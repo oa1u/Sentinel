@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { Canvas } = require('skia-canvas');
+const { Canvas, loadImage } = require('skia-canvas');
 const { AttachmentBuilder, EmbedBuilder } = require("discord.js");
 const path = require('path');
 const { CaptchaGenerator } = require("captcha-canvas");
@@ -77,17 +77,30 @@ module.exports = {
 
             const dmChannel = member.user.dmChannel || await member.user.createDM();
             
+            // Always ping user in verification channel first
+            if (verifyChannel) {
+                const verifyEmbed = new EmbedBuilder()
+                    .setTitle(`🔐 Verification Required`)
+                    .setColor(Color)
+                    .setDescription(`Welcome to **${Server}**, ${member}!\n\nTo gain access to the server, you need to verify that you're human.`)
+                    .addFields(
+                        { name: '📝 How to Verify', value: 'Please run the `/verify` command in this channel to receive a captcha in your DMs.', inline: false },
+                        { name: '⚠️ DMs Disabled?', value: 'Make sure your DMs are enabled from server members, then run `/verify`.', inline: false }
+                    )
+                    .setImage('https://i.imgur.com/sEkQOCf.png')
+                    .setTimestamp()
+                    .setFooter({ text: 'Verification is required to access the server' });
+                
+                verifyChannel.send({ content: `${member}`, embeds: [verifyEmbed] })
+                    .then(msg => setTimeout(() => msg.delete().catch(() => {}), 60000)); // Delete after 1 minute
+            }
+
+            // Still try to send DM for immediate verification (legacy support)
             dmChannel.send({
                 embeds: [e1.setImage(captchaImage.url)]
             }).catch(async () => {
-                if (verifyChannel) {
-                    const enableDMEmb = new EmbedBuilder()
-                        .setTitle(`Enable DM's`)
-                        .setDescription(`Please enable DMs then run the command /verify`)
-                        .setImage('https://i.imgur.com/sEkQOCf.png');
-                    verifyChannel.send({ content: `<@!${member.user.id}>`, embeds: [enableDMEmb] })
-                        .then(msg => setTimeout(() => msg.delete().catch(() => {}), 20000));
-                }
+                // DM failed - user already pinged in verification channel above
+                console.log(`Could not DM ${member.user.tag} - they need to use /verify command`);
             });
 
             const filter = m => {
@@ -119,14 +132,25 @@ module.exports = {
                         if (roleObj) {
                             await member.roles.add(roleObj);
                             console.log(`Role added to ${member.user.tag}`);
-                            await dmChannel.send({ embeds: [e3] });
+                            
+                            // Send success message with actual role name
+                            const successEmbed = new EmbedBuilder()
+                                .setTitle(`🔐 Verification Required`)
+                                .setColor("#00FF00")
+                                .setDescription(`✅ **Verification Successful!**\n\nYou have successfully verified your identity in **${Server}** and have been assigned the **${roleObj.name}** role.\n\n🎉 You now have full access to the server!`)
+                                .setFooter({ text: `${Version}` })
+                                .setTimestamp();
+                            
+                            await dmChannel.send({ embeds: [successEmbed] });
 
                             // Create welcome canvas
                             const canvas = new Canvas(700, 250);
                             const ctx = canvas.getContext('2d');
                             const bgPath = path.join(__dirname, '../Images/background.png');
                             console.log('Verification background path:', bgPath);
-                            const background = await Canvas.loadImage(bgPath);
+                            
+                            // Load background from file
+                            const background = await loadImage(bgPath);
                             ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
                             ctx.strokeStyle = '#74037b';
                             ctx.strokeRect(0, 0, canvas.width, canvas.height);
@@ -139,13 +163,18 @@ module.exports = {
                             ctx.fillStyle = '#ffffff';
                             ctx.fillText(`${member.displayName}!`, canvas.width / 2.5, canvas.height / 1.8);
 
+                            // Reset clipping and draw avatar
+                            ctx.save();
                             ctx.beginPath();
                             ctx.arc(125, 125, 100, 0, Math.PI * 2, true);
                             ctx.closePath();
                             ctx.clip();
 
-                            const avatar = await Canvas.loadImage(member.user.displayAvatarURL());
+                            // Get avatar URL with extension
+                            const avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 256 });
+                            const avatar = await loadImage(avatarURL);
                             ctx.drawImage(avatar, 25, 25, 200, 200);
+                            ctx.restore();
 
                             const attachment = new AttachmentBuilder(await canvas.toBuffer('png'), { name: 'welcome-image.png' });
 

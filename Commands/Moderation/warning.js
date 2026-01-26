@@ -29,6 +29,9 @@ module.exports = {
         .setTitle(`Prohibited User`)
         .setDescription(`You have to be in the moderation team to be able to use this command!`);
     
+    // Check for ModRole permission
+    if(!interaction.member.roles.cache.has(ModRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+    
     let enabledms = new EmbedBuilder()
       .setColor(colorInt)
         .setTitle(`Error!`)
@@ -65,8 +68,6 @@ module.exports = {
       await interaction.user.send({ embeds: [em] }).catch(err => interaction.reply({ embeds: [enabledms], flags: MessageFlags.Ephemeral }));
       await interaction.reply({ embeds: [warninginfo], flags: MessageFlags.Ephemeral });
     } else {
-      if(!interaction.member.roles.cache.has(staffrole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
-      
       const em = new EmbedBuilder()
         .setTitle(caseID)
         .setColor(colorInt)

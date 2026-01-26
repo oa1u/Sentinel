@@ -1,5 +1,4 @@
 const { EmbedBuilder } = require('discord.js');
-const { Color } = require("../Config/constants/misc.json")
 const { channelLog } = require("../Config/constants/channel.json")
 
 module.exports = (client) => {
@@ -7,20 +6,23 @@ module.exports = (client) => {
  	   let logs = await client.channels.cache.get(channelLog);
 	   if(Old.displayName !== New.displayName || Old.user.username !== New.user.username){
     	   let embed = new EmbedBuilder()
-            .setTitle("Member Updated")
-            .setColor(Color);
+            .setTitle("✏️ Member Updated")
+            .setColor("#FAA61A")
+            .setDescription(`${New.user.toString()} has been updated.`);
             const fields = [];
-            fields.push({ name: "User", value: Old.user.username });
+            fields.push({ name: "User", value: `${New.user.tag}`, inline: true });
+            fields.push({ name: "User ID", value: `\`${New.id}\``, inline: true });
         	if(Old.displayName !== New.displayName){
-                fields.push({ name: "Old Nickname", value: Old.nickname || "None" });
-                fields.push({ name: "New Nickname", value: New.nickname || "None" });
+                fields.push({ name: "Old Nickname", value: Old.nickname || "None", inline: true });
+                fields.push({ name: "New Nickname", value: New.nickname || "None", inline: true });
             }   	
         	if(Old.user.username !== New.user.username){
-                fields.push({ name: "Old Username", value: Old.user.username });
-                fields.push({ name: "New Username", value: New.user.username });
+                fields.push({ name: "Old Username", value: Old.user.username, inline: true });
+                fields.push({ name: "New Username", value: New.user.username, inline: true });
             }
             embed.addFields(fields);
-            embed.setThumbnail(New.user.displayAvatarURL());
+            embed.setThumbnail(New.user.displayAvatarURL({ size: 256 }));
+            embed.setTimestamp().setFooter({ text: `Member Updated • ID: ${New.id}` });
             return logs.send({embeds: [embed]});
         }
     })

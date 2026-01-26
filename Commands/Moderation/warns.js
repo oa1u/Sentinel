@@ -24,6 +24,9 @@ module.exports = {
         .setTitle(`Prohibited User`)
         .setDescription(`You have to be in the moderation team to look at other people's warnings`);
     
+    // Check for ModRole permission
+    if(!interaction.member.roles.cache.has(ModRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+    
     let enabledms = new EmbedBuilder()
       .setColor(colorInt)
         .setTitle(`Error!`)
@@ -44,23 +47,13 @@ module.exports = {
       await interaction.user.send({ embeds: [em] }).catch(err => interaction.reply({ embeds: [enabledms], flags: MessageFlags.Ephemeral }));
       await interaction.reply({ content: 'I have sent you a dm with your requested information!', flags: MessageFlags.Ephemeral });
     } else {
-      if(!interaction.member.roles.cache.has(staffrole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+      const em = new EmbedBuilder()
+        .setTitle("Warnings")
+        .setColor(colorInt)
+        .setDescription(`\`${Object.keys(warnsDB.get(user.id).warns).length != 0 ? Object.keys(warnsDB.get(user.id).warns).join('\n') : 'User has not been warned before'}\``);
       
-        const em = new EmbedBuilder()
-          .setTitle("Warnings")
-          .setColor(colorInt)
-          .setDescription(`\`${Object.keys(warnsDB.get(user.id).warns).length != 0 ? Object.keys(warnsDB.get(user.id).warns).join('\n') : 'User has not been warned before'}\``);
-      
-        await interaction.user.send({ embeds: [em] }).catch(err => interaction.reply({ embeds: [enabledms], flags: MessageFlags.Ephemeral }));
-        await interaction.reply({ content: 'I have sent you a dm with your requested information!', flags: MessageFlags.Ephemeral });
+      await interaction.user.send({ embeds: [em] }).catch(err => interaction.reply({ embeds: [enabledms], flags: MessageFlags.Ephemeral }));
+      await interaction.reply({ content: 'I have sent you a dm with your requested information!', flags: MessageFlags.Ephemeral });
     }
   }
 }
-
-
-
-
-
-
-
-

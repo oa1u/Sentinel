@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { Color } = require("../../Config/constants/misc.json");
+const { ServerInvite } = require("../../Config/main.json");
+const { AdminRole, ModRole } = require("../../Config/constants/roles.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,46 +15,98 @@ module.exports = {
           { name: 'Management', value: 'management' },
           { name: 'Moderation', value: 'moderation' },
           { name: 'Utility', value: 'utility' },
-          { name: 'Application', value: 'application' },
-          { name: 'Staff', value: 'staff' },
           { name: 'Ticket', value: 'ticket' },
-          { name: 'ServerInfo', value: 'serverinfo' }
         )
     ),
   category: 'utility',
   async execute(interaction) {
     const category = interaction.options.getString('category');
     const colorInt = parseInt(Color.replace('#', ''), 16);
+    
+    // Check user roles
+    const member = interaction.member;
+    const hasAdminRole = member.roles.cache.has(AdminRole);
+    const hasModRole = member.roles.cache.has(ModRole);
 
     function ChangeLatter(string) {
       return string.charAt(0).toUpperCase() + string.slice(1);
     }
 
+    // Category emojis
+    const categoryIcons = {
+      management: '⚙️',
+      moderation: '🛡️',
+      utility: '🔧',
+      ticket: '🎫'
+    };
+
+    // Build category list based on permissions
+    let categoryList = [];
+    if (hasAdminRole) {
+      categoryList.push('⚙️ **Management** - Server management commands');
+    }
+    if (hasModRole || hasAdminRole) {
+      categoryList.push('🛡️ **Moderation** - Moderation & safety commands');
+    }
+    categoryList.push('🔧 **Utility** - Helpful utility commands');
+    categoryList.push('🎫 **Ticket** - Ticket system commands');
+
     let embedhelp = new EmbedBuilder()
       .setColor(colorInt)
-      .setTitle(`${interaction.client.user.username} - Help Section!`)
-      .setDescription(`Below you can see the current Command Categories\nUse /help [category] for more details`)
+      .setAuthor({ 
+        name: `${interaction.client.user.username} Help Menu`, 
+        iconURL: interaction.client.user.displayAvatarURL() 
+      })
+      .setDescription(`Welcome to the help menu! Select a category below to view available commands.\n\n**How to use:** \`/help [category]\``)
       .addFields(
-        { name: 'Command Categories', value: 'Management\nModeration\nUtility\nApplication\nStaff\nTicket\nServerInfo', inline: true },
-        { name: 'Server information', value: '[Server Invite]()\n[Server Info]', inline: true },
-      );
+        { 
+          name: '📚 Command Categories', 
+          value: categoryList.join('\n'), 
+          inline: false 
+        },
+        { 
+          name: '🔗 Links', 
+          value: `[Server Invite](${ServerInvite})`, 
+          inline: false 
+        }
+      )
+      .setFooter({ text: `Requested by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
+      .setTimestamp();
 
     if (!category) {
       return interaction.reply({ embeds: [embedhelp], flags: MessageFlags.Ephemeral });
     }
 
+    // Check permissions for specific categories
+    if (category === 'management' && !hasAdminRole) {
+      return interaction.reply({ 
+        content: `❌ You do not have permission to view Management commands. This category requires the ${AdminRole} role.`, 
+        flags: MessageFlags.Ephemeral 
+      });
+    }
+
+    if (category === 'moderation' && !hasModRole && !hasAdminRole) {
+      return interaction.reply({ 
+        content: `❌ You do not have permission to view Moderation commands. This category requires the ${ModRole} role.`, 
+        flags: MessageFlags.Ephemeral 
+      });
+    }
+
     const categoryEmbed = new EmbedBuilder()
       .setColor(colorInt)
-      .setTitle(`${ChangeLatter(category)} Commands`);
+      .setAuthor({ 
+        name: `${ChangeLatter(category)} Commands`, 
+        iconURL: interaction.client.user.displayAvatarURL() 
+      })
+      .setDescription(`${categoryIcons[category]} All commands in the **${ChangeLatter(category)}** category:\n`)
+      .setFooter({ text: `Requested by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
+      .setTimestamp();
 
     let count = 0;
+    const commands = [];
     for (const [, command] of interaction.client.slashCommands) {
       if (command.category === category) {
-        categoryEmbed.addFields({
-          name: `/${command.data.name}`,
-          value: command.data.description || 'No description',
-          inline: false
-        });
+        commands.push(`\`/${command.data.name}\` - ${command.data.description || 'No description'}`);
         count++;
       }
     }
@@ -60,6 +114,12 @@ module.exports = {
     if (count === 0) {
       return interaction.reply({ content: `No commands found in the ${category} category.`, flags: MessageFlags.Ephemeral });
     }
+
+    categoryEmbed.addFields({
+      name: `Total Commands: ${count}`,
+      value: commands.join('\n'),
+      inline: false
+    });
 
     return interaction.reply({ embeds: [categoryEmbed], flags: MessageFlags.Ephemeral });
   }

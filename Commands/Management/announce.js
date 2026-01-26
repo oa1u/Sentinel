@@ -2,9 +2,6 @@ const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const { AdminRole } = require("../../Config/constants/roles.json");
 const { Announcement } = require("../../Config/constants/channel.json")
-const { Color } = require("../../Config/constants/misc.json")
-
-const colorInt = parseInt(Color.replace('#', ''), 16);
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -24,9 +21,9 @@ module.exports = {
   category: "management",
   async execute(interaction) {
     const Prohibited = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(`Prohibited User`)
-      .setDescription(`You have to be an administrator to use this command!`);
+      .setColor(0xF04747)
+      .setTitle(`❌ No Permission`)
+      .setDescription(`You need the Administrator role to use this command!`);
     
     if (!interaction.member.roles.cache.has(AdminRole)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
@@ -37,23 +34,35 @@ module.exports = {
     const message = interaction.options.getString('message');
 
     if (!message || message.trim().split(' ').length < 5) {
+      const shortMsgEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle('❌ Message Too Short')
+        .setDescription('Your announcement must be at least 5 words long!');
       return interaction.reply({
-        content: 'Make sure to include a description for the announcement! (Must be longer than 5 words)',
+        embeds: [shortMsgEmbed],
         flags: MessageFlags.Ephemeral
       });
     }
 
     const em = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(title)
-      .setDescription(message);
+      .setColor(0x5865F2)
+      .setTitle(`📢 ${title}`)
+      .setDescription(message)
+      .setFooter({ text: `Announced by ${interaction.user.username}` })
+      .setTimestamp();
 
     if (announceChan) {
       await announceChan.send({ embeds: [em] });
     }
 
+    const successEmbed = new EmbedBuilder()
+      .setColor(0x43B581)
+      .setTitle('✅ Announcement Sent')
+      .setDescription(`Your announcement has been posted to <#${Announcement}>`)
+      .setTimestamp();
+    
     await interaction.reply({
-      content: 'Announcement sent!',
+      embeds: [successEmbed],
       flags: MessageFlags.Ephemeral
     });
   }

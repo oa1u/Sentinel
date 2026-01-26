@@ -15,27 +15,34 @@ module.exports = {
   category: 'ticket',
   async execute(interaction) {
     let Prohibited = new EmbedBuilder()
-        .setColor(colorInt)
-        .setTitle(`Error`)
-        .setDescription(`You don't have enough permission to do that!`);
+        .setColor(0xF04747)
+        .setTitle(`❌ No Permission`)
+        .setDescription(`You need the Support role to mark tickets as handled!`);
     
     if(!interaction.member.roles.cache.has(SupportRole)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
 
     if(interaction.channel.parentId !== ticketCategory) {
-      return interaction.reply({ content: ":x: You can't do that here!", flags: MessageFlags.Ephemeral });
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle('❌ Invalid Channel')
+        .setDescription('This command can only be used in ticket channels!');
+      return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
 
     await interaction.channel.setName(interaction.channel.name + " - 🚩 - " + interaction.user.username);
-    return interaction.reply({ content: "Ticket marked as handled!", flags: MessageFlags.Ephemeral });
+    
+    const successEmbed = new EmbedBuilder()
+      .setColor(0x43B581)
+      .setTitle('✅ Ticket Marked as Handled')
+      .setDescription(`This ticket has been flagged as handled by ${interaction.user}`)
+      .addFields(
+        { name: '👤 Handler', value: interaction.user.username, inline: true },
+        { name: '🚩 Status', value: 'Handled', inline: true }
+      )
+      .setTimestamp();
+    
+    return interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
   }
 }
-
-
-
-
-
-
-
-

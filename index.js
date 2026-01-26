@@ -1,13 +1,18 @@
 require("dotenv").config({ path: "./Config/credentials.env" });
 // Discord bot stuff
-const { Client, Collection, GatewayIntentBits, MessageFlags } = require("discord.js");
+const { Client, Collection, GatewayIntentBits, MessageFlags, Partials } = require("discord.js");
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.GuildEmojisAndStickers,
+    GatewayIntentBits.GuildInvites,
+    GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.GuildMessageReactions,
   ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
   presence: require("./Config/presence.json"),
 });
 
@@ -64,5 +69,3 @@ client.on('warn', (msg) => {
 
 
 client.login(process.env.TOKEN);
-
-

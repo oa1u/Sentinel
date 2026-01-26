@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { ModRole } = require("../../Config/constants/roles.json");
 const { channelLog } = require("../../Config/constants/channel.json")
-const { Color } = require("../../Config/constants/misc.json")
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,16 +14,15 @@ module.exports = {
   category: "moderation",
   async execute(interaction) {
     const warnLogs = interaction.guild.channels.cache.get(channelLog);
-    const colorInt = parseInt(Color.replace('#', ''), 16);
     let Prohibited = new EmbedBuilder()
-      .setColor(colorInt)
-        .setTitle(`Prohibited User`)
-        .setDescription(`You have to be in the moderation team to be able to use this command!`);
+      .setColor(0xF04747)
+      .setTitle(`❌ No Permission`)
+      .setDescription(`You need the Moderator role to use this command!`);
     
     let MessageLimit = new EmbedBuilder()
-      .setColor(colorInt)
-        .setTitle(`Error`)
-        .setDescription("The limit of messages you can delete at once is 100");
+      .setColor(0xFAA61A)
+      .setTitle(`⚠️ Invalid Amount`)
+      .setDescription("You can only delete up to **100 messages** at once.");
     
     if(!interaction.member.roles.cache.has(ModRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
 
@@ -34,13 +32,16 @@ module.exports = {
 
     await interaction.channel.bulkDelete(amount, true).then(Amount => {
         let Embed = new EmbedBuilder()
-          .setColor(colorInt)
-          .setTitle(`**Messages Deleted!**`)
+          .setColor(0x43B581)
+          .setTitle(`🧹 Messages Cleared`)
+          .setDescription(`Successfully deleted **${Amount.size}** message(s)`)
           .addFields(
-            { name: "Moderator", value: `${interaction.user.tag} (${interaction.user.id})` },
-            { name: "Messages Deleted", value: String(Amount.size) },
-            { name: "In Channel", value: `<#${interaction.channel.id}>` }
-          );
+            { name: "👮 Moderator", value: `${interaction.user.tag}\n\`${interaction.user.id}\``, inline: true },
+            { name: "📝 Messages Deleted", value: `**${Amount.size}**`, inline: true },
+            { name: "📍 Channel", value: `${interaction.channel}`, inline: true }
+          )
+          .setTimestamp()
+          .setFooter({ text: `Bulk Delete` });
         warnLogs.send({ embeds: [Embed] });
         return interaction.reply({ embeds: [Embed], flags: MessageFlags.Ephemeral });
     })

@@ -36,26 +36,60 @@ module.exports = {
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     
     if (member) {
+      // Calculate account age
+      const accountAge = moment.duration(Date.now() - member.user.createdTimestamp).format('Y [years], M [months], D [days]');
+      const serverAge = moment.duration(Date.now() - member.joinedTimestamp).format('Y [years], M [months], D [days]');
+      
+      // Get roles (excluding @everyone)
+      const roles = member.roles.cache
+        .filter(role => role.id !== interaction.guild.id)
+        .sort((a, b) => b.position - a.position)
+        .map(role => role.toString())
+        .slice(0, 20);
+      const rolesDisplay = roles.length > 0 ? roles.join(', ') : 'None';
+      
+      // Get permissions
+      const keyPermissions = [];
+      if (member.permissions.has('Administrator')) keyPermissions.push('Administrator');
+      if (member.permissions.has('ManageGuild')) keyPermissions.push('Manage Server');
+      if (member.permissions.has('ManageRoles')) keyPermissions.push('Manage Roles');
+      if (member.permissions.has('ManageChannels')) keyPermissions.push('Manage Channels');
+      if (member.permissions.has('KickMembers')) keyPermissions.push('Kick Members');
+      if (member.permissions.has('BanMembers')) keyPermissions.push('Ban Members');
+      if (member.permissions.has('ModerateMembers')) keyPermissions.push('Timeout Members');
+      const permissionsDisplay = keyPermissions.length > 0 ? keyPermissions.join(', ') : 'None';
+      
       const em = new EmbedBuilder()
         .setAuthor({ name: `${member.displayName}'s information`, iconURL: member.user.displayAvatarURL() })
         .setThumbnail(member.user.displayAvatarURL())
+        .setColor(member.displayHexColor !== '#000000' ? parseInt(member.displayHexColor.replace('#', ''), 16) : 0x5865F2)
         .addFields(
           { name: "Username", value: member.user.username, inline: true },
+          { name: "Display Name", value: member.displayName, inline: true },
           { name: "ID", value: member.user.id, inline: true },
-          { name: `Created At [${moment(member.user.createdTimestamp).fromNow()}]`, value: moment(member.user.createdTimestamp).format('LLL') },
-          { name: `Joined Server At [${moment(member.joinedTimestamp).fromNow()}]`, value: moment(member.joinedTimestamp).format('LLL') }
+          { name: "Bot", value: member.user.bot ? 'Yes' : 'No', inline: true },
+          { name: "Nickname", value: member.nickname || 'None', inline: true },
+          { name: "Highest Role", value: member.roles.highest.toString(), inline: true },
+          { name: `Account Created [${moment(member.user.createdTimestamp).fromNow()}]`, value: `${moment(member.user.createdTimestamp).format('LLL')}\n*${accountAge}*` },
+          { name: `Joined Server [${moment(member.joinedTimestamp).fromNow()}]`, value: `${moment(member.joinedTimestamp).format('LLL')}\n*${serverAge}*` },
+          { name: `Roles [${roles.length}]`, value: rolesDisplay },
+          { name: "Key Permissions", value: permissionsDisplay }
         );
-      if (member.user.presence) {
+      if (member.presence) {
         em.addFields(
-          { name: "Status", value: `${statusMoji[member.user.presence.status]} ${statusName[member.user.presence.status]}`, inline: true },
-          { name: "Main Device", value: `${device[Object.keys(member.user.presence.clientStatus)[0]]} ${Object.keys(member.user.presence.clientStatus)[0]}`, inline: true }
+          { name: "Status", value: `${statusMoji[member.presence.status]} ${statusName[member.presence.status]}`, inline: true }
         );
-        if (member.user.presence.activities[0] && member.user.presence.activities[0].name !== 'Custom Status') {
-          em.addFields({ name: "Activity", value: `${member.user.presence.activities[0].type} ${member.user.presence.activities[0].name}` });
+        if (member.presence.clientStatus && Object.keys(member.presence.clientStatus).length > 0) {
+          em.addFields(
+            { name: "Main Device", value: `${device[Object.keys(member.presence.clientStatus)[0]]} ${Object.keys(member.presence.clientStatus)[0]}`, inline: true }
+          );
+        }
+        if (member.presence.activities && member.presence.activities[0] && member.presence.activities[0].name !== 'Custom Status') {
+          em.addFields({ name: "Activity", value: `${member.presence.activities[0].type} ${member.presence.activities[0].name}` });
         }
       }
       if (interaction.user.id !== member.id) {
-        em.setFooter({ text: `Requested by ${interaction.member.displayName}` });
+        em.setFooter({ text: `Requested by ${interaction.user.username}` });
       }
       await interaction.reply({ embeds: [em] });
     } else {

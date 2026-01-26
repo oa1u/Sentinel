@@ -32,24 +32,24 @@ module.exports = {
     const server = interaction.guild;
 
     let Prohibited = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(`Prohibited User`)
-      .setDescription(`You have to be in the moderation team to be able to use this command!`);
+      .setColor(0xF04747)
+      .setTitle(`❌ No Permission`)
+      .setDescription(`You need the Moderator role to use this command!`);
 
     let validuser = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(`Error`)
-      .setDescription(`Mention a valid user`);
+      .setColor(0xF04747)
+      .setTitle(`❌ Invalid User`)
+      .setDescription(`Please mention a valid user!`);
 
     let cantbanyourself = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(`Error`)
-      .setDescription(`You can't ban yourself`);
+      .setColor(0xF04747)
+      .setTitle(`❌ Error`)
+      .setDescription(`You can't ban yourself!`);
 
     let samerankorhigher = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(`Error`)
-      .setDescription(`You can't ban that user due to role hierarchy`);
+      .setColor(0xF04747)
+      .setTitle(`❌ Role Hierarchy`)
+      .setDescription(`You can't ban that user due to role hierarchy!`);
 
     const warnsDB = new JSONDatabase('warns');
     
@@ -86,38 +86,52 @@ module.exports = {
     const warnLogs = server.channels.cache.get(channelLog);
 
     const em = new EmbedBuilder()
-      .setTitle(`Case - ${caseID}`)
-      .setColor(colorInt)
+      .setTitle(`🔨 Ban Case - ${caseID}`)
+      .setColor(0xF04747)
       .addFields(
-        { name: "Member", value: `${toWarn.username} (${toWarn.id})` },
-        { name: "Moderator", value: `${moderator.user.username} (${moderator.id})` },
-        { name: "Reason", value: `\`(banned) - ${reason}\`` }
+        { name: "👤 Member", value: `${toWarn.username} (${toWarn.id})`, inline: true },
+        { name: "🛡️ Moderator", value: `${moderator.user.username} (${moderator.id})`, inline: true },
+        { name: "📝 Reason", value: `\`${reason}\``, inline: false }
       )
-      .setFooter({ text: `By: ${moderator.user.username} (${moderator.id})` })
+      .setFooter({ text: `Banned by ${moderator.user.username}` })
       .setTimestamp();
 
     if (warnLogs) await warnLogs.send({ embeds: [em] });
 
     const emUser = new EmbedBuilder()
-      .setTitle("Banned")
-      .setColor(colorInt)
-      .setDescription(`You were banned from **${server.name}** for ${reason}!`)
+      .setTitle("🔨 You Have Been Banned")
+      .setColor(0xF04747)
+      .setDescription(`You were banned from **${server.name}**`)
       .addFields(
-        { name: "Case ID", value: `\`${caseID}\`` },
-        { name: "Ban Appeal Server", value: "[Join]()" }
+        { name: "📝 Reason", value: `${reason}` },
+        { name: "🔑 Case ID", value: `\`${caseID}\`` },
+        { name: "📬 Ban Appeal", value: "[Join Appeal Server]()" }
       )
       .setTimestamp();
 
     await toWarn.send({ embeds: [emUser] }).catch(err => console.error(err));
 
     const emChan = new EmbedBuilder()
-      .setDescription(`You have successfully banned **${toWarn.username}**.`)
-      .setColor(colorInt)
+      .setTitle("✅ Member Banned")
+      .setDescription(`Successfully banned **${toWarn.username}**`)
+      .setColor(0x43B581)
+      .addFields(
+        { name: "🔑 Case ID", value: `\`${caseID}\`` }
+      )
+      .setTimestamp()
       .setTimestamp();
 
     await interaction.reply({ embeds: [emChan], flags: MessageFlags.Ephemeral });
 
-    warnsDB.set(toWarn.id, { moderator: moderator.id, reason: `(banned) - ${reason}`, date: moment(Date.now()).format('LL') }, `warns.${caseID}`);
+    // Store ban information in database
+    const userData = warnsDB.get(toWarn.id) || { warns: {} };
+    if (!userData.warns) userData.warns = {};
+    userData.warns[caseID] = {
+      moderator: moderator.id,
+      reason: `(banned) - ${reason}`,
+      date: moment(Date.now()).format('LL')
+    };
+    warnsDB.set(toWarn.id, userData);
     
     // Perform the ban after replying, with error handling
     try {

@@ -1,21 +1,24 @@
 const { EmbedBuilder } = require('discord.js');
-const { Color } = require("../Config/constants/misc.json")
 const { channelLog } = require("../Config/constants/channel.json")
 
 module.exports = (client) => {
 	client.on("roleCreate", async(role) => {
     let logs = await client.channels.cache.get(channelLog);
         	let embed = new EmbedBuilder()
-            .setTitle("New Role Created")
-            .setColor(role.hexColor)
+            .setTitle("🏷️ Role Created")
+            .setColor(role.hexColor !== "#000000" ? parseInt(role.hexColor.replace('#', ''), 16) : 0x43B581)
+            .setDescription(`A new role has been created in the server.`)
             .addFields(
-                { name: "Role Name", value: role.name, inline: true },
-                { name: "Role ID", value: role.id, inline: true },
-                { name: "Role Hex Color", value: role.hexColor },
-                { name: "Role Hoisted?", value: role.hoist.toString() },
-                { name: "Role Mentionable By Everyone?", value: role.mentionable.toString() },
-                { name: "Role Position", value: role.position.toString() }
+                { name: "Role", value: role.toString(), inline: true },
+                { name: "Role ID", value: `\`${role.id}\``, inline: true },
+                { name: "Role Color", value: `${role.hexColor}`, inline: true },
+                { name: "Hoisted", value: role.hoist ? "Yes (Displayed separately)" : "No", inline: true },
+                { name: "Mentionable", value: role.mentionable ? "Yes" : "No", inline: true },
+                { name: "Position", value: role.position.toString(), inline: true },
+                { name: "Members", value: role.members.size.toString(), inline: true }
             )
+            .setTimestamp()
+            .setFooter({ text: "Role Created" });
             return logs.send({embeds: [embed]});
     })
 }

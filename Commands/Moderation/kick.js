@@ -3,11 +3,10 @@ const JSONDatabase = require('../../Functions/Database');
 require("moment-duration-format");
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
-const { staffrole } = require("../../Config/constants/roles.json");
+const { ModRole } = require("../../Config/constants/roles.json");
 const { channelLog } = require("../../Config/constants/channel.json")
-const { Color, serverID } = require("../../Config/constants/misc.json")
+const { serverID } = require("../../Config/constants/misc.json")
 
-const colorInt = parseInt(Color.replace('#', ''), 16);
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -32,24 +31,24 @@ module.exports = {
     const cannedMsgs = new JSONDatabase('cannedMsgs');
     
     let Prohibited = new EmbedBuilder()
-      .setColor(colorInt)
-        .setTitle(`Prohibited User`)
-        .setDescription(`You have to be in the moderation team to be able to use this command!`);
+      .setColor(0xF04747)
+        .setTitle(`❌ No Permission`)
+        .setDescription(`You need the Moderator role to use this command!`);
     
     let validuser = new EmbedBuilder()
-      .setColor(colorInt)
-        .setTitle(`Error`)
-        .setDescription(`Mention a valid user`);
+      .setColor(0xF04747)
+        .setTitle(`❌ Invalid User`)
+        .setDescription(`Please mention a valid user!`);
     
     let cantkickyourself = new EmbedBuilder()
-      .setColor(colorInt)
-        .setTitle(`Error`)
-        .setDescription(`You cant kick yourself`);
+      .setColor(0xF04747)
+        .setTitle(`❌ Error`)
+        .setDescription(`You cannot kick yourself!`);
     
     let samerankorhigher = new EmbedBuilder()
-      .setColor(colorInt)
-        .setTitle(`Error`)
-        .setDescription(`You can't kick that user due to role hierarchy`);
+      .setColor(0xF04747)
+        .setTitle(`❌ Role Hierarchy`)
+        .setDescription(`You cannot kick that user due to role hierarchy!`);
     
     const server = interaction.client.guilds.cache.get(serverID);
     if(!interaction.member.roles.cache.has(ModRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
@@ -76,29 +75,40 @@ module.exports = {
     
     const caseID = makeid(10);
     const em = new EmbedBuilder()
-      .setTitle(`Case - ${caseID}`)
-      .setColor(colorInt)
+      .setTitle(`👢 Kick Case - ${caseID}`)
+      .setColor(0xFAA61A)
       .addFields(
-        { name: "Member", value: `${toWarn.tag} (${toWarn.id})` },
-        { name: "Moderator", value: `${interaction.user.tag} (${interaction.user.id})` },
-        { name: "Reason", value: `\`(kicked) - ${finalReason}\`` }
+        { name: "👤 Member", value: `${toWarn.tag} (${toWarn.id})`, inline: true },
+        { name: "🛡️ Moderator", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+        { name: "📝 Reason", value: `\`${finalReason}\``, inline: false }
       )
-      .setFooter({ text: `By: ${interaction.user.tag} (${interaction.user.id})` });
+      .setFooter({ text: `Kicked by ${interaction.user.tag}` })
+      .setTimestamp();
     
     await warnLogs.send({ embeds: [em] });
     
     const Server = interaction.guild.name;
     const emUser = new EmbedBuilder()
-      .setTitle("Kicked")
-      .setColor(colorInt)
-      .setDescription(`You were kicked from ${Server} for **${finalReason}**.\nPlease don't do it again!`)
-      .addFields({ name: "Case ID", value: `\`${caseID}\`` });
+      .setTitle("👢 You Have Been Kicked")
+      .setColor(0xFAA61A)
+      .setDescription(`You were kicked from **${Server}**`)
+      .addFields(
+        { name: "📝 Reason", value: `${finalReason}` },
+        { name: "🔑 Case ID", value: `\`${caseID}\`` },
+        { name: "⚡ Note", value: "Please avoid repeating this behavior!" }
+      )
+      .setTimestamp();
     
     await toWarn.send({ embeds: [emUser] }).catch(err => err);
     
     const emChan = new EmbedBuilder()
-      .setDescription(`You have succesfully kicked **${toWarn.tag}**.`)
-      .setColor(colorInt);
+      .setTitle("✅ Member Kicked")
+      .setDescription(`Successfully kicked **${toWarn.tag}**`)
+      .setColor(0x43B581)
+      .addFields(
+        { name: "🔑 Case ID", value: `\`${caseID}\`` }
+      )
+      .setTimestamp();
     
     // Perform the kick before replying
     await toWarnMember.kick(finalReason).catch(err => {
@@ -110,11 +120,3 @@ module.exports = {
     return await interaction.reply({ embeds: [emChan], flags: MessageFlags.Ephemeral });
   }
 }
-
-
-
-
-
-
-
-

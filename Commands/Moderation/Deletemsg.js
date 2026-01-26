@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { ModRole } = require("../../Config/constants/roles.json");
-const { Color } = require("../../Config/constants/misc.json")
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,39 +13,44 @@ module.exports = {
   category: 'moderation',
   async execute(interaction) {
     const link = interaction.options.getString('link');
-    const colorInt = parseInt(Color.replace('#', ''), 16);
     const Prohibited = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle('Prohibited User')
-      .setDescription('You have to be in the moderation team to be able to use this command!');
+      .setColor(0xF04747)
+      .setTitle('❌ No Permission')
+      .setDescription('You need the Moderator role to use this command!');
 
     if (!interaction.member.roles.cache.has(ModRole)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
     
     let invalidlink = new EmbedBuilder()
-      .setColor(colorInt)
-        .setDescription(":x: That isn't a valid message link! :x:");
+      .setColor(0xF04747)
+      .setTitle('❌ Invalid Link')
+      .setDescription("That isn't a valid message link!");
     
     let cantindmmessages = new EmbedBuilder()
-      .setColor(colorInt)
-        .setDescription(":x: I can't delete messages in DMs! :x:");
+      .setColor(0xF04747)
+      .setTitle('❌ Cannot Delete DMs')
+      .setDescription("I can't delete messages in DMs!");
     
     let otherserverisbad = new EmbedBuilder()
-      .setColor(colorInt)
-        .setDescription(":x: I can't delete messages in other servers! :x:");
+      .setColor(0xF04747)
+      .setTitle('❌ Different Server')
+      .setDescription("I can't delete messages from other servers!");
     
     let successfullydeleted = new EmbedBuilder()
-      .setColor(colorInt)
-        .setDescription(":white_check_mark: Successfully deleted! :white_check_mark:");
+      .setColor(0x43B581)
+      .setTitle('✅ Message Deleted')
+      .setDescription("Successfully deleted the message!");
     
     let cantfindthechannel = new EmbedBuilder()
-      .setColor(colorInt)
-        .setDescription(":x: I couldn't find that channel :x:");
+      .setColor(0xF04747)
+      .setTitle('❌ Channel Not Found')
+      .setDescription("I couldn't find that channel!");
     
     let cantfindthemessage = new EmbedBuilder()
-      .setColor(colorInt)
-        .setDescription(":x: I couldn't find that message :x:");
+      .setColor(0xF04747)
+      .setTitle('❌ Message Not Found')
+      .setDescription("I couldn't find that message!");
     
     if (!link.includes("https://discord.com/channels/")) return interaction.reply({ embeds: [invalidlink], flags: MessageFlags.Ephemeral });
     if (link.includes("@me")) return interaction.reply({ embeds: [cantindmmessages], flags: MessageFlags.Ephemeral });

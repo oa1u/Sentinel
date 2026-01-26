@@ -102,7 +102,15 @@ module.exports = {
       .setColor(colorInt);
     
     await interaction.reply({ embeds: [emChan], flags: MessageFlags.Ephemeral });
-    warnsDB.set(toWarn.id, {moderator: moderator.id, reason: `(warned) - ${finalReason}`, date: moment(Date.now()).format('LL')}, `warns.${caseID}`);
+    
+    // Store warning information in database
+    const userData = warnsDB.get(toWarn.id) || { warns: {} };
+    userData.warns[caseID] = {
+      moderator: moderator.id,
+      reason: `(warned) - ${finalReason}`,
+      date: moment(Date.now()).format('LL')
+    };
+    warnsDB.set(toWarn.id, userData);
     return;
   }
 }

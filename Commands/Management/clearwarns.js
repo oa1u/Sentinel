@@ -5,9 +5,6 @@ const { MessageFlags } = require('discord.js');
 require("moment-duration-format");
 const { AdminRole } = require("../../Config/constants/roles.json");
 const { channelLog } = require("../../Config/constants/channel.json")
-const { Color } = require("../../Config/constants/misc.json")
-
-const colorInt = parseInt(Color.replace('#', ''), 16);
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -22,9 +19,9 @@ module.exports = {
   category: 'management',
   async execute(interaction) {
     let Prohibited = new EmbedBuilder()
-        .setColor(colorInt)
-        .setTitle(`Prohibited User`)
-        .setDescription(`You have to be an administrator to use this command!`);
+        .setColor(0xF04747)
+        .setTitle(`❌ No Permission`)
+        .setDescription(`You need the Administrator role to use this command!`);
     
     const user = interaction.options.getUser('user');
     
@@ -42,24 +39,23 @@ module.exports = {
     warnsDB.delete(user.id);
     const clearedWarnsLog = interaction.client.channels.cache.get(channelLog);
     const em = new EmbedBuilder()
-      .setTitle("Warnings cleared")
-      .setColor(colorInt)
+      .setTitle("🧹 Warnings Cleared")
+      .setColor(0x43B581)
       .addFields(
-        { name: "Administrator", value: `${interaction.user.tag} (${interaction.user.id})` },
-        { name: "User", value: `${user.tag} (${user.id})` },
-        { name: "Unbanned?", value: userBanned ? 'Yes' : 'No' }
+        { name: "👮 Administrator", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+        { name: "👤 User", value: `${user.tag} (${user.id})`, inline: true },
+        { name: "🔓 Unbanned?", value: userBanned ? '✅ Yes' : '❌ No', inline: true }
       )
-      .setFooter({ text: `By: ${interaction.user.tag}` });
+      .setFooter({ text: `Cleared by ${interaction.user.tag}` })
+      .setTimestamp();
     
     await clearedWarnsLog.send({ embeds: [em] });
-    return interaction.reply({ embeds: [new EmbedBuilder().setColor(colorInt).setDescription(`I have successfully cleared all warnings on **${user.tag}**!`)], flags: MessageFlags.Ephemeral });
+    
+    const successEmbed = new EmbedBuilder()
+      .setColor(0x43B581)
+      .setTitle('✅ Warnings Cleared')
+      .setDescription(`All warnings for **${user.tag}** have been removed!`);
+    
+    return interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
   }
 }
-
-
-
-
-
-
-
-

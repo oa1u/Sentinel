@@ -5,9 +5,6 @@ const { MessageFlags } = require('discord.js');
 require("moment-duration-format");
 const { AdminRole } = require("../../Config/constants/roles.json");
 const { Announcement } = require("../../Config/constants/channel.json")
-const { Color } = require("../../Config/constants/misc.json")
-
-const colorInt = parseInt(Color.replace('#', ''), 16);
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -27,9 +24,9 @@ module.exports = {
   category: "management",
   async execute(interaction) {
     let Prohibited = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(`Prohibited User`)
-      .setDescription(`You have to be an administrator to use this command!`);
+      .setColor(0xF04747)
+      .setTitle(`❌ No Permission`)
+      .setDescription(`You need the Administrator role to use this command!`);
     
     if (!interaction.member.roles.cache.has(AdminRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     
@@ -38,19 +35,20 @@ module.exports = {
     const AnnDesc = interaction.options.getString('message');
     
     const em = new EmbedBuilder()
-      .setColor(colorInt)
-      .setTitle(title)
-      .setDescription(AnnDesc);
+      .setColor(0x5865F2)
+      .setTitle(`📢 ${title}`)
+      .setDescription(AnnDesc)
+      .setFooter({ text: `Announced by ${interaction.user.username}` })
+      .setTimestamp();
     
     await announceChan.send({ content: '@everyone', embeds: [em] });
-    await interaction.reply({ content: 'Announcement sent!', flags: MessageFlags.Ephemeral });
+    
+    const successEmbed = new EmbedBuilder()
+      .setColor(0x43B581)
+      .setTitle('✅ Announcement Sent')
+      .setDescription(`Your announcement has been posted to <#${Announcement}>`)
+      .setTimestamp();
+    
+    await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
   }
 }
-
-
-
-
-
-
-
-

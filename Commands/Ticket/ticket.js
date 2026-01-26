@@ -1,10 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { ChannelType, PermissionFlagsBits, MessageFlags } = require('discord.js');
-const { Color } = require("../../Config/constants/misc.json");
 const { ticketCategory } = require("../../Config/constants/channel.json");
 
-// Convert hex color to integer
-const colorInt = parseInt(Color.replace('#', ''), 16);
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -39,9 +36,14 @@ module.exports = {
       
       if (existingTicket) {
         const errorEmbed = new EmbedBuilder()
-          .setColor(colorInt)
+          .setColor(0xF04747)
           .setTitle('❌ Ticket Already Exists')
-          .setDescription(`You already have an open ticket: <#${existingTicket.id}>`);
+          .setDescription(`You already have an open ticket in this category!`)
+          .addFields(
+            { name: '🎫 Your Ticket', value: `<#${existingTicket.id}>`, inline: false },
+            { name: '💡 Note', value: 'Please use your existing ticket or close it first.', inline: false }
+          )
+          .setTimestamp();
         
         return await interaction.editReply({ embeds: [errorEmbed] });
       }
@@ -88,10 +90,14 @@ module.exports = {
 
       // Send welcome message in ticket channel
       const welcomeEmbed = new EmbedBuilder()
-        .setColor(colorInt)
-        .setTitle('🎫 Support Ticket')
-        .setDescription(`Welcome ${interaction.user}!\n\nSupport will be with you shortly.\nTo close this ticket, use the /close command or react with ❌.`)
-        .addFields({ name: 'Reason', value: reason, inline: false })
+        .setColor(0x5865F2)
+        .setTitle('🎫 Support Ticket Created')
+        .setDescription(`Welcome ${interaction.user}!\n\nOur support team will be with you shortly. Please describe your issue in detail.`)
+        .addFields(
+          { name: '📝 Reason', value: reason, inline: false },
+          { name: '❌ Close Ticket', value: 'Use `/close` or react with ❌ below', inline: false }
+        )
+        .setFooter({ text: 'Support Team' })
         .setTimestamp();
 
       const ticketMessage = await ticketChannel.send({
@@ -102,37 +108,16 @@ module.exports = {
       // Add close reaction
       await ticketMessage.react('❌').catch(console.error);
 
-      // Set up reaction collector for closing
-      const collector = ticketMessage.createReactionCollector({
-        filter: (reaction, user) => reaction.emoji.name === '❌' && !user.bot,
-        time: 7 * 24 * 60 * 60 * 1000 // 7 days
-      });
-
-      collector.on('collect', async (reaction, user) => {
-        // Only allow ticket creator or support staff to close
-        const canClose = user.id === interaction.user.id || 
-                        (supportRole && interaction.guild.members.cache.get(user.id)?.roles.cache.has(supportRole.id));
-        
-        if (canClose) {
-          const closeEmbed = new EmbedBuilder()
-            .setColor('Red')
-            .setDescription('⏱️ Ticket will be deleted in 5 seconds...');
-          
-          await ticketChannel.send({ embeds: [closeEmbed] });
-          
-          setTimeout(async () => {
-            await ticketChannel.delete().catch(console.error);
-          }, 5000);
-          
-          collector.stop();
-        }
-      });
-
       // Send confirmation to user
       const successEmbed = new EmbedBuilder()
-        .setColor(colorInt)
-        .setTitle('✅ Ticket Created')
-        .setDescription(`Your ticket has been created: ${ticketChannel}`);
+        .setColor(0x43B581)
+        .setTitle('✅ Ticket Created Successfully')
+        .setDescription(`Your support ticket has been created!`)
+        .addFields(
+          { name: '🎫 Ticket Channel', value: `${ticketChannel}`, inline: false },
+          { name: '📝 Reason', value: reason, inline: false }
+        )
+        .setTimestamp();
 
       await interaction.editReply({ embeds: [successEmbed] });
 
@@ -149,12 +134,3 @@ module.exports = {
     }
   }
 };
-
-
-
-
-
-
-
-
-

@@ -13,9 +13,14 @@ module.exports = {
   category: 'ticket',
   async execute(interaction) {
     const delete1 = new EmbedBuilder()
-        .setColor(colorInt)
-        .setTitle(`Deletion`)
-        .setDescription(`Ticket Will be deleted in 5 seconds`);
+        .setColor(0xFAA61A)
+        .setTitle(`🗑️ Closing Ticket`)
+        .setDescription(`This ticket will be deleted in **5 seconds**.`)
+        .addFields(
+          { name: '⏰ Time Remaining', value: '5 seconds', inline: false },
+          { name: '💡 Note', value: 'All messages will be permanently deleted.', inline: false }
+        )
+        .setTimestamp();
     
     if(interaction.channel.parentId !== ticketCategory) {
       return interaction.reply({ content: 'This command can only be used in a ticket channel!', flags: MessageFlags.Ephemeral });
@@ -28,11 +33,3 @@ module.exports = {
     }, 5000);
   }
 }
-
-
-
-
-
-
-
-
