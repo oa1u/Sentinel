@@ -1,11 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
-const { setUserXP, resetUser, getUserData } = require('../../Events/Leveling');
+const { setUserXP, resetUser, getUserData, calculateRequiredXP } = require('../../Events/Leveling');
 const { sendErrorReply, sendSuccessReply } = require('../../Functions/EmbedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('setlevel')
-        .setDescription('Set a user\'s XP or level (Admin only)')
+        .setDescription('Set a user\'s XP, level, or rank (Admin only)')
         .addSubcommand(subcommand =>
             subcommand
                 .setName('xp')
@@ -20,6 +20,23 @@ module.exports = {
                         .setDescription('Total XP to set')
                         .setRequired(true)
                         .setMinValue(0)
+                )
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('level')
+                .setDescription('Set a user\'s level')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('User to modify')
+                        .setRequired(true)
+                )
+                .addIntegerOption(option =>
+                    option.setName('amount')
+                        .setDescription('Level to set (1-100)')
+                        .setRequired(true)
+                        .setMinValue(1)
+                        .setMaxValue(100)
                 )
         )
         .addSubcommand(subcommand =>
@@ -39,7 +56,7 @@ module.exports = {
             await sendErrorReply(
                 interaction,
                 'No Permission',
-                'You need **Administrator** permission to use this command!'
+                'You need **Administrator** permission!'
             );
             return;
         }
@@ -65,6 +82,23 @@ module.exports = {
                 'XP Updated',
                 `Set **${targetUser.tag}**'s XP to **${amount.toLocaleString()}**\n` +
                 `New Level: **${userData.level}**`
+            );
+        } else if (subcommand === 'level') {
+            const level = interaction.options.getInteger('amount');
+            
+            // Calculate total XP needed for the target level
+            let totalXP = 0;
+            for (let i = 1; i < level; i++) {
+                totalXP += calculateRequiredXP(i);
+            }
+            
+            const userData = setUserXP(targetUser.id, totalXP);
+
+            await sendSuccessReply(
+                interaction,
+                'Level Updated',
+                `Set **${targetUser.tag}**'s level to **${level}**\n` +
+                `Total XP: **${totalXP.toLocaleString()}**`
             );
         } else if (subcommand === 'reset') {
             const oldData = getUserData(targetUser.id);

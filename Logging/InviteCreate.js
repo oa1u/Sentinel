@@ -1,13 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("inviteCreate", async(invite) => {
-    let logs = await client.channels.cache.get(channelLog);
-        	let embed = new EmbedBuilder()
+    const logs = client.channels.cache.get(serverLogChannelId);
+    if (!logs) return;
+        const embed = new EmbedBuilder()
             .setTitle("🔗 Invite Created")
             .setColor("#43B581")
-            .setDescription(`A new server invite has been created.`)
+            .setDescription(`New invite created.`)
             const fields = [
                 { name: "Invite Code", value: `\`${invite.code}\``, inline: true },
                 { name: "Invite URL", value: `[Click Here](${invite.url})`, inline: true },

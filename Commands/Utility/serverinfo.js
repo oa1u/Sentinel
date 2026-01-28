@@ -5,7 +5,7 @@ const { MessageFlags, ChannelType } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('serverinfo')
-    .setDescription('Display comprehensive server statistics, member counts, and configuration details'),
+    .setDescription('Get server information'),
   category: 'utility',
   async execute(interaction) {
     const guild = interaction.guild;
@@ -49,17 +49,17 @@ module.exports = {
       .setThumbnail(guild.iconURL({ size: 256 }) || null)
       .addFields(
         { name: '🪪 Server ID', value: guild.id, inline: true },
-        { name: '👑 Owner', value: owner ? `${owner.user.tag} (${owner.id})` : 'Unknown', inline: true },
+        { name: '👑 Owner', value: owner ? `${owner.user.tag}` : 'Unknown', inline: true },
         { name: '📅 Created', value: `${createdAt.format('LLL')}\n(${createdAt.fromNow()})`, inline: true },
         { name: '👥 Members', value: `Total: **${memberCount}**\n🙍‍♂️ Humans: **${humanCount}**\n🤖 Bots: **${botCount}**`, inline: true },
         { name: '📢 Channels', value: `#️⃣ Text: **${textChannels}**\n🔊 Voice: **${voiceChannels}**\n🎙️ Stage: **${stageChannels}**\n📰 Forum: **${forumChannels}**\n🗂️ Categories: **${categories}**`, inline: true },
-        { name: '⚡ Boosts', value: `✨ Count: **${boostCount}**\n🎖️ Tier: **${boostTier}**\n📈 ${boostProgress}`, inline: true },
+        { name: '⚡ Boosts', value: `✨ ${boostCount} (${boostTier})\n📈 ${boostProgress}`, inline: true },
         { name: '🎭 Roles', value: `${rolesCount}`, inline: true },
         { name: '😀 Emojis', value: `${emojisCount}`, inline: true },
         { name: '🏷️ Stickers', value: `${stickersCount}`, inline: true },
         { name: '🛡️ Verification', value: `${guild.verificationLevel ?? 'Unknown'}`, inline: true },
         { name: '😴 AFK', value: `${afkChannel}\n⏱️ Timeout: ${afkTimeout}`, inline: true },
-        { name: '🔗 Vanity URL', value: guild.vanityURLCode ? `discord.gg/${guild.vanityURLCode}` : 'None', inline: true },
+        { name: '🔗 Vanity', value: guild.vanityURLCode ? `discord.gg/${guild.vanityURLCode}` : 'None', inline: true },
         { name: '✨ Features', value: featureDisplay, inline: false }
       )
       .setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })

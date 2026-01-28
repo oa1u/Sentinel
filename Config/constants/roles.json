@@ -1,6 +1,6 @@
 {
-    "roleID": "",
-    "ModRole": "",
-    "AdminRole": "",
-    "SupportRole": ""
+    "verifiedRoleId": "VERIFIED_ROLE_ID_HERE",
+    "moderatorRoleId": "MODERATOR_ROLE_ID_HERE",
+    "administratorRoleId": "ADMINISTRATOR_ROLE_ID_HERE",
+    "supportTeamRoleId": "SUPPORT_TEAM_ROLE_ID_HERE"
 }

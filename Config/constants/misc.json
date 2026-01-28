@@ -1,4 +1,34 @@
 {
-	"blockInvites": true,
-	"mentionThreshold": 6
+	"blockExternalInvites": true,
+	"maxMentionsBeforeFlag": 6,
+	"timeouts": {
+		"ticketChannelDelete": 5000,
+		"verificationMessageDelete": 60000,
+		"joinToCreateCleanup": 10000,
+		"databaseSaveDebounce": 500,
+		"reminderCheckInterval": 60000
+	},
+	"cleanup": {
+		"cooldownCleanupInterval": 300000,
+		"reminderCheckInterval": 60000
+	},
+	"limits": {
+		"minAnnounceLength": 3,
+		"maxAnnounceTitleLength": 256,
+		"maxAnnounceMessageLength": 2000,
+		"maxGiveawayDuration": 604800,
+		"minReminderMinutes": 1,
+		"maxReminderMinutes": 1440
+	},
+	"rateLimit": {
+		"globalMax": 10,
+		"globalWindow": 10000,
+		"perCommandMax": 3,
+		"perCommandWindow": 5000
+	},
+	"reminders": {
+		"maxDeliveryAttempts": 5,
+		"retryDelayMinutes": 5,
+		"notificationChannelId": "YOUR_NOTIFICATIONS_CHANNEL_ID"
+	}
 }

@@ -1,11 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { ServerInvite } = require("../../Config/main.json");
-const { AdminRole, ModRole } = require("../../Config/constants/roles.json");
+const { administratorRoleId, moderatorRoleId } = require("../../Config/constants/roles.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Display all available commands and their descriptions organized by category')
+    .setDescription('Show all available commands')
     .addStringOption(option =>
       option.setName('category')
         .setDescription('Command category to display')
@@ -16,7 +16,8 @@ module.exports = {
           { name: 'Utility', value: 'utility' },
           { name: 'Leveling', value: 'levels' },
           { name: 'Fun', value: 'fun' },
-          { name: 'Ticket', value: 'ticket' }
+          { name: 'Ticket', value: 'ticket' },
+          { name: 'Verification', value: 'verification' }
         )
     ),
   category: 'utility',
@@ -25,8 +26,8 @@ module.exports = {
     
     // Check user roles
     const member = interaction.member;
-    const hasAdminRole = member.roles.cache.has(AdminRole);
-    const hasModRole = member.roles.cache.has(ModRole);
+    const hasAdminRole = member.roles.cache.has(administratorRoleId);
+    const hasModRole = member.roles.cache.has(moderatorRoleId);
 
     function ChangeLatter(string) {
       return string.charAt(0).toUpperCase() + string.slice(1);
@@ -39,7 +40,8 @@ module.exports = {
       utility: '🔧',
       leveling: '📈',
       fun: '🎮',
-      ticket: '🎫'
+      ticket: '🎫',
+      verification: '🔐'
     };
 
     // Build category list based on permissions
@@ -54,6 +56,7 @@ module.exports = {
     categoryList.push('📈 **Leveling** - Level up and rank commands');
     categoryList.push('🎮 **Fun** - Games and entertainment commands');
     categoryList.push('🎫 **Ticket** - Ticket system commands');
+    categoryList.push('🔐 **Verification** - Account verification commands');
 
     let embedhelp = new EmbedBuilder()
       .setColor(0x5865F2)
@@ -86,17 +89,21 @@ module.exports = {
       return interaction.reply({ embeds: [embedhelp], flags: MessageFlags.Ephemeral });
     }
 
-    // Check permissions for specific categories
+    // Check permissions
     if (category === 'management' && !hasAdminRole) {
+      const adminRole = interaction.guild.roles.cache.get(administratorRoleId);
+      const roleName = adminRole ? adminRole.name : 'Administrator';
       return interaction.reply({ 
-        content: `❌ You do not have permission to view Management commands. This category requires the ${AdminRole} role.`, 
+        content: `❌ You need the **${roleName}** role to view Management commands.`, 
         flags: MessageFlags.Ephemeral 
       });
     }
 
     if (category === 'moderation' && !hasModRole && !hasAdminRole) {
+      const modRole = interaction.guild.roles.cache.get(moderatorRoleId);
+      const roleName = modRole ? modRole.name : 'Moderator';
       return interaction.reply({ 
-        content: `❌ You do not have permission to view Moderation commands. This category requires the ${ModRole} role.`, 
+        content: `❌ You need the **${roleName}** role to view Moderation commands.`, 
         flags: MessageFlags.Ephemeral 
       });
     }
@@ -122,13 +129,13 @@ module.exports = {
         name: `${ChangeLatter(category)} Commands`, 
         iconURL: interaction.client.user.displayAvatarURL() 
       })
-      .setDescription(`${categoryIcons[category]} **${ChangeLatter(category)} Category**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nAll available commands in this category are listed below.`)
-      .setFooter({ text: `Requested by ${interaction.user.username} • ${count} commands`, iconURL: interaction.user.displayAvatarURL() })
+      .setDescription(`${categoryIcons[category]} **${ChangeLatter(category)}**`)
+      .setFooter({ text: `${count} commands`, iconURL: interaction.user.displayAvatarURL() })
       .setTimestamp();
 
     categoryEmbed.addFields({
-      name: `📝 Commands (${count} total)`,
-      value: commands.join('\n') + '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      name: `Commands`,
+      value: commands.join('\n'),
       inline: false
     });
 
@@ -146,6 +153,8 @@ function getCommandEmoji(commandName) {
     'unban': '🚫',
     'clearwarning': '🧹',
     'clearwarns': '🧹',
+    'giveaway': '🎉',
+    'manage': '🛠️',
     // Moderation
     'warn': '⚠️',
     'warning': '📋',
@@ -153,6 +162,8 @@ function getCommandEmoji(commandName) {
     'ban': '🔨',
     'kick': '👢',
     'clear': '🧹',
+    'timeout': '⏱️',
+    'untimeout': '✅',
     'deletemsg': '🗑️',
     // Utility
     'help': '❓',
@@ -161,8 +172,8 @@ function getCommandEmoji(commandName) {
     'joke': '😂',
     'define': '📖',
     'poll': '📊',
-    'remind': '🔔',
-    'verify': '✅',
+    'reminders': '🔔',
+    'crypto': '💰',
     // Leveling
     'rank': '🏆',
     'leaderboard': '🥇',
@@ -170,13 +181,19 @@ function getCommandEmoji(commandName) {
     // Fun
     '8ball': '🎱',
     'trivia': '🧠',
+    'coinflip': '🎲',
+    'fact': '💡',
+    'roast': '🔥',
+    'pickup': '💘',
     // Ticket
     'ticket': '🎫',
     'close': '🔒',
     'markhandled': '✅',
     'claim': '👤',
     'adduser': '➕',
-    'removeuser': '➖'
+    'removeuser': '➖',
+    // Verification
+    'verify': '🔐'
   };
   
   return emojiMap[commandName] || '❯';

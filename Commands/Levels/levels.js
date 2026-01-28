@@ -10,7 +10,7 @@ module.exports = {
                 .setDescription('User to check rank for')
                 .setRequired(false)
         ),
-    category: 'utility',
+    category: 'levels',
     async execute(interaction) {
         const targetUser = interaction.options.getUser('user') || interaction.user;
         
@@ -26,12 +26,12 @@ module.exports = {
         const userData = getUserData(targetUser.id);
         const rank = getUserRank(targetUser.id);
         const requiredXP = calculateRequiredXP(userData.level + 1);
-        const progress = Math.floor((userData.xp / requiredXP) * 100);
+        const progress = Math.min(100, Math.max(0, Math.floor((userData.xp / requiredXP) * 100)));
 
         // Create progress bar
         const barLength = 20;
-        const filledBars = Math.floor((progress / 100) * barLength);
-        const emptyBars = barLength - filledBars;
+        const filledBars = Math.max(0, Math.min(barLength, Math.floor((progress / 100) * barLength)));
+        const emptyBars = Math.max(0, barLength - filledBars);
         const progressBar = '▰'.repeat(filledBars) + '▱'.repeat(emptyBars);
 
         const rankEmbed = new EmbedBuilder()
@@ -59,7 +59,7 @@ module.exports = {
                 },
                 {
                     name: '⬆️ Progress to Next Level',
-                    value: `${progressBar} **${progress}%**\n${userData.xp.toLocaleString()} / ${requiredXP.toLocaleString()} XP`,
+                    value: `${progressBar} **${progress}%**\n${Math.max(0, userData.xp).toLocaleString()} / ${requiredXP.toLocaleString()} XP`,
                     inline: false
                 },
                 {
@@ -69,7 +69,7 @@ module.exports = {
                 },
                 {
                     name: '🎯 XP Needed',
-                    value: `**${(requiredXP - userData.xp).toLocaleString()}**`,
+                    value: `**${Math.max(0, requiredXP - userData.xp).toLocaleString()}**`,
                     inline: true
                 }
             )

@@ -1,9 +1,36 @@
 {
-	"status": "idle",
+	"interval": 30000,
+	"defaultStatus": "online",
 	"activities": [
 		{
 			"name": "The Server",
-			"type": 3
+			"type": 3,
+			"status": "online"
+		},
+		{
+			"name": "{members} members",
+			"type": 3,
+			"status": "idle"
+		},
+		{
+			"name": "For commands",
+			"type": 2,
+			"status": "dnd"
+		},
+		{
+			"name": "The community",
+			"type": 3,
+			"status": "online"
+		},
+		{
+			"name": "{users} users",
+			"type": 0,
+			"status": "idle"
+		},
+		{
+			"name": "For /help",
+			"type": 3,
+			"status": "online"
 		}
 	]
 }

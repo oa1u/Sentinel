@@ -2,14 +2,14 @@ const moment = require("moment");
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 require("moment-duration-format");
-const { AdminRole } = require("../../Config/constants/roles.json");
-const { channelLog } = require("../../Config/constants/channel.json")
+const { administratorRoleId } = require("../../Config/constants/roles.json");
+const { serverLogChannelId } = require("../../Config/constants/channel.json")
 const DatabaseManager = require('../../Functions/DatabaseManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('clearwarns')
-    .setDescription('Clear all warning infractions from a member\'s complete disciplinary history')
+    .setDescription('Clear all warnings from a user')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to clear warnings from')
@@ -25,7 +25,7 @@ module.exports = {
     
     const user = interaction.options.getUser('user');
     
-    if(!interaction.member.roles.cache.has(AdminRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+    if(!interaction.member.roles.cache.has(administratorRoleId)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     
     const userBanned = DatabaseManager.isUserBanned(user.id);
     if (userBanned) {
@@ -35,7 +35,7 @@ module.exports = {
     }
     DatabaseManager.clearUserWarns(user.id);
     
-    const clearedWarnsLog = interaction.client.channels.cache.get(channelLog);
+    const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
     const em = new EmbedBuilder()
       .setTitle("🧹 Warnings Cleared")
       .setColor(0x43B581)

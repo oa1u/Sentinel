@@ -10,7 +10,7 @@ const { AppealLink } = require("../../Config/main.json");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Permanently ban a user from the server with an optional reason')
+    .setDescription('Ban a user from the server')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to ban')
@@ -23,20 +23,21 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      }
+
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') || 'No reason provided';
 
-    // Check permissions and hierarchy
+    // Check permissions
     if (!await canModerateMember(interaction, targetUser, 'ban')) {
       return;
     }
 
-    // Generate case ID
     const caseID = generateCaseId('BAN');
-
-    // Create logging embed
     const logEmbed = createModerationEmbed({
-      action: '🔨 BAN',
+      action: '🔨 Ban',
       target: targetUser,
       moderator: interaction.user,
       reason: reason,
@@ -44,9 +45,9 @@ module.exports = {
       color: 0xF04747
     });
 
-    // Send DM to user
+    // DM the user
     const dmEmbed = new EmbedBuilder()
-      .setTitle('🔨 You Have Been Banned')
+      .setTitle('🔨 You\'ve Been Banned')
       .setColor(0xF04747)
       .setDescription(`You were banned from **${interaction.guild.name}**`)
       .addFields(
@@ -58,10 +59,9 @@ module.exports = {
 
     const dmSent = await sendModerationDM(targetUser, dmEmbed);
 
-    // Log the action
     await logModerationAction(interaction, logEmbed);
 
-    // Add to database
+    // Save to database
     addCase(targetUser.id, caseID, {
       moderator: interaction.user.id,
       reason: `(banned) - ${reason}`,
@@ -69,24 +69,23 @@ module.exports = {
       type: 'BAN'
     });
 
-    // Perform the ban
+    // Do the ban
     try {
       await interaction.guild.members.ban(targetUser, { reason });
       
-      // Send success response
       await sendSuccessReply(
         interaction,
         'Member Banned',
-        `Successfully banned **${targetUser.tag}**\n` +
+        `Banned **${targetUser.tag}**\n` +
         `Case ID: \`${caseID}\`\n` +
-        `DM Sent: ${dmSent ? '✅' : '❌'}`
+        `DM: ${dmSent ? '✅' : '❌'}`
       );
     } catch (err) {
-      console.error(`Error banning ${targetUser.tag}:`, err.message);
+      console.error(`Couldn't ban ${targetUser.tag}:`, err.message);
       await sendErrorReply(
         interaction,
         'Ban Failed',
-        `Could not ban **${targetUser.tag}**\nError: ${err.message}`
+        `Couldn't ban **${targetUser.tag}**\nError: ${err.message}`
       );
     }
   }

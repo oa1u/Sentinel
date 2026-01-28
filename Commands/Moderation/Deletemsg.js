@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
-const { ModRole } = require("../../Config/constants/roles.json");
+const { moderatorRoleId } = require("../../Config/constants/roles.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -16,9 +16,9 @@ module.exports = {
     const Prohibited = new EmbedBuilder()
       .setColor(0xF04747)
       .setTitle('❌ No Permission')
-      .setDescription('You need the Moderator role to use this command!');
+      .setDescription(`You need the <@&${moderatorRoleId}> role to use this command!`);
 
-    if (!interaction.member.roles.cache.has(ModRole)) {
+    if (!interaction.member.roles.cache.has(moderatorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
     
@@ -40,7 +40,7 @@ module.exports = {
     let successfullydeleted = new EmbedBuilder()
       .setColor(0x43B581)
       .setTitle('✅ Message Deleted')
-      .setDescription("Successfully deleted the message!");
+      .setDescription("Message deleted!");
     
     let cantfindthechannel = new EmbedBuilder()
       .setColor(0xF04747)

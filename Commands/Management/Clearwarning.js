@@ -1,13 +1,13 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const DatabaseManager = require('../../Functions/DatabaseManager');
-const { AdminRole } = require("../../Config/constants/roles.json");
-const { channelLog } = require("../../Config/constants/channel.json")
+const { administratorRoleId } = require("../../Config/constants/roles.json");
+const { serverLogChannelId } = require("../../Config/constants/channel.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('clearwarn')
-    .setDescription('Remove a specific warning case from a member\'s disciplinary record')
+    .setDescription('Remove a specific warning from a user')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to clear warning from')
@@ -26,7 +26,7 @@ module.exports = {
       .setTitle(`❌ No Permission`)
       .setDescription(`You need the Administrator role to use this command!`);
     
-    if (!interaction.member.roles.cache.has(AdminRole)) {
+    if (!interaction.member.roles.cache.has(administratorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
     
@@ -48,7 +48,7 @@ module.exports = {
     const caseReason = warnsDB.get(user.id).warns[caseID].reason;
     warnsDB.delete(user.id, `warns.${caseID}`);
     
-    const clearedWarnsLog = interaction.client.channels.cache.get(channelLog);
+    const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
     const em = new EmbedBuilder()
       .setTitle("🗑️ Warning Cleared")
       .setColor(0x43B581)

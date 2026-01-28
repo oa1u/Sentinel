@@ -32,58 +32,80 @@ class JSONDatabase {
             if (fs.existsSync(this.filePath)) {
                 const fileData = fs.readFileSync(this.filePath, 'utf-8');
                 this.data = JSON.parse(fileData);
-                console.log(`✅ Database loaded: ${this.name} (${this.size()} entries)`);
+                console.log(`✅ Loaded ${this.name}: ${this.size()} entries`);
                 return this.data;
             }
         } catch (err) {
-            console.error(`❌ Error loading database ${this.name}: ${err.message}`);
+            console.error(`❌ Couldn't load ${this.name}: ${err.message}`);
             console.warn(`⚠️  Using empty database for ${this.name}`);
         }
         return this.data;
     }
 
-    /**
-     * Create a backup before writing
-     */
+    // Create backup before writing
     createBackup() {
         if (!this.autoBackup) return;
         try {
             if (fs.existsSync(this.filePath)) {
-                fs.copyFileSync(this.filePath, this.backupPath);
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const rotatedBackupPath = path.join(BACKUP_DIR, `${this.name}.backup.${timestamp}.json`);
+                fs.copyFileSync(this.filePath, rotatedBackupPath);
+                
+                // Keep only last 10 backups
+                this.rotateBackups();
             }
         } catch (err) {
             console.warn(`⚠️  Failed to create backup for ${this.name}: ${err.message}`);
         }
     }
 
-    /**
-     * Debounced save to prevent excessive file writes
-     */
+    // Keep only last 10 backups
+    rotateBackups() {
+        try {
+            const files = fs.readdirSync(BACKUP_DIR)
+                .filter(file => file.startsWith(this.name) && file.endsWith('.json'))
+                .map(file => ({
+                    name: file,
+                    path: path.join(BACKUP_DIR, file),
+                    time: fs.statSync(path.join(BACKUP_DIR, file)).mtime.getTime()
+                }))
+                .sort((a, b) => b.time - a.time);
+            
+            // Delete files beyond the 10 most recent
+            for (let i = 10; i < files.length; i++) {
+                try {
+                    fs.unlinkSync(files[i].path);
+                    console.log(`[Database] Removed old backup: ${files[i].name}`);
+                } catch (err) {
+                    console.warn(`[Database] Could not delete backup ${files[i].name}: ${err.message}`);
+                }
+            }
+        } catch (err) {
+            console.warn(`[Database] Error rotating backups: ${err.message}`);
+        }
+    }
+
+    // Save with debouncing
     save() {
         if (this.saveTimeout) clearTimeout(this.saveTimeout);
         
-        this.saveTimeout = setTimeout(() => {
+        this.saveTimeout = setTimeout(async () => {
             try {
                 this.createBackup();
-                fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf-8');
+                const jsonString = JSON.stringify(this.data, null, 2);
+                await fs.promises.writeFile(this.filePath, jsonString, 'utf-8');
             } catch (err) {
-                console.error(`❌ Error saving database ${this.name}: ${err.message}`);
+                console.error(`❌ Couldn't save ${this.name}: ${err.message}`);
             }
         }, this.writeInterval);
     }
 
-    /**
-     * Validate key format
-     */
     validateKey(key) {
         if (typeof key !== 'string' || key.length === 0) {
             throw new TypeError(`Key must be a non-empty string, got ${typeof key}`);
         }
     }
 
-    /**
-     * Set a key-value pair
-     */
     set(key, value) {
         this.validateKey(key);
         this.data[key] = value;
@@ -91,25 +113,16 @@ class JSONDatabase {
         return value;
     }
 
-    /**
-     * Get a value by key
-     */
     get(key) {
         this.validateKey(key);
         return this.data[key];
     }
 
-    /**
-     * Check if key exists
-     */
     has(key) {
         this.validateKey(key);
         return key in this.data;
     }
 
-    /**
-     * Delete a key
-     */
     delete(key) {
         this.validateKey(key);
         delete this.data[key];

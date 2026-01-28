@@ -1,13 +1,15 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("emojiUpdate", async(oldEmoji, newEmoji) => {
-    let logs = await client.channels.cache.get(channelLog);
-        	let embed = new EmbedBuilder()
+        const logs = client.channels.cache.get(serverLogChannelId);
+        if (!logs) return;
+        
+        const embed = new EmbedBuilder()
             .setTitle("✏️ Emoji Updated")
             .setColor("#FAA61A")
-            .setDescription(`A custom emoji has been updated.`)
+            .setDescription(`Emoji updated.`)
             const fields = [];
             if(oldEmoji.name !== newEmoji.name){
                 fields.push({ name: "Old Emoji Name", value: `\`:${oldEmoji.name}:\``, inline: true });

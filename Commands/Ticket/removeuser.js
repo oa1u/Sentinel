@@ -1,22 +1,21 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { MessageFlags } = require('discord.js');
-const { ticketCategory } = require("../../Config/constants/channel.json");
-const { SupportRole } = require("../../Config/constants/roles.json");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const { ticketCategoryId } = require("../../Config/constants/channel.json");
+const { supportTeamRoleId } = require("../../Config/constants/roles.json");
 const { sendErrorReply, createSuccessEmbed } = require("../../Functions/EmbedBuilders");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('removeuser')
-    .setDescription('Remove a member\'s access from the current ticket conversation')
+    .setDescription('Remove a user from the current ticket')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to remove from the ticket')
         .setRequired(true)
     ),
-  category: 'ticket',
+  category: 'moderation',
   async execute(interaction) {
     // Verify this is a ticket channel
-    if (interaction.channel.parentId !== ticketCategory) {
+    if (interaction.channel.parentId !== ticketCategoryId) {
       return sendErrorReply(
         interaction,
         'Invalid Channel',
@@ -36,17 +35,15 @@ module.exports = {
       );
     }
 
-    // Check permissions (ticket owner, support, or admin)
-    const ticketOwnerName = interaction.channel.name.replace('ticket-', '').split(' - ')[0];
-    const isTicketOwner = member.user.username.toLowerCase() === ticketOwnerName.toLowerCase();
-    const hasSupport = member.roles.cache.has(SupportRole);
+    // Check permissions (support role required)
+    const hasSupport = member.roles.cache.has(supportTeamRoleId);
     const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
 
-    if (!isTicketOwner && !hasSupport && !isAdmin) {
+    if (!hasSupport && !isAdmin) {
       return sendErrorReply(
         interaction,
         'No Permission',
-        'Only the ticket owner or support staff can remove users!'
+        'Only support staff can remove users from tickets!'
       );
     }
 
@@ -64,7 +61,7 @@ module.exports = {
 
     const successEmbed = createSuccessEmbed(
       'User Removed from Ticket',
-      `**${targetUser}** has been removed from this ticket.\n\n━━━━━━━━━━━━━━━━━━━━━`
+      `**${targetUser}** has been removed from this ticket.`
     ).addFields(
       { name: '👤 Removed User', value: `${targetUser.tag}\n\`${targetUser.id}\``, inline: true },
       { name: '➖ Removed By', value: `${interaction.user.tag}\n\`${interaction.user.id}\``, inline: true },

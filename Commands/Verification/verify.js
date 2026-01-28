@@ -1,19 +1,19 @@
 const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { CaptchaGenerator } = require("captcha-canvas");
 const { sendErrorReply } = require('../../Functions/EmbedBuilders');
-const { roleID, AdminRole } = require("../../Config/constants/roles.json");
-const { verificationchannel, captchalogchannel } = require("../../Config/constants/channel.json");
+const { verifiedRoleId, administratorRoleId } = require("../../Config/constants/roles.json");
+const { verificationChannelId, captchaLogChannelId } = require("../../Config/constants/channel.json");
 
 const userCaptchaData = {};
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Complete server verification by solving a CAPTCHA challenge'),
-  category: 'management',
+    .setDescription('Verify yourself by solving a CAPTCHA'),
+  category: 'verification',
   async execute(interaction) {
     // Check if command is used in verification channel
-    if (interaction.channelId !== verificationchannel) {
+    if (interaction.channelId !== verificationChannelId) {
       return sendErrorReply(
         interaction,
         'Wrong Channel',
@@ -22,10 +22,10 @@ module.exports = {
     }
 
     const member = interaction.member;
-    const captchachannel = interaction.client.channels.cache.get(captchalogchannel);
+    const captchachannel = interaction.client.channels.cache.get(captchaLogChannelId);
 
     // Check if user is already verified
-    if (member.roles.cache.has(roleID)) {
+    if (member.roles.cache.has(verifiedRoleId)) {
       const alreadyVerifiedEmbed = new EmbedBuilder()
         .setColor(0x43B581)
         .setTitle('✅ Already Verified')
@@ -33,7 +33,7 @@ module.exports = {
       
       return interaction.reply({ 
         embeds: [alreadyVerifiedEmbed], 
-        ephemeral: true 
+        flags: 64
       });
     }
 
@@ -57,7 +57,7 @@ module.exports = {
       return sendErrorReply(
         interaction,
         'System Error',
-        `Verification system is not configured. Please contact an <@&${AdminRole}>.`
+        `Verification system is not configured. Please contact an <@&${administratorRoleId}>.`
       );
     }
 
@@ -98,7 +98,7 @@ module.exports = {
         
         return interaction.reply({ 
           embeds: [dmErrorEmbed], 
-          ephemeral: true 
+          flags: 64
         });
       });
 
@@ -109,7 +109,7 @@ module.exports = {
       
       await interaction.reply({ 
         embeds: [captchaSentEmbed], 
-        ephemeral: true 
+        flags: 64
       });
 
       const filter = m => {
@@ -136,7 +136,7 @@ module.exports = {
         try {
           console.log(`Response received for ${member.user.tag}, size: ${response.size}`);
           if (response && response.size > 0) {
-            const roleObj = member.guild.roles.cache.get(roleID);
+            const roleObj = member.guild.roles.cache.get(verifiedRoleId);
             console.log(`Role found: ${roleObj ? roleObj.name : 'NULL'}`);
             if (roleObj) {
               await member.roles.add(roleObj);
@@ -159,7 +159,7 @@ module.exports = {
             }
           }
         } catch (err) {
-          console.log(err);
+          console.error('[Verify] Error during verification:', err);
         }
       }).catch(async () => {
         const timeoutEmbed = new EmbedBuilder()
@@ -167,11 +167,13 @@ module.exports = {
           .setTitle('⏱️ Timeout')
           .setDescription('Operation timed out. Please run `/verify` to try again.');
         
-        dmChannel.send({ embeds: [timeoutEmbed] }).catch(() => {});
+        dmChannel.send({ embeds: [timeoutEmbed] }).catch((err) => {
+          console.error(`[Verify] Failed to send timeout message: ${err.message}`);
+        });
       });
 
     } catch (err) {
-      console.log(err);
+      console.error('[Verify] Error generating captcha:', err);
       const errorEmbed = new EmbedBuilder()
         .setColor(0xF04747)
         .setTitle('❌ Error')
@@ -179,7 +181,7 @@ module.exports = {
       
       return interaction.reply({ 
         embeds: [errorEmbed], 
-        ephemeral: true 
+        flags: 64
       });
     }
   }

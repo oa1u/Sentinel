@@ -6,7 +6,7 @@ require("moment-duration-format");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('userinfo')
-    .setDescription('Display comprehensive member information including roles, badges, and account details')
+    .setDescription('Get info about a user')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to get info about')
@@ -44,11 +44,9 @@ module.exports = {
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     
     if (member) {
-      // Calculate account age
       const accountAge = moment.duration(Date.now() - member.user.createdTimestamp).format('Y [years], M [months], D [days]');
       const serverAge = moment.duration(Date.now() - member.joinedTimestamp).format('Y [years], M [months], D [days]');
       
-      // Get user badges/flags
       const flags = member.user.flags ? member.user.flags.toArray() : [];
       const badgeEmojis = {
         Staff: '👮',
@@ -69,12 +67,6 @@ module.exports = {
       // Get voice state
       const voiceChannel = member.voice.channel;
       const voiceState = voiceChannel ? `${voiceChannel.toString()} ${member.voice.serverMute ? '🔇' : ''}${member.voice.serverDeaf ? '🔈' : ''}${member.voice.selfMute ? '🎤' : ''}${member.voice.selfDeaf ? '🔊' : ''}${member.voice.streaming ? '📹' : ''}` : 'Not in voice';
-      
-      // Get join position
-      const members = await interaction.guild.members.fetch();
-      const joinPosition = [...members.filter(m => !m.user.bot).values()]
-        .sort((a, b) => a.joinedTimestamp - b.joinedTimestamp)
-        .findIndex(m => m.id === member.id) + 1;
       
       // Get roles (excluding @everyone)
       const roles = member.roles.cache
@@ -116,7 +108,7 @@ module.exports = {
           { name: "🏷️ Nickname", value: member.nickname || 'None', inline: true },
           { name: "🎭 Highest Role", value: member.roles.highest.toString(), inline: true },
           { name: `⏰ Account Created`, value: `${moment(member.user.createdTimestamp).format('LLL')}\n*${moment(member.user.createdTimestamp).fromNow()}*\n**${accountAge}**` },
-          { name: `📍 Joined Server`, value: `${moment(member.joinedTimestamp).format('LLL')}\n*${moment(member.joinedTimestamp).fromNow()}*\n**${serverAge}**\n🏅 Join Position: **#${joinPosition}**` },
+          { name: `📍 Joined Server`, value: `${moment(member.joinedTimestamp).format('LLL')}\n*${moment(member.joinedTimestamp).fromNow()}*\n**${serverAge}**` },
           { name: `🎪 Roles [${roles.length}]`, value: rolesDisplay || '`None`' },
           { name: "⚔️ Key Permissions", value: permissionsDisplay || '`None`' }
         );

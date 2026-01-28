@@ -1,11 +1,6 @@
 const { EmbedBuilder, MessageFlags } = require('discord.js');
 
-/**
- * Create a consistent error embed
- * @param {string} title - Error title
- * @param {string} description - Error description
- * @returns {EmbedBuilder} Formatted error embed
- */
+// Basic embed creators
 function createErrorEmbed(title, description) {
     return new EmbedBuilder()
         .setColor(0xF04747)
@@ -14,12 +9,6 @@ function createErrorEmbed(title, description) {
         .setTimestamp();
 }
 
-/**
- * Create a consistent success embed
- * @param {string} title - Success title
- * @param {string} description - Success description
- * @returns {EmbedBuilder} Formatted success embed
- */
 function createSuccessEmbed(title, description) {
     return new EmbedBuilder()
         .setColor(0x43B581)
@@ -28,12 +17,6 @@ function createSuccessEmbed(title, description) {
         .setTimestamp();
 }
 
-/**
- * Create a consistent warning embed
- * @param {string} title - Warning title
- * @param {string} description - Warning description
- * @returns {EmbedBuilder} Formatted warning embed
- */
 function createWarningEmbed(title, description) {
     return new EmbedBuilder()
         .setColor(0xFAA61A)
@@ -42,12 +25,6 @@ function createWarningEmbed(title, description) {
         .setTimestamp();
 }
 
-/**
- * Create a consistent info embed
- * @param {string} title - Info title
- * @param {string} description - Info description
- * @returns {EmbedBuilder} Formatted info embed
- */
 function createInfoEmbed(title, description) {
     return new EmbedBuilder()
         .setColor(0x5865F2)
@@ -56,11 +33,7 @@ function createInfoEmbed(title, description) {
         .setTimestamp();
 }
 
-/**
- * Create a moderation action embed with all relevant details
- * @param {Object} options - Options object
- * @returns {EmbedBuilder} Formatted moderation embed
- */
+// Create moderation action embeds
 function createModerationEmbed(options = {}) {
     const {
         action = 'Action',
@@ -109,12 +82,7 @@ function createModerationEmbed(options = {}) {
     return embed;
 }
 
-/**
- * Create a user profile embed
- * @param {User|GuildMember} user - User or member to display
- * @param {Object} options - Additional options
- * @returns {EmbedBuilder} Formatted profile embed
- */
+// Create user profile embed
 function createUserEmbed(user, options = {}) {
     const {
         title = 'User Information',
@@ -151,13 +119,7 @@ function createUserEmbed(user, options = {}) {
     return embed;
 }
 
-/**
- * Send an error response with optional followUp option
- * @param {Interaction} interaction - Discord interaction
- * @param {string} title - Error title
- * @param {string} description - Error description
- * @returns {Promise<Message>} Sent message
- */
+// Send error reply
 async function sendErrorReply(interaction, title, description) {
     const embed = createErrorEmbed(title, description);
     
@@ -168,13 +130,7 @@ async function sendErrorReply(interaction, title, description) {
     }
 }
 
-/**
- * Send a success response
- * @param {Interaction} interaction - Discord interaction
- * @param {string} title - Success title
- * @param {string} description - Success description
- * @returns {Promise<Message>} Sent message
- */
+// Send success reply
 async function sendSuccessReply(interaction, title, description) {
     const embed = createSuccessEmbed(title, description);
     

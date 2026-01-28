@@ -1,23 +1,23 @@
 {
     "config": {
-        "baseXP": 15,
-        "randomXP": 10,
-        "cooldown": 60000,
-        "levelMultiplier": 1.5,
-        "baseRequirement": 100
+        "baseXpPerMessage": 15,
+        "randomXpVariance": 10,
+        "xpCooldownMs": 60000,
+        "levelRequirementMultiplier": 1.5,
+        "baseLevelRequirement": 100
     },
     "multipliers": {
-        "longMessage": 1.2,
-        "hasImage": 1.15,
-        "hasLink": 1.1
+        "longMessageXpMultiplier": 1.2,
+        "messageHasImageXpMultiplier": 1.15,
+        "messageHasLinkXpMultiplier": 1.1
     },
     "levelRoles": {
-        "role5": "",
-        "role10": "",
-        "role25": "",
-        "role50": "",
-        "role75": "",
-        "role100": ""
+        "level5RoleId": "LEVEL_5_ROLE_ID_HERE",
+        "level10RoleId": "LEVEL_10_ROLE_ID_HERE",
+        "level25RoleId": "LEVEL_25_ROLE_ID_HERE",
+        "level50RoleId": "LEVEL_50_ROLE_ID_HERE",
+        "level75RoleId": "LEVEL_75_ROLE_ID_HERE",
+        "level100RoleId": "LEVEL_100_ROLE_ID_HERE"
     }
 }
 

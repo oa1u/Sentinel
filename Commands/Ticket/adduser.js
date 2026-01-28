@@ -1,22 +1,21 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { MessageFlags } = require('discord.js');
-const { ticketCategory } = require("../../Config/constants/channel.json");
-const { SupportRole } = require("../../Config/constants/roles.json");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const { ticketCategoryId } = require("../../Config/constants/channel.json");
+const { supportTeamRoleId } = require("../../Config/constants/roles.json");
 const { sendErrorReply, createSuccessEmbed } = require("../../Functions/EmbedBuilders");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('adduser')
-    .setDescription('Add a member to view and participate in the current ticket conversation')
+    .setDescription('Add a user to the current ticket')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to add to the ticket')
         .setRequired(true)
     ),
-  category: 'ticket',
+  category: 'moderation',
   async execute(interaction) {
     // Verify this is a ticket channel
-    if (interaction.channel.parentId !== ticketCategory) {
+    if (interaction.channel.parentId !== ticketCategoryId) {
       return sendErrorReply(
         interaction,
         'Invalid Channel',
@@ -36,17 +35,15 @@ module.exports = {
       );
     }
 
-    // Check permissions (ticket owner, support, or admin)
-    const ticketOwnerName = interaction.channel.name.replace('ticket-', '').split(' - ')[0];
-    const isTicketOwner = member.user.username.toLowerCase() === ticketOwnerName.toLowerCase();
-    const hasSupport = member.roles.cache.has(SupportRole);
+    // Check permissions (support role required)
+    const hasSupport = member.roles.cache.has(supportTeamRoleId);
     const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
 
-    if (!isTicketOwner && !hasSupport && !isAdmin) {
+    if (!hasSupport && !isAdmin) {
       return sendErrorReply(
         interaction,
         'No Permission',
-        'Only the ticket owner or support staff can add users!'
+        'Only support staff can add users to tickets!'
       );
     }
 
@@ -60,7 +57,7 @@ module.exports = {
 
     const successEmbed = createSuccessEmbed(
       'User Added to Ticket',
-      `**${targetUser}** has been successfully added to this ticket!\n\n━━━━━━━━━━━━━━━━━━━━━`
+      `**${targetUser}** has been added to this ticket!`
     ).addFields(
       { name: '👤 Added User', value: `${targetUser.tag}\n\`${targetUser.id}\``, inline: true },
       { name: '➕ Added By', value: `${interaction.user.tag}\n\`${interaction.user.id}\``, inline: true },
@@ -73,7 +70,7 @@ module.exports = {
     const notifyEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setTitle('🎫 Added to Support Ticket')
-      .setDescription(`${targetUser}\n\n━━━━━━━━━━━━━━━━━━━━━\n\nYou have been added to this ticket by ${interaction.user}.\n\n**You can now:**\n> 📖 View the conversation history\n> 💬 Send messages and help resolve the issue\n> 📎 Share files and screenshots`)
+      .setDescription(`${targetUser}\n\nYou have been added to this ticket by ${interaction.user}.\n\n**You can now:**\n> 📖 View the conversation history\n> 💬 Send messages and help resolve the issue\n> 📎 Share files and screenshots`)
       .setFooter({ text: 'Ticket System' })
       .setTimestamp();
 

@@ -12,7 +12,7 @@ module.exports = {
                 .setMinValue(5)
                 .setMaxValue(25)
         ),
-    category: 'utility',
+    category: 'levels',
     async execute(interaction) {
         await interaction.deferReply();
 
@@ -23,7 +23,7 @@ module.exports = {
             const emptyEmbed = new EmbedBuilder()
                 .setColor(0xFAA61A)
                 .setTitle('📊 Leaderboard')
-                .setDescription('No users have earned XP yet! Start chatting to be the first on the leaderboard!');
+                .setDescription('Nobody has earned XP yet! Start chatting to be first!');
             return interaction.editReply({ embeds: [emptyEmbed] });
         }
 
@@ -53,12 +53,11 @@ module.exports = {
             .setColor(0xFFD700)
             .setTitle('🏆 XP Leaderboard')
             .setDescription(
-                `Top ${limit} members by total XP\n\n` +
-                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `Top ${limit} members\n\n` +
                 leaderboardText.join('\n\n')
             )
             .setTimestamp()
-            .setFooter({ text: `Total users ranked: ${leaderboard.length}` });
+            .setFooter({ text: `${leaderboard.length} users ranked` });
 
         await interaction.editReply({ embeds: [leaderboardEmbed] });
     }

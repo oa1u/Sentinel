@@ -1,9 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
-const { AdminRole } = require("../../Config/constants/roles.json");
-const { Announcement } = require("../../Config/constants/channel.json")
+const { administratorRoleId } = require("../../Config/constants/roles.json");
+const { announcementChannelId } = require("../../Config/constants/channel.json")
 
-// Helper function to format long messages for embeds
 function formatMessageForEmbed(message) {
   const MAX_DESC_LENGTH = 4096;
   
@@ -11,7 +10,6 @@ function formatMessageForEmbed(message) {
     return { type: 'description', content: message };
   }
   
-  // Split message into chunks for fields
   const chunks = [];
   const lines = message.split('\n');
   let currentChunk = '';
@@ -32,7 +30,7 @@ function formatMessageForEmbed(message) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('announce')
-    .setDescription('Publish a formatted announcement with custom styling to the server announcement channel')
+    .setDescription('Post an announcement')
     .addStringOption(option =>
       option.setName('title')
         .setDescription('Announcement title')
@@ -56,11 +54,11 @@ module.exports = {
       .setTitle(`❌ No Permission`)
       .setDescription(`You need the Administrator role to use this command!`);
     
-    if (!interaction.member.roles.cache.has(AdminRole)) {
+    if (!interaction.member.roles.cache.has(administratorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
     
-    const announceChan = interaction.client.channels.cache.get(Announcement);
+    const announceChan = interaction.client.channels.cache.get(announcementChannelId);
     if (!announceChan) {
       const notFoundEmbed = new EmbedBuilder()
         .setColor(0xF04747)
@@ -73,24 +71,23 @@ module.exports = {
     const message = interaction.options.getString('message').trim();
     const colorInput = interaction.options.getString('color') || '5865F2';
 
-    // Capitalize first letter of title
     const formattedTitle = title.charAt(0).toUpperCase() + title.slice(1);
 
-    // Validate title
+    // Check title length
     if (title.length < 3 || title.length > 100) {
       const titleEmbed = new EmbedBuilder()
         .setColor(0xF04747)
         .setTitle('❌ Invalid Title')
-        .setDescription('Title must be between 3 and 100 characters!');
+        .setDescription('Title needs to be 3-100 characters!');
       return interaction.reply({ embeds: [titleEmbed], flags: MessageFlags.Ephemeral });
     }
 
-    // Validate message
+    // Check message length
     if (!message || message.trim().split(' ').length < 3) {
       const shortMsgEmbed = new EmbedBuilder()
         .setColor(0xF04747)
         .setTitle('❌ Message Too Short')
-        .setDescription('Your announcement must be at least 3 words long!');
+        .setDescription('Announcement needs at least 3 words!');
       return interaction.reply({ embeds: [shortMsgEmbed], flags: MessageFlags.Ephemeral });
     }
 
@@ -106,11 +103,10 @@ module.exports = {
       const colorEmbed = new EmbedBuilder()
         .setColor(0xF04747)
         .setTitle('❌ Invalid Color')
-        .setDescription('Please provide a valid hex color code (e.g., #5865F2 or 5865F2)!');
+        .setDescription('Need a valid hex color (e.g., #5865F2 or 5865F2)!');
       return interaction.reply({ embeds: [colorEmbed], flags: MessageFlags.Ephemeral });
     }
 
-    // Defer after all validations pass
     await interaction.deferReply();
 
     const em = new EmbedBuilder()
@@ -137,16 +133,14 @@ module.exports = {
 
     const successEmbed = new EmbedBuilder()
       .setColor(0x43B581)
-      .setTitle('✅ Announcement Sent')
-      .setDescription(`Your announcement has been posted to <#${Announcement}>`)
+      .setTitle('✅ Sent!')
+      .setDescription(`Posted to <#${announcementChannelId}>`)
       .addFields(
         { name: 'Title', value: formattedTitle, inline: true },
-        { name: 'Characters', value: `${message.length}`, inline: true }
+        { name: 'Length', value: `${message.length} chars`, inline: true }
       )
       .setTimestamp();
     
-    await interaction.editReply({
-      embeds: [successEmbed]
-    });
+    await interaction.editReply({ embeds: [successEmbed] });
   }
 }

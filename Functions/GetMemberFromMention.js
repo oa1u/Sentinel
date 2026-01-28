@@ -1,9 +1,4 @@
-/**
- * Get a member from a mention string, ID, or username
- * @param {Guild} guild - The guild to search in
- * @param {string} input - The mention string, member ID, or username
- * @returns {Promise<GuildMember|null>} The member object or null if not found
- */
+// Get member from mention, ID, or username
 async function getMemberFromMention(guild, input) {
     if (!guild) {
         throw new Error('Guild is required');
@@ -50,12 +45,7 @@ async function getMemberFromMention(guild, input) {
     return member || null;
 }
 
-/**
- * Get a user from various input formats
- * @param {Client} client - The Discord client
- * @param {string} input - Mention, user ID, or username
- * @returns {Promise<User|null>} The user object or null if not found
- */
+// Get user from mention or ID
 async function getUserFromInput(client, input) {
     if (!client) {
         throw new Error('Client is required');
@@ -86,12 +76,7 @@ async function getUserFromInput(client, input) {
     return null;
 }
 
-/**
- * Check if a member has a specific role
- * @param {GuildMember} member - The member to check
- * @param {string|Role} roleInput - Role ID or Role object
- * @returns {boolean} True if member has the role
- */
+// Check if member has a role
 function memberHasRole(member, roleInput) {
     if (!member) return false;
     
@@ -99,12 +84,7 @@ function memberHasRole(member, roleInput) {
     return member.roles.cache.has(roleId);
 }
 
-/**
- * Get all members with a specific role
- * @param {Guild} guild - The guild to search in
- * @param {string|Role} roleInput - Role ID or Role object
- * @returns {Collection<string, GuildMember>} Members with the role
- */
+// Get all members with a role
 function getMembersWithRole(guild, roleInput) {
     if (!guild) {
         throw new Error('Guild is required');

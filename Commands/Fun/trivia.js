@@ -3,13 +3,6 @@ const { MessageFlags } = require('discord.js');
 
 const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣'];
 
-// HTML decode helper
-function decodeHtml(html) {
-  const txt = document.createElement('textarea');
-  txt.innerHTML = html;
-  return txt.value;
-}
-
 // Simple HTML entity decoder without DOM
 function htmlDecode(str) {
   const entities = {
@@ -25,7 +18,7 @@ function htmlDecode(str) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('trivia')
-    .setDescription('Challenge your knowledge with a random multiple-choice trivia question'),
+    .setDescription('Answer a random trivia question'),
   category: 'fun',
   async execute(interaction) {
     await interaction.deferReply();
@@ -65,12 +58,12 @@ module.exports = {
         .join('\n');
       
       em.addFields({ name: 'Options', value: optionsText, inline: false });
-      em.setFooter({ text: `React with your answer! You have 30 seconds.` })
+      em.setFooter({ text: `React with your answer! 30 seconds.` })
         .setTimestamp();
       
-      const triviaMessage = await interaction.editReply({ embeds: [em], fetchReply: true });
+      const triviaMessage = await interaction.editReply({ embeds: [em] }).then(response => response || interaction.message);
       
-      // Add reactions
+      // Add reaction options
       for (let i = 0; i < 4; i++) {
         await triviaMessage.react(emojis[i]);
       }
@@ -97,10 +90,22 @@ module.exports = {
           const wrongEmbed = new EmbedBuilder()
             .setColor(0xF04747)
             .setTitle('❌ Wrong!')
-            .setDescription(`The correct answer is **${correctAnswer}**\n\nYou answered: **${allAnswers[answerIndex]}**`)
-            .setFooter({ text: `Better luck next time, ${interaction.user.username}!` });
+            .setDescription(`Correct answer: **${correctAnswer}**\n\nYou answered: **${allAnswers[answerIndex]}**`)
+            .setFooter({ text: `Better luck next time!` });
           
           interaction.followUp({ embeds: [wrongEmbed] });
+        }
+      });
+      
+      collector.on('end', (collected) => {
+        if (collected.size === 0) {
+          const timeoutEmbed = new EmbedBuilder()
+            .setColor(0xFAA61A)
+            .setTitle('⏱️ Time\'s Up!')
+            .setDescription(`The correct answer was **${correctAnswer}**`)
+            .setFooter({ text: `No answer was selected in time.` });
+          
+          interaction.followUp({ embeds: [timeoutEmbed] });
         }
       });
     } catch (error) {

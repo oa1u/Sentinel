@@ -1,12 +1,12 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const DatabaseManager = require('../../Functions/DatabaseManager');
-const { ModRole, AdminRole } = require("../../Config/constants/roles.json");
+const { moderatorRoleId, administratorRoleId } = require("../../Config/constants/roles.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('checkban')
-    .setDescription('Look up detailed ban information and case details using the case identifier')
+    .setDescription('Look up ban info by case ID')
     .addStringOption(option =>
       option.setName('caseid')
         .setDescription('The case ID to look up')
@@ -18,11 +18,11 @@ module.exports = {
     const caseID = interaction.options.getString('caseid');
 
     // Permission check
-    if (!moderator.roles.cache.has(ModRole) && !moderator.roles.cache.has(AdminRole)) {
+    if (!moderator.roles.cache.has(moderatorRoleId) && !moderator.roles.cache.has(administratorRoleId)) {
       const noPermEmbed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('❌ No Permission')
-        .setDescription('You must be a moderator or administrator to use this command!');
+        .setDescription('You need mod or admin role!');
       
       return interaction.reply({ embeds: [noPermEmbed], flags: MessageFlags.Ephemeral });
     }

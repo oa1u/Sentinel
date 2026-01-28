@@ -3,8 +3,8 @@ const JSONDatabase = require('../../Functions/Database');
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 require("moment-duration-format");
-const { AdminRole } = require("../../Config/constants/roles.json");
-const { Announcement } = require("../../Config/constants/channel.json")
+const { administratorRoleId } = require("../../Config/constants/roles.json");
+const { announcementChannelId } = require("../../Config/constants/channel.json")
 
 // Helper function to format long messages for embeds
 function formatMessageForEmbed(message) {
@@ -35,7 +35,7 @@ function formatMessageForEmbed(message) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('eannounce')
-    .setDescription('Publish a server-wide announcement with @everyone notification and custom styling')
+    .setDescription('Make an @everyone announcement with custom styling')
     .addStringOption(option =>
       option.setName('title')
         .setDescription('Announcement title')
@@ -59,11 +59,11 @@ module.exports = {
       .setTitle(`❌ No Permission`)
       .setDescription(`You need the Administrator role to use this command!`);
     
-    if (!interaction.member.roles.cache.has(AdminRole)) {
+    if (!interaction.member.roles.cache.has(administratorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
     
-    const announceChan = interaction.client.channels.cache.get(Announcement);
+    const announceChan = interaction.client.channels.cache.get(announcementChannelId);
     if (!announceChan) {
       const notFoundEmbed = new EmbedBuilder()
         .setColor(0xF04747)
@@ -141,7 +141,7 @@ module.exports = {
     const successEmbed = new EmbedBuilder()
       .setColor(0x43B581)
       .setTitle('✅ Announcement Sent with @everyone')
-      .setDescription(`Your announcement has been posted to <#${Announcement}> and @everyone was pinged`)
+      .setDescription(`Your announcement has been posted to <#${announcementChannelId}> and @everyone was pinged`)
       .addFields(
         { name: 'Title', value: formattedTitle, inline: true },
         { name: 'Characters', value: `${message.length}`, inline: true }

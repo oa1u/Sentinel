@@ -1,14 +1,15 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("guildMemberUpdate", async(Old, New) => {
- 	   let logs = await client.channels.cache.get(channelLog);
+       const logs = client.channels.cache.get(serverLogChannelId);
+       if (!logs) return;
 	   if(Old.displayName !== New.displayName || Old.user.username !== New.user.username){
-    	   let embed = new EmbedBuilder()
+           const embed = new EmbedBuilder()
             .setTitle("✏️ Member Updated")
             .setColor("#FAA61A")
-            .setDescription(`${New.user.toString()} has been updated.`);
+            .setDescription(`${New.user.toString()} updated.`);
             const fields = [];
             fields.push({ name: "User", value: `${New.user.tag}`, inline: true });
             fields.push({ name: "User ID", value: `\`${New.id}\``, inline: true });

@@ -1,20 +1,12 @@
-const { MessageFlags } = require('discord.js');
 const { isModOrAdmin, getMemberFromMention } = require('./GetMemberFromMention');
-const { createErrorEmbed, sendErrorReply } = require('./EmbedBuilders');
+const { sendErrorReply } = require('./EmbedBuilders');
 const DatabaseManager = require('./DatabaseManager');
+const { getMember, getUser } = require('./Helpers');
 
-/**
- * Check if the executor has permission to moderate a target
- * @param {Interaction} interaction - The Discord interaction
- * @param {User} targetUser - The user being targeted
- * @param {string} actionName - Name of the action (ban, kick, warn)
- * @returns {Promise<boolean>} True if allowed, false otherwise
- */
 async function canModerateMember(interaction, targetUser, actionName = 'action') {
     const executor = interaction.member;
     const guild = interaction.guild;
 
-    // Check if executor is mod/admin
     if (!isModOrAdmin(executor)) {
         await sendErrorReply(
             interaction,
@@ -24,7 +16,6 @@ async function canModerateMember(interaction, targetUser, actionName = 'action')
         return false;
     }
 
-    // Check if targeting self
     if (executor.id === targetUser.id) {
         await sendErrorReply(
             interaction,
@@ -34,8 +25,7 @@ async function canModerateMember(interaction, targetUser, actionName = 'action')
         return false;
     }
 
-    // Fetch target member and check role hierarchy
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+    const targetMember = await getMember(guild, targetUser.id);
     if (targetMember && executor.roles.highest.position <= targetMember.roles.highest.position) {
         await sendErrorReply(
             interaction,
@@ -48,34 +38,23 @@ async function canModerateMember(interaction, targetUser, actionName = 'action')
     return true;
 }
 
-/**
- * Get or create warn database entry for a user
- * @param {string} userId - The user ID
- * @returns {Object} User's warn data
- */
 function getOrCreateWarnEntry(userId) {
     return DatabaseManager.getUserWarns(userId);
 }
 
-/**
- * Add a moderation case to a user's record
- * @param {string} userId - The user ID
- * @param {string} caseId - The case ID
- * @param {Object} caseData - Case information
- */
 function addCase(userId, caseId, caseData) {
     DatabaseManager.addCase(userId, caseId, caseData);
 }
 
-/**
- * Send DM to user
- * @param {User} user - The user to DM
- * @param {EmbedBuilder} embed - The embed to send
- * @returns {Promise<boolean>} True if sent, false otherwise
- */
 async function sendModerationDM(user, embed) {
     try {
-        await user.send({ embeds: [embed] });
+        const dmUser = await getUser(null, user.id);
+        if (!dmUser) {
+            console.warn(`Could not fetch user for DM: ${user.tag}`);
+            return false;
+        }
+        
+        await dmUser.send({ embeds: [embed] });
         return true;
     } catch (err) {
         console.warn(`Could not send DM to ${user.tag}: ${err.message}`);
@@ -83,15 +62,9 @@ async function sendModerationDM(user, embed) {
     }
 }
 
-/**
- * Log moderation action to logging channel
- * @param {Interaction} interaction - The Discord interaction
- * @param {EmbedBuilder} embed - The embed to log
- * @returns {Promise<boolean>} True if sent, false otherwise
- */
 async function logModerationAction(interaction, embed) {
-    const { channelLog } = require('../Config/constants/channel.json');
-    const loggingChannel = interaction.guild.channels.cache.get(channelLog);
+    const { serverLogChannelId } = require('../Config/constants/channel.json');
+    const loggingChannel = interaction.guild.channels.cache.get(serverLogChannelId);
 
     if (!loggingChannel) {
         console.warn('Logging channel not found or not configured');
@@ -107,14 +80,9 @@ async function logModerationAction(interaction, embed) {
     }
 }
 
-/**
- * Validate and resolve a user input (mention, ID, or username)
- * @param {Interaction} interaction - The Discord interaction
- * @param {string|User} input - User input or User object
- * @returns {Promise<User|null>} The resolved user or null
- */
+// Resolve user from mention, ID, or username
 async function resolveUser(interaction, input) {
-    // If already a User object, return it
+    // Already a User object
     if (input && typeof input === 'object' && input.id) {
         return input;
     }

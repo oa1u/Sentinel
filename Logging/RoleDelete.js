@@ -1,13 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("roleDelete", async(role) => {
-    let logs = await client.channels.cache.get(channelLog);
-        	let embed = new EmbedBuilder()
+    const logs = client.channels.cache.get(serverLogChannelId);
+    if (!logs) return;
+        const embed = new EmbedBuilder()
             .setTitle("🗑️ Role Deleted")
             .setColor(role.hexColor !== "#000000" ? parseInt(role.hexColor.replace('#', ''), 16) : 0xF04747)
-            .setDescription(`A role has been deleted from the server.`)
+            .setDescription(`Role deleted from server.`)
             .addFields(
                 { name: "Role Name", value: `@${role.name}`, inline: true },
                 { name: "Role ID", value: `\`${role.id}\``, inline: true },

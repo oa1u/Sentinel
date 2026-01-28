@@ -1,19 +1,20 @@
 const { EmbedBuilder, ChannelType } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("channelDelete", async(channel) => {
-    let logs = await client.channels.cache.get(channelLog);
+    const logs = client.channels.cache.get(serverLogChannelId);
+    if (!logs) return;
         if(channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice){
             const isVoice = channel.type === ChannelType.GuildVoice;
             const channelTypeText = isVoice ? "Voice Channel" : "Text Channel";
             const emoji = isVoice ? "🔊" : "📝";
-            const channelPrefix = isVoice ? "🔊 " : "#";
+            const channelPrefix = isVoice ? "🔊 " : "📝";
             
-        	let embed = new EmbedBuilder()
-            .setTitle("🗑️ Channel Deleted")
+        const embed = new EmbedBuilder()
+            .setTitle(`🗑️ ${emoji} Channel Deleted`)
             .setColor("#F04747")
-            .setDescription(`A ${channelTypeText.toLowerCase()} has been deleted from the server.`)
+            .setDescription(`${channelTypeText} deleted from server.`)
             const fields = [
                 { name: "Channel Name", value: `${channelPrefix}${channel.name}`, inline: true },
                 { name: "Channel ID", value: `\`${channel.id}\``, inline: true },

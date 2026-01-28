@@ -4,7 +4,7 @@ const { MessageFlags } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('poll')
-    .setDescription('Create an interactive poll with customizable options for members to vote on')
+    .setDescription('Create a poll with up to 4 options')
     .addStringOption(option =>
       option.setName('question')
         .setDescription('Your poll question')
@@ -44,8 +44,8 @@ module.exports = {
     if (options.length < 2) {
       const errorEmbed = new EmbedBuilder()
         .setColor(0xF04747)
-        .setTitle('❌ Invalid Poll')
-        .setDescription('You need at least 2 options for a poll!');
+        .setTitle('❌ Invalid')
+        .setDescription('Need at least 2 options for a poll!');
       return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
@@ -66,9 +66,9 @@ module.exports = {
       inline: false
     });
     
-    const pollMessage = await interaction.reply({ embeds: [pollEmbed], fetchReply: true });
+    const pollMessage = await interaction.reply({ embeds: [pollEmbed] }).then(response => response || interaction.message);
     
-    // Add reactions
+    // React with options
     for (let i = 0; i < options.length; i++) {
       await pollMessage.react(emojis[i]);
     }

@@ -1,18 +1,17 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { MessageFlags } = require('discord.js');
-const { ticketCategory } = require("../../Config/constants/channel.json");
-const { SupportRole } = require("../../Config/constants/roles.json");
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { ticketCategoryId } = require("../../Config/constants/channel.json");
+const { supportTeamRoleId } = require("../../Config/constants/roles.json");
 const { sendErrorReply, createSuccessEmbed } = require("../../Functions/EmbedBuilders");
 const DatabaseManager = require('../../Functions/DatabaseManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('claim')
-    .setDescription('Assign this support ticket to yourself as the primary handler'),
-  category: 'ticket',
+    .setDescription('Claim this ticket as yours'),
+  category: 'moderation',
   async execute(interaction) {
     // Verify this is a ticket channel
-    if (interaction.channel.parentId !== ticketCategory) {
+    if (interaction.channel.parentId !== ticketCategoryId) {
       return sendErrorReply(
         interaction,
         'Invalid Channel',
@@ -21,7 +20,7 @@ module.exports = {
     }
 
     // Check if user has support role
-    if (!interaction.member.roles.cache.has(SupportRole) && !interaction.member.permissions.has('Administrator')) {
+    if (!interaction.member.roles.cache.has(supportTeamRoleId) && !interaction.member.permissions.has('Administrator')) {
       return sendErrorReply(
         interaction,
         'No Permission',
@@ -57,7 +56,7 @@ module.exports = {
 
     const successEmbed = createSuccessEmbed(
       'Ticket Claimed Successfully',
-      `You have claimed this ticket!\n\n━━━━━━━━━━━━━━━━━━━━━`
+      `You have claimed this ticket!`
     ).addFields(
       { name: '👤 Support Member', value: `${interaction.user.tag}\n\`${interaction.user.id}\``, inline: true },
       { name: '⏰ Claimed At', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
@@ -70,7 +69,7 @@ module.exports = {
     const notifyEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setTitle('🎫 Ticket Claimed')
-      .setDescription(`━━━━━━━━━━━━━━━━━━━━━\n\n**${interaction.user}** has claimed this ticket and will assist you.\n\n**What this means:**\n> ✅ A support member is now handling your case\n> 📞 They will respond to your questions\n> 🎯 Your issue will be resolved shortly`)
+      .setDescription(`**${interaction.user}** has claimed this ticket and will assist you.\n\n**What this means:**\n> ✅ A support member is now handling your case\n> 📞 They will respond to your questions\n> 🎯 Your issue will be resolved shortly`)
       .setFooter({ text: 'Support Team' })
       .setTimestamp();
 

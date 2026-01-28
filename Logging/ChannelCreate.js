@@ -1,18 +1,19 @@
 const { EmbedBuilder, ChannelType } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("channelCreate", async(channel) => {
-    let logs = await client.channels.cache.get(channelLog);
+    const logs = client.channels.cache.get(serverLogChannelId);
+    if (!logs) return;
         if(channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice){
             const isVoice = channel.type === ChannelType.GuildVoice;
             const channelTypeText = isVoice ? "Voice Channel" : "Text Channel";
             const emoji = isVoice ? "🔊" : "📝";
             
-        	let embed = new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle(`${emoji} Channel Created`)
             .setColor("#43B581")
-            .setDescription(`A new ${channelTypeText.toLowerCase()} has been created in the server.`)
+            .setDescription(`New ${channelTypeText.toLowerCase()} created.`)
             .addFields(
                 { name: "Channel", value: channel.toString(), inline: true },
                 { name: "Channel ID", value: `\`${channel.id}\``, inline: true },

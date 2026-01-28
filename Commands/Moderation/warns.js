@@ -3,12 +3,12 @@ const DatabaseManager = require('../../Functions/DatabaseManager');
 require("moment-duration-format");
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
-const { ModRole } = require("../../Config/constants/roles.json");
+const { moderatorRoleId } = require("../../Config/constants/roles.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warns')
-    .setDescription('Display all recorded warning cases and infractions for a specified member')
+    .setDescription('View all warnings for a user')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User (optional)')
@@ -21,8 +21,8 @@ module.exports = {
         .setTitle(`Prohibited User`)
         .setDescription(`You have to be in the moderation team to look at other people's warnings`);
     
-    // Check for ModRole permission
-    if(!interaction.member.roles.cache.has(ModRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+    // Check for Mod role permission
+    if(!interaction.member.roles.cache.has(moderatorRoleId)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     
     const warnsDB = DatabaseManager.getWarnsDB();
     const userOption = interaction.options.getUser('user');

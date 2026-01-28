@@ -1,6 +1,6 @@
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const jointocreatemap = new Map();
-const { jointocreatechannel, jointocreatecategory } = require("../Config/constants/channel.json");
+const { joinToCreateChannelId, joinToCreateCategoryId } = require("../Config/constants/channel.json");
 const { serverID } = require("../Config/main.json");
 
 let cleanupStarted = false;
@@ -25,12 +25,14 @@ module.exports = {
               const vc = guild.channels.cache.get(jointocreatemap.get(key));
               if (vc && vc.members.size < 1) {
                 jointocreatemap.delete(key);
-                vc.delete().catch(() => {});
+                vc.delete().catch((err) => {
+                  console.error(`[JTC] Couldn't delete temp channel: ${err.message}`);
+                });
               }
             }
           }
         } catch (err) {
-          console.error('[JoinToCreate] Cleanup error:', err);
+          console.error('[JTC] Cleanup error:', err);
         }
       }, 10000);
     }
@@ -43,7 +45,7 @@ module.exports = {
 
     // Join event
     if (!oldChannelId && newChannelId) {
-      if (newChannelId !== jointocreatechannel) return;
+      if (newChannelId !== joinToCreateChannelId) return;
       await createTempChannel(newState);
       return;
     }
@@ -67,7 +69,7 @@ module.exports = {
 
     // Move event
     if (oldChannelId && newChannelId && oldChannelId !== newChannelId) {
-      if (newChannelId === jointocreatechannel) {
+      if (newChannelId === joinToCreateChannelId) {
         await createTempChannel(oldState);
       }
 
@@ -92,12 +94,15 @@ async function createTempChannel(userState) {
   try {
     const username = userState.member?.user?.username || userState.id;
     const guild = userState.guild;
-    if (!guild) return;
+    if (!guild) {
+      console.warn('[JTC] Guild not found');
+      return;
+    }
 
     const vc = await guild.channels.create({
       name: `${username}'s room`,
       type: ChannelType.GuildVoice,
-      parent: jointocreatecategory || undefined,
+      parent: joinToCreateCategoryId || undefined,
       userLimit: 14,
       permissionOverwrites: [
         {
@@ -111,9 +116,9 @@ async function createTempChannel(userState) {
       ],
     });
 
-    await userState.setChannel(vc).catch(err => console.error('Error moving user into temp channel:', err));
+    await userState.setChannel(vc).catch(err => console.error('[JoinToCreate] Error moving user into temp channel:', err.message));
     jointocreatemap.set(`tempvoicechannel_${vc.guild.id}_${vc.id}`, vc.id);
   } catch (err) {
-    console.error('Error creating temp channel:', err);
+    console.error('[JoinToCreate] Error creating temp channel:', err.message);
   }
 }

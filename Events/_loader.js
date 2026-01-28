@@ -1,7 +1,7 @@
 const { resolve } = require("path");
 const { readdir } = require("fs").promises;
 
-async function * getFiles(dir) { // recursively find all event files
+async function * getFiles(dir) { // recursively find event files
 	const dirents = await readdir(dir, { withFileTypes: true });
 	for (const dirent of dirents) {
 		const res = resolve(dir, dirent.name);
@@ -18,7 +18,7 @@ async function load(client) {
 	let errorCount = 0;
 	const eventNames = [];
 	
-	console.log('\n📡 Loading Events...');
+	console.log('\n📡 Events (loading...)');
 	
 	for await (const fn of getFiles("./Events")) {
 		if (fn.endsWith("_loader.js")) continue; // do not load event loader as event
@@ -34,8 +34,15 @@ async function load(client) {
 			// Support both 'call' and 'execute' patterns
 			let handler;
 			if (event.call) {
-			// 'call' pattern: call(client, args) where args is an array
-			handler = (...args) => event.call(client, args);
+				// 'call' pattern: call(client, args) where args is an array
+				handler = (...args) => event.call(client, args);
+			} else if (event.execute) {
+				// Standard Discord.js pattern: execute(...args, client)
+				handler = (...args) => event.execute(...args, client);
+			}
+			
+			if (typeof handler !== 'function') {
+				throw new Error('Invalid event handler');
 			}
 			
 			if (event.runOnce) {
@@ -46,14 +53,14 @@ async function load(client) {
 			
 			eventCount++;
 			eventNames.push(`${event.name}${event.runOnce ? ' (once)' : ''}`);
-			console.log(`  ✅ ${event.name} ${event.runOnce ? '(once)' : ''}`);
 		} catch (err) {
 			errorCount++;
-			console.error(`  ❌ Error loading event: ${err.message}`);
+			console.error(`  ❌ Error: ${err.message}`);
 		}
 	}
 	
-	console.log(`\n✨ Events loaded: ${eventCount}${errorCount > 0 ? ` (${errorCount} errors)` : ''}\n`);
+	const errorMsg = errorCount > 0 ? ` (${errorCount} error${errorCount !== 1 ? 's' : ''})` : '';
+	console.log(`  ✅ ${eventCount} loaded${errorMsg}\n`);
 }
 
 module.exports = load;

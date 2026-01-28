@@ -4,7 +4,7 @@ const { MessageFlags } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('define')
-    .setDescription('Look up comprehensive word definitions, phonetics, and usage examples')
+    .setDescription('Look up a word definition')
     .addStringOption(option =>
       option.setName('word')
         .setDescription('The word to define')
@@ -22,8 +22,8 @@ module.exports = {
       if (!response.ok) {
         const notFound = new EmbedBuilder()
           .setColor(0xF04747)
-          .setTitle('❌ Word Not Found')
-          .setDescription(`No definition found for "${word}". Please check spelling!`);
+          .setTitle('❌ Not Found')
+          .setDescription(`No definition for "${word}". Check spelling!`);
         return interaction.editReply({ embeds: [notFound] });
       }
       
@@ -69,7 +69,7 @@ module.exports = {
       const errorEmbed = new EmbedBuilder()
         .setColor(0xF04747)
         .setTitle('❌ Error')
-        .setDescription('Failed to fetch definition. Please try again later!');
+        .setDescription('Couldn\'t fetch definition. Try again later!');
       
       await interaction.editReply({ embeds: [errorEmbed] });
     }

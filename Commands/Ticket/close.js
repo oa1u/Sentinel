@@ -1,13 +1,12 @@
-const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
-const { MessageFlags } = require('discord.js');
-const { ticketCategory, ticketLog } = require("../../Config/constants/channel.json");
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder, MessageFlags } = require('discord.js');
+const { ticketCategoryId, ticketLogChannelId } = require("../../Config/constants/channel.json");
 const { createWarningEmbed } = require("../../Functions/EmbedBuilders");
 const DatabaseManager = require('../../Functions/DatabaseManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('close')
-    .setDescription('Close the current support ticket and archive the conversation transcript')
+    .setDescription('Close this ticket and save transcript')
     .addStringOption(option =>
       option.setName('reason')
         .setDescription('Reason for closing the ticket')
@@ -16,7 +15,7 @@ module.exports = {
   category: 'ticket',
   async execute(interaction) {
     // Verify this is a ticket channel
-    if (interaction.channel.parentId !== ticketCategory) {
+    if (interaction.channel.parentId !== ticketCategoryId) {
       const errorEmbed = createWarningEmbed(
         'Invalid Channel',
         'This command can only be used in a ticket channel!'
@@ -80,7 +79,7 @@ module.exports = {
     const closingEmbed = new EmbedBuilder()
       .setColor(0xF04747)
       .setTitle('🔒 Ticket Closing')
-      .setDescription(`This ticket is being closed and will be deleted shortly.\n\n━━━━━━━━━━━━━━━━━━━━━\n\n**Closure Details:**`)
+      .setDescription(`This ticket is being closed and will be deleted shortly.\n\n**Closure Details:**`)
       .addFields(
         { name: '⏱️ Time Remaining', value: '\`5 seconds\`', inline: true },
         { name: '💾 Transcript', value: '✅ Saved to logs', inline: true },
@@ -94,7 +93,7 @@ module.exports = {
     await interaction.reply({ embeds: [closingEmbed] });
 
     // Log to ticket log channel with transcript
-    const logChannel = interaction.guild.channels.cache.get(ticketLog);
+    const logChannel = interaction.guild.channels.cache.get(ticketLogChannelId);
     if (logChannel) {
       const logEmbed = new EmbedBuilder()
         .setColor(0xF04747)
@@ -119,6 +118,18 @@ module.exports = {
       });
 
       await logChannel.send({ embeds: [logEmbed], files: [attachment] });
+
+      // Also send to user's DMs if possible
+      try {
+        const dmChannel = await interaction.user.createDM().catch(() => null);
+        if (dmChannel) {
+          await dmChannel.send({ embeds: [logEmbed], files: [attachment] }).catch((err) => {
+            console.error(`Failed to send ticket log to user DMs: ${err.message}`);
+          });
+        }
+      } catch (err) {
+        console.error(`Could not open DM with user: ${err.message}`);
+      }
     }
 
     // Update database
@@ -131,11 +142,12 @@ module.exports = {
     });
     
     // Delete channel after 5 seconds
+    const channelId = interaction.channel.id;
     setTimeout(async () => {
       try {
         await interaction.channel.delete();
         // Clean up database after deletion
-        ticketsDB.delete(interaction.channel.id);
+        ticketsDB.delete(channelId);
       } catch (err) {
         console.error(`Failed to delete ticket channel: ${err.message}`);
       }

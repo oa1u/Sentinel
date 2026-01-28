@@ -1,13 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("emojiCreate", async(emoji) => {
-    let logs = await client.channels.cache.get(channelLog);
-         let embed = new EmbedBuilder()
+    const logs = client.channels.cache.get(serverLogChannelId);
+    if (!logs) return;
+        const embed = new EmbedBuilder()
              .setTitle("😀 Emoji Added")
              .setColor("#43B581")
-            .setDescription(`A custom emoji has been added to the server.`)
+            .setDescription(`New emoji added to server.`)
             .addFields(
                 { name: "Emoji", value: emoji.toString(), inline: true },
                 { name: "Emoji Name", value: `\`:${emoji.name}:\``, inline: true },

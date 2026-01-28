@@ -10,7 +10,7 @@ const DatabaseManager = require('../../Functions/DatabaseManager');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('kick')
-    .setDescription('Remove a member from the server with a specified reason')
+    .setDescription('Kick a user from the server')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to kick')
@@ -23,18 +23,19 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      }
+
     const targetUser = interaction.options.getUser('user');
     const reasonInput = interaction.options.getString('reason');
     
-    // Check for canned messages
     const reason = DatabaseManager.getResolvedReason(reasonInput);
 
-    // Check permissions and hierarchy
     if (!await canModerateMember(interaction, targetUser, 'kick')) {
       return;
     }
 
-    // Fetch member to verify they exist in guild
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
       await sendErrorReply(
@@ -50,7 +51,7 @@ module.exports = {
 
     // Create logging embed
     const logEmbed = createModerationEmbed({
-      action: '👢 KICK',
+      action: '👢 Kick',
       target: targetUser,
       moderator: interaction.user,
       reason: reason,
@@ -58,15 +59,15 @@ module.exports = {
       color: 0xFAA61A
     });
 
-    // Send DM to user
+    // DM the user
     const dmEmbed = new EmbedBuilder()
-      .setTitle('👢 You Have Been Kicked')
+      .setTitle('👢 Kicked')
       .setColor(0xFAA61A)
       .setDescription(`You were kicked from **${interaction.guild.name}**`)
       .addFields(
         { name: '📝 Reason', value: reason, inline: false },
         { name: '🔑 Case ID', value: `\`${caseID}\``, inline: true },
-        { name: '⚡ Note', value: 'Please avoid repeating this behavior!', inline: true }
+        { name: '⚡ Note', value: 'Don\'t repeat this behavior!', inline: true }
       )
       .setTimestamp();
 

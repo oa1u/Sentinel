@@ -3,12 +3,12 @@ const DatabaseManager = require('../../Functions/DatabaseManager');
 require("moment-duration-format");
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
-const { ModRole } = require("../../Config/constants/roles.json");
+const { moderatorRoleId } = require("../../Config/constants/roles.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warning')
-    .setDescription('Retrieve detailed information about a specific warning case by its unique ID')
+    .setDescription('Look up details about a warning case')
     .addStringOption(option =>
       option.setName('caseid')
         .setDescription('Case ID')
@@ -24,10 +24,10 @@ module.exports = {
     let Prohibited = new EmbedBuilder()
       .setColor(0xFAA61A)
         .setTitle(`Prohibited User`)
-        .setDescription(`You have to be in the moderation team to be able to use this command!`);
+        .setDescription(`You have to be a <@&${moderatorRoleId}> to be able to use this command!`);
     
     // Check for ModRole permission
-    if(!interaction.member.roles.cache.has(ModRole)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+    if(!interaction.member.roles.cache.has(moderatorRoleId)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     
     let caseidincorrect = new EmbedBuilder()
       .setColor(0xFAA61A)

@@ -2,6 +2,18 @@ const { resolve } = require("path");
 const { readdir } = require("fs").promises;
 const { Collection } = require("discord.js");
 
+// ANSI Color codes
+const colors = {
+	reset: '\x1b[0m',
+	bright: '\x1b[1m',
+	dim: '\x1b[2m',
+	cyan: '\x1b[36m',
+	green: '\x1b[32m',
+	yellow: '\x1b[33m',
+	red: '\x1b[31m',
+	blue: '\x1b[34m'
+};
+
 async function * getFiles(dir) {
 	const dirents = await readdir(dir, { withFileTypes: true });
 	for (const dirent of dirents) {
@@ -15,48 +27,60 @@ async function * getFiles(dir) {
 }
 
 async function load(collection) {
+	const startTime = Date.now();
 	let commandCount = 0;
 	let errorCount = 0;
 	const categories = new Map();
+	const errors = [];
 	
-	console.log('\n🎮 Loading Commands...');
+	console.log(`\n${colors.cyan}${colors.bright}🎮 Commands${colors.reset} (loading...)`);
 	
 	for await (const fn of getFiles("./Commands")) {
 		if (fn.endsWith("_loader.js") || fn.endsWith("_slashLoader.js")) continue;
 		
 		try {
 			const command = require(fn);
-			if (command.data) {
-				collection.set(command.data.name, command);
-				
-				const category = command.category || 'uncategorized';
-				if (!categories.has(category)) {
-					categories.set(category, []);
-				}
-				categories.get(category).push(command.data.name);
-				
-				commandCount++;
-				console.log(`  ✅ /${command.data.name} (${category})`);
+			
+			// Validate command has required data
+			if (!command.data) {
+				throw new Error('Missing "data" property (SlashCommandBuilder)');
 			}
+			if (!command.execute) {
+				throw new Error('Missing "execute" function');
+			}
+			
+			const cmdName = command.data.name;
+			const category = command.category || 'uncategorized';
+			
+			collection.set(cmdName, command);
+			
+			if (!categories.has(category)) {
+				categories.set(category, []);
+			}
+			categories.get(category).push(cmdName);
+			
+			commandCount++;
 		} catch (err) {
 			errorCount++;
-			console.error(`  ❌ Error loading command from ${fn}: ${err.message}`);
+			const cmdPath = fn.split('\\').pop();
+			errors.push({ file: cmdPath, error: err.message });
+			console.log(`  ${colors.red}❌${colors.reset} ${fn.split('\\').pop()}: ${colors.red}${err.message}${colors.reset}`);
 		}
 	}
 	
-	console.log('\n📊 Command Summary:');
-	console.log(`  ├─ Total Commands: ${commandCount}${errorCount > 0 ? ` (${errorCount} errors)` : ''}`);
-	console.log(`  ├─ Categories: ${categories.size}`);
+	const loadTime = Date.now() - startTime;
 	
-	let categoryIndex = 1;
-	const categoryArray = Array.from(categories.entries());
-	categoryArray.forEach(([category, commands], index) => {
-		const isLast = index === categoryArray.length - 1;
-		const prefix = isLast ? '  └─' : '  ├─';
-		console.log(`${prefix} ${category}: ${commands.length}`);
-	});
+	// Single line summary
+	const categoryList = Array.from(categories.keys()).join(', ');
+	const errorMsg = errorCount > 0 ? ` ${colors.yellow}(${errorCount} error${errorCount !== 1 ? 's' : ''})${colors.reset}` : '';
+	console.log(`  ${colors.green}✅${colors.reset} ${commandCount} commands in ${categories.size} categories${errorMsg} ${colors.dim}(${loadTime}ms)${colors.reset}`);
 	
-	console.log('\n✨ Commands loaded\n');
+	if (errorCount > 0) {
+		console.log(`${colors.red}  Failed:${colors.reset}`);
+		errors.forEach((err) => {
+			console.log(`    • ${err.file}: ${colors.red}${err.message}${colors.reset}`);
+		});
+	}
 }
 
 module.exports = load;

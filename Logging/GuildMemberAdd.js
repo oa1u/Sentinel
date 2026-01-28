@@ -1,15 +1,16 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("guildMemberAdd", async(member) => {
-    let logs = await client.channels.cache.get(channelLog);
+        const logs = client.channels.cache.get(serverLogChannelId);
+        if (!logs) return;
         const accountAge = Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24));
         const memberCount = member.guild.memberCount;
-        	let embed = new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle("📥 Member Joined")
             .setColor("#43B581")
-            .setDescription(`${member.user.toString()} has joined the server!`)
+            .setDescription(`${member.user.toString()} joined the server!`)
             .addFields(
                 { name: "User", value: `${member.user.tag}`, inline: true },
                 { name: "User ID", value: `\`${member.id}\``, inline: true },

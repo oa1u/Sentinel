@@ -3,13 +3,13 @@ const DatabaseManager = require('../../Functions/DatabaseManager');
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 require("moment-duration-format");
-const { AdminRole } = require("../../Config/constants/roles.json");
-const { channelLog } = require("../../Config/constants/channel.json")
+const { administratorRoleId } = require("../../Config/constants/roles.json");
+const { serverLogChannelId } = require("../../Config/constants/channel.json")
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('unban')
-    .setDescription('Revoke a server ban by providing either a user ID or ban case identifier')
+    .setDescription('Unban a user by ID or case ID')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to unban')
@@ -28,7 +28,7 @@ module.exports = {
       .setTitle(`❌ No Permission`)
       .setDescription(`You need the Administrator role to use this command!`);
     
-    if(!interaction.member.roles.cache.has(AdminRole)) {
+    if(!interaction.member.roles.cache.has(administratorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
     
@@ -54,8 +54,8 @@ module.exports = {
       if (!targetUserId || !banEntry) {
         const notFound = new EmbedBuilder()
           .setColor(0xF04747)
-          .setTitle('❌ Invalid Case ID')
-          .setDescription('No ban found for the provided case ID.');
+          .setTitle('❌ Invalid Case')
+          .setDescription('No ban found for that case ID.');
         return interaction.reply({ embeds: [notFound], flags: MessageFlags.Ephemeral });
       }
     }
@@ -64,7 +64,7 @@ module.exports = {
       const needParam = new EmbedBuilder()
         .setColor(0xF04747)
         .setTitle('❌ Missing Input')
-        .setDescription('Provide either a user or a case ID to unban.');
+        .setDescription('Provide a user or case ID.');
       return interaction.reply({ embeds: [needParam], flags: MessageFlags.Ephemeral });
     }
 
@@ -76,7 +76,7 @@ module.exports = {
     await interaction.guild.members.unban(targetUserId, unbanReason).catch(err => {
       console.error('Error unbanning user:', err);
     });
-    const clearedWarnsLog = interaction.client.channels.cache.get(channelLog);
+    const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
     const em = new EmbedBuilder()
       .setTitle("🔓 User Unbanned")
       .setColor(0x43B581)

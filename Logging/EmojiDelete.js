@@ -1,13 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("emojiDelete", async(emoji) => {
-    let logs = await client.channels.cache.get(channelLog);
-        	let embed = new EmbedBuilder()
+    const logs = client.channels.cache.get(serverLogChannelId);
+    if (!logs) return;
+        const embed = new EmbedBuilder()
             .setTitle("🗑️ Emoji Deleted")
             .setColor("#F04747")
-            .setDescription(`A custom emoji has been deleted from the server.`)
+            .setDescription(`Emoji removed from server.`)
             .addFields(
                 { name: "Emoji Name", value: `\`:${emoji.name}:\``, inline: true },
                 { name: "Emoji ID", value: `\`${emoji.id}\``, inline: true },

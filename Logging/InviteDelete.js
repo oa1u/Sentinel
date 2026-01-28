@@ -1,13 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
-const { channelLog } = require("../Config/constants/channel.json")
+const { serverLogChannelId } = require("../Config/constants/channel.json");
 
 module.exports = (client) => {
 	client.on("inviteDelete", async(invite) => {
-    let logs = await client.channels.cache.get(channelLog);
-        	let embed = new EmbedBuilder()
+    const logs = client.channels.cache.get(serverLogChannelId);
+    if (!logs) return;
+        const embed = new EmbedBuilder()
             .setTitle("🗑️ Invite Deleted")
             .setColor("#F04747")
-            .setDescription(`A server invite has been deleted.`);
+            .setDescription(`Invite deleted.`);
             const fields = [
                 { name: "Invite Code", value: `\`${invite.code}\``, inline: true },
                 { name: "Invite URL", value: `\`${invite.url}\``, inline: true },

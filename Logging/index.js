@@ -1,17 +1,18 @@
 module.exports = (client) => {
-    var channelCreate = require("./ChannelCreate");
-    var channelDelete = require("./ChannelDelete");
-    var emojiCreate = require("./EmojiCreate");
-    var emojiDelete = require("./EmojiDelete");
-    var emojiUpdate = require("./EmojiUpdate");
-    var guildMemberAdd = require("./GuildMemberAdd");
-    var guildMemberRemove = require("./GuildMemberRemove");
-    var guildMemberUpdate = require("./GuildMemberUpdate");
-    var inviteCreate = require("./InviteCreate");
-    var inviteDelete = require("./InviteDelete");
-    var roleCreate = require("./RoleCreate");
-    var roleDelete = require("./RoleDelete");
-    var roleUpdate = require("./RoleUpdate");
+    const channelCreate = require("./ChannelCreate");
+    const channelDelete = require("./ChannelDelete");
+    const emojiCreate = require("./EmojiCreate");
+    const emojiDelete = require("./EmojiDelete");
+    const emojiUpdate = require("./EmojiUpdate");
+    const guildMemberAdd = require("./GuildMemberAdd");
+    const guildMemberRemove = require("./GuildMemberRemove");
+    const guildMemberUpdate = require("./GuildMemberUpdate");
+    const inviteCreate = require("./InviteCreate");
+    const inviteDelete = require("./InviteDelete");
+    const roleCreate = require("./RoleCreate");
+    const roleDelete = require("./RoleDelete");
+    const roleUpdate = require("./RoleUpdate");
+    
     channelCreate(client);
     channelDelete(client);
     emojiCreate(client);

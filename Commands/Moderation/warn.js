@@ -10,7 +10,7 @@ const DatabaseManager = require('../../Functions/DatabaseManager');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warn')
-    .setDescription('Issue a warning to a member and log it with a case ID')
+    .setDescription('Warn a user')
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to warn')
@@ -23,18 +23,19 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
+
     const targetUser = interaction.options.getUser('user');
     const reasonInput = interaction.options.getString('reason');
     
-    // Check for canned messages
     const reason = DatabaseManager.getResolvedReason(reasonInput);
 
-    // Check permissions and hierarchy
     if (!await canModerateMember(interaction, targetUser, 'warn')) {
       return;
     }
 
-    // Fetch member
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
       await sendErrorReply(
@@ -50,7 +51,7 @@ module.exports = {
 
     // Create logging embed
     const logEmbed = createModerationEmbed({
-      action: '⚠️ WARN',
+      action: '⚠️ Warn',
       target: targetUser,
       moderator: interaction.user,
       reason: reason,
@@ -58,15 +59,15 @@ module.exports = {
       color: 0xFAA61A
     });
 
-    // Send DM to user
+    // DM the user
     const dmEmbed = new EmbedBuilder()
-      .setTitle('⚠️ You Have Received a Warning')
+      .setTitle('⚠️ Warning')
       .setColor(0xFAA61A)
       .setDescription(`You received a warning in **${interaction.guild.name}**`)
       .addFields(
         { name: '📝 Reason', value: reason, inline: false },
         { name: '🔑 Case ID', value: `\`${caseID}\``, inline: true },
-        { name: '⚡ Note', value: 'Please avoid this behavior in the future!', inline: true }
+        { name: '⚡ Note', value: 'Avoid this behavior in the future!', inline: true }
       )
       .setTimestamp();
 
@@ -86,14 +87,13 @@ module.exports = {
     // Get total warns for user
     const totalWarns = DatabaseManager.getUserWarnsCount(targetUser.id) + 1;
 
-    // Send success response with warn count
     await sendSuccessReply(
       interaction,
       'Warning Issued',
-      `Successfully warned **${targetUser.tag}**\n` +
-      `Case ID: \`${caseID}\`\n` +
-      `Total Warnings: **${totalWarns}**\n` +
-      `DM Sent: ${dmSent ? '✅' : '❌'}`
+      `Warned **${targetUser.tag}**\n` +
+      `Case: \`${caseID}\`\n` +
+      `Total: **${totalWarns}**\n` +
+      `DM: ${dmSent ? '✅' : '❌'}`
     );
   }
 };

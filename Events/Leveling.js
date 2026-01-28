@@ -1,24 +1,37 @@
 const { EmbedBuilder } = require('discord.js');
 const JSONDatabase = require('../Functions/Database');
-const { levelup } = require('../Config/constants/channel.json');
+const { levelUpLogChannelId } = require('../Config/constants/channel.json');
 const { config: CONFIG, multipliers: MULTIPLIERS, levelRoles: LEVEL_ROLES } = require('../Config/constants/leveling.json');
 
-// Initialize leveling database
 const levelDB = new JSONDatabase('levels', { writeInterval: 2000 });
 
-// Cooldown tracker
 const cooldowns = new Map();
+let lastCleanup = Date.now();
+const CLEANUP_INTERVAL = 300000;
 
-/**
- * Calculate XP required for a specific level
- */
-function calculateRequiredXP(level) {
-    return Math.floor(CONFIG.baseRequirement * Math.pow(CONFIG.levelMultiplier, level - 1));
+function cleanupCooldowns() {
+    const now = Date.now();
+    const cutoff = now - CONFIG.xpCooldownMs;
+    
+    let removed = 0;
+    for (const [key, timestamp] of cooldowns.entries()) {
+        if (timestamp < cutoff) {
+            cooldowns.delete(key);
+            removed++;
+        }
+    }
+    
+    if (removed > 0) {
+        console.log(`[Leveling] Cleaned ${removed} old cooldowns`);
+    }
+    
+    lastCleanup = now;
 }
 
-/**
- * Calculate level from total XP
- */
+function calculateRequiredXP(level) {
+    return Math.floor(CONFIG.baseLevelRequirement * Math.pow(CONFIG.levelRequirementMultiplier, level - 1));
+}
+
 function calculateLevel(xp) {
     let level = 1;
     let totalRequired = 0;
@@ -32,9 +45,6 @@ function calculateLevel(xp) {
     return level - 1;
 }
 
-/**
- * Get user leveling data
- */
 function getUserData(userId) {
     return levelDB.ensure(userId, {
         xp: 0,
@@ -45,48 +55,52 @@ function getUserData(userId) {
     });
 }
 
-/**
- * Calculate XP gain based on message content
- */
 function calculateXPGain(message) {
-    let xp = CONFIG.baseXP + Math.floor(Math.random() * CONFIG.randomXP);
+    let xp = CONFIG.baseXpPerMessage + Math.floor(Math.random() * CONFIG.randomXpVariance);
     
-    // Apply multipliers
     if (message.content.length > 100) {
-        xp *= MULTIPLIERS.longMessage;
+        xp *= MULTIPLIERS.longMessageXpMultiplier;
     }
     
     if (message.attachments.size > 0) {
-        xp *= MULTIPLIERS.hasImage;
+        xp *= MULTIPLIERS.messageHasImageXpMultiplier;
     }
     
     if (message.content.match(/https?:\/\//)) {
-        xp *= MULTIPLIERS.hasLink;
+        xp *= MULTIPLIERS.messageHasLinkXpMultiplier;
     }
     
     return Math.floor(xp);
 }
 
-/**
- * Send level up notification
- */
+// Send level up message
 async function sendLevelUpNotification(message, userData, newLevel) {
+    const nextLevelXP = calculateRequiredXP(newLevel + 1);
+    
     const levelUpEmbed = new EmbedBuilder()
         .setColor(0xFFD700)
         .setTitle('🎉 Level Up!')
-        .setDescription(`${message.author} just advanced to **Level ${newLevel}**!`)
+        .setDescription(
+            `**Congrats ${message.author}!**\n\n` +
+            `You're now **Level ${newLevel}**!\n\n` +
+            `**Stats:**\n` +
+            `> 📊 Total XP: **${userData.totalXP.toLocaleString()} XP**\n` +
+            `> 💬 Messages: **${userData.messages.toLocaleString()}**\n` +
+            `> ⬆️ Next Level: **${nextLevelXP.toLocaleString()} XP**`
+        )
         .addFields(
-            { name: '📊 Total XP', value: `${userData.totalXP.toLocaleString()}`, inline: true },
-            { name: '💬 Messages', value: `${userData.messages.toLocaleString()}`, inline: true },
-            { name: '⬆️ Next Level', value: `${calculateRequiredXP(newLevel + 1)} XP`, inline: true }
+            { name: '📈 Current Level', value: `**${newLevel}**`, inline: true },
+            { name: '🎯 Next Level', value: `**${newLevel + 1}**`, inline: true },
+            { name: '⚡ XP Needed', value: `**${nextLevelXP.toLocaleString()}**`, inline: true }
         )
         .setThumbnail(message.author.displayAvatarURL({ size: 256 }))
         .setTimestamp()
-        .setFooter({ text: `Keep chatting to level up!` });
+        .setFooter({ text: `Keep going to reach level ${newLevel + 1}!` });
 
-    // Check for level role rewards
-    if (LEVEL_ROLES[`role${newLevel}`]) {
-        const role = message.guild.roles.cache.get(LEVEL_ROLES[`role${newLevel}`]);
+    // Check for role rewards
+    const levelRoleKey = `level${newLevel}RoleId`;
+    if (LEVEL_ROLES[levelRoleKey]) {
+        const role = message.guild.roles.cache.get(LEVEL_ROLES[levelRoleKey]);
         if (role) {
             try {
                 await message.member.roles.add(role);
@@ -96,64 +110,64 @@ async function sendLevelUpNotification(message, userData, newLevel) {
                     inline: false
                 });
             } catch (err) {
-                console.error(`Failed to assign level role: ${err.message}`);
+                console.error(`Couldn't assign level role: ${err.message}`);
             }
         }
     }
 
-    // Send to channel or DM
+    // Send notification
     try {
         await message.reply({ embeds: [levelUpEmbed] });
     } catch {
-        // If can't reply, try sending in channel
+        // Can't reply, send in channel instead
         try {
             await message.channel.send({ embeds: [levelUpEmbed] });
         } catch (err) {
-            console.error(`Failed to send level up message: ${err.message}`);
+            console.error(`Couldn't send level up message: ${err.message}`);
         }
     }
 
-    // Log to moderation channel
-    const logChannel = message.guild.channels.cache.get(levelup);
+    // Log to mod channel
+    const logChannel = message.guild.channels.cache.get(levelUpLogChannelId);
     if (logChannel) {
         const logEmbed = new EmbedBuilder()
             .setColor(0xFFD700)
-            .setTitle('📈 Member Leveled Up')
+            .setTitle('🎉 Level Up')
+            .setDescription(`**${message.author.tag}** reached level ${newLevel}!`)
             .addFields(
-                { name: '👤 User', value: `${message.author.tag}\n\`${message.author.id}\``, inline: true },
-                { name: '⬆️ New Level', value: `${newLevel}`, inline: true },
-                { name: '📊 Total XP', value: `${userData.totalXP.toLocaleString()}`, inline: true }
+                { name: '👤 User', value: `${message.author}\n\`${message.author.id}\``, inline: true },
+                { name: '⬆️ Level', value: `**${newLevel}**`, inline: true },
+                { name: '📊 XP', value: `**${userData.totalXP.toLocaleString()}**`, inline: true }
             )
+            .setThumbnail(message.author.displayAvatarURL({ size: 128 }))
             .setTimestamp();
         
-        logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+        logChannel.send({ embeds: [logEmbed] }).catch((err) => {
+            console.error(`[Leveling] Couldn't log: ${err.message}`);
+        });
     }
 }
 
-/**
- * Process XP gain for a message
- */
+// Handle XP gain from messages
 async function processXP(message) {
-    // Ignore bots
     if (message.author.bot) return;
-    
-    // Ignore DMs
     if (!message.guild) return;
     
-    // Check cooldown
     const now = Date.now();
     const cooldownKey = `${message.author.id}_${message.guild.id}`;
     
+    // Clean up old cooldowns periodically
+    if (now - lastCleanup > CLEANUP_INTERVAL) {
+        cleanupCooldowns();
+    }
+    
     if (cooldowns.has(cooldownKey)) {
-        const expirationTime = cooldowns.get(cooldownKey) + CONFIG.cooldown;
+        const expirationTime = cooldowns.get(cooldownKey) + CONFIG.xpCooldownMs;
         if (now < expirationTime) return;
     }
     
     // Set new cooldown
     cooldowns.set(cooldownKey, now);
-    
-    // Clean up old cooldowns periodically
-    setTimeout(() => cooldowns.delete(cooldownKey), CONFIG.cooldown);
     
     // Get user data
     const userData = getUserData(message.author.id);
@@ -184,9 +198,7 @@ async function processXP(message) {
     }
 }
 
-/**
- * Get leaderboard data
- */
+// Get top users
 function getLeaderboard(limit = 10) {
     const allUsers = levelDB.all();
     const sorted = Object.entries(allUsers)
@@ -197,9 +209,7 @@ function getLeaderboard(limit = 10) {
     return sorted;
 }
 
-/**
- * Get user rank
- */
+// Get user's rank
 function getUserRank(userId) {
     const allUsers = levelDB.all();
     const sorted = Object.entries(allUsers)
@@ -210,9 +220,7 @@ function getUserRank(userId) {
     return rank || null;
 }
 
-/**
- * Set user XP (admin function)
- */
+// Admin: set user XP
 function setUserXP(userId, xp) {
     const userData = getUserData(userId);
     userData.totalXP = xp;
@@ -230,9 +238,7 @@ function setUserXP(userId, xp) {
     return userData;
 }
 
-/**
- * Reset user levels (admin function)
- */
+// Admin: reset user
 function resetUser(userId) {
     levelDB.delete(userId);
     return true;

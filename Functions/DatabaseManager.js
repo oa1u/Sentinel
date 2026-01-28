@@ -1,21 +1,23 @@
 const JSONDatabase = require('./Database');
 
-/**
- * Database Manager - Centralized cache for all database instances
- * Prevents creating duplicate instances and optimizes write operations
- */
+// Manages all database instances and batches writes
 class DatabaseManager {
     constructor() {
         this.databases = new Map();
         this.pendingWrites = new Map();
-        this.writeDelay = 500; // Batch writes every 500ms
+        this.writeDelay = 500; // batch writes every 500ms
+        this.writeTimers = new Map();
+        this.isShuttingDown = false;
+        
+        const shutdownHandler = () => {
+            this.flushAll();
+        };
+        process.on('SIGINT', shutdownHandler);
+        process.on('SIGTERM', shutdownHandler);
+        process.on('beforeExit', shutdownHandler);
     }
 
-    /**
-     * Get or create a database instance (cached)
-     * @param {string} name - Database name
-     * @returns {JSONDatabase} Database instance
-     */
+    // Get or create database instance
     getDatabase(name) {
         if (!this.databases.has(name)) {
             this.databases.set(name, new JSONDatabase(name));
@@ -23,42 +25,69 @@ class DatabaseManager {
         return this.databases.get(name);
     }
 
-    /**
-     * Queue a database operation for batching
-     * @param {string} dbName - Database name
-     * @param {Function} operation - Function that performs the database operation
-     * @returns {Promise} Resolves when operation is queued
-     */
+    // Queue an operation for batching
     async queueOperation(dbName, operation) {
-        if (!this.pendingWrites.has(dbName)) {
-            this.pendingWrites.set(dbName, []);
-            
-            // Schedule batch write
-            setTimeout(() => {
-                const operations = this.pendingWrites.get(dbName) || [];
-                if (operations.length > 0) {
-                    const db = this.getDatabase(dbName);
-                    operations.forEach(op => op(db));
-                    this.pendingWrites.delete(dbName);
+        return new Promise((resolve, reject) => {
+            if (!this.pendingWrites.has(dbName)) {
+                this.pendingWrites.set(dbName, []);
+                
+                // Clear existing timer if any
+                if (this.writeTimers.has(dbName)) {
+                    clearTimeout(this.writeTimers.get(dbName));
                 }
-            }, this.writeDelay);
+                
+                // Schedule batch write
+                const timer = setTimeout(() => {
+                    this.flushDatabase(dbName);
+                }, this.writeDelay);
+                
+                this.writeTimers.set(dbName, timer);
+            }
+            
+            // Add operation with resolve/reject callbacks
+            this.pendingWrites.get(dbName).push({ operation, resolve, reject });
+        });
+    }
+    
+    // Write pending operations for a database
+    flushDatabase(dbName) {
+        const operations = this.pendingWrites.get(dbName) || [];
+        if (operations.length > 0) {
+            const db = this.getDatabase(dbName);
+            operations.forEach(({ operation, resolve, reject }) => {
+                try {
+                    operation(db);
+                    resolve();
+                } catch (err) {
+                    console.error(`[DatabaseManager] Error executing operation for ${dbName}:`, err);
+                    reject(err);
+                }
+            });
+            this.pendingWrites.delete(dbName);
+            this.writeTimers.delete(dbName);
         }
+    }
+    
+    // Write all pending operations on shutdown
+    flushAll() {
+        if (this.isShuttingDown) return;
+        this.isShuttingDown = true;
         
-        this.pendingWrites.get(dbName).push(operation);
+        console.log('[DatabaseManager] Flushing pending writes...');
+        this.writeTimers.forEach((timer) => clearTimeout(timer));
+        this.writeTimers.clear();
+        
+        this.pendingWrites.forEach((_, dbName) => {
+            this.flushDatabase(dbName);
+        });
+        
+        console.log('[DatabaseManager] All writes flushed successfully');
     }
 
-    /**
-     * Get warns database
-     * @returns {JSONDatabase} Warns database
-     */
     getWarnsDB() {
         return this.getDatabase('warns');
     }
 
-    /**
-     * Get canned messages database
-     * @returns {JSONDatabase} Canned messages database
-     */
     getCannedMsgsDB() {
         return this.getDatabase('cannedMsgs');
     }
@@ -69,6 +98,14 @@ class DatabaseManager {
      */
     getRemindersDB() {
         return this.getDatabase('reminders');
+    }
+
+    /**
+     * Get giveaways database
+     * @returns {JSONDatabase} Giveaways database
+     */
+    getGiveawaysDB() {
+        return this.getDatabase('giveaways');
     }
 
     /**

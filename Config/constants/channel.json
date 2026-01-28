@@ -1,15 +1,14 @@
 {
-    "channelLog": "",
-    "Announcement": "",
-    "suggestchannel": "",
-    "welcomeChannel": "",
-    "leaveChannel": "",
-    "membercount": "",
-    "ticketCategory": "",
-    "ticketLog": "",
-    "jointocreatechannel": "",
-    "jointocreatecategory": "",
-    "verificationchannel": "",
-    "captchalogchannel": "",
-    "giveawayChannel": ""
+    "serverLogChannelId": "SERVER_LOG_CHANNEL_ID_HERE",
+    "announcementChannelId": "ANNOUNCEMENT_CHANNEL_ID_HERE",
+    "welcomeChannelId": "WELCOME_CHANNEL_ID_HERE",
+    "leaveChannelId": "LEAVE_CHANNEL_ID_HERE",
+    "ticketCategoryId": "TICKET_CATEGORY_ID_HERE",
+    "ticketLogChannelId": "TICKET_LOG_CHANNEL_ID_HERE",
+    "joinToCreateChannelId": "JOIN_TO_CREATE_CHANNEL_ID_HERE",
+    "joinToCreateCategoryId": "JOIN_TO_CREATE_CATEGORY_ID_HERE",
+    "verificationChannelId": "VERIFICATION_CHANNEL_ID_HERE",
+    "captchaLogChannelId": "CAPTCHA_LOG_CHANNEL_ID_HERE",
+    "giveawayChannelId": "GIVEAWAY_CHANNEL_ID_HERE",
+    "levelUpLogChannelId": "LEVEL_UP_LOG_CHANNEL_ID_HERE"
 }
