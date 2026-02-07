@@ -749,8 +749,13 @@ async function loadAppeals() {
             return;
         }
         table.innerHTML = appeals.map(appeal => {
-            const statusColor = appeal.status === 'pending' ? 'var(--color-yellow)' : appeal.status === 'accepted' ? 'var(--color-green)' : 'var(--color-red)';
-            const statusText = appeal.status.charAt(0).toUpperCase() + appeal.status.slice(1);
+            const status = typeof appeal.status === 'string' && appeal.status.length > 0 ? appeal.status : 'unknown';
+            let statusColor;
+            if (status === 'pending') statusColor = 'var(--color-yellow)';
+            else if (status === 'accepted') statusColor = 'var(--color-green)';
+            else if (status === 'denied') statusColor = 'var(--color-red)';
+            else statusColor = 'gray';
+            const statusText = status.charAt(0).toUpperCase() + status.slice(1);
             return `
                 <tr>
                     <td><strong>${appeal.user_tag || appeal.user_id}</strong></td>
