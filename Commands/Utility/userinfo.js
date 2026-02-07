@@ -1,7 +1,7 @@
 const moment = require("moment");
-const JSONDatabase = require('../../Functions/Database');
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 require("moment-duration-format");
+const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
 // Displays detailed user information
 // Includes roles, join date, account age, etc.
@@ -44,6 +44,15 @@ module.exports = {
     }
     
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    // Example: Fetch custom user data from database
+    let customUserData = null;
+    try {
+      // Replace 'users' and 'userId' with your actual table/column names
+      const [results] = await MySQLDatabaseManager.connection.pool.query('SELECT * FROM users WHERE userId = ?', [user.id]);
+      customUserData = results[0] || null;
+    } catch (err) {
+      console.error('Database error in userinfo:', err);
+    }
     
     if (member) {
       const accountAge = moment.duration(Date.now() - member.user.createdTimestamp).format('Y [years], M [months], D [days]');
