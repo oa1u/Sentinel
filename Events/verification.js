@@ -58,11 +58,17 @@ module.exports = {
         }
 
         try {
-            const captchaMessage = await captchachannel.send({ 
-                files: [new AttachmentBuilder(captchaBuffer, { name: "captcha.png" })] 
-            });
-            const captchaImage = captchaMessage.attachments.first();
-            const captchaImageUrl = captchaImage?.url;
+            // Send captcha image as an embed in log channel
+            const captchaAttachment = new AttachmentBuilder(captchaBuffer, { name: "captcha.png" });
+            const captchaEmbed = new EmbedBuilder()
+                .setTitle("🧩 Captcha Generated")
+                .setDescription(`Captcha generated for ${member.user.tag}`)
+                .setImage(`attachment://captcha.png`)
+                .setColor(Color)
+                .setFooter({ text: `${member.guild.name} • Verification System` });
+            await captchachannel.send({ embeds: [captchaEmbed], files: [captchaAttachment] });
+            // Use the same attachment for DM and other logic
+            const captchaImageUrl = `attachment://captcha.png`;
             const Server = member.guild.name;
 
             const baseEmbed = new EmbedBuilder()
@@ -71,11 +77,16 @@ module.exports = {
                 .setFooter({ text: `${Version}` });
 
             const e1 = new EmbedBuilder(baseEmbed)
-                .setDescription('Type the 6-character code from the image. Case-insensitive, 10 minutes to complete.')
+                .setDescription('Welcome to the server! To keep our community safe, please complete this quick verification.\n\n**Instructions:**')
                 .addFields(
-                    { name: '📝 How It Works', value: '```1️⃣ Look at the image\n2️⃣ Type the 6-character code\n3️⃣ Case doesn\'t matter\n4️⃣ 10 min to complete```', inline: false },
-                    { name: '❓ Why?', value: '> Keeps the community safe\n> Prevents bots\n> Takes 30 seconds!', inline: false },
-                    { name: '🔄 Trouble?', value: '> Run `/verify` for new code\n> Copy all 6 characters\n> Check for similar letters', inline: false }
+                    { name: 'Step 1', value: '👀 **Look at the image below**', inline: true },
+                    { name: 'Step 2', value: '✏️ **Type the 6-character code**', inline: true },
+                    { name: 'Step 3', value: '🔤 **Case doesn\'t matter**', inline: true },
+                    { name: 'Time Limit', value: '⏱️ You have **10 minutes** to complete verification.', inline: true },
+                    { name: 'Why Verification?', value: '🛡️ Prevents bots & spam\n✅ Keeps the community safe', inline: true },
+                    { name: 'Trouble?', value: '🔄 Run `/verify` for a new code\n🔍 Check for similar letters (e.g. O/0, I/1)', inline: true },
+                    { name: 'DM Settings', value: '⚠️ Make sure DMs from server members are enabled in your Discord privacy settings.', inline: false },
+                    { name: 'Need Help?', value: '❓ If you have issues, contact a moderator or admin.', inline: false }
                 );
 
             const e2 = new EmbedBuilder(baseEmbed)

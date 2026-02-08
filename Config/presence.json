@@ -18,7 +18,7 @@
 			"status": "dnd"
 		},
 		{
-			"name": "the community",
+			"name": "The community",
 			"type": 3,
 			"status": "online"
 		},
@@ -28,7 +28,7 @@
 			"status": "idle"
 		},
 		{
-			"name": "for /help",
+			"name": "For /help",
 			"type": 3,
 			"status": "online"
 		}

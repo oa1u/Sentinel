@@ -91,10 +91,17 @@ module.exports = {
     }
 
     try {
-      const captchaMessage = await captchachannel.send({ 
-        files: [new AttachmentBuilder(captchaBuffer, { name: "captcha.png" })] 
-      });
-      const captchaImage = captchaMessage.attachments.first();
+      // Send captcha image as an embed in log channel
+      const captchaAttachment = new AttachmentBuilder(captchaBuffer, { name: "captcha.png" });
+      const captchaEmbed = new EmbedBuilder()
+        .setTitle("🧩 Captcha Generated")
+        .setDescription(`Captcha generated for ${member.user.tag}`)
+        .setImage(`attachment://captcha.png`)
+        .setColor(0x5865F2)
+        .setFooter({ text: `${member.guild.name} • Verification System` });
+      await captchachannel.send({ embeds: [captchaEmbed], files: [captchaAttachment] });
+      // Use the same attachment for DM and other logic
+      const captchaImage = { url: `attachment://captcha.png` };
       const Server = member.guild.name;
 
       const e0 = new EmbedBuilder()
