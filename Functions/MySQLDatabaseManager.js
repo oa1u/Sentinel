@@ -736,6 +736,7 @@ class MySQLDatabaseManager {
                 channelId,
                 messageId,
                 hostId,
+                guildId,
                 endTime,
                 winnerCount,
                 ended,
@@ -743,8 +744,8 @@ class MySQLDatabaseManager {
             } = data;
 
             await this.connection.query(
-                `INSERT INTO giveaways (id, case_id, prize, title, channel_id, message_id, host_id, end_time, winner_count, ended) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO giveaways (id, case_id, prize, title, channel_id, message_id, host_id, guild_id, end_time, winner_count, ended) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     id,
                     caseId || null,
@@ -753,6 +754,7 @@ class MySQLDatabaseManager {
                     channelId || null,
                     messageId || null,
                     hostId || null,
+                    guildId || null,
                     endTime || null,
                     winnerCount || 1,
                     ended ? 1 : 0
@@ -864,6 +866,9 @@ class MySQLDatabaseManager {
                     prize: g.prize,
                     title: g.title,
                     channelId: g.channel_id,
+                    messageId: g.message_id,
+                    hostId: g.host_id,
+                    guildId: g.guild_id,
                     endTime: g.end_time,
                     entries: entries.map(e => e.user_id)
                 };

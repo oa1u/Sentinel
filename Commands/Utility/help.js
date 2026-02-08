@@ -157,6 +157,7 @@ function getCommandEmoji(commandName) {
     'clearwarns': '🧹',
     'giveaway': '🎉',
     'manage': '🛠️',
+    'automodwarns': '⚠️',
     // Moderation commands
     'warn': '⚠️',
     'warning': '📋',

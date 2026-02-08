@@ -117,7 +117,7 @@ async function handleViewGiveaways(interaction) {
   try {
     const giveawayDB = DatabaseManager.getGiveawaysDB();
     const allGiveaways = Object.values(await giveawayDB.all());
-    const activeGiveaways = allGiveaways.filter(g => !g.completed);
+    const activeGiveaways = allGiveaways.filter(g => !g.ended);
     
     if (activeGiveaways.length === 0) {
       const embed = new EmbedBuilder()
@@ -135,11 +135,16 @@ async function handleViewGiveaways(interaction) {
     const fields = activeGiveaways.slice(0, 25).map((giveaway, index) => {
       const timeRemaining = Math.max(0, giveaway.endTime - Date.now());
       const formatted = formatDuration(timeRemaining);
-      const url = `https://discord.com/channels/${giveaway.guildId}/${giveaway.channelId}/${giveaway.messageId}`;
-      
+      let value = `Hosted by <@${giveaway.hostId}> • ${formatted}`;
+      if (giveaway.guildId && giveaway.channelId && giveaway.messageId) {
+        const url = `https://discord.com/channels/${giveaway.guildId}/${giveaway.channelId}/${giveaway.messageId}`;
+        value += `\n[View Giveaway](${url})`;
+      } else {
+        value += '\nGiveaway link unavailable.';
+      }
       return {
         name: `#${index + 1} - ${giveaway.prize}`,
-        value: `Hosted by <@${giveaway.hostId}> • ${formatted}\n[View Giveaway](${url})`,
+        value,
         inline: false
       };
     });

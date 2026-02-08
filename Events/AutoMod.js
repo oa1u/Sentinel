@@ -247,15 +247,21 @@ async function handleViolation(message, client, violation) {
         console.error(`[AutoMod] Failed to delete message: ${err.message}`);
     }
 
-    // Log to database if available
+    // Log to automod_violations table with caseId, reason, action, etc.
     try {
-        await MySQLDatabaseManager.logAutomodViolation(
-            userId,
-            message.guild.id,
-            type,
-            message.content.slice(0, 1000),
-            message.channel.id,
-            action
+        await MySQLDatabaseManager.connection.query(
+            `INSERT INTO automod_violations (user_id, guild_id, violation_type, message_content, channel_id, action_taken, case_id, reason, timestamp)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [
+                userId,
+                message.guild.id,
+                type,
+                message.content.slice(0, 1000),
+                message.channel.id,
+                action,
+                caseId,
+                reason
+            ]
         );
     } catch (err) {
         console.warn(`[AutoMod] Could not log violation: ${err.message}`);
@@ -265,7 +271,6 @@ async function handleViolation(message, client, violation) {
     if (type === 'spam') {
         try {
             const violations = await MySQLDatabaseManager.getAutomodViolations(userId, 1);
-            
             if (violations && violations.length >= AUTOMOD_CONFIG.spamWarningThreshold) {
                 // Timeout after multiple violations
                 try {
@@ -273,30 +278,35 @@ async function handleViolation(message, client, violation) {
                         AUTOMOD_CONFIG.spamTimeout,
                         `AutoMod: Repeated spam violations`
                     );
-
-                    // Save timeout to database with case ID
                     await MySQLDatabaseManager.connection.query(
-                        `INSERT INTO timeouts (user_id, case_id, reason, issued_at, expires_at, issued_by, active)
-                         VALUES (?, ?, ?, NOW(), ?, 'AutoMod', TRUE)`,
+                        `INSERT INTO timeouts (user_id, username, case_id, reason, issued_at, expires_at, issued_by, active)
+                         VALUES (?, ?, ?, ?, NOW(), ?, 'AutoMod', TRUE)`,
                         [
                             userId,
+                            message.author.username,
                             caseId,
                             `AutoMod: Repeated spam violations`,
                             new Date(Date.now() + AUTOMOD_CONFIG.spamTimeout)
                         ]
                     );
-
                     console.log(`[AutoMod] User ${userId} timed out for spam (Case: ${caseId})`);
+                    // Only send notification for timeout
+                    sendUserNotification(message, `AutoMod: Repeated spam violations`, 'spam', caseId);
                 } catch (err) {
                     console.error(`[AutoMod] Failed to timeout user or save case: ${err.message}`);
                 }
+            } else {
+                // Only warn if below threshold
+                sendUserNotification(message, reason, type, caseId);
             }
         } catch (err) {
             console.warn(`[AutoMod] Could not check violation history: ${err.message}`);
         }
+        // Avoid duplicate notification for spam
+        return;
     }
 
-    // Send DM to user
+    // Send DM to user for other violation types
     sendUserNotification(message, reason, type, caseId);
 
     // Log to server log channel

@@ -21,7 +21,7 @@ module.exports = {
     .addStringOption(option =>
       option.setName('reason')
         .setDescription('Reason for the ban')
-        .setRequired(false)
+        .setRequired(true)
     ),
   category: 'moderation',
   async execute(interaction) {

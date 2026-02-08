@@ -52,13 +52,13 @@ async function runGiveawayCountdown(message, giveawayId, client, duration, prize
                 title: '🎉 Giveaway in Progress!',
                 description: '⏳ **Giveaway is still running!**',
                 fields: [
-                    { name: '🎁 Prize', value: `**${prize}**`, inline: true },
-                    { name: '⏱️ Time Left', value: `**${toTime(timeRemaining)}**`, inline: true },
-                    { name: '🎪 Participants', value: `**${participantCount}** 🎯`, inline: true },
-                    { name: '👤 Host', value: host, inline: true },
-                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
+                    { name: '🎁 Prize', value: `**${prize || '-'}**`, inline: true },
+                    { name: '⏱️ Time Left', value: `**${toTime(timeRemaining) || '-'}**`, inline: true },
+                    { name: '🎪 Participants', value: `**${participantCount != null ? participantCount : '-'}** 🎯`, inline: true },
+                    { name: '👤 Host', value: host || '-', inline: true },
+                    { name: '🆔 Case ID', value: `\`${caseId || '-'}\``, inline: true }
                 ],
-                footer: { text: `⚡ Keep reacting to participate! | Case ID: ${caseId}` },
+                footer: { text: `⚡ Keep reacting to participate! | Case ID: ${caseId || '-'}` },
                 timestamp: new Date()
             };
 
@@ -96,13 +96,13 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
             endEmbed = {
                 color: 16744171,
                 title: '❌ No Winners',
-                description: `No one entered the **${prize}** giveaway. Better luck next time! 🍀`,
+                description: `No one entered the **${prize || '-'}** giveaway. Better luck next time! 🍀`,
                 fields: [
-                    { name: '🎁 Prize', value: `**${prize}**`, inline: true },
+                    { name: '🎁 Prize', value: `**${prize || '-'}**`, inline: true },
                     { name: '👥 Total Reactions', value: '0', inline: true },
-                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
+                    { name: '🆔 Case ID', value: `\`${caseId || '-'}\``, inline: true }
                 ],
-                footer: { text: `Giveaway Ended - No participants | Case ID: ${caseId}` },
+                footer: { text: `Giveaway Ended - No participants | Case ID: ${caseId || '-'}` },
                 timestamp: new Date()
             };
         } else {
@@ -122,15 +122,15 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
             endEmbed = {
                 color: 65280,
                 title: '🏆 Giveaway Winner!',
-                description: `🎉 **Congratulations ${winnerUsername}!** You won the **${prize}** giveaway!`,
+                description: `🎉 **Congratulations ${winnerUsername || '-'}!** You won the **${prize || '-'}** giveaway!`,
                 fields: [
-                    { name: '🎁 Prize', value: `**${prize}**`, inline: true },
-                    { name: '🥇 Winner', value: `**${winnerUsername}**\n<@${winnerId}>`, inline: true },
-                    { name: '👥 Participants', value: `**${participants.length}**`, inline: true },
-                    { name: '📊 Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true },
-                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
+                    { name: '🎁 Prize', value: `**${prize || '-'}**`, inline: true },
+                    { name: '🥇 Winner', value: `**${winnerUsername || '-'}**\n<@${winnerId || '-'}>`, inline: true },
+                    { name: '👥 Participants', value: `**${participants.length || '-'}**`, inline: true },
+                    { name: '📊 Chance', value: `**${participants.length ? ((1 / participants.length) * 100).toFixed(2) : '-'}%**`, inline: true },
+                    { name: '🆔 Case ID', value: `\`${caseId || '-'}\``, inline: true }
                 ],
-                footer: { text: `🎊 Giveaway Ended | Case ID: ${caseId}` },
+                footer: { text: `🎊 Giveaway Ended | Case ID: ${caseId || '-'}` },
                 timestamp: new Date()
             };
         }
@@ -297,6 +297,7 @@ module.exports = {
                 channelId: channel.id,
                 messageId: giveawayMessage.id,
                 hostId: interaction.user.id,
+                guildId: interaction.guildId,
                 endTime: Date.now() + (duration * 1000),
                 winnerCount: 1,
                 ended: false
