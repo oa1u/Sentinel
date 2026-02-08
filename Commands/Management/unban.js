@@ -85,9 +85,13 @@ module.exports = {
 
     // Make a new case number for this unban event.
     const dbManager = require('../../Functions/MySQLDatabaseManager');
-    const unbansRows = await dbManager.connection.query('SELECT MAX(id) as maxId FROM unbans');
-    const newUnbanCaseId = (unbansRows && unbansRows[0] && unbansRows[0].maxId) ? (parseInt(unbansRows[0].maxId) + 1) : 1;
-    const unbanReason = `unban-${newUnbanCaseId}`;
+    // Generate a unique case ID for unban
+    function generateCaseId(type) {
+      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+      return `${type}-${random}`;
+    }
+    const newUnbanCaseId = generateCaseId('UNBAN');
+    const unbanReason = newUnbanCaseId;
 
     // If we only have a user ID, try to get their latest ban info from the database.
     let originalBanCaseId = resolvedCaseId || null;
@@ -126,11 +130,11 @@ module.exports = {
       .setTitle("🔓 User Unbanned")
       .setColor(0x43B581)
       .addFields(
-        { name: "👮 Administrator", value: `${interaction.user.tag} (${interaction.user.id})` },
-        { name: "👤 User", value: targetLabel },
-        { name: "🔑 Unban Case ID", value: `\`${newUnbanCaseId}\`` },
-        { name: "🔑 Original Ban Case ID", value: resolvedCaseId ? `\`${resolvedCaseId}\`` : 'N/A' }
-      )
+          { name: '👮 Administrator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
+          { name: '👤 User', value: `${targetLabel}`, inline: true },
+          { name: '🔑 Unban Case ID', value: `\t${'```'}${newUnbanCaseId}${'```'}`, inline: false },
+          { name: '🔑 Original Ban Case ID', value: `${'```'}${originalBanCaseId || 'N/A'}${'```'}`, inline: true },
+        )
       .setFooter({ text: `Unbanned by ${interaction.user.username}` })
       .setTimestamp();
     

@@ -10,10 +10,10 @@ const AdminPanelHelper = require("../../Functions/AdminPanelHelper");
 function parseDuration(input) {
   const match = input.match(/^(\d+)([mhdw])$/i);
   if (!match) return null;
-  
+
   const value = parseInt(match[1], 10);
   const unit = match[2].toLowerCase();
-  
+
   // Convert everything to minutes
   switch (unit) {
     case 'm': return value;
@@ -45,10 +45,10 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
-      // Respond right away so Discord doesn't time out while we process
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-      }
+    // Respond right away so Discord doesn't time out while we process
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
+    }
 
     const targetUser = interaction.options.getUser('user');
     const durationInput = interaction.options.getString('duration');
@@ -77,7 +77,7 @@ module.exports = {
         'Duration must be at least **1 minute**'
       );
     }
-    
+
     // Discord's hard limit is 28 days (40320 minutes)
     if (duration > 40320) {
       const days = Math.floor(duration / 1440);
@@ -139,16 +139,14 @@ module.exports = {
     const dmEmbed = new EmbedBuilder()
       .setTitle('⏱️ Communication Timeout Notice')
       .setColor(0xFAA61A)
-      .setDescription(`You have been temporarily restricted from communicating in **${interaction.guild.name}**.`)
+      .setDescription(`You have been temporarily muted in **${interaction.guild.name}**.`)
       .addFields(
-        { name: 'Timeout Status', value: `**${moment.duration(duration, 'minutes').format('d[d] h[h] m[m]')}**`, inline: true },
-        { name: 'Issued At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+        { name: 'Timeout Status', value: `**${'```'}${moment.duration(duration, 'minutes').format('d[d] h[h] m[m]')}${'```'}**`, inline: true },
+        { name: 'Issued At', value: `${moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm')}`, inline: true },
         { name: 'Expires At', value: `<t:${Math.floor(expiresAt / 1000)}:F>`, inline: true },
-        { name: 'Time Remaining', value: `<t:${Math.floor(expiresAt / 1000)}:R>`, inline: true },
-        { name: 'Reason for Timeout', value: `\`\`\`${reason}\`\`\``, inline: false },
-        { name: 'Case ID', value: `\`${caseID}\``, inline: true },
-        { name: 'Issued By', value: `\`${interaction.user.tag}\``, inline: true },
-        { name: 'Restrictions During Timeout', value: '• Cannot send messages\n• Cannot use voice channels\n• Cannot react to messages\n• Cannot use application commands', inline: false }
+        { name: 'Reason for timeout', value: `	${'```'}${reason}${'```'}`, inline: false },
+        { name: 'Case ID', value: `${'```'}${caseID}${'```'}`, inline: true },
+        { name: 'Moderator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
       )
       .setFooter({ text: `${interaction.guild.name} • Moderation System` })
       .setTimestamp();
@@ -191,7 +189,7 @@ module.exports = {
     // Perform the timeout
     try {
       await targetMember.timeout(timeoutMs, reason);
-      
+
       // Send success response
       await sendSuccessReply(
         interaction,

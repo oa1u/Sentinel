@@ -67,14 +67,13 @@ module.exports = {
     const dmEmbed = new EmbedBuilder()
       .setTitle('👢 Server Kick Notice')
       .setColor(0xFAA61A)
-      .setDescription(`You have been removed from **${interaction.guild.name}** by a moderator.`)
+      .setDescription(`You have been removed from **${interaction.guild.name}**`)
       .addFields(
         { name: 'Action Type', value: '**Kick**', inline: true },
-        { name: 'Effective Date', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-        { name: 'Reason', value: `\`\`\`${reason}\`\`\``, inline: false },
-        { name: 'Case ID', value: `\`${caseID}\``, inline: true },
-        { name: 'Moderator', value: `\`${interaction.user.tag}\``, inline: true },
-        { name: 'What Now?', value: 'You can rejoin the server through an invite link. Review the reason to avoid this in the future.', inline: false }
+        { name: 'Effective Date', value: `${moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm')}`, inline: true },
+        { name: 'Reason for Kick', value: `	${'```'}${reason}${'```'}`, inline: false },
+        { name: 'Case ID', value: `${'```'}${caseID}${'```'}`, inline: true },
+        { name: 'Moderator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
       )
       .setFooter({ text: `${interaction.guild.name} • Moderation System` })
       .setTimestamp();

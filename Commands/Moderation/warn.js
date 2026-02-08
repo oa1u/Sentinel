@@ -31,80 +31,38 @@ module.exports = {
 
     const targetUser = interaction.options.getUser('user');
     const reasonInput = interaction.options.getString('reason');
-    
-    // The reason could be a preset or something custom
-    const reason = DatabaseManager.getResolvedReason(reasonInput);
+    const caseIdInput = interaction.options.getString('caseid');
 
-    if (!await canModerateMember(interaction, targetUser, 'warn')) {
+    // If caseid is provided, fetch warning details
+    if (caseIdInput) {
+      const warnsDB = DatabaseManager.getWarnsDB();
+      let foundUserId = targetUser ? targetUser.id : interaction.user.id;
+      const userData = await warnsDB.get(foundUserId);
+      const warn = userData?.warns?.[caseIdInput];
+      if (!warn) {
+        await sendErrorReply(
+          interaction,
+          'Case Not Found',
+          `No warning found for Case ID: \`${caseIdInput}\``
+        );
+        return;
+      }
+      // Fetch moderator info
+      let moderatorTag = warn.moderatorId ? (await interaction.client.users.fetch(warn.moderatorId).catch(() => null))?.tag || warn.moderatorId : 'Unknown';
+      let issuedAt = warn.timestamp ? `<t:${Math.floor(warn.timestamp / 1000)}:F>` : 'Unknown';
+      const embed = new EmbedBuilder()
+        .setTitle('⚠️ Warning Details')
+        .setColor(0xFAA61A)
+        .setDescription(`Case ID: \`${caseIdInput}\``)
+        .addFields(
+          { name: 'Reason', value: `\`\`\`${warn.reason}\`\`\``, inline: false },
+          { name: 'Moderator', value: `\`${moderatorTag}\``, inline: true },
+          { name: 'Issued At', value: issuedAt, inline: true }
+        )
+        .setFooter({ text: `${interaction.guild.name} • Moderation System` })
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       return;
     }
-
-    // Make sure the user is still in the server (can't warn someone who left)
-    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember) {
-      await sendErrorReply(
-        interaction,
-        'Invalid User',
-        `**${targetUser.tag}** is not in this server!`
-      );
-      return;
-    }
-
-    // Make a new case ID for this warning
-    const caseID = generateCaseId('WARN');
-
-    // Put together the log message for this warning
-    const logEmbed = createModerationEmbed({
-      action: '⚠️ Warn',
-      target: targetUser,
-      moderator: interaction.user,
-      reason: reason,
-      caseId: caseID,
-      color: 0xFAA61A
-    });
-
-    // DM the user
-    const dmEmbed = new EmbedBuilder()
-      .setTitle('⚠️ Server Warning Notice')
-      .setColor(0xFAA61A)
-      .setDescription(`You have received an official warning in **${interaction.guild.name}** for your actions.`)
-      .addFields(
-        { name: 'Warning Type', value: '**Server Conduct Violation**', inline: true },
-        { name: 'Issued At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-        { name: 'Violation Details', value: `\`\`\`${reason}\`\`\``, inline: false },
-        { name: 'Case ID', value: `\`${caseID}\``, inline: true },
-        { name: 'Issued By', value: `\`${interaction.user.tag}\``, inline: true },
-        { name: 'Next Steps', value: 'Repeated violations may result in further moderation action. Please review our server rules and code of conduct.', inline: false }
-      )
-      .setFooter({ text: `${interaction.guild.name} • Moderation System` })
-      .setTimestamp();
-
-    const dmSent = await sendModerationDM(targetUser, dmEmbed);
-
-    // Log this action in the mod log channel
-    await logModerationAction(interaction, logEmbed);
-
-    // Count warnings BEFORE saving (to get the accurate count for notification)
-    const previousWarns = await DatabaseManager.getUserWarnsCount(targetUser.id);
-    const totalWarns = previousWarns + 1;
-
-    // Save the warning to database
-    addCase(targetUser.id, caseID, {
-      moderator: interaction.user.id,
-      moderatorTag: interaction.user.username,
-      userTag: targetUser.username,
-      reason: reason,
-      date: moment(Date.now()).format('LL'),
-      type: 'WARN'
-    });
-
-    await sendSuccessReply(
-      interaction,
-      'Warning Issued',
-      `Warned **${targetUser.tag}**\n` +
-      `Case: \`${caseID}\`\n` +
-      `Total: **${totalWarns}**\n` +
-      `DM: ${dmSent ? '✅' : '❌'}`
-    );
   }
 };

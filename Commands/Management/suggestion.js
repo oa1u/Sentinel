@@ -60,7 +60,7 @@ module.exports = {
         if (!isAdmin) {
             return interaction.reply({
                 content: '❌ You do not have permission to manage suggestions.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -75,7 +75,7 @@ module.exports = {
             if (!suggestion) {
                 return interaction.reply({
                     content: `❌ Suggestion #${suggestionId} not found.`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -109,6 +109,7 @@ module.exports = {
                 }
 
                 return interaction.reply({ embeds: [embed], ephemeral: true });
+                            return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
 
             // Change the suggestion's status depending on the subcommand.
@@ -172,7 +173,7 @@ module.exports = {
 
             await interaction.reply({
                 content: `${actionEmojis[newStatus]} Suggestion #${suggestionId} has been **${newStatus}**.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
 
             console.log(`[Suggestion] #${suggestionId} ${newStatus} by ${interaction.user.tag}`);
@@ -181,7 +182,7 @@ module.exports = {
             console.error('[Suggestion] Error:', error);
             await interaction.reply({
                 content: '❌ An error occurred while processing the suggestion.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }

@@ -50,12 +50,13 @@ async function runGiveawayCountdown(message, giveawayId, client, duration, prize
             const countdownEmbed = {
                 color: 16766680,
                 title: '🎉 Giveaway in Progress!',
-                description: '━━━━━━━━━━━━━━━━━━━━━\n\n⏳ **Giveaway is still running!**\n\n━━━━━━━━━━━━━━━━━━━━━',
+                description: '⏳ **Giveaway is still running!**',
                 fields: [
                     { name: '🎁 Prize', value: `**${prize}**`, inline: true },
-                    { name: '⏱️ Time Remaining', value: `**${toTime(timeRemaining)}**`, inline: true },
-                    { name: '👤 Hosted by', value: host, inline: true },
-                    { name: '🎪 Participants', value: `**${participantCount}** 🎯`, inline: true }
+                    { name: '⏱️ Time Left', value: `**${toTime(timeRemaining)}**`, inline: true },
+                    { name: '🎪 Participants', value: `**${participantCount}** 🎯`, inline: true },
+                    { name: '👤 Host', value: host, inline: true },
+                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
                 ],
                 footer: { text: `⚡ Keep reacting to participate! | Case ID: ${caseId}` },
                 timestamp: new Date()
@@ -95,7 +96,7 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
             endEmbed = {
                 color: 16744171,
                 title: '❌ No Winners',
-                description: `━━━━━━━━━━━━━━━━━━━━━\n\nUnfortunately, nobody reacted to the **${prize}** giveaway.\n\n**Better luck next time!** 🍀\n\n━━━━━━━━━━━━━━━━━━━━━`,
+                description: `No one entered the **${prize}** giveaway. Better luck next time! 🍀`,
                 fields: [
                     { name: '🎁 Prize', value: `**${prize}**`, inline: true },
                     { name: '👥 Total Reactions', value: '0', inline: true },
@@ -120,16 +121,16 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
             
             endEmbed = {
                 color: 65280,
-                title: '🏆 Giveaway Winner Announced!',
-                description: `━━━━━━━━━━━━━━━━━━━━━\n\n🎉 **Congratulations ${winnerUsername}!** 🎉\n\nYou have won the **${prize}** giveaway!\n\n━━━━━━━━━━━━━━━━━━━━━`,
+                title: '🏆 Giveaway Winner!',
+                description: `🎉 **Congratulations ${winnerUsername}!** You won the **${prize}** giveaway!`,
                 fields: [
-                    { name: '🎁 Prize Won', value: `**${prize}**`, inline: true },
+                    { name: '🎁 Prize', value: `**${prize}**`, inline: true },
                     { name: '🥇 Winner', value: `**${winnerUsername}**\n<@${winnerId}>`, inline: true },
-                    { name: '👥 Total Participants', value: `**${participants.length}**`, inline: true },
-                    { name: '📊 Winning Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true },
+                    { name: '👥 Participants', value: `**${participants.length}**`, inline: true },
+                    { name: '📊 Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true },
                     { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
                 ],
-                footer: { text: `🎊 Giveaway Ended - Congratulations! | Case ID: ${caseId}` },
+                footer: { text: `🎊 Giveaway Ended | Case ID: ${caseId}` },
                 timestamp: new Date()
             };
         }
@@ -248,16 +249,15 @@ module.exports = {
         // Create giveaway embed
         const startEmbed = {
             color: 16766680,
-            title: '🎉 Exciting Giveaway!',
-            description: `An amazing giveaway has been started in **${interaction.guild.name}**!\n\nReact with 🎉 below to automatically enter for a chance to win!`,
+            title: '🎉 Giveaway Started!',
+            description: `React with 🎉 to enter!`,
             fields: [
-                { name: 'Prize Offered', value: `**${prize}**\n\nWin this amazing prize!`, inline: false },
-                { name: 'Duration', value: `⏱️ **${toTime(duration)}**\n\nEnter before time runs out!`, inline: true },
-                { name: 'Hosted By', value: `${interaction.user}\n\`${interaction.user.id}\``, inline: true },
-                { name: 'How to Enter', value: '1️⃣ React with 🎉 emoji\n2️⃣ Stay in the server\n3️⃣ Wait for winner announcement', inline: false },
-                { name: 'Current Participants', value: '**0** members entered', inline: true },
-                { name: 'Status', value: '**Active** 🟢\n(Running)', inline: true },
-                { name: '🍀 Chance to Win', value: 'Every reaction = 1 entry\nRandom winner selected at end', inline: false }
+                { name: '🎁 Prize', value: `**${prize}**`, inline: true },
+                { name: '⏱️ Duration', value: `**${toTime(duration)}**`, inline: true },
+                { name: '👤 Host', value: `${interaction.user}`, inline: true },
+                { name: 'How to Enter', value: 'React with 🎉\nStay in the server\nWait for winner', inline: false },
+                { name: 'Participants', value: '**0**', inline: true },
+                { name: 'Status', value: '**Active** 🟢', inline: true }
             ],
             footer: { text: '🎊 Good luck! Only one winner will be selected.' },
             timestamp: new Date()
@@ -317,22 +317,24 @@ module.exports = {
             // Update the embed to include the case ID
             const updatedEmbed = {
                 ...startEmbed,
-                footer: { text: `🎊 Good luck! Only one winner will be selected. | Case ID: ${caseId}` }
+                footer: { text: `🎊 Good luck! Only one winner will be selected. | Case ID: ${caseId}` },
+                fields: [
+                    ...startEmbed.fields,
+                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
+                ]
             };
             await giveawayMessage.edit({ embeds: [updatedEmbed] });
 
             // Confirm to user
             const successEmbed = {
                 color: 65280,
-                title: '✅ Giveaway Created & Posted Successfully',
-                description: `Your giveaway has been posted to ${channel} and is now live!\n\nMembers can start entering immediately by reacting with 🎉.`,
+                title: '✅ Giveaway Created!',
+                description: `Giveaway posted in ${channel} and is now live! React with 🎉 to enter.`,
                 fields: [
                     { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true },
-                    { name: 'Prize', value: `**${prize}**`, inline: true },
-                    { name: 'Duration', value: `**${toTime(duration)}**`, inline: true },
-                    { name: 'Status', value: '**ACTIVE** 🟢', inline: true },
-                    { name: 'Posted Channel', value: `${channel}`, inline: false },
-                    { name: 'Next Steps', value: `✅ Giveaway is running\n✅ Members can enter by reacting\n⏳ Winner will be selected when time expires\n✅ Use Case ID \`${caseId}\` to extend or reroll`, inline: false }
+                    { name: '🎁 Prize', value: `**${prize}**`, inline: true },
+                    { name: '⏱️ Duration', value: `**${toTime(duration)}**`, inline: true },
+                    { name: 'Status', value: '**ACTIVE** 🟢', inline: true }
                 ],
                 footer: { text: 'Monitor the giveaway for live participant updates!' },
                 timestamp: new Date()
@@ -593,13 +595,13 @@ module.exports = {
             
             const rerollEmbed = {
                 color: 65280,
-                title: '🎊 New Winner Selected!',
-                description: `━━━━━━━━━━━━━━━━━━━━━\n\n🎉 **Congratulations ${winnerUsername}!** 🎉\n\nYou have won the **${giveaway.prize}** giveaway!\n\n━━━━━━━━━━━━━━━━━━━━━`,
+                title: '🎊 New Winner!',
+                description: `🎉 **Congratulations ${winnerUsername}!** You won the **${giveaway.prize}** giveaway!`,
                 fields: [
                     { name: '🎁 Prize', value: `**${giveaway.prize}**`, inline: true },
-                    { name: '🥇 New Winner', value: `**${winnerUsername}**\n<@${winnerId}>`, inline: true },
-                    { name: '👥 Total Participants', value: `**${participants.length}**`, inline: true },
-                    { name: '📊 Winning Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true },
+                    { name: '🥇 Winner', value: `**${winnerUsername}**\n<@${winnerId}>`, inline: true },
+                    { name: '👥 Participants', value: `**${participants.length}**`, inline: true },
+                    { name: '📊 Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true },
                     { name: '🔄 Note', value: 'This is a reroll - a new winner was selected from all previous participants', inline: false },
                     { name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true }
                 ],

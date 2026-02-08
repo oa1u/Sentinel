@@ -61,7 +61,17 @@ module.exports = {
 
     const targetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
     const userLabel = targetUser ? `${targetUser.tag} (${targetUserId})` : targetUserId;
-    const moderatorLabel = warningEntry.moderator ? `<@${warningEntry.moderator}> (${warningEntry.moderator})` : 'Unknown';
+    // Try new format first
+    let moderatorLabel = 'Unknown';
+    if (warningEntry.moderatorId) {
+      const modUser = await interaction.client.users.fetch(warningEntry.moderatorId).catch(() => null);
+      moderatorLabel = modUser ? `${modUser.tag} (${modUser.id})` : warningEntry.moderatorId;
+    } else if (warningEntry.moderator) {
+      const modUser = await interaction.client.users.fetch(warningEntry.moderator).catch(() => null);
+      moderatorLabel = modUser ? `${modUser.tag} (${modUser.id})` : warningEntry.moderator;
+    }
+    // Date: prefer timestamp, fallback to date
+    let dateLabel = warningEntry.timestamp ? `<t:${Math.floor(warningEntry.timestamp / 1000)}:F>` : (warningEntry.date || 'No date recorded');
     const userData = await warnsDB.get(targetUserId);
     const totalWarns = Object.keys(userData?.warns || {}).length;
 
@@ -72,7 +82,7 @@ module.exports = {
         { name: "User", value: userLabel },
         { name: "Reason", value: warningEntry.reason || 'No reason recorded' },
         { name: "Moderator", value: moderatorLabel },
-        { name: "Date", value: warningEntry.date || 'No date recorded' },
+        { name: "Date", value: dateLabel },
         { name: "Total warnings for user", value: `${totalWarns}` }
       );
     

@@ -136,13 +136,15 @@ async function openTicket(interaction) {
     const welcomeEmbed = new EmbedBuilder()
       .setColor(priority === 'high' ? 0xF04747 : priority === 'low' ? 0x43B581 : 0x5865F2)
       .setTitle(`${priorityEmoji} Support Ticket Opened`)
-      .setDescription(`Welcome, ${interaction.user}!\n\nYour support ticket has been created and assigned to our support team. We typically respond within 5-15 minutes during business hours.`)
+      .setDescription(`Welcome, ${interaction.user}!\n\nYour support ticket has been created and assigned to our support team. Please provide as much detail as possible to help us assist you quickly.`)
       .addFields(
-        { name: 'Ticket Information', value: `**Status:** Open\n**Created:** <t:${Math.floor(Date.now() / 1000)}:F>\n**Priority:** ${priorityLabel}`, inline: false },
-        { name: 'Your Request', value: `\`\`\`${reason || 'No reason provided'}\`\`\``, inline: false },
-        { name: 'How to Provide Information', value: '📝 Provide detailed descriptions\n📸 Share relevant screenshots\n⏱️ Include timing of issues\n📎 Attach files if needed', inline: false },
-        { name: 'Support Team Actions', value: '✅ We will review your ticket\n🔍 Ask clarifying questions if needed\n⚡ Provide solutions or guidance\n📋 Document the resolution', inline: false },
-        { name: 'Close Your Ticket', value: 'Once resolved, use `/ticket close` or click the ❌ reaction below.\nA transcript will be saved for your records.', inline: false }
+        { name: 'Status', value: '🟢 Open', inline: true },
+        { name: 'Priority', value: `${priorityEmoji} ${priorityLabel}`, inline: true },
+        { name: 'Created', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+        { name: 'Your Request', value: reason ? `\`\`\`${reason}\`\`\`` : 'No reason provided', inline: false },
+        { name: 'How to Provide Info', value: '📝 Detailed description\n📸 Screenshots\n⏱️ Timing\n📎 Attach files', inline: true },
+        { name: 'Support Actions', value: '✅ Review\n🔍 Clarify\n⚡ Solution\n📋 Document', inline: true },
+        { name: 'Close Ticket', value: 'Use `/ticket close` or click ❌\nTranscript will be saved.', inline: false }
       )
       .setFooter({ text: '🎫 Support System • Case #' + Date.now().toString().slice(-6) })
       .setTimestamp();
@@ -186,15 +188,14 @@ async function openTicket(interaction) {
     const successEmbed = new EmbedBuilder()
       .setColor(0x43B581)
       .setTitle('✅ Ticket Created Successfully')
-      .setDescription(`Your support request has been registered and assigned to our support team.\n\nYou will receive a response shortly. Please be patient and provide as much detail as possible to help us assist you.`)
+      .setDescription(`Your support request has been registered and assigned to our support team. Please provide as much detail as possible to help us assist you.\n\nYou will receive a response shortly.`)
       .addFields(
-        { name: 'Ticket Channel', value: `${ticketChannel}`, inline: false },
-        { name: 'Current Status', value: '🟢 **Open** - Awaiting Support Team Response', inline: false },
-        { name: 'Your Issue', value: `\`\`\`${reason || 'No reason provided'}\`\`\``, inline: false },
-        { name: 'Priority Level', value: `${priorityEmoji} **${priorityLabel}**`, inline: true },
-        { name: 'Expected Response Time', value: '⏱️ **5-15 minutes**\n(Business hours)', inline: true },
-        { name: 'What You Can Do', value: '✅ Provide additional details\n📎 Share relevant files\n💬 Ask follow-up questions\n⏳ Wait for support staff', inline: false },
-        { name: 'When You\'re Done', value: 'Use `/ticket close` command or click ❌ reaction\n📋 A transcript will be saved for your records', inline: false }
+        { name: 'Status', value: '🟢 Open', inline: true },
+        { name: 'Priority', value: `${priorityEmoji} ${priorityLabel}`, inline: true },
+        { name: 'Channel', value: `${ticketChannel}`, inline: true },
+        { name: 'Your Issue', value: reason ? `\`\`\`${reason}\`\`\`` : 'No reason provided', inline: false },
+        { name: 'What You Can Do', value: '✅ Add details\n📎 Share files\n💬 Ask questions\n⏳ Wait for support', inline: true },
+        { name: 'When Done', value: 'Use `/ticket close` or click ❌\nTranscript will be saved.', inline: true }
       )
       .setFooter({ text: 'Thank you for contacting support!' })
       .setTimestamp();

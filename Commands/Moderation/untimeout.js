@@ -30,10 +30,10 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
-      // Respond right away so Discord doesn't time out while we process
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-      }
+    // Respond right away so Discord doesn't time out while we process
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
+    }
 
     let targetUser = interaction.options.getUser('user');
     const caseId = interaction.options.getString('caseid');
@@ -138,14 +138,13 @@ module.exports = {
 
     // Send DM to user
     const dmEmbed = new EmbedBuilder()
-      .setTitle('✅ Your Timeout Has Been Removed')
+      .setTitle('✅ Your Timeout has been removed!')
       .setColor(0x43B581)
-      .setDescription(`Your timeout in **${interaction.guild.name}** has been removed\n\n━━━━━━━━━━━━━━━━━━━━━━`)
+      .setDescription(`Your timeout in **${interaction.guild.name}** has been removed!`)
       .addFields(
-        { name: '📋 Summary', value: `\`\`\`\nUser: ${targetUser.tag}\nModerator: ${interaction.user.tag}\nCase: ${newCaseID}\n\`\`\``, inline: false },
-        { name: '📝 Reason', value: `\`\`\`${reason}\`\`\``, inline: false },
-        { name: '🔑 Case ID', value: `\`${newCaseID}\``, inline: true },
-        { name: '👮 Moderator', value: `${interaction.user}`, inline: true }
+        { name: 'Reason', value: `${'```'}${reason}${'```'}`, inline: false },
+        { name: 'Case ID', value: `${'```'}${newCaseID}${'```'}`, inline: true },
+        { name: 'Moderator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
       )
       .setFooter({ text: '✅ You can now send messages and join voice channels again!' })
       .setTimestamp();
@@ -185,7 +184,7 @@ module.exports = {
     // Remove the timeout
     try {
       await targetMember.timeout(null, reason);
-      
+
       // Send success response
       await sendSuccessReply(
         interaction,
