@@ -369,15 +369,31 @@ function renderTimeouts(timeouts) {
         return;
     }
     
-    tbody.innerHTML = timeouts.map(timeout => {
+    // Remove duplicate timeouts for same user, reason, and issued_by
+    const uniqueTimeouts = [];
+    const seen = new Set();
+    for (const timeout of timeouts) {
+        const key = `${timeout.user_id}|${timeout.reason}|${timeout.issued_by}`;
+        if (!seen.has(key)) {
+            uniqueTimeouts.push(timeout);
+            seen.add(key);
+        }
+    }
+    tbody.innerHTML = uniqueTimeouts.map(timeout => {
         const issuedByDisplay = timeout.issued_by_username ? `${timeout.issued_by_username}` : timeout.issued_by || 'Unknown';
+        // Fix expiration date formatting if invalid
+        let expiresDate = 'N/A';
+        if (timeout.expires_at) {
+            const expires = new Date(timeout.expires_at);
+            expiresDate = isNaN(expires.getTime()) ? 'N/A' : expires.toLocaleString();
+        }
         return `
         <tr>
             <td><code>${escapeHtml(timeout.user_id)}</code></td>
             <td>${escapeHtml(timeout.username)}</td>
             <td>${escapeHtml(timeout.reason) || 'No reason provided'}</td>
             <td>${escapeHtml(issuedByDisplay)}</td>
-            <td>${new Date(timeout.expires_at).toLocaleString()}</td>
+            <td>${expiresDate}</td>
             <td>
                 <button class="btn btn-sm btn-primary" onclick='viewTimeoutDetails(${JSON.stringify(timeout)})'>View</button>
                 <button class="btn btn-sm btn-success" onclick="removeTimeout('${escapeHtml(timeout.user_id)}')">Remove</button>

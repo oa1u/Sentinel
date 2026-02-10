@@ -249,19 +249,13 @@ async function handleViolation(message, client, violation) {
 
     // Log to automod_violations table with caseId, reason, action, etc.
     try {
-        await MySQLDatabaseManager.connection.query(
-            `INSERT INTO automod_violations (user_id, guild_id, violation_type, message_content, channel_id, action_taken, case_id, reason, timestamp)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [
-                userId,
-                message.guild.id,
-                type,
-                message.content.slice(0, 1000),
-                message.channel.id,
-                action,
-                caseId,
-                reason
-            ]
+        await MySQLDatabaseManager.logAutomodViolation(
+            userId,
+            message.guild.id,
+            type,
+            message.content.slice(0, 1000),
+            message.channel.id,
+            action
         );
     } catch (err) {
         console.warn(`[AutoMod] Could not log violation: ${err.message}`);
@@ -270,39 +264,53 @@ async function handleViolation(message, client, violation) {
     // Handle spam with escalating actions
     if (type === 'spam') {
         try {
-            const violations = await MySQLDatabaseManager.getAutomodViolations(userId, 1);
-            if (violations && violations.length >= AUTOMOD_CONFIG.spamWarningThreshold) {
+            const violations = await MySQLDatabaseManager.getAutomodViolations(userId, 24); // Check last 24 hours
+            const spamViolations = Array.isArray(violations)
+                ? violations.filter(v => v.violation_type === 'spam')
+                : [];
+            if (spamViolations.length >= AUTOMOD_CONFIG.spamWarningThreshold) {
                 // Timeout after multiple violations
                 try {
-                    await message.member.timeout(
-                        AUTOMOD_CONFIG.spamTimeout,
-                        `AutoMod: Repeated spam violations`
+                    const timeoutMs = Number(AUTOMOD_CONFIG.spamTimeout) || 10 * 60 * 1000;
+                    // Check for existing active timeout for this user
+                    const [existingTimeouts] = await MySQLDatabaseManager.connection.query(
+                        `SELECT * FROM timeouts WHERE user_id = ? AND active = TRUE AND issued_by = 'AutoMod'`,
+                        [userId]
                     );
-                    await MySQLDatabaseManager.connection.query(
-                        `INSERT INTO timeouts (user_id, username, case_id, reason, issued_at, expires_at, issued_by, active)
-                         VALUES (?, ?, ?, ?, NOW(), ?, 'AutoMod', TRUE)`,
-                        [
-                            userId,
-                            message.author.username,
-                            caseId,
-                            `AutoMod: Repeated spam violations`,
-                            new Date(Date.now() + AUTOMOD_CONFIG.spamTimeout)
-                        ]
-                    );
-                    console.log(`[AutoMod] User ${userId} timed out for spam (Case: ${caseId})`);
-                    // Only send notification for timeout
+                    if (!existingTimeouts || existingTimeouts.length === 0) {
+                        await message.member.timeout(
+                            timeoutMs,
+                            `AutoMod: Repeated spam violations`
+                        );
+                        await MySQLDatabaseManager.connection.query(
+                            `INSERT INTO timeouts (user_id, username, case_id, reason, issued_at, expires_at, issued_by, active)
+                             VALUES (?, ?, ?, ?, NOW(), ?, 'AutoMod', TRUE)`,
+                            [
+                                userId,
+                                message.author.username,
+                                caseId,
+                                `AutoMod: Repeated spam violations`,
+                                Date.now() + timeoutMs
+                            ]
+                        );
+                    }
+                    // Always send notification for timeout
                     sendUserNotification(message, `AutoMod: Repeated spam violations`, 'spam', caseId);
                 } catch (err) {
                     console.error(`[AutoMod] Failed to timeout user or save case: ${err.message}`);
+                    // Still notify user even if timeout fails
+                    sendUserNotification(message, `AutoMod: Repeated spam violations`, 'spam', caseId);
                 }
             } else {
-                // Only warn if below threshold
+                // Always send notification for warn action
                 sendUserNotification(message, reason, type, caseId);
             }
         } catch (err) {
             console.warn(`[AutoMod] Could not check violation history: ${err.message}`);
+            // Always notify user if violation check fails
+            sendUserNotification(message, reason, type, caseId);
         }
-        // Avoid duplicate notification for spam
+        // Only send one embed for spam
         return;
     }
 
@@ -315,15 +323,27 @@ async function handleViolation(message, client, violation) {
 
 // Send DM to violating user
 function sendUserNotification(message, reason, violationType, caseId) {
+    let embedDescription = 'Your message was automatically removed.';
+    let fields = [
+        { name: '📌 Reason', value: `\`${reason}\``, inline: true },
+        { name: '📋 Case ID', value: `\`${caseId}\``, inline: true }
+    ];
+    let color = 0xFF6B6B;
+    // If user was muted/timed out for spam, show mute info
+    if (reason.includes('Repeated spam violations')) {
+        // Find timeout duration from config
+        const timeoutMs = Number(AUTOMOD_CONFIG.spamTimeout) || 10 * 60 * 1000;
+        const minutes = Math.round(timeoutMs / 60000);
+        embedDescription = `You have been muted for ${minutes} minutes due to repeated spam violations.`;
+        color = 0xFFA500;
+        fields.push({ name: '⏳ Duration', value: `${minutes} minutes`, inline: true });
+    }
+    fields.push({ name: '💡 Tip', value: 'Please review the server rules to avoid future violations.', inline: false });
     const userEmbed = new EmbedBuilder()
-        .setColor(0xFF6B6B)
+        .setColor(color)
         .setAuthor({ name: '⚠️ AutoMod Alert', iconURL: message.guild.iconURL() })
-        .setDescription('Your message was automatically removed.')
-        .addFields(
-            { name: '📌 Reason', value: `\`${reason}\``, inline: false },
-            { name: '📋 Case ID', value: `\`${caseId}\``, inline: true },
-            { name: '💡 Tip', value: 'Please review the server rules to avoid future violations.', inline: false }
-        )
+        .setDescription(embedDescription)
+        .addFields(fields)
         .setFooter({ text: message.guild.name })
         .setTimestamp();
 
