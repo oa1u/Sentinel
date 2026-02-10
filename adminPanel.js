@@ -3430,6 +3430,7 @@ app.get('/api/moderation/warnings/search', requireAuth, async (req, res) => {
         }
         
         const query = (req.query.q || '').trim();
+        const normalizedQuery = query.toLowerCase();
         
         // Get all levels first (all members)
         const allLevels = await AdminPanelHelper.getAllLevels();
@@ -3517,24 +3518,24 @@ app.get('/api/moderation/warnings/search', requireAuth, async (req, res) => {
         (allLevels || []).forEach(u => {
             allMembers[u.user_id] = {
                 ...u,
-                username: u.username || warnMap[u.user_id]?.username || 'Unknown',
-                warn_count: warnMap[u.user_id]?.warn_count || 0,
-                warns: warnMap[u.user_id]?.warns || [],
+                username: u.username || warnsByUser[u.user_id]?.username || 'Unknown',
+                warn_count: warnsByUser[u.user_id]?.warnCount || 0,
+                warns: warnsByUser[u.user_id]?.warns || [],
                 joined_at: u.created_at || null
             };
         });
         
         // Add warn-only users not present in levels
-        Object.keys(warnMap).forEach(userId => {
+        Object.keys(warnsByUser).forEach(userId => {
             if (!allMembers[userId]) {
                 allMembers[userId] = {
                     user_id: userId,
-                    username: warnMap[userId].username || 'Unknown',
+                    username: warnsByUser[userId].username || 'Unknown',
                     level: 1,
                     messages: 0,
                     xp: 0,
-                    warn_count: warnMap[userId].warn_count || 0,
-                    warns: warnMap[userId].warns || [],
+                    warn_count: warnsByUser[userId].warnCount || 0,
+                    warns: warnsByUser[userId].warns || [],
                     joined_at: null
                 };
             }

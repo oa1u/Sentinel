@@ -48,7 +48,7 @@ module.exports = {
     let customUserData = null;
     try {
       // Replace 'users' and 'userId' with your actual table/column names
-      const [results] = await MySQLDatabaseManager.connection.pool.query('SELECT * FROM users WHERE userId = ?', [user.id]);
+      const [results] = await MySQLDatabaseManager.connection.pool.query('SELECT * FROM userinfo WHERE user_id = ?', [user.id]);
       customUserData = results[0] || null;
     } catch (err) {
       console.error('Database error in userinfo:', err);

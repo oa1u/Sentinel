@@ -420,6 +420,7 @@ async function unbanUser(userId) {
     } catch (error) {
         showError('Error unbanning user');
     }
+// Advanced warnings tab features
 }
 
 async function removeTimeout(userId) {
@@ -465,18 +466,19 @@ function renderWarnings(warnings) {
     
     tbody.innerHTML = warnings.map((warn, idx) => `
         <tr>
-            <td><code>${escapeHtml(warn.userId)}</code></td>
+            <td><code>${escapeHtml(warn.user_id)}</code></td>
             <td>${escapeHtml(warn.username || 'Unknown')}</td>
-            <td><strong>${escapeHtml(warn.warnCount || 0)}</strong></td>
+            <td><strong>${escapeHtml(warn.warn_count || 0)}</strong></td>
             <td><code>${escapeHtml(warn.warns && warn.warns[0] ? warn.warns[0].moderator_id : 'N/A')}</code></td>
             <td>${warn.warns && warn.warns[0] && warn.warns[0].created_at ? new Date(warn.warns[0].created_at).toLocaleDateString() : 'Never'}</td>
             <td><code>${escapeHtml(warn.warns && warn.warns[0] && warn.warns[0].case_id ? warn.warns[0].case_id : 'N/A')}</code></td>
-            <td>
-                <button class="btn btn-sm btn-primary" onclick="window.viewWarnings_${idx}()">Details</button>
-                <button class="btn btn-sm btn-danger" onclick="clearWarnings('${escapeHtml(warn.userId)}')">Clear</button>
-            </td>
+            <td><button class="btn btn-sm btn-primary" onclick="window.viewWarnings_${idx}()">Details</button></td>
         </tr>
     `).join('');
+    // Store warning data globally and attach click handlers
+    warnings.forEach((warn, idx) => {
+        window[`viewWarnings_${idx}`] = () => viewWarningDetails(warn);
+    });
     
     // Store warning data globally and attach click handlers
     warnings.forEach((warn, idx) => {
@@ -501,9 +503,9 @@ async function clearWarnings(userId) {
 }
 
 function viewWarningDetails(warn) {
-    const userDisplay = warn.username ? `${warn.username} (${warn.userId})` : warn.userId || 'N/A';
+    const userDisplay = warn.username ? `${warn.username} (${warn.user_id})` : warn.user_id || 'N/A';
     document.getElementById('warningDetailUser').textContent = userDisplay;
-    document.getElementById('warningDetailCount').textContent = warn.warnCount || 0;
+    document.getElementById('warningDetailCount').textContent = warn.warn_count || 0;
     
     // Create detailed warning list
     if (warn.warns && Array.isArray(warn.warns) && warn.warns.length > 0) {
