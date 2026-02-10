@@ -62,7 +62,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     await loadOverviewStats();
     await loadRecentActions();
-    await filterTickets();
     
     // Attach tab event listeners
     document.querySelectorAll('.tab').forEach(btn => {
@@ -73,7 +72,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     });
-    
     // Load bans and timeouts on page load
     await loadBannedUsers();
     await loadTimeouts();
@@ -151,7 +149,7 @@ function switchTab(e, tabName) {
         loadBannedUsers();
         loadTimeouts();
     } else if (tabName === 'ticketsTab') {
-        filterTickets();
+        // No filterTickets, just show tickets if needed
     } else if (tabName === 'warningsTab') {
         // Warning search happens when user types
     } else if (tabName === 'membersTab') {
@@ -159,7 +157,7 @@ function switchTab(e, tabName) {
     }
 }
 
-// ========== OVERVIEW TAB ==========
+//  OVERVIEW TAB 
 
 async function loadOverviewStats() {
     try {
@@ -223,33 +221,17 @@ async function loadRecentActions() {
     }
 }
 
-// ========== TICKETS TAB ==========
+// TICKETS TAB 
 
 if (!window.currentTickets) {
     window.currentTickets = [];
-}
-
-async function filterTickets() {
-    const filter = document.getElementById('ticketFilter').value;
-    try {
-        const status = filter === 'in-progress' ? 'claimed' : filter;
-        const url = status === 'all' ? '/api/tickets' : `/api/tickets?status=${status}`;
-        const response = await fetch(url);
-        if (response.ok) {
-            const tickets = await response.json();
-            currentTickets = Array.isArray(tickets) ? tickets : [];
-            renderTickets(tickets);
-        }
-    } catch (error) {
-        console.error('Error filtering tickets:', error);
-    }
 }
 
 function renderTickets(tickets) {
     const tbody = document.getElementById('ticketsTable');
     
     if (!Array.isArray(tickets) || tickets.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No tickets found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No tickets are currently open</td></tr>';
         return;
     }
     
@@ -303,7 +285,7 @@ async function claimTicket(ticketId) {
         const response = await fetch(`/api/tickets/${ticketId}/claim`, { method: 'POST' });
         if (response.ok) {
             showSuccess('Ticket claimed successfully');
-            await filterTickets();
+            // Optionally reload tickets here if needed
         } else {
             showError('Failed to claim ticket');
         }

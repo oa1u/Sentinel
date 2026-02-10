@@ -1,103 +1,3 @@
-// This section is all about showing the list of banned users and keeping it up to date for admins.
-async function loadBannedUsers() {
-    try {
-        const response = await fetch('/api/moderation/bans');
-        if (response.ok) {
-            const json = await response.json();
-            const bans = json.data || (Array.isArray(json) ? json : []);
-            renderBannedUsers(bans);
-        } else {
-            renderBannedUsers([]);
-        }
-    } catch (error) {
-        console.error('Error loading banned users:', error);
-        renderBannedUsers([]);
-    }
-}
-
-function renderBannedUsers(bans) {
-    const tbody = document.getElementById('bannedUsersTable');
-    if (!tbody) return;
-    if (!Array.isArray(bans) || bans.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No banned users</td></tr>';
-        return;
-    }
-    tbody.innerHTML = bans.map((ban, idx) => {
-        const bannedByDisplay = ban.banned_by_username ? `${ban.banned_by_username}` : ban.banned_by || 'Unknown';
-        return `
-        <tr>
-            <td><code>${escapeHtml(ban.user_id)}</code></td>
-            <td>${escapeHtml(ban.username)}</td>
-            <td>${escapeHtml(ban.ban_reason) || 'No reason provided'}</td>
-            <td>${escapeHtml(bannedByDisplay)}</td>
-            <td>${new Date(ban.banned_at).toLocaleDateString()}</td>
-            <td>
-                <button class="btn btn-sm btn-primary" onclick="window.viewBanDetails_${idx}()">View</button>
-                <button class="btn btn-sm btn-success" onclick="unbanUser('${escapeHtml(ban.user_id)}')">Unban</button>
-            </td>
-        </tr>
-    `;
-    }).join('');
-    bans.forEach((ban, idx) => {
-        window[`viewBanDetails_${idx}`] = () => viewBanDetails(ban);
-    });
-}
-
-// This unbanUser function is only for the banned users tab
-// This function is just for unbanning people from the banned users list. If you click "Unban," this is what runs.
-async function unbanUser(userId) {
-    if (!confirm('Are you sure you want to unban this user?')) return;
-    try {
-        const response = await fetch(`/api/moderation/bans/${userId}`, { method: 'DELETE' });
-        const data = await response.json();
-        if (response.ok && data.success) {
-            const caseIdMsg = data.caseId ? ` (Case ID: ${data.caseId})` : '';
-            showSuccess(`User unbanned successfully${caseIdMsg}`);
-            await loadBannedUsers();
-        } else {
-            showError(data.error || 'Failed to unban user');
-            console.error('Error unbanning user:', data.error);
-        }
-    } catch (error) {
-        showError('Error unbanning user');
-    }
-}
-
-function viewBanDetails(ban) {
-    let modal = document.getElementById('banDetailsModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'banDetailsModal';
-        modal.className = 'modal';
-        modal.style.display = 'none';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <h3>Ban Details</h3>
-                <button class="modal-close" onclick="closeBanDetails()">&times;</button>
-                <div><label>User:</label> <div id="banDetailUser" class="form-input" style="background: var(--bg-secondary);"></div></div>
-                <div><label>Ban Reason</label> <div id="banDetailReason" class="form-input" style="background: var(--bg-secondary);"></div></div>
-                <div><label>Banned By</label> <div id="banDetailBannedBy" class="form-input" style="background: var(--bg-secondary);"></div></div>
-                <div><label>Banned At</label> <div id="banDetailBannedAt" class="form-input" style="background: var(--bg-secondary);"></div></div>
-                <div><label>Case ID</label> <div id="banDetailCaseId" class="form-input" style="background: var(--bg-secondary);"></div></div>
-                <button class="btn btn-secondary" onclick="closeBanDetails()">Close</button>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
-    const userDisplay = ban.username ? `${ban.username} (${ban.user_id})` : ban.user_id || 'N/A';
-    const bannedByDisplay = ban.banned_by_username ? `${ban.banned_by_username} (${ban.banned_by})` : ban.banned_by || 'Unknown';
-    document.getElementById('banDetailUser').textContent = userDisplay;
-    document.getElementById('banDetailReason').textContent = ban.ban_reason || ban.reason || 'No reason provided';
-    document.getElementById('banDetailBannedBy').textContent = bannedByDisplay;
-    document.getElementById('banDetailBannedAt').textContent = ban.banned_at ? new Date(ban.banned_at).toLocaleString() : 'N/A';
-    document.getElementById('banDetailCaseId').textContent = ban.ban_case_id || 'N/A';
-    modal.style.display = 'flex';
-}
-
-function closeBanDetails() {
-    const modal = document.getElementById('banDetailsModal');
-    if (modal) modal.style.display = 'none';
-}
 // This just opens or closes the user dropdown menu when you click the trigger.
 function toggleUserDropdown() {
     const menu = document.getElementById('userDropdownMenu');
@@ -749,7 +649,7 @@ async function loadAppeals() {
             return;
         }
         table.innerHTML = appeals.map(appeal => {
-            const status = typeof appeal.status === 'string' && appeal.status.length > 0 ? appeal.status : 'unknown';
+            const status = typeof appeal.status === 'string' && appeal.status.length > 0 ? appeal.status : 'pending';
             let statusColor;
             if (status === 'pending') statusColor = 'var(--color-yellow)';
             else if (status === 'accepted') statusColor = 'var(--color-green)';
