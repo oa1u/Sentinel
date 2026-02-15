@@ -161,6 +161,46 @@ if (document.readyState === 'loading') {
     initSessionWarning();
 } 
 class ModalManager {
+        /**
+         * Show a simple details modal with a title and HTML content.
+         * @param {string} title - The modal title
+         * @param {string} htmlContent - The HTML content to display
+         * @param {function} [onClose] - Optional callback when closed
+         */
+        showDetails(title = 'Details', htmlContent = '', onClose = null) {
+            const modalId = `modal-${Date.now()}`;
+            const container = document.getElementById('modal-container');
+            if (!container) return null;
+
+            const modalHTML = `
+                <div class="modal-overlay" onclick="modalManager.closeModal('${modalId}')"></div>
+                <div class="notification-modal">
+                    <div class="modal-header">
+                        <h3>${title}</h3>
+                        <button class="modal-close" onclick="modalManager.closeModal('${modalId}')">×</button>
+                    </div>
+                    <div class="modal-body">
+                        ${htmlContent}
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="modalManager.closeModal('${modalId}')">Close</button>
+                    </div>
+                </div>
+            `;
+
+            const modal = document.createElement('div');
+            modal.id = modalId;
+            modal.className = 'modal-wrapper';
+            modal.innerHTML = modalHTML;
+
+            container.appendChild(modal);
+            setTimeout(() => {
+                modal.classList.add('show');
+            }, 10);
+
+            this.modals.set(modalId, { modal, onClose });
+            return modal;
+        }
     constructor() {
         this.modals = new Map();
         this.initContainer();
