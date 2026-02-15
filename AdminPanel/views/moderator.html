@@ -262,7 +262,7 @@
                 </div>
                 <div class="form-group">
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <input type="text" class="form-input" id="warningSearchInput" placeholder="Search by username, user ID..." onkeyup="searchWarnings()">
+                        <input type="text" class="form-input" id="warningSearchInput" placeholder=" Search by User ID..." onkeyup="searchWarnings()">
                         <button class="btn btn-primary" type="button" onclick="searchWarnings()">Search</button>
                     </div>
                 </div>
@@ -280,7 +280,7 @@
                             </tr>
                         </thead>
                         <tbody id="warningsTable">
-                            <tr><td colspan="6" class="text-center text-muted">Waiting for username or user ID...</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted">Waiting for User ID...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -297,8 +297,9 @@
                 </div>
                 <div class="form-group">
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <input type="text" class="form-input" id="memberSearchInput" placeholder="Search by username or user ID..." onkeyup="searchMembers()">
+                        <input type="text" class="form-input" id="memberSearchInput" placeholder="Search by User ID..." onkeyup="searchMembers()">
                         <button class="btn btn-primary" type="button" onclick="searchMembers()">Search</button>
+                        <span id="memberSearchStatus" style="margin-left:1rem;color:#888;font-size:0.95em;"></span>
                     </div>
                 </div>
                 <div class="table-container" id="membersContainer">
@@ -315,7 +316,7 @@
                             </tr>
                         </thead>
                         <tbody id="membersTable">
-                            <tr><td colspan="8" class="text-center text-muted">Waiting for username or user ID...</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted">Waiting for User ID...</td></tr>
                         </tbody>
                     </table>
                 </div>

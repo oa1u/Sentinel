@@ -541,19 +541,36 @@ function closeWarningsDetails() {
 // Member info tab
 
 async function searchMembers() {
-    const query = document.getElementById('memberSearchInput').value;
-    if (!query) {
+    const inputElem = document.getElementById('memberSearchInput');
+    const statusElem = document.getElementById('memberSearchStatus');
+    let userId = inputElem.value.trim();
+    if (statusElem) statusElem.textContent = '';
+    // Only allow valid Discord user IDs (17-19 digits)
+    if (!/^\d{17,19}$/.test(userId)) {
+        renderMembers([]);
+        if (statusElem) statusElem.textContent = 'Please enter a valid Discord User ID.';
         return;
     }
-    
     try {
-        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+        if (statusElem) statusElem.textContent = 'Searching...';
+        const response = await fetch(`/api/users/${encodeURIComponent(userId)}`);
         if (response.ok) {
-            const members = await response.json();
-            renderMembers(members);
+            const result = await response.json();
+            if (result && result.user) {
+                renderMembers([result.user]);
+                if (statusElem) statusElem.textContent = 'User found.';
+            } else {
+                renderMembers([]);
+                if (statusElem) statusElem.textContent = 'User not found.';
+            }
+        } else {
+            renderMembers([]);
+            if (statusElem) statusElem.textContent = 'User not found.';
         }
     } catch (error) {
-        console.error('Error searching members:', error);
+        renderMembers([]);
+        if (statusElem) statusElem.textContent = 'Error searching user.';
+        console.error('Error searching user:', error);
     }
 }
 

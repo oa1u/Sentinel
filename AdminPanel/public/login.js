@@ -3,6 +3,17 @@
 
 // Wait until everything on the page is loaded before running the login logic.
 document.addEventListener('DOMContentLoaded', () => {
+        // Always clear any old CSRF token and fetch a new one on page load
+        document.cookie = 'csrfToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+        fetch('/api/csrf', { credentials: 'include' })
+            .then(res => res.json())
+            .then(data => {
+                if (data?.csrfToken) {
+                    document.cookie = `csrfToken=${data.csrfToken}; path=/; SameSite=Strict`;
+                    window._cachedCsrfToken = data.csrfToken;
+                }
+            })
+            .catch(() => {});
     const loginBtn = document.getElementById('loginBtn');
     const registerLink = document.getElementById('registerLink');
     const loading = document.getElementById('loading');

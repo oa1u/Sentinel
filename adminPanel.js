@@ -593,26 +593,35 @@ app.get('/api/users/:id', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Invalid user ID' });
     }
     try {
-        // Try to get user from Discord client if available
-        let user = null;
-        if (discordClient) {
-            user = await discordClient.users.fetch(userId).catch(() => null);
+        // Get level info
+        const levels = await AdminPanelHelper.getAllLevels();
+        const userLevel = (levels || []).find(u => String(u.user_id) === String(userId));
+        // Get warns info
+        const allWarnsRaw = await AdminPanelHelper.getAllWarns();
+        const userWarns = (allWarnsRaw || []).filter(w => String(w.user_id) === String(userId));
+        // Get notes if available
+        let notes = null;
+        if (typeof MySQLDatabaseManager.getMemberNotes === 'function') {
+            notes = await MySQLDatabaseManager.getMemberNotes(userId);
         }
-        // Fallback: get from database if available
-        if (!user) {
-            user = await AdminPanelHelper.getAdminUserById?.(userId);
+        // Try to get username from Discord if missing
+        let username = userLevel?.username;
+        if ((!username || username === 'Unknown') && discordClient) {
+            try {
+                const discordUser = await discordClient.users.fetch(userId).catch(() => null);
+                if (discordUser) username = discordUser.username;
+            } catch {}
         }
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        // Only return safe fields
-        const safeUser = {
-            id: user.id,
-            username: user.username,
-            role: user.role || (user.bot ? 'Bot' : 'User'),
-            avatar: user.avatarURL?.() || user.avatar || null
+        // Compose user object for moderator panel
+        const user = {
+            user_id: userId,
+            username: username || (userWarns[0]?.username) || 'Unknown',
+            joined_at: userLevel?.created_at || null,
+            level: userLevel?.level || 1,
+            warn_count: userWarns.length,
+            notes: notes || '',
         };
-        return res.json({ success: true, user: safeUser });
+        return res.json({ success: true, user });
     } catch (err) {
         console.error('[API] Error fetching user info:', err.message);
         return res.status(500).json({ error: 'Failed to fetch user info' });
@@ -1714,22 +1723,26 @@ app.get('/api/invites/list', requireAuth, async (req, res) => {
 // Revoke invite code (OWNER ONLY)
 app.post('/api/invites/revoke/:code', requireAuth, async (req, res) => {
     const { code } = req.params;
-    
     try {
         // Validate code format
         if (!code || typeof code !== 'string' || code.length < 5 || code.length > 50) {
             return res.status(400).json({ error: 'Invalid invite code' });
         }
-        
         // Check if user is owner
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
         if (!user || user.role !== 'owner') {
             return res.status(403).json({ error: 'Only owner can revoke invite codes' });
         }
-        
-        console.log(`[Admin] ${req.session.username} revoked invite code: ${code}`);
-        
-        res.json({ success: true, message: 'Invite code revoked' });
+        // Actually delete the invite code from the DB
+        const result = await AdminPanelHelper.connection.query(
+            'DELETE FROM admin_invite_codes WHERE code = ?',
+            [code]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Invite code not found or already deleted' });
+        }
+        console.log(`[Admin] ${req.session.username} deleted invite code: ${code}`);
+        res.json({ success: true, message: 'Invite code deleted' });
     } catch (error) {
         console.error('Error revoking invite code:', error);
         res.status(500).json({ error: 'Failed to revoke invite code' });

@@ -1,3 +1,24 @@
+// Revoke invite code (owner panel)
+async function revokeInvite(code) {
+    if (!code) return;
+    if (!confirm('Are you sure you want to revoke this invite code?')) return;
+    try {
+        const response = await fetch(`/api/invites/revoke/${encodeURIComponent(code)}`, { method: 'POST', credentials: 'include' });
+        if (response.ok) {
+            // Remove the invite row from the UI
+            const btn = document.querySelector(`button[onclick*="revokeInvite('${code}')"]`);
+            if (btn) {
+                const row = btn.closest('tr');
+                if (row) row.remove();
+            }
+        } else {
+            const data = await response.json().catch(() => ({}));
+            alert('Failed to delete invite: ' + (data.error || response.statusText));
+        }
+    } catch (error) {
+        alert('Error deleting invite: ' + error.message);
+    }
+}
 // This function lets you open and close the user dropdown menu. Makes navigation easier for owners.
 function toggleUserDropdown() {
     const menu = document.getElementById('userDropdownMenu');
