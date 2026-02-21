@@ -13,10 +13,14 @@ async function revokeInvite(code) {
             }
         } else {
             const data = await response.json().catch(() => ({}));
-            alert('Failed to delete invite: ' + (data.error || response.statusText));
+            const msg = 'Failed to delete invite: ' + (data.error || response.statusText);
+            if (typeof showError === 'function') showError('Invite Error', msg);
+            else alert(msg);
         }
     } catch (error) {
-        alert('Error deleting invite: ' + error.message);
+        const msg = 'Error deleting invite: ' + error.message;
+        if (typeof showError === 'function') showError('Invite Error', msg);
+        else alert(msg);
     }
 }
 // This function lets you open and close the user dropdown menu. Makes navigation easier for owners.

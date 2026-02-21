@@ -161,12 +161,16 @@ if (document.readyState === 'loading') {
     initSessionWarning();
 } 
 class ModalManager {
-        /**
-         * Show a simple details modal with a title and HTML content.
-         * @param {string} title - The modal title
-         * @param {string} htmlContent - The HTML content to display
-         * @param {function} [onClose] - Optional callback when closed
-         */
+    applyModalWrapperLayout(modal) {
+        if (!modal) return;
+        modal.style.setProperty('position', 'fixed', 'important');
+        modal.style.setProperty('inset', '0', 'important');
+        modal.style.setProperty('display', 'grid', 'important');
+        modal.style.setProperty('place-items', 'center', 'important');
+        modal.style.setProperty('z-index', '9001', 'important');
+        modal.style.setProperty('pointer-events', 'auto', 'important');
+    }
+
         showDetails(title = 'Details', htmlContent = '', onClose = null) {
             const modalId = `modal-${Date.now()}`;
             const container = document.getElementById('modal-container');
@@ -192,6 +196,7 @@ class ModalManager {
             modal.id = modalId;
             modal.className = 'modal-wrapper';
             modal.innerHTML = modalHTML;
+            this.applyModalWrapperLayout(modal);
 
             container.appendChild(modal);
             setTimeout(() => {
@@ -215,6 +220,18 @@ class ModalManager {
             container.className = 'modal-container';
             document.body.appendChild(container);
         }
+    }
+
+    toast(message = '', type = 'info', duration = 5000) {
+        const normalizedType = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
+        const titleMap = {
+            success: 'Success',
+            error: 'Error',
+            warning: 'Warning',
+            info: 'Info'
+        };
+
+        return showToast(normalizedType, titleMap[normalizedType], message, duration);
     }
 
 
@@ -282,6 +299,7 @@ class ModalManager {
         modal.id = modalId;
         modal.className = 'modal-wrapper';
         modal.innerHTML = modalHTML;
+        this.applyModalWrapperLayout(modal);
 
         container.appendChild(modal);
         
@@ -295,16 +313,34 @@ class ModalManager {
         return modal;
     }
 
-    showConfirm(options = {}) {
+    showConfirm(options = {}, legacyMessage, legacyConfirmText, legacyCancelText, legacyType) {
+        let resolvedOptions = options;
+
+        // Backward-compatible signature:
+        // showConfirm(title, message, confirmText, cancelText, type)
+        if (typeof options === 'string') {
+            return new Promise((resolve) => {
+                this.showConfirm({
+                    title: options,
+                    message: legacyMessage || 'Are you sure?',
+                    confirmText: legacyConfirmText || 'Confirm',
+                    cancelText: legacyCancelText || 'Cancel',
+                    type: legacyType || 'warning',
+                    onConfirm: () => resolve(true),
+                    onCancel: () => resolve(false)
+                });
+            });
+        }
+
         const {
             title = 'Confirm Action',
-            message = 'Are you sure?',
-            confirmText = 'Confirm',
-            cancelText = 'Cancel',
+            message: optionMessage = 'Are you sure?',
+            confirmText: optionConfirmText = 'Confirm',
+            cancelText: optionCancelText = 'Cancel',
             type = 'warning', // warning, danger, info
             onConfirm = null,
             onCancel = null
-        } = options;
+        } = resolvedOptions;
 
         const modalId = `modal-${Date.now()}`;
         const container = document.getElementById('modal-container');
@@ -325,14 +361,14 @@ class ModalManager {
                     <button class="modal-close" onclick="modalManager.closeModal('${modalId}')">×</button>
                 </div>
                 <div class="modal-body">
-                    <p style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 1.5rem;">${message}</p>
+                    <p style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 1.5rem;">${optionMessage}</p>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="modalManager.closeModal('${modalId}')">
-                        ${cancelText}
+                        ${optionCancelText}
                     </button>
                     <button class="btn ${confirmBtnClass}" onclick="modalManager.confirmAction('${modalId}')">
-                        ${confirmText}
+                        ${optionConfirmText}
                     </button>
                 </div>
             </div>
@@ -342,6 +378,7 @@ class ModalManager {
         modal.id = modalId;
         modal.className = 'modal-wrapper';
         modal.innerHTML = modalHTML;
+        this.applyModalWrapperLayout(modal);
 
         container.appendChild(modal);
         
@@ -381,6 +418,7 @@ class ModalManager {
         modal.id = modalId;
         modal.className = 'modal-wrapper';
         modal.innerHTML = modalHTML;
+        this.applyModalWrapperLayout(modal);
 
         container.appendChild(modal);
         
@@ -398,6 +436,7 @@ class ModalManager {
         if (!data) return;
 
         const modal = data.modal;
+        modal.style.pointerEvents = 'none';
         modal.classList.remove('show');
 
         setTimeout(() => {
@@ -423,19 +462,22 @@ class ModalManager {
 }
 
 // Initialize modal manager (safely - check if document exists)
-let modalManager = null;
+var modalManager = null;
 if (typeof document !== 'undefined') {
     try {
         modalManager = new ModalManager();
+        window.modalManager = modalManager;
     } catch (e) {
         console.warn('notifications.js: Could not initialize ModalManager', e);
         // Create a dummy object to prevent errors
         modalManager = {
             showDetails: () => null,
             showConfirm: () => null,
+            toast: () => null,
             showLoading: () => ({ modalId: null, close: () => {} }),
             closeModal: () => {},
             closeAll: () => {}
         };
+        window.modalManager = modalManager;
     }
 }

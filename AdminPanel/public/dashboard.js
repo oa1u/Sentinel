@@ -484,18 +484,21 @@ async function deleteWarning(userId, caseId) {
         });
         
         if (response.ok) {
-            alert('Warning deleted successfully');
+            if (typeof showSuccess === 'function') showSuccess('Success', 'Warning deleted successfully');
+            else alert('Warning deleted successfully');
             const modal = document.getElementById('warnModal');
             modal.style.display = 'none';
             modal.classList.remove('active');
             await loadWarns();
             await loadStats();
         } else {
-            alert('Failed to delete warning');
+            if (typeof showError === 'function') showError('Error', 'Failed to delete warning');
+            else alert('Failed to delete warning');
         }
     } catch (error) {
         console.error('Error deleting warning:', error);
-        alert('Error deleting warning');
+        if (typeof showError === 'function') showError('Error', 'Error deleting warning');
+        else alert('Error deleting warning');
     }
 }
 
@@ -571,16 +574,19 @@ async function unbanUser(userId) {
         const data = await response.json();
         
         if (response.ok) {
-            alert('User unbanned successfully');
+            if (typeof showSuccess === 'function') showSuccess('Success', 'User unbanned successfully');
+            else alert('User unbanned successfully');
             await loadBannedUsers();
             await loadWarns();
             await loadStats();
         } else {
-            alert(data.error || 'Failed to unban user');
+            if (typeof showError === 'function') showError('Error', data.error || 'Failed to unban user');
+            else alert(data.error || 'Failed to unban user');
         }
     } catch (error) {
         console.error('Error unbanning user:', error);
-        alert('Error unbanning user');
+        if (typeof showError === 'function') showError('Error', 'Error unbanning user');
+        else alert('Error unbanning user');
     }
 }
 

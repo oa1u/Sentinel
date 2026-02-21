@@ -7,7 +7,7 @@
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/public/appeal.js" defer></script>
+    <script src="/public/notifications.js" defer></script>
     <style>
         * {
             margin: 0;
@@ -527,7 +527,7 @@
 
                 <div class="form-group">
                     <label class="form-label">Your Username *</label>
-                    <input type="text" id="userTag" class="form-input" placeholder="e.g., YourName" required>
+                    <input type="text" id="userTag" class="form-input" placeholder="e.g., Your discord nickname" required>
                     <p class="form-help">Your Discord username</p>
                 </div>
 
@@ -620,6 +620,37 @@
     </div>
 
     <script>
+        let appealCsrfToken = '';
+
+        async function getAppealCsrfToken() {
+            if (appealCsrfToken) return appealCsrfToken;
+
+            const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            if (metaToken) {
+                appealCsrfToken = metaToken;
+                return appealCsrfToken;
+            }
+
+            const cookieMatch = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
+            if (cookieMatch && cookieMatch[1]) {
+                appealCsrfToken = decodeURIComponent(cookieMatch[1]);
+                return appealCsrfToken;
+            }
+
+            try {
+                const response = await fetch('/api/csrf', { credentials: 'include' });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data?.csrfToken) {
+                    appealCsrfToken = data.csrfToken;
+                    return appealCsrfToken;
+                }
+            } catch (error) {
+                console.error('Failed to fetch CSRF token:', error);
+            }
+
+            return '';
+        }
+
         // Character counter
         const reasonInput = document.getElementById('reason');
         const charCount = document.getElementById('charCount');
@@ -726,11 +757,15 @@
             document.getElementById('appealForm').style.opacity = '0.5';
 
             try {
+                const csrfToken = await getAppealCsrfToken();
+
                 const response = await fetch('/api/appeals/submit', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'x-csrf-token': csrfToken
                     },
+                    credentials: 'include',
                     body: JSON.stringify({
                         userId,
                         userTag,
@@ -751,6 +786,13 @@
                         document.getElementById('successMessage').scrollIntoView({ behavior: 'smooth' });
                     }, 100);
                 } else {
+                    if (response.status === 429) {
+                        const retryAfter = response.headers.get('Retry-After');
+                        const retryText = retryAfter ? ` Please wait about ${retryAfter} seconds and try again.` : ' Please wait a bit and try again.';
+                        showMessage('warning', `Too many submit attempts.${retryText}`);
+                        return;
+                    }
+
                     if (data.error.includes('already have a pending appeal')) {
                         showMessage('warning', 'You already have a pending appeal. Please wait for a response.');
                     } else {
@@ -790,6 +832,5 @@
             }
         }
     </script>
-</script>
 </body>
 </html>

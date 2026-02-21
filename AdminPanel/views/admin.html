@@ -47,6 +47,7 @@
         <div class="tabs" id="adminTabs" style="margin-bottom:2.5rem;">
             <button class="tab active" data-tab="member-management" style="--tab-color:#5b7fff;"><span class="tab-icon">👥</span> <span>Member Management</span></button>
             <button class="tab" data-tab="appeals" style="--tab-color:#ffd45b;"><span class="tab-icon">📝</span> <span>Appeals</span></button>
+            <button class="tab" data-tab="appeals-history" style="--tab-color:#8b5cf6;"><span class="tab-icon">📚</span> <span>Appeals History</span></button>
         </div>
         <style>
         .tabs {
@@ -186,33 +187,69 @@
     </div>
 
     <div id="appeals" class="tab-content">
-            <div class="center-flex">
-                <div class="card">
+        <div class="center-flex">
+            <div class="card">
                 <div class="card-header">
                     <span class="card-header-icon">👥</span>
                     <span>Appeals</span>
                 </div>
-            <div class="table-container" id="appealsContainer">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Username</th>
-                            <th>Ban Case ID</th>
-                            <th>Reason</th>
-                            <th>Appeal Date</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="appealsTable">
-                        <tr><td colspan="6" class="text-center text-muted">No appeals found</td></tr>
-                    </tbody>
-                </table>
+                <div class="table-container" id="appealsContainer">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Ban Case ID</th>
+                                <th>Reason</th>
+                                <th>Appeal Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="appealsTable">
+                            <tr><td colspan="6" class="text-center text-muted">No appeals found</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
+    <div id="appeals-history" class="tab-content">
+        <div class="center-flex">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">📚</span>
+                    <span>Appeals History (Accepted / Denied)</span>
+                </div>
+                <div style="margin-bottom: 1rem; display: flex; justify-content: flex-end;">
+                    <select id="appealHistoryStatusFilter" class="form-input" style="max-width: 220px;" onchange="loadAppealHistory()">
+                        <option value="all">All Statuses</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="denied">Denied</option>
+                    </select>
+                </div>
+                <div class="table-container" id="appealsHistoryContainer">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Ban Case ID</th>
+                                <th>Reason</th>
+                                <th>Status</th>
+                                <th>Submitted</th>
+                                <th>Decided</th>
+                            </tr>
+                        </thead>
+                        <tbody id="appealHistoryTable">
+                            <tr><td colspan="6" class="text-center text-muted">No decided appeals found</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
+
+</div>
 
     <footer class="page-footer">
         <div class="footer-links">

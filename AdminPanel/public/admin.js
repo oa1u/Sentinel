@@ -67,6 +67,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadBannedUsers();
         } else if (tabName === 'appeals' && typeof loadAppeals === 'function') {
             loadAppeals();
+        } else if (tabName === 'appeals-history' && typeof loadAppealHistory === 'function') {
+            loadAppealHistory();
         }
     }
     tabButtons.forEach(btn => {
@@ -361,6 +363,7 @@ function switchTab(e, tabName, tabButton) {
     // Hide all tab contents
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
+        tab.style.display = 'none';
     });
 
     // Remove active from all tab buttons
@@ -372,6 +375,7 @@ function switchTab(e, tabName, tabButton) {
     const selectedTab = document.getElementById(tabName);
     if (selectedTab) {
         selectedTab.classList.add('active');
+        selectedTab.style.display = '';
     }
 
     // Activate the clicked tab button
@@ -385,6 +389,8 @@ function switchTab(e, tabName, tabButton) {
         loadBannedUsers();
     } else if (tabName === 'appeals' && typeof loadAppeals === 'function') {
         loadAppeals();
+    } else if (tabName === 'appeals-history' && typeof loadAppealHistory === 'function') {
+        loadAppealHistory();
     }
     // For member-management, no data load by default
 }
@@ -649,6 +655,9 @@ async function loadAppeals() {
             return;
         }
         table.innerHTML = appeals.map(appeal => {
+            const safeUsername = encodeURIComponent(String(appeal.user_tag || appeal.user_id || 'Unknown'));
+            const safeCaseId = encodeURIComponent(String(appeal.ban_case_id || 'N/A'));
+            const safeReason = encodeURIComponent(String(appeal.reason || 'No reason provided'));
             const status = typeof appeal.status === 'string' && appeal.status.length > 0 ? appeal.status : 'pending';
             let statusColor;
             if (status === 'pending') statusColor = 'var(--color-yellow)';
@@ -666,7 +675,7 @@ async function loadAppeals() {
                     <td style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
                         <button class="btn btn-sm btn-success" onclick="acceptAppeal(${appeal.id}, '${appeal.user_tag}')">✅ Accept</button>
                         <button class="btn btn-sm btn-danger" onclick="denyAppeal(${appeal.id}, '${appeal.user_tag}')">❌ Deny</button>
-                        <button class="btn btn-sm btn-primary" onclick="viewAppealDetails(${appeal.id}, '${appeal.user_tag}', '${appeal.ban_case_id || 'N/A'}')">👁️ View</button>
+                        <button class="btn btn-sm btn-primary" onclick="viewAppealDetails(${appeal.id}, '${safeUsername}', '${safeCaseId}', '${safeReason}')">👁️ View</button>
                     </td>
                 </tr>
             `;
@@ -675,6 +684,83 @@ async function loadAppeals() {
         console.error('Error loading appeals:', error);
         const table = document.getElementById('appealsTable');
         if (table) table.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Failed to load appeals</td></tr>';
+    }
+}
+
+async function loadAppealHistory() {
+    try {
+        const response = await fetch('/api/appeals/decided');
+        if (!response.ok) throw new Error('Failed to load appeal history');
+
+        const appeals = await response.json();
+        const table = document.getElementById('appealHistoryTable');
+        const filterSelect = document.getElementById('appealHistoryStatusFilter');
+        let statusFilter = filterSelect?.value || 'all';
+
+        try {
+            const savedFilter = localStorage.getItem('adminAppealsHistoryStatusFilter');
+            const isValidSavedFilter = savedFilter === 'all' || savedFilter === 'accepted' || savedFilter === 'denied';
+            const isFirstHistoryLoad = filterSelect && !filterSelect.dataset.filterInitialized;
+            if (isFirstHistoryLoad && isValidSavedFilter && filterSelect.value !== savedFilter) {
+                filterSelect.value = savedFilter;
+                statusFilter = savedFilter;
+            }
+            if (filterSelect) {
+                filterSelect.dataset.filterInitialized = 'true';
+                statusFilter = filterSelect.value || statusFilter;
+            }
+            localStorage.setItem('adminAppealsHistoryStatusFilter', statusFilter);
+        } catch (storageError) {
+            // Ignore storage errors (private mode / blocked storage)
+        }
+
+        if (!table) return;
+
+        if (!Array.isArray(appeals) || appeals.length === 0) {
+            table.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No decided appeals found</td></tr>';
+            return;
+        }
+
+        const getNormalizedStatus = (appeal) => {
+            const rawStatus = String(appeal?.normalized_status || appeal?.status || '').toLowerCase();
+            if (['accepted', 'accept', 'approved'].includes(rawStatus)) return 'accepted';
+            if (['denied', 'deny', 'rejected', 'declined'].includes(rawStatus)) return 'denied';
+            return rawStatus || 'unknown';
+        };
+
+        const filteredAppeals = statusFilter === 'all'
+            ? appeals
+            : appeals.filter(appeal => getNormalizedStatus(appeal) === statusFilter);
+
+        if (filteredAppeals.length === 0) {
+            table.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No appeals match the selected status</td></tr>';
+            return;
+        }
+
+        table.innerHTML = filteredAppeals.map(appeal => {
+            const status = getNormalizedStatus(appeal);
+            const statusColor = status === 'accepted'
+                ? 'var(--color-green)'
+                : status === 'denied'
+                    ? 'var(--color-red)'
+                    : 'var(--text-secondary)';
+            const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+
+            return `
+                <tr>
+                    <td><strong>${appeal.user_tag || appeal.user_id || 'Unknown'}</strong></td>
+                    <td><code>${appeal.ban_case_id || 'N/A'}</code></td>
+                    <td>${appeal.reason || 'No reason provided'}</td>
+                    <td><span style="background: ${statusColor}; color: white; padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-weight: 600;">${statusText}</span></td>
+                    <td>${appeal.created_at ? new Date(appeal.created_at).toLocaleDateString() : 'N/A'}</td>
+                    <td>${appeal.decided_at ? new Date(appeal.decided_at).toLocaleDateString() : 'N/A'}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading appeal history:', error);
+        const table = document.getElementById('appealHistoryTable');
+        if (table) table.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Failed to load appeal history</td></tr>';
     }
 }
 
@@ -695,31 +781,43 @@ async function loadAppealStats() {
 }
 
 async function acceptAppeal(appealId, username) {
-    const response = await modalManager?.showConfirm(
-        'Accept Appeal',
-        `Accept the appeal from ${username}?`,
-        'Accept',
-        'Cancel'
-    ) || confirm(`Accept the appeal from ${username}?`);
+    const response = await new Promise((resolve) => {
+        if (modalManager?.showConfirm) {
+            modalManager.showConfirm({
+                title: 'Accept Appeal',
+                message: `Accept the appeal from ${username}?`,
+                confirmText: 'Accept',
+                cancelText: 'Cancel',
+                type: 'warning',
+                onConfirm: () => resolve(true),
+                onCancel: () => resolve(false)
+            });
+        } else {
+            resolve(confirm(`Accept the appeal from ${username}?`));
+        }
+    });
     
     if (!response) return;
 
     try {
-        const result = await fetch(`/api/appeals/${appealId}`, {
-            method: 'PATCH',
+        const result = await fetch(`/api/appeals/${appealId}/accept`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'accepted' })
+            body: JSON.stringify({
+                response: 'Your ban appeal has been accepted. You may rejoin the server.'
+            })
         });
 
         if (result.ok) {
-            modalManager?.showDetails('Success', 'Appeal accepted!') || alert('Appeal accepted!');
+            showSuccess('Success', 'Appeal accepted!');
             await loadAppeals();
+            await loadAppealHistory();
         } else {
-            modalManager?.toast('Failed to accept appeal', 'error') || alert('Failed to accept appeal');
+            showError('Failed to accept appeal');
         }
     } catch (error) {
         console.error('Error accepting appeal:', error);
-        modalManager?.toast('Error accepting appeal', 'error') || alert('Error accepting appeal');
+        showError('Error accepting appeal');
     }
 }
 
@@ -728,24 +826,24 @@ async function denyAppeal(appealId, username) {
     if (reasonInput === null) return; // User cancelled
 
     try {
-        const result = await fetch(`/api/appeals/${appealId}`, {
-            method: 'PATCH',
+        const result = await fetch(`/api/appeals/${appealId}/deny`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                status: 'denied',
-                owner_response: reasonInput || 'Appeal denied'
+                response: reasonInput || 'Appeal denied'
             })
         });
 
         if (result.ok) {
-            modalManager?.showDetails('Success', 'Appeal denied!') || alert('Appeal denied!');
+            showSuccess('Success', 'Appeal denied!');
             await loadAppeals();
+            await loadAppealHistory();
         } else {
-            modalManager?.toast('Failed to deny appeal', 'error') || alert('Failed to deny appeal');
+            showError('Failed to deny appeal');
         }
     } catch (error) {
         console.error('Error denying appeal:', error);
-        modalManager?.toast('Error denying appeal', 'error') || alert('Error denying appeal');
+        showError('Error denying appeal');
     }
 }
 
@@ -918,17 +1016,25 @@ async function warnUser(userId, reason) {
     }
 }
 
-function viewAppealDetails(appealId, username, banCaseId) {
-    if (modalManager) {
-        modalManager.showDetails('Appeal Details', `
+function viewAppealDetails(appealId, username, banCaseId, reason) {
+    const decodedUsername = username ? decodeURIComponent(username) : 'Unknown';
+    const decodedCaseId = banCaseId ? decodeURIComponent(banCaseId) : 'N/A';
+    const decodedReason = reason ? decodeURIComponent(reason) : 'No reason provided';
+    const manager = (typeof modalManager !== 'undefined' && modalManager)
+        ? modalManager
+        : (typeof window !== 'undefined' ? window.modalManager : null);
+
+    if (manager && typeof manager.showDetails === 'function') {
+        manager.showDetails('Appeal Details', `
             <div style="text-align: left;">
-                <p><strong>Username:</strong> ${username}</p>
-                <p><strong>Ban Case ID:</strong> <code>${banCaseId}</code></p>
+                <p><strong>Username:</strong> ${decodedUsername}</p>
+                <p><strong>Ban Case ID:</strong> <code>${decodedCaseId}</code></p>
+                <p><strong>Appeal Reason:</strong> ${decodedReason}</p>
                 <p><strong>Appeal ID:</strong> ${appealId}</p>
             </div>
         `);
     } else {
-        alert(`Appeal Details:\nUsername: ${username}\nBan Case ID: ${banCaseId}\nAppeal ID: ${appealId}`);
+        alert(`Appeal Details:\nUsername: ${decodedUsername}\nBan Case ID: ${decodedCaseId}\nAppeal Reason: ${decodedReason}\nAppeal ID: ${appealId}`);
     }
 }
 
