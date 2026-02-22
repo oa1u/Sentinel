@@ -102,6 +102,7 @@ module.exports = {
       await captchachannel.send({ embeds: [captchaEmbed], files: [captchaAttachment] });
       // Use the same attachment for DM and other logic
       const captchaImage = { url: `attachment://captcha.png` };
+
       const Server = member.guild.name;
 
       const e0 = new EmbedBuilder()
@@ -137,7 +138,8 @@ module.exports = {
       const dmChannel = member.user.dmChannel || await member.user.createDM();
       
       await dmChannel.send({
-        embeds: [e1.setImage(captchaImage.url)]
+        embeds: [e1.setImage('attachment://captcha.png')],
+        files: [captchaAttachment]
       }).catch(async () => {
         const dmErrorEmbed = new EmbedBuilder()
           .setColor(0xF04747)

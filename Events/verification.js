@@ -124,7 +124,8 @@ module.exports = {
             }
 
             dmChannel.send({
-                embeds: [e1]
+                embeds: [e1],
+                files: [captchaAttachment]
             }).catch(async () => {
                 // DM failed - user already pinged in verification channel above
             });
