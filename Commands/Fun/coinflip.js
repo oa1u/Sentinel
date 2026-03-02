@@ -9,13 +9,13 @@ module.exports = {
   async execute(interaction) {
     const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
     const emoji = result === 'Heads' ? '🪙' : '💿';
-    
+
     const em = new EmbedBuilder()
       .setColor(result === 'Heads' ? 0xFFD700 : 0xC0C0C0)
       .setTitle('🪙 Coin Flip')
       .setDescription(`The coin landed on **${result}**! ${emoji}`)
       .setTimestamp();
-    
-    await interaction.reply({ embeds: [em] });
+
+    await interaction.reply({ embeds: [em], ephemeral: false });
   }
 };

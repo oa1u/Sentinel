@@ -1,10 +1,10 @@
 const { EmbedBuilder, MessageFlags } = require('discord.js');
 
-// Functions for building embeds so all bot messages look consistent.
-// Keeps all embeds uniform across the bot.
-// TODO: Add more embed templates (info, warning, etc.).
+// Embed builders
+// Centralized helpers to create consistent, well-styled Discord embeds used
+// across the bot. This keeps message formatting uniform and easy to update.
 
-// Basic embed creators for error, success, warning, and info messages.
+// Simple templates for error, success, warning and info messages.
 function createErrorEmbed(title, description) {
     return new EmbedBuilder()
         .setColor(0xF04747)
@@ -41,7 +41,7 @@ function createInfoEmbed(title, description) {
         .setTimestamp();
 }
 
-// Builds fancy embeds for moderation actions like bans, kicks, warns, etc.
+// Build a standardized moderation embed for logging actions (ban/kick/timeout/etc.).
 function createModerationEmbed(options = {}) {
     const {
         action = 'Action',
@@ -102,7 +102,71 @@ function createModerationEmbed(options = {}) {
     return embed;
 }
 
-// Create a nice-looking user profile embed
+// Build the DM that gets sent to users to explain moderation actions.
+function createModerationDmEmbed(options = {}) {
+    const {
+        actionTitle = 'Moderation Notice',
+        actionEmoji = '⚖️',
+        color = 0xF04747,
+        guildName = 'the server',
+        description,
+        statusLabel = 'Status',
+        statusValue,
+        effectiveDate,
+        effectiveLabel = 'Effective Date',
+        reason = 'No reason provided',
+        caseId,
+        moderatorName,
+        appealLink,
+        duration,
+        durationLabel = 'Duration',
+        extraFields = []
+    } = options;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${actionEmoji} ${actionTitle}`)
+        .setColor(color)
+        .setDescription(description || `A moderation action was taken in **${guildName}**.`)
+        .setTimestamp();
+
+    if (statusValue) {
+        embed.addFields({ name: statusLabel, value: statusValue, inline: true });
+    }
+
+    if (effectiveDate) {
+        embed.addFields({ name: effectiveLabel, value: effectiveDate, inline: true });
+    }
+
+    if (duration) {
+        embed.addFields({ name: durationLabel, value: duration, inline: true });
+    }
+
+    embed.addFields({ name: 'Reason', value: `${'```'}${reason}${'```'}`, inline: false });
+
+    if (caseId) {
+        embed.addFields({ name: 'Case ID', value: `${'```'}${caseId}${'```'}`, inline: true });
+    }
+
+    if (moderatorName) {
+        embed.addFields({ name: 'Moderator', value: `${'```'}${moderatorName}${'```'}`, inline: true });
+    }
+
+    if (Array.isArray(extraFields) && extraFields.length > 0) {
+        embed.addFields(...extraFields);
+    }
+
+    if (appealLink) {
+        embed.addFields({ name: 'Appeal Process', value: `[Submit Appeal](${appealLink})`, inline: false });
+    }
+
+    if (guildName) {
+        embed.setFooter({ text: `${guildName} • Moderation System` });
+    }
+
+    return embed;
+}
+
+// Create a user profile embed for displaying account information.
 function createUserEmbed(user, options = {}) {
     const {
         title = 'User Profile',
@@ -150,10 +214,10 @@ function createUserEmbed(user, options = {}) {
     return embed;
 }
 
-// Send error reply
+// Reply to an interaction with an error embed (ephemeral by default).
 async function sendErrorReply(interaction, title, description) {
     const embed = createErrorEmbed(title, description);
-    
+
     if (interaction.replied || interaction.deferred) {
         return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
     } else {
@@ -161,10 +225,10 @@ async function sendErrorReply(interaction, title, description) {
     }
 }
 
-// Send success reply
+// Reply to an interaction with a success embed (ephemeral by default).
 async function sendSuccessReply(interaction, title, description) {
     const embed = createSuccessEmbed(title, description);
-    
+
     if (interaction.replied || interaction.deferred) {
         return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
     } else {
@@ -178,6 +242,7 @@ module.exports = {
     createWarningEmbed,
     createInfoEmbed,
     createModerationEmbed,
+    createModerationDmEmbed,
     createUserEmbed,
     sendErrorReply,
     sendSuccessReply

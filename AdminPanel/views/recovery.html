@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<!-- Account Recovery — tools to recover access to your Admin Panel account. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="websiteNameTitle">Recovery</title>
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        :root {
+            --login-bg: #0f0f13;
+            --login-accent: #5b7fff;
+            --login-card-bg: rgba(30, 30, 35, 0.6);
+            --login-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: var(--login-bg);
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
+            background-size: cover;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: #fff;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .background-shapes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: float 20s infinite ease-in-out alternate;
+        }
+
+        .shape-1 {
+            top: -10%;
+            left: -10%;
+            width: 500px;
+            height: 500px;
+            background: #5b7fff;
+            animation-delay: 0s;
+        }
+
+        .shape-2 {
+            bottom: -10%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: #7f5bff;
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            100% {
+                transform: translate(30px, 50px);
+            }
+        }
+
+        .form-container {
+            width: 100%;
+            max-width: 480px;
+            padding: 2rem;
+            z-index: 10;
+        }
+
+        .auth-card {
+            background: var(--login-card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--login-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease;
+        }
+
+        .auth-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.6);
+        }
+
+        .brand-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .brand-logo {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            display: inline-block;
+            filter: drop-shadow(0 0 20px rgba(91, 127, 255, 0.3));
+        }
+
+        .form-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        .form-subtitle {
+            color: #a0a0b0;
+            font-size: 0.9rem;
+        }
+
+        /* Recovery Switches as Tabs */
+        .recovery-switches {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.25rem;
+            border-radius: 12px;
+        }
+
+        .recovery-switches button {
+            background: transparent;
+            border: none;
+            color: #a0a0b0;
+            padding: 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .recovery-switches button:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .recovery-switches button.active {
+            background: var(--login-accent);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+            position: relative;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #d1d1e0;
+            margin-bottom: 0.4rem;
+            margin-left: 0.25rem;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--login-border);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            background: rgba(0, 0, 0, 0.3);
+            border-color: var(--login-accent);
+            box-shadow: 0 0 0 4px rgba(91, 127, 255, 0.15);
+            outline: none;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 0.8rem;
+            color: #71717a;
+            pointer-events: none;
+            transition: color 0.2s;
+            font-size: 1rem;
+        }
+
+        .form-input:focus+.input-icon,
+        .form-input:not(:placeholder-shown)+.input-icon {
+            color: var(--login-accent);
+        }
+
+        .btn-full {
+            width: 100%;
+            padding: 0.85rem;
+            border-radius: 12px;
+            font-weight: 600;
+            letter-spacing: 0.025em;
+            transition: all 0.2s;
+            margin-top: 0.5rem;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #5b7fff 0%, #4f6be0 100%);
+            border: none;
+            color: white;
+            box-shadow: 0 4px 12px rgba(91, 127, 255, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(91, 127, 255, 0.4);
+            filter: brightness(1.1);
+        }
+
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            animation: slideDown 0.3s ease;
+        }
+
+        .message.error {
+            background: rgba(220, 53, 69, 0.15);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            color: #ff8fa3;
+        }
+
+        .message.success {
+            background: rgba(40, 167, 69, 0.15);
+            border: 1px solid rgba(40, 167, 69, 0.3);
+            color: #75ec9c;
+        }
+
+        .links-container {
+            margin-top: 1.5rem;
+            text-align: center;
+            font-size: 0.9rem;
+            border-top: 1px solid var(--login-border);
+            padding-top: 1.5rem;
+        }
+
+        .links-container a {
+            color: #a0a0b0;
+            text-decoration: none;
+            transition: color 0.2s;
+            font-weight: 500;
+        }
+
+        .links-container a:hover {
+            color: var(--login-accent);
+        }
+
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 15, 19, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .loading-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(91, 127, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #5b7fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+    </div>
+
+    <div class="form-container">
+        <div class="auth-card">
+            <div class="brand-header">
+                <div class="brand-logo">🔐</div>
+                <h1 class="form-title">Account Recovery</h1>
+                <p class="form-subtitle">Choose a recovery method below</p>
+            </div>
+
+            <div id="errorMsg" class="message error hidden"></div>
+            <div id="successMsg" class="message success hidden"></div>
+
+            <div class="recovery-switches">
+                <button type="button" id="showRecoveryLoginPanel">Code Login</button>
+                <button type="button" id="showEmailResetRequestPanel">Email Reset</button>
+                <button type="button" id="showTokenResetPanel">Token Reset</button>
+                <button type="button" id="showRecoveryResetPanel">Code Reset</button>
+            </div>
+
+            <form id="recoveryForm">
+                <h3 style="display:none">Recovery Code Login</h3>
+                <div class="form-group">
+                    <label for="username" class="form-label">Username</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="username" name="username" class="form-input"
+                            placeholder="Enter your username" required autocomplete="username">
+                        <span class="input-icon">👤</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="recoveryCode" class="form-label">Recovery Code</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="recoveryCode" name="recoveryCode" class="form-input"
+                            placeholder="XXXX-XXXX-XXXX" maxlength="14" required autocomplete="one-time-code">
+                        <span class="input-icon">🔑</span>
+                    </div>
+                </div>
+
+                <button type="button" id="recoveryLoginBtn" class="btn btn-primary btn-full">Sign In</button>
+            </form>
+
+            <!-- Panel 2: Request Password Reset -->
+            <form id="passwordResetRequestForm" style="display:none;">
+                <h3 style="display:none">Email Reset Request</h3>
+                <div class="form-group">
+                    <label for="resetIdentifier" class="form-label">Username or Email</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="resetIdentifier" name="resetIdentifier" class="form-input"
+                            placeholder="Enter username or email" autocomplete="username email">
+                        <span class="input-icon">📧</span>
+                    </div>
+                </div>
+                <button type="button" id="requestResetBtn" class="btn btn-primary btn-full">Send Reset Link</button>
+            </form>
+
+            <!-- Panel 3: Reset with Token -->
+            <form id="passwordResetTokenForm" style="display:none;">
+                <h3 style="display:none">Reset With Email Token</h3>
+                <div class="form-group">
+                    <label for="resetToken" class="form-label">Reset Token</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="resetToken" name="resetToken" class="form-input"
+                            placeholder="Paste token from email">
+                        <span class="input-icon">🎟️</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="resetNewPassword" class="form-label">New Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="resetNewPassword" name="resetNewPassword" class="form-input"
+                            placeholder="New password" autocomplete="new-password">
+                        <span class="input-icon">🔒</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="resetConfirmPassword" class="form-label">Confirm Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="resetConfirmPassword" name="resetConfirmPassword" class="form-input"
+                            placeholder="Confirm password" autocomplete="new-password">
+                        <span class="input-icon">🔒</span>
+                    </div>
+                </div>
+                <button type="button" id="confirmResetBtn" class="btn btn-primary btn-full">Reset Password</button>
+            </form>
+
+            <!-- Panel 4: Reset with Recovery Code -->
+            <form id="passwordResetRecoveryForm" style="display:none;">
+                <h3 style="display:none">Reset With Recovery Code</h3>
+                <div class="form-group">
+                    <label for="resetRecoveryUsername" class="form-label">Username</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="resetRecoveryUsername" name="resetRecoveryUsername" class="form-input"
+                            placeholder="Username" autocomplete="username">
+                        <span class="input-icon">👤</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="resetRecoveryCode" class="form-label">Recovery Code</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="resetRecoveryCode" name="resetRecoveryCode" class="form-input"
+                            placeholder="XXXX-XXXX-XXXX" maxlength="14" autocomplete="one-time-code">
+                        <span class="input-icon">🔑</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="recoveryResetNewPassword" class="form-label">New Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="recoveryResetNewPassword" name="recoveryResetNewPassword"
+                            class="form-input" placeholder="New password" autocomplete="new-password">
+                        <span class="input-icon">🔒</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="recoveryResetConfirmPassword" class="form-label">Confirm Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="recoveryResetConfirmPassword" name="recoveryResetConfirmPassword"
+                            class="form-input" placeholder="Confirm password" autocomplete="new-password">
+                        <span class="input-icon">🔒</span>
+                    </div>
+                </div>
+                <button type="button" id="recoveryResetBtn" class="btn btn-primary btn-full">Reset Password</button>
+            </form>
+
+            <div class="links-container">
+                <p>Remembered your password? <a href="/login" id="loginLink">Sign in here</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+        <p style="color:#fff">Processing...</p>
+    </div>
+
+    <script src="/public/notifications.js" defer></script>
+    <script src="/public/shared.js"></script>
+    <script src="/public/recovery.js"></script>
+</body>
+
+</html>

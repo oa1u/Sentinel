@@ -24,8 +24,8 @@ module.exports = {
             .setRequired(true))
         .addIntegerOption(option =>
           option.setName('duration')
-            .setDescription('Poll duration in minutes (optional)')
-            .setRequired(false)
+            .setDescription('Poll duration in minutes (required)')
+            .setRequired(true)
             .setMinValue(1)
             .setMaxValue(10080)))
     .addSubcommand(subcommand =>
@@ -69,7 +69,7 @@ async function createPoll(interaction) {
   if (options.length < 2) {
     return interaction.reply({
       content: '❌ You need at least 2 options for a poll!',
-      ephemeral: true
+      flags: require('discord.js').MessageFlags.Ephemeral
     });
   }
 
@@ -77,7 +77,7 @@ async function createPoll(interaction) {
   if (options.length > 10) {
     return interaction.reply({
       content: '❌ Maximum 10 options allowed!',
-      ephemeral: true
+      flags: require('discord.js').MessageFlags.Ephemeral
     });
   }
 
@@ -86,7 +86,7 @@ async function createPoll(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setAuthor({ 
+    .setAuthor({
       name: '📊 Poll',
       iconURL: interaction.user.displayAvatarURL()
     })
@@ -135,39 +135,39 @@ async function endPoll(interaction) {
 
   try {
     const poll = await MySQLDatabaseManager.getPoll(pollId);
-    
+
     if (!poll) {
       return interaction.reply({
         content: '❌ Poll not found!',
-        ephemeral: true
+        flags: require('discord.js').MessageFlags.Ephemeral
       });
     }
 
     if (poll.user_id !== interaction.user.id && !interaction.member.permissions.has('ManageMessages')) {
       return interaction.reply({
         content: '❌ Only the poll creator or moderators can end this poll!',
-        ephemeral: true
+        flags: require('discord.js').MessageFlags.Ephemeral
       });
     }
 
     if (poll.ended) {
       return interaction.reply({
         content: '❌ This poll has already ended!',
-        ephemeral: true
+        flags: require('discord.js').MessageFlags.Ephemeral
       });
     }
 
     await endPollById(pollId, interaction.channel);
     await interaction.reply({
       content: '✅ Poll ended successfully!',
-      ephemeral: true
+      flags: require('discord.js').MessageFlags.Ephemeral
     });
 
   } catch (error) {
     console.error('[Poll] Error ending poll:', error);
     await interaction.reply({
       content: '❌ Failed to end poll.',
-      ephemeral: true
+      flags: require('discord.js').MessageFlags.Ephemeral
     });
   }
 }
@@ -200,7 +200,7 @@ async function showResults(interaction) {
     if (totalVotes === 0) {
       return interaction.reply({
         content: '📊 No votes yet!',
-        ephemeral: true
+        flags: require('discord.js').MessageFlags.Ephemeral
       });
     }
 
@@ -223,14 +223,14 @@ async function showResults(interaction) {
 
     await interaction.reply({
       embeds: [resultEmbed],
-      ephemeral: true
+      flags: require('discord.js').MessageFlags.Ephemeral
     });
 
   } catch (error) {
     console.error('[Poll] Error showing results:', error);
     await interaction.reply({
       content: '❌ Failed to fetch poll results.',
-      ephemeral: true
+      flags: require('discord.js').MessageFlags.Ephemeral
     });
   }
 }

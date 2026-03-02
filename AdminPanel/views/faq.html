@@ -1,13 +1,388 @@
 <!DOCTYPE html>
+<!-- FAQ — help center and answers to common admin questions (accordion interface). -->
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FAQ - Bot Admin Panel</title>
-    <title>Frequently Asked Questions</title>
+    <title id="websiteNameTitle">FAQ</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
-   
+
+    <style>
+        .faq-hero {
+            background: linear-gradient(145deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2.4rem 2.2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .faq-hero::after {
+            content: '';
+            position: absolute;
+            right: -70px;
+            top: -70px;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(91, 127, 255, 0.22) 0%, rgba(91, 127, 255, 0) 70%);
+            pointer-events: none;
+        }
+
+        .faq-hero-main {
+            max-width: 760px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .faq-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: rgba(91, 127, 255, 0.14);
+            color: var(--color-blue);
+            border: 1px solid rgba(91, 127, 255, 0.32);
+            border-radius: 999px;
+            padding: 0.3rem 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            font-size: 0.8rem;
+            margin-bottom: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .faq-hero h1 {
+            font-size: 2.25rem;
+            color: var(--text-primary);
+            margin-bottom: 0.6rem;
+            line-height: 1.18;
+        }
+
+        .faq-subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .faq-layout {
+            display: grid;
+            grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        .faq-sidebar {
+            position: sticky;
+            top: 1.25rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .faq-sidebar h2 {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            margin: 0 0 0.8rem 0;
+            padding: 0 0.25rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .faq-nav {
+            display: grid;
+            gap: 0.45rem;
+        }
+
+        .faq-nav-btn {
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--text-secondary);
+            text-align: left;
+            padding: 0.62rem 0.68rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 0.62rem;
+            transition: all 0.18s ease;
+        }
+
+        .faq-nav-btn:hover {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .faq-nav-btn.active {
+            background: rgba(91, 127, 255, 0.12);
+            border-color: rgba(91, 127, 255, 0.36);
+            color: var(--color-blue);
+            box-shadow: inset 0 0 0 1px rgba(91, 127, 255, 0.08);
+        }
+
+        .faq-nav-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            font-size: 0.95rem;
+        }
+
+        .faq-nav-btn.active .faq-nav-icon {
+            background: rgba(91, 127, 255, 0.2);
+        }
+
+        .faq-nav-label {
+            min-width: 0;
+        }
+
+        .faq-nav-count {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            padding: 0.15rem 0.5rem;
+            background: var(--bg-card);
+        }
+
+        .faq-nav-btn.active .faq-nav-count {
+            color: var(--color-blue);
+            border-color: rgba(91, 127, 255, 0.32);
+            background: rgba(91, 127, 255, 0.16);
+        }
+
+        .faq-content-area {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1.2rem;
+            box-shadow: var(--shadow-sm);
+            display: grid;
+            gap: 1rem;
+        }
+
+        .faq-category-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.85rem;
+        }
+
+        .faq-category-title {
+            font-size: 1.4rem;
+            color: var(--text-primary);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+        }
+
+        .faq-category-meta {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        .faq-list {
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .sr-only {
+            position: absolute !important;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .faq-accordion {
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+            overflow: hidden;
+        }
+
+        .faq-question {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.9rem 1rem;
+            color: var(--text-primary);
+            font-size: 1.02rem;
+            font-weight: 800;
+            line-height: 1.2;
+            background: linear-gradient(90deg, rgba(91, 127, 255, 0.03), transparent);
+            border-radius: 10px;
+            border: 1px solid transparent;
+            transition: all 200ms ease;
+            cursor: pointer;
+        }
+
+        .faq-question:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+            border-color: rgba(91, 127, 255, 0.12);
+        }
+
+        .faq-question .q-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .faq-question .q-bullet {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-secondary);
+            font-size: 1.05rem;
+        }
+
+        .faq-question .q-text {
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .faq-question .q-chevron {
+            font-size: 1.05rem;
+            color: var(--text-secondary);
+            transition: transform 200ms ease;
+        }
+
+        .faq-accordion.open .q-chevron {
+            transform: rotate(180deg);
+            color: var(--accent);
+        }
+
+        .faq-answer {
+            padding: 0 1rem 0 1rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 260ms ease, padding 200ms ease;
+        }
+
+        .faq-accordion.open .faq-answer {
+            padding: 0.85rem 1rem 1rem 1rem;
+            max-height: 800px;
+            opacity: 1;
+        }
+
+        .faq-answer p {
+            margin: 0;
+        }
+
+        .faq-example {
+            margin-top: 0.75rem;
+            padding: 0.68rem 0.8rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(16, 185, 129, 0.24);
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--text-primary);
+            font-size: 0.86rem;
+            line-height: 1.55;
+        }
+
+        .faq-example::before {
+            content: 'Tip';
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            color: var(--color-green);
+            font-weight: 700;
+            font-size: 0.72rem;
+            padding: 0.08rem 0.45rem;
+            margin-right: 0.45rem;
+            background: rgba(16, 185, 129, 0.12);
+        }
+
+        .faq-empty {
+            text-align: center;
+            border: 1px dashed var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1.8rem 1rem;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            font-size: 0.95rem;
+        }
+
+        @media (max-width: 900px) {
+            .faq-hero {
+                padding: 1.6rem 1.2rem;
+                margin-bottom: 1.2rem;
+            }
+
+            .faq-hero h1 {
+                font-size: 1.8rem;
+            }
+
+            .faq-subtitle {
+                font-size: 0.95rem;
+            }
+
+            .faq-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .faq-sidebar {
+                position: static;
+            }
+
+            .faq-nav {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .faq-nav-btn {
+                grid-template-columns: auto 1fr;
+            }
+
+            .faq-nav-count {
+                display: none;
+            }
+
+            .faq-content-area {
+                padding: 0.9rem;
+            }
+
+            .faq-category-head {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+
 <body>
     <header class="header">
         <div class="header-content">
@@ -33,6 +408,8 @@
                         <a href="/profile">👤 My Profile</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
                     </div>
@@ -41,305 +418,291 @@
         </div>
     </header>
 
-    <style>
-        body {
-            background: linear-gradient(135deg, #23272a 0%, #181818 100%);
-        }
-        .faq-outer {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            background: transparent;
-        }
-        .faq-container {
-            display: flex;
-            gap: 32px;
-            background: rgba(34, 39, 42, 0.95);
-            border-radius: 18px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.22);
-            padding: 44px 32px;
-            max-width: 1200px;
-            width: 100%;
-        }
-        .faq-sidebar {
-            width: 320px;
-            background: rgba(36, 40, 44, 0.98);
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            padding: 0;
-            min-height: 420px;
-            display: flex;
-            flex-direction: column;
-        }
-        .faq-sidebar h2 {
-            font-size: 18px;
-            font-weight: 700;
-            padding: 20px;
-            margin: 0;
-            border-bottom: 1px solid #36393f;
-            color: #fff;
-            letter-spacing: 0.5px;
-        }
-        .faq-tab-list {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-        .faq-tab-list li {
-            border-bottom: 1px solid #36393f;
-        }
-        .faq-tab-list button {
-            width: 100%;
-            background: none;
-            border: none;
-            text-align: left;
-            padding: 22px 28px;
-            font-size: 18px;
-            cursor: pointer;
-            color: #b9bbbe;
-            transition: background 0.2s, font-weight 0.2s, color 0.2s;
-            border-radius: 0;
-        }
-        .faq-tab-list button.active {
-            background: #2c2f33;
-            font-weight: bold;
-            color: #fff;
-        }
-        .faq-content {
-            flex: 1;
-            background: rgba(36, 40, 44, 0.98);
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            padding: 48px 40px;
-            min-height: 420px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        .faq-category-box {
-            background: rgba(44, 47, 51, 0.98);
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            padding: 28px 24px;
-            margin-bottom: 32px;
-            border-left: 4px solid #22c55e;
-        }
-        .faq-category-box h4 {
-            margin: 0 0 12px 0;
-            font-size: 22px;
-            color: #fff;
-            font-weight: 600;
-        }
-        .faq-category-box p {
-            color: #b9bbbe;
-            font-size: 17px;
-            margin: 0 0 10px 0;
-        }
-        .faq-category-box .example {
-            color: #22c55e;
-            font-weight: bold;
-            font-size: 16px;
-            margin-top: 8px;
-        }
-        @media (max-width: 900px) {
-            .faq-outer {
-                padding: 24px 0;
-            }
-            .faq-container {
-                flex-direction: column;
-                gap: 16px;
-                padding: 18px 8px;
-                max-width: 98vw;
-            }
-            .faq-sidebar {
-                width: 100%;
-                min-height: unset;
-            }
-            .faq-content {
-                padding: 24px 12px;
-                min-height: unset;
-            }
-        }
-    </style>
-
-    <div class="faq-outer">
-        <div class="faq-container">
-            <div class="faq-sidebar">
-                <h2>❓ Frequently Asked Questions ❓</h2>
-                <ul class="faq-tab-list" id="faq-tab-list">
-                    <li><button class="active" onclick="showFaqCategory(0)">👤 My account</button></li>
-                    <li><button onclick="showFaqCategory(1)">🔒 Security</button></li>
-                    <li><button onclick="showFaqCategory(2)">🤖 Bot features</button></li>
-                    <li><button onclick="showFaqCategory(3)">🚀 Getting started</button></li>
-                    <li><button onclick="showFaqCategory(4)">📞 Support & Contact</button></li>
-                    <li><button onclick="showFaqCategory(5)">🛠️ Troubleshooting</button></li>
-                </ul>
+    <main class="container">
+        <section class="faq-hero">
+            <div class="faq-hero-main">
+                <p class="faq-eyebrow">Help Center</p>
+                <h1>Frequently Asked Questions</h1>
+                <p class="faq-subtitle">Find answers to common questions about your bot setup, website dashboard,
+                    account access, security, and troubleshooting.</p>
             </div>
-            <div class="faq-content" id="faq-content">
+        </section>
+
+        <div class="faq-layout">
+            <aside class="faq-sidebar">
+                <h2>Categories</h2>
+                <nav class="faq-nav" id="faq-nav">
+                    <!-- Populated by JS -->
+                </nav>
+            </aside>
+
+            <div class="faq-content-area" id="faq-content-area">
+                <!-- Populated by JS -->
             </div>
         </div>
-    </div>
+    </main>
+
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
+
     <script>
         const faqCategories = [
             {
                 name: 'My account',
+                icon: '👤',
                 faqs: [
                     {
-                        question: 'How do I change my password?',
-                        answer: 'Go to your account settings and select "Change Password". Follow the instructions to set a new password.',
-                        example: 'Example: Use a strong password with letters, numbers, and symbols.'
+                        question: 'How do I reset my Admin Panel password?',
+                        answer: 'Use the Recovery page in the panel and submit the email linked to your account. Follow the reset link in your inbox to create a new password.',
+                        example: 'Tip: If the email does not arrive, check spam and confirm your SMTP credentials in Config/credentials.env.'
                     },
                     {
-                        question: 'How do I update my profile information?',
-                        answer: 'Currently a work in progress. Will be updated in a future release.',
-                        example: 'Example: Keep your contact information up to date.'
+                        question: 'Why can’t I see Admin or Owner pages?',
+                        answer: 'Panel pages are role-gated. Your account role must include the required permission level (Moderator, Admin, or Owner) to access those routes.',
+                        example: 'Tip: Ask an Owner to verify your role mapping if links are hidden or return Unauthorized.'
                     },
                     {
-                        question: 'How do I view my account activity?',
-                        answer: 'Account activity is available in your profile under the "Activity" tab. Please note that this feature is currently being developed and will be available in a future update.',
-                        example: 'Example: Review your recent logins for security.'
+                        question: 'Where do I manage my profile and linked Discord account?',
+                        answer: 'Open My Profile from the top-right user menu. This page is used to view account details and any linked Discord identity information.',
+                        example: 'Tip: Keep your profile details current so recovery and notifications work correctly.'
                     }
                 ]
             },
             {
                 name: 'Security',
+                icon: '🔒',
                 faqs: [
                     {
-                        question: 'Is my data secure and private?',
-                        answer: 'Your data is protected with industry-standard security practices. Only authorized users can access sensitive information.',
-                        example: 'Example: All passwords are encrypted and user activity is logged securely.'
+                        question: 'How is access to commands and pages protected?',
+                        answer: 'The bot and panel use role checks and permission validation. Management commands require elevated roles, and panel routes validate session/account access before rendering.',
+                        example: 'Tip: Review role IDs in your config files after migrating to a new server.'
                     },
                     {
-                        question: 'How do I enable two-factor authentication?',
-                        answer: 'Go to your account security settings and follow the steps to enable two-factor authentication (2FA). Please note that 2FA is currently being developed and will be available in a future update.',
-                        example: 'Example: Use an authenticator app for 2FA.'
+                        question: 'Does this project support TOTP/2FA?',
+                        answer: 'Yes. The project includes TOTP helpers and related security flows, allowing stronger account protection where enabled in your setup.',
+                        example: 'Tip: Store backup recovery codes securely before enforcing 2FA for staff accounts.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'What should I do if I think a token or credential leaked?',
+                        answer: 'Immediately rotate your bot token and SMTP/API secrets, update Config/credentials.env, restart the bot and panel, and audit recent account activity.',
+                        example: 'Tip: Never share .env files or paste secrets in support channels.'
                     }
                 ]
             },
             {
                 name: 'Bot features',
+                icon: '🤖',
                 faqs: [
                     {
-                        question: 'What commands does the bot support?',
-                        answer: 'The bot supports moderation, fun, utility, and management commands. See the documentation or /help for a full list.',
-                        example: 'Example: Use /ban, /kick, /trivia, /poll, etc.'
+                        question: 'What feature groups are available in the bot?',
+                        answer: 'The bot includes Moderation, Management, Ticketing, Utility, Verification, Voice, Leveling, and Fun command groups.',
+                        example: 'Tip: Use the Features page in the panel for a categorized overview before configuring modules.'
                     },
                     {
-                        question: 'How do I report bugs or request features?',
-                        answer: 'On the github page',
-                        example: 'Example: Attach screenshots and describe the steps to reproduce the bug.'
+                        question: 'Can I use announcements and embeds for server updates?',
+                        answer: 'Yes. The management command set includes announcement tools for posting structured server updates to your configured announcement channel.',
+                        example: 'Tip: Keep announcement text concise and use clear titles for better readability.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'Which systems are integrated besides slash commands?',
+                        answer: 'The project includes event-driven modules such as automod flows, giveaways, welcome/leave events, leveling updates, verification handlers, and ticket reactions.',
+                        example: 'Tip: Confirm each module’s required channel/role IDs in your constants before going live.'
                     }
                 ]
             },
             {
                 name: 'Getting started',
+                icon: '🚀',
                 faqs: [
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'What are the first setup steps for a new install?',
+                        answer: 'Install dependencies, configure credentials/env values, set required role/channel constants, enable privileged intents, and start the bot with node index.js.',
+                        example: 'Tip: Follow the Getting Started page in the panel for the cleanest setup order.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'Where can I see all bot and panel capabilities quickly?',
+                        answer: 'Open the Features page in the Admin Panel. It summarizes core modules and helps you identify what to configure next.',
+                        example: 'Tip: Use Features first, then Changelog to understand what is new in your version.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'Do I need to configure the Admin Panel separately?',
+                        answer: 'Yes. Besides bot credentials, the web panel requires its own config, account setup, and any OAuth/email settings used by your deployment.',
+                        example: 'Tip: Verify panel login and notifications before inviting production staff users.'
                     }
                 ]
             },
             {
                 name: 'Support & Contact',
+                icon: '📞',
                 faqs: [
                     {
-                        question: 'Is there a community forum?',
-                        answer: 'Currently there isnt a community forum or discord server. We recommend checking the GitHub repository for updates on community support channels.',
-                        example: 'Get help from other users and staff.'
+                        question: 'Where should I report bugs or request features?',
+                        answer: 'Use the GitHub repository issues page. Include a clear title, expected behavior, and what happened instead.',
+                        example: 'Tip: Add screenshots, console errors, and reproduction steps for faster fixes.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'What details should I include when asking for help?',
+                        answer: 'Provide your bot version, recent changes, relevant logs, and the exact command/page that failed. This speeds up troubleshooting significantly.',
+                        example: 'Tip: Mention whether the issue is bot-side, panel-side, or both.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'Is there built-in guidance inside the panel?',
+                        answer: 'Yes. The FAQ, Getting Started, Features, and Moderation Playbook pages are designed as the primary in-panel help resources.',
+                        example: 'Tip: Point staff to these pages first to reduce repeated setup questions.'
                     }
                 ]
             },
             {
                 name: 'Troubleshooting',
+                icon: '🛠️',
                 faqs: [
                     {
-                        question: 'Why isn’t the bot responding?',
-                        answer: 'Check if the bot is online and has the correct permissions. Try restarting the bot or re-inviting it.',
-                        example: 'Make sure the bot has access to the channel.'
+                        question: 'Why is the bot online but slash commands are not working?',
+                        answer: 'Most often this is missing command registration permissions, wrong CLIENT_ID/GUILD_ID, or command deployment not refreshed after changes.',
+                        example: 'Tip: Recheck applications.commands scope and rerun your command deployment flow.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'Why are live dashboard updates not appearing?',
+                        answer: 'WebSocket updates can fail if socket.io is unavailable, blocked, or disconnected. Confirm socket scripts load and check browser console/network logs.',
+                        example: 'Tip: Refresh the page and verify the socket connection is established before testing events.'
                     },
                     {
-                        question: '',
-                        answer: '',
-                        example: ''
+                        question: 'Why are email notifications not sending?',
+                        answer: 'Check SMTP host, port, sender credentials, and anti-abuse/rate-limit behavior in the email helper. Also verify the recipient address and spam filters.',
+                        example: 'Tip: Use your local email test script to validate templates and sending flow safely.'
                     }
                 ]
             }
         ];
 
-        function showFaqCategory(index) {
-            const buttons = document.querySelectorAll('.faq-tab-list button');
+        function renderSidebar() {
+            const nav = document.getElementById('faq-nav');
+            nav.innerHTML = '';
+            faqCategories.forEach((cat, index) => {
+                const count = cat.faqs.filter(faq => faq.question && faq.question.trim() !== '').length;
+                const btn = document.createElement('button');
+                btn.className = `faq-nav-btn ${index === 0 ? 'active' : ''}`;
+                btn.innerHTML = `
+                    <span class="faq-nav-icon">${cat.icon}</span>
+                    <span class="faq-nav-label">${cat.name}</span>
+                    <span class="faq-nav-count">${count}</span>
+                `;
+                btn.onclick = () => showCategory(index);
+                nav.appendChild(btn);
+            });
+        }
+
+        function updateOpenAccordionHeights(root = document) {
+            const openAccordions = root.querySelectorAll('.faq-accordion.open');
+            openAccordions.forEach((acc) => {
+                const ans = acc.querySelector('.faq-answer');
+                if (!ans) return;
+                ans.style.maxHeight = 'none';
+                ans.style.maxHeight = (ans.scrollHeight + 24) + 'px';
+            });
+        }
+
+        function showCategory(index) {
+            const buttons = document.querySelectorAll('.faq-nav-btn');
             buttons.forEach((btn, i) => {
                 btn.classList.toggle('active', i === index);
             });
+
             const category = faqCategories[index];
-            let html = '';
-            category.faqs.forEach(faq => {
-                html += `<div class="faq-category-box">
-                    <h4>${faq.question}</h4>
-                    <p>${faq.answer}</p>
-                    <div class="example">${faq.example}</div>
+            const contentArea = document.getElementById('faq-content-area');
+
+            const validFaqs = category.faqs.filter(faq => faq.question && faq.question.trim() !== '');
+            const totalText = `${validFaqs.length} ${validFaqs.length === 1 ? 'answer' : 'answers'}`;
+
+            const normalizeExample = (text) => {
+                if (!text) return '';
+                return text.replace(/^\s*tip\s*:\s*/i, '').trim();
+            };
+
+            let html = `
+                <div class="faq-category-head">
+                    <h2 class="faq-category-title">${category.icon} ${category.name}</h2>
+                    <p class="faq-category-meta">${totalText}</p>
+                </div>
+            `;
+
+            if (validFaqs.length === 0) {
+                html += `<div class="faq-accordion faq-empty">
+                    No frequently asked questions available for this category yet.
                 </div>`;
+            } else {
+                html += `<div class="faq-list">`;
+                validFaqs.forEach((faq, i) => {
+                    const cleanedExample = normalizeExample(faq.example);
+                    const exampleHtml = cleanedExample ? `<div class="faq-example">${cleanedExample}</div>` : '';
+                    html += `
+                            <div class="faq-accordion">
+                                <div class="faq-question">
+                                    <div class="q-left"><div class="q-bullet">❓</div><div class="q-text">${faq.question}</div></div>
+                                    <div class="q-chevron">▾</div>
+                                </div>
+                                <div class="faq-answer">
+                                    <p>${faq.answer}</p>
+                                    ${exampleHtml}
+                                </div>
+                            </div>
+                        `;
+                });
+                html += `</div>`;
+            }
+
+            contentArea.innerHTML = html;
+
+            // attach accordion toggle handlers
+            Array.from(contentArea.querySelectorAll('.faq-accordion')).forEach((acc, idx) => {
+                const q = acc.querySelector('.faq-question');
+                const ans = acc.querySelector('.faq-answer');
+                if (!q || !ans) return;
+                q.addEventListener('click', () => {
+                    const isOpen = acc.classList.toggle('open');
+                    if (isOpen) {
+                        ans.style.maxHeight = (ans.scrollHeight + 24) + 'px';
+                    } else {
+                        ans.style.maxHeight = 0;
+                    }
+                });
             });
-            document.getElementById('faq-content').innerHTML = html;
+
+            // open first by default
+            const firstAcc = contentArea.querySelector('.faq-accordion');
+            if (firstAcc) {
+                firstAcc.classList.add('open');
+                const ans = firstAcc.querySelector('.faq-answer');
+                if (ans) ans.style.maxHeight = (ans.scrollHeight + 24) + 'px';
+            }
+
+            requestAnimationFrame(() => updateOpenAccordionHeights(contentArea));
         }
 
-        // Show first category by default
         window.addEventListener('DOMContentLoaded', () => {
-            showFaqCategory(0);
+            renderSidebar();
+            showCategory(0);
+        });
+
+        window.addEventListener('resize', () => {
+            updateOpenAccordionHeights();
         });
     </script>
 
-    <footer class="page-footer">
-        <div class="footer-links">
-            <span>© 2026 <strong>Admin Panel</strong></span>
-            <span class="footer-sep">•</span>
-            <a href="/changelog">Changelog</a>
-            <span class="footer-sep">•</span>
-            <a href="/license">License</a>
-        </div>
-    </footer>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/notifications.js" defer></script>
     <script src="/public/shared.js"></script>
-    <script src="/public/faq.js" defer></script>
+    <script src="/public/faq.js"></script>
     <script src="/public/version.js"></script>
 </body>
+
 </html>

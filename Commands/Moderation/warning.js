@@ -21,40 +21,52 @@ module.exports = {
   async execute(interaction) {
     let Prohibited = new EmbedBuilder()
       .setColor(0xFAA61A)
-        .setTitle(`Prohibited User`)
-        .setDescription(`You have to be a <@&${moderatorRoleId}> to be able to use this command!`);
-    
+      .setTitle(`Prohibited User`)
+      .setDescription(`You have to be a <@&${moderatorRoleId}> to be able to use this command!`);
+
     // Check for ModRole permission
-    if(!interaction.member.roles.cache.has(moderatorRoleId)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
-    
+    if (!interaction.member.roles.cache.has(moderatorRoleId)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+
     let caseidincorrect = new EmbedBuilder()
       .setColor(0xFAA61A)
-        .setTitle(`Error`)
-        .setDescription(`Invalid case ID`);
-    
+      .setTitle(`Error`)
+      .setDescription(`Invalid case ID`);
+
     const warnsDB = DatabaseManager.getWarnsDB();
     const caseID = interaction.options.getString('caseid');
     const userOption = interaction.options.getUser('user');
 
-    // Try to find the warning by user or by searching all users
-    let targetUserId = userOption ? userOption.id : null;
+    // Try to find the warning in MySQL database
     let warningEntry = null;
+    let targetUserId = null;
 
-    if (targetUserId) {
-      const userRecord = await warnsDB.get(targetUserId);
-      warningEntry = userRecord?.warns?.[caseID] || null;
-    }
+    try {
+      const query = 'SELECT user_id, case_id, reason, moderator_id, moderator_name, type, timestamp, created_at FROM warns WHERE case_id = ? LIMIT 1';
+      const [rows] = await DatabaseManager.connection.pool.query(query, [caseID]);
 
-    if (!warningEntry) {
-      const allWarns = await warnsDB.all();
-      for (const [userId, data] of Object.entries(allWarns)) {
-        const entry = data?.warns?.[caseID];
-        if (entry) {
-          targetUserId = userId;
-          warningEntry = entry;
-          break;
-        }
+      if (rows && rows.length > 0) {
+        const row = rows[0];
+        targetUserId = row.user_id;
+        warningEntry = {
+          caseId: row.case_id,
+          reason: row.reason,
+          moderatorId: row.moderator_id,
+          moderatorName: row.moderator_name,
+          type: row.type,
+          timestamp: row.timestamp,
+          date: row.created_at
+        };
       }
+    } catch (err) {
+      console.error('[warning] Error looking up case:', err);
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(0xFAA61A)
+          .setTitle('Error')
+          .setDescription(`Failed to look up case \`${caseID}\`: ${err.message}`)
+        ],
+        flags: MessageFlags.Ephemeral
+      });
     }
 
     if (!warningEntry || !targetUserId) return interaction.reply({ embeds: [caseidincorrect], flags: MessageFlags.Ephemeral });
@@ -72,8 +84,15 @@ module.exports = {
     }
     // Date: prefer timestamp, fallback to date
     let dateLabel = warningEntry.timestamp ? `<t:${Math.floor(warningEntry.timestamp / 1000)}:F>` : (warningEntry.date || 'No date recorded');
-    const userData = await warnsDB.get(targetUserId);
-    const totalWarns = Object.keys(userData?.warns || {}).length;
+
+    // Count total warnings for this user from MySQL
+    let totalWarns = 0;
+    try {
+      const [countRows] = await DatabaseManager.connection.pool.query('SELECT COUNT(*) as count FROM warns WHERE user_id = ?', [targetUserId]);
+      totalWarns = countRows[0]?.count || 0;
+    } catch (err) {
+      console.error('[warning] Error counting warns:', err);
+    }
 
     const em = new EmbedBuilder()
       .setTitle(`Case ${caseID}`)
@@ -85,7 +104,7 @@ module.exports = {
         { name: "Date", value: dateLabel },
         { name: "Total warnings for user", value: `${totalWarns}` }
       );
-    
+
     await interaction.reply({ embeds: [em], flags: MessageFlags.Ephemeral });
   }
 }

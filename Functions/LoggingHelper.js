@@ -1,8 +1,9 @@
 const { EmbedBuilder } = require('discord.js');
 const { serverLogChannelId } = require('../Config/constants/channel.json');
 
-// Helper functions for logging server events.
-// Makes it easier to send nicely formatted log messages.
+// Logging helpers
+// Small helpers to build and send nicely formatted log embeds to the
+// configured server logging channel. Keeps logging code consistent.
 
 // Finds and checks the logging channel for the server.
 function getLoggingChannel(guild) {

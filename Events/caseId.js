@@ -1,9 +1,7 @@
 const crypto = require('crypto');
 
-// This function creates unique case IDs for moderation actions, like warnings or bans.
-// It uses crypto to make sure the IDs are truly random and secure.
-// Generate unique case IDs for moderation actions
-// Uses crypto for secure random generation
+// Helpers for generating secure, unique case IDs used in moderation logs.
+// Uses `crypto` to produce random, hard-to-guess identifiers like `WARN-abc123`.
 
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 

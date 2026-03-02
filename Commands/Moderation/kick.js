@@ -1,9 +1,9 @@
 const moment = require("moment");
 require("moment-duration-format");
-const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
+const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const AdminPanelHelper = require("../../Functions/AdminPanelHelper");
@@ -25,13 +25,13 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-      }
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
+    }
 
     const targetUser = interaction.options.getUser('user');
     const reasonInput = interaction.options.getString('reason');
-    
+
     // See if the reason is a preset or something custom
     const reason = DatabaseManager.getResolvedReason(reasonInput);
 
@@ -64,19 +64,19 @@ module.exports = {
     });
 
     // DM the user
-    const dmEmbed = new EmbedBuilder()
-      .setTitle('👢 Server Kick Notice')
-      .setColor(0xFAA61A)
-      .setDescription(`You have been removed from **${interaction.guild.name}**`)
-      .addFields(
-        { name: 'Action Type', value: '**Kick**', inline: true },
-        { name: 'Effective Date', value: `${moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm')}`, inline: true },
-        { name: 'Reason for Kick', value: `	${'```'}${reason}${'```'}`, inline: false },
-        { name: 'Case ID', value: `${'```'}${caseID}${'```'}`, inline: true },
-        { name: 'Moderator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
-      )
-      .setFooter({ text: `${interaction.guild.name} • Moderation System` })
-      .setTimestamp();
+    const dmEmbed = createModerationDmEmbed({
+      actionTitle: 'Server Kick Notice',
+      actionEmoji: '👢',
+      color: 0xFAA61A,
+      guildName: interaction.guild.name,
+      description: `You have been removed from **${interaction.guild.name}**`,
+      statusLabel: 'Action Type',
+      statusValue: '**Kick**',
+      effectiveDate: moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm'),
+      reason: reason,
+      caseId: caseID,
+      moderatorName: interaction.user.username
+    });
 
     const dmSent = await sendModerationDM(targetUser, dmEmbed);
 
@@ -108,7 +108,7 @@ module.exports = {
         kickedBySource: 'discord',
         kickedAt: Date.now()
       });
-      
+
       // Send success response
       await sendSuccessReply(
         interaction,

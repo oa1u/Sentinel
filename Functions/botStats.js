@@ -1,6 +1,6 @@
-// Bot statistics shared between the bot and admin panel.
-// Stats are saved to a JSON file so both can access them.
-// Tracks things like command usage, message counts, and more.
+// Shared bot statistics
+// Simple JSON-backed stats storage used by the bot and admin panel. Keeps
+// counts like uptime, guild/member totals, and other lightweight metrics.
 const fs = require('fs');
 const path = require('path');
 const statsFile = path.join(__dirname, '../Config/botStats.json');

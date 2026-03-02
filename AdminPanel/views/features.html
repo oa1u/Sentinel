@@ -1,15 +1,19 @@
 <!DOCTYPE html>
+<!-- Features — documentation and toggles for available Admin Panel features. -->
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Features - Bot Admin Panel</title>
+    <title id="websiteNameTitle">Features</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
+
 <body>
-       
+
 
     <header class="header">
         <div class="header-content">
@@ -35,6 +39,8 @@
                         <a href="/profile">👤 My Profile</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
                     </div>
@@ -44,54 +50,81 @@
     </header>
 
     <main class="container">
-        <section class="features-summary" style="margin-bottom:2.5rem;">
-            <div class="card" style="background:linear-gradient(90deg,#23272a 60%,#5b7fff 100%);color:#fff;box-shadow:0 4px 24px 0 #000a;">
-                <div style="display:flex;align-items:center;gap:1.5rem;">
-                    <div style="font-size:2.5rem;">🤖</div>
+        <section class="features-summary">
+            <div class="card features-hero">
+                <div class="features-hero-content">
                     <div>
-                        <h2 style="margin:0 0 0.5rem 0;font-size:2rem;">All-in-One Discord Bot</h2>
-                        <div style="font-size:1.1rem;opacity:0.92;">Powerful moderation, fun, utility, and management features for your community. Easy to use, highly customizable, and always improving.</div>
+                        <p class="features-eyebrow">Capabilities</p>
+                        <h2>All-in-One Discord Bot</h2>
+                        <p class="features-subtitle">Moderation, automation, engagement, and management features built
+                            for daily server operations.</p>
+                    </div>
+                    <div class="features-hero-meta">
+                        <div class="features-meta-item">
+                            <span class="meta-label">Coverage</span>
+                            <span class="meta-value">8 Core Domains</span>
+                        </div>
+                        <div class="features-meta-item">
+                            <span class="meta-label">Best For</span>
+                            <span class="meta-value">Moderators + Admins</span>
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
-        <div class="tabs" id="featuresTabs">
+        <div class="tabs features-tabs" id="featuresTabs">
             <button class="tab active" data-tab="moderation"><span class="tab-icon">🛡️</span>Moderation</button>
             <button class="tab" data-tab="fun"><span class="tab-icon">🎲</span>Fun</button>
             <button class="tab" data-tab="utility"><span class="tab-icon">🛠️</span>Utility</button>
             <button class="tab" data-tab="management"><span class="tab-icon">📋</span>Management</button>
             <button class="tab" data-tab="levels"><span class="tab-icon">🏆</span>Levels</button>
             <button class="tab" data-tab="verification"><span class="tab-icon">✅</span>Verification</button>
+            <button class="tab" data-tab="ticket"><span class="tab-icon">🎫</span>Ticket</button>
+            <button class="tab" data-tab="voice"><span class="tab-icon">🎧</span>Voice</button>
         </div>
         <div class="tab-content active" id="tab-moderation">
             <div class="card feature-card moderation-card">
                 <div class="feature-header">
                     <div>
                         <h3>Moderation Features</h3>
-                        <div class="feature-desc">Keep your community safe and organized with advanced moderation tools.</div>
+                        <div class="feature-desc">Keep your community safe and organized with advanced moderation tools.
+                        </div>
                     </div>
                 </div>
                 <div class="feature-list">
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🔨</span> <b>Ban/Kick/Timeout:</b> Instantly remove or timeout problematic users.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">⚠️</span> <b>Warn System:</b> Issue, track, and clear warnings for users.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🤖</span> <b>AutoMod:</b> Automatic filtering of bad words, spam, and unwanted content.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🧹</span> <b>Message Deletion:</b> Bulk delete messages for quick cleanups.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">📋</span> <b>Case Logging:</b> All actions are logged for transparency and review.</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🔨</span> <b>Core
+                            actions:</b> /ban, /kick, /timeout, /untimeout, /clear, /deletemsg, /slowmode</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">⚠️</span> <b>Warnings
+                            & notes:</b> /warn, /warns, /warning, /note</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">📋</span> <b>Logs &
+                            review:</b> /audit, /modlogs, /moderations (audit logging, case history)</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🧾</span> <b>Ban
+                            details & unban:</b> Polished ban details modal with direct unban action and clear case info
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🔒</span>
+                        <b>Security:</b> CSRF-hardened mutating requests in the admin UI (automatic token refresh and
+                        safe API wrappers)</div>
                 </div>
             </div>
         </div>
+
+
         <div class="tab-content" id="tab-fun">
             <div class="card feature-card fun-card">
                 <div class="feature-header">
                     <div>
                         <h3>Fun Features</h3>
-                        <div class="feature-desc">Boost engagement and make your server lively with interactive games and jokes.</div>
+                        <div class="feature-desc">Boost engagement and make your server lively with interactive games
+                            and jokes.</div>
                     </div>
                 </div>
                 <div class="feature-list">
-                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🎱</span> <b>8ball, Coinflip, Trivia:</b> Entertaining commands for your community.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">😂</span> <b>Jokes, Facts, Pickup Lines:</b> Lighten the mood with fun responses.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🔥</span> <b>Roast & Compliment:</b> Playful interactions for users.</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🎱</span>
+                        <b>Games:</b> /8ball, /coinflip, /trivia</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">😂</span>
+                        <b>Content:</b> /joke, /fact, /pickup</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🔥</span>
+                        <b>Social:</b> /roast</div>
                 </div>
             </div>
         </div>
@@ -104,9 +137,12 @@
                     </div>
                 </div>
                 <div class="feature-list">
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">⏰</span> <b>Reminders & Polls:</b> Set reminders and create polls easily.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">ℹ️</span> <b>Server Info & User Info:</b> Get detailed information about the server and users.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">💸</span> <b>Crypto & Define:</b> Get crypto prices and word definitions instantly.</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">ℹ️</span> <b>Info
+                            tools:</b> /serverinfo, /userinfo, /inviteinfo, /avatar, /banner</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">⏰</span>
+                        <b>Productivity:</b> /poll, /remind, /birthday</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">💸</span>
+                        <b>Helpers:</b> /help, /ping, /define, /crypto, /suggest</div>
                 </div>
             </div>
         </div>
@@ -115,13 +151,19 @@
                 <div class="feature-header">
                     <div>
                         <h3>Management Features</h3>
-                        <div class="feature-desc">Streamline your server’s growth and feedback with management tools.</div>
+                        <div class="feature-desc">Streamline your server’s growth and feedback with management tools.
+                        </div>
                     </div>
                 </div>
                 <div class="feature-list">
-                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🎁</span> <b>Giveaways:</b> Host and manage giveaways with ease.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">💡</span> <b>Suggestions:</b> Collect and review user suggestions.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">📢</span> <b>Announcements:</b> Send announcements to your community.</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">📢</span>
+                        <b>Announcements & rules:</b> /announce, /rules</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🎁</span>
+                        <b>Operations:</b> /manage, /setlevel, /giveaway</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🧰</span> <b>Safety
+                            controls:</b> /checkban, /unban, /automodwarns, /clearwarns</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">💡</span>
+                        <b>Feedback:</b> /suggestion</div>
                 </div>
             </div>
         </div>
@@ -134,9 +176,10 @@
                     </div>
                 </div>
                 <div class="feature-list">
-                    <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">📈</span> <b>Leveling System:</b> Reward active users with XP and levels.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🏅</span> <b>Leaderboard:</b> See who’s most active in your community.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">⚙️</span> <b>Customizable XP:</b> Adjust XP gain and level rewards.</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">📈</span>
+                        <b>Leveling:</b> /levels</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🏅</span>
+                        <b>Leaderboard:</b> /leaderboard</div>
                 </div>
             </div>
         </div>
@@ -149,28 +192,131 @@
                     </div>
                 </div>
                 <div class="feature-list">
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🤖</span> <b>Captcha Verification:</b> Prevent bots and fake accounts from joining.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🏷️</span> <b>Role Assignment:</b> Automatically assign roles to verified users.</div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🔧</span> <b>Customizable Flows:</b> Adapt verification to your server’s needs.</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">✅</span>
+                        <b>Verification:</b> /verify</div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-ticket">
+            <div class="card feature-card ticket-card">
+                <div class="feature-header">
+                    <div>
+                        <h3>Ticketing</h3>
+                        <div class="feature-desc">Manage support queues and resolve requests with structured ticket
+                            workflows.</div>
+                    </div>
+                </div>
+                <div class="feature-list">
+                    <div class="feature-item"><span class="feature-bullet" style="color:#7bd3ff;">🎫</span> <b>Ticket
+                            flow:</b> /ticket, /claim, /close, /markhandled</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#7bd3ff;">👥</span> <b>Access
+                            control:</b> /adduser, /removeuser</div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-voice">
+            <div class="card feature-card voice-card">
+                <div class="feature-header">
+                    <div>
+                        <h3>Voice & Music</h3>
+                        <div class="feature-desc">Enhance voice sessions with music controls and voice utilities.</div>
+                    </div>
+                </div>
+                <div class="feature-list">
+                    <div class="feature-item"><span class="feature-bullet" style="color:#9fd1ff;">🎧</span> <b>Voice
+                            tools:</b> /voice</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#9fd1ff;">🎵</span> <b>Music
+                            controls:</b> /music</div>
                 </div>
             </div>
         </div>
     </main>
-        <style>
-        .feature-card {
-            margin-bottom: 2.5rem;
-            border: none !important;
-            box-shadow: 0 2px 16px 0 #0002;
-            padding: 2.25rem 2rem 2rem 2rem;
-            border-radius: 1.25rem;
-            background: var(--bg-card);
+    <style>
+        .features-summary {
+            margin-bottom: 2rem;
         }
+
+        .features-hero {
+            border: 1px solid rgba(91, 127, 255, 0.35);
+            background: linear-gradient(135deg, rgba(32, 32, 32, 0.96) 0%, rgba(20, 20, 20, 0.98) 60%, rgba(91, 127, 255, 0.18) 100%);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+            padding: 1.75rem 2rem;
+        }
+
+        .features-hero-content {
+            display: grid;
+            gap: 1.2rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            align-items: center;
+        }
+
+        .features-eyebrow {
+            margin: 0 0 0.4rem 0;
+            font-size: 0.75rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+
+        .features-subtitle {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .features-hero-meta {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .features-meta-item {
+            border: 1px solid rgba(91, 127, 255, 0.25);
+            border-radius: 12px;
+            padding: 0.75rem 0.9rem;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .features-meta-item .meta-label {
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-secondary);
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .features-meta-item .meta-value {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+
+        .features-tabs {
+            margin-bottom: 1.6rem;
+            border-radius: 14px;
+            background: linear-gradient(145deg, rgba(30, 30, 30, 0.94) 0%, rgba(20, 20, 20, 0.96) 100%);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .feature-card {
+            margin-bottom: 2rem;
+            border: 1px solid rgba(91, 127, 255, 0.2);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+            padding: 2rem;
+            border-radius: 1.25rem;
+            background: linear-gradient(160deg, rgba(32, 32, 32, 0.96) 0%, rgba(24, 24, 24, 0.98) 100%);
+        }
+
         .feature-header {
             display: flex;
             align-items: center;
             gap: 1.5rem;
             margin-bottom: 1.25rem;
         }
+
         .feature-icon {
             display: flex;
             align-items: center;
@@ -182,38 +328,45 @@
             background: #23272a;
             box-shadow: 0 2px 8px #0001;
         }
+
         .feature-desc {
-            color: #a0a0a0;
-            font-size: 1.08rem;
-            margin-top: 0.15rem;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin-top: 0.2rem;
         }
+
         .feature-list {
             margin-top: 0.5rem;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
         }
+
         .feature-item {
-            font-size: 1.08rem;
+            font-size: 1rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            background: #23272a;
-            border-radius: 0.75rem;
-            padding: 0.75rem 1.25rem;
-            box-shadow: 0 1px 4px #0001;
+            gap: 0.65rem;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(91, 127, 255, 0.2);
+            border-radius: 0.9rem;
+            padding: 0.85rem 1.1rem;
+            box-shadow: none;
         }
+
         .feature-bullet {
-            font-size: 1.25rem;
-            margin-right: 0.5rem;
+            font-size: 1.1rem;
+            margin-right: 0;
         }
-        </style>
-    
+    </style>
+
     <footer class="page-footer">
         <div class="footer-links">
-            <span>© 2026 <strong>Admin Panel</strong></span>
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
             <span class="footer-sep">•</span>
             <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
             <span class="footer-sep">•</span>
             <a href="/license">License</a>
         </div>
@@ -224,4 +377,5 @@
     <script src="/public/version.js"></script>
     <script src="/public/notifications.js" defer></script>
 </body>
+
 </html>

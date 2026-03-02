@@ -48,9 +48,9 @@ module.exports = {
           { name: 'What This Means', value: '• Access to all public channels\n• Ability to send messages\n• View member list\n• Participate in voice\n• Use bot commands', inline: false },
           { name: 'Need Help?', value: 'If you believe this is an error, contact the server admins.', inline: false }
         );
-      
-      return interaction.reply({ 
-        embeds: [alreadyVerifiedEmbed], 
+
+      return interaction.reply({
+        embeds: [alreadyVerifiedEmbed],
         flags: 64
       });
     }
@@ -69,17 +69,17 @@ module.exports = {
     // Generate new captcha
     const captcha = new CaptchaGenerator()
       .setDimension(600, 600)
-      .setCaptcha({ 
-        text: Math.random().toString(36).substring(2, 8).toUpperCase(), 
-        size: 70, 
-        color: "#32CD32" 
+      .setCaptcha({
+        text: Math.random().toString(36).substring(2, 8).toUpperCase(),
+        size: 70,
+        color: "#32CD32"
       })
       .setDecoy({ opacity: 0.2 })
       .setTrace({ color: "#32CD32", size: 2 });
 
     const captchaBuffer = await captcha.generate();
     const captchaCode = captcha.text;
-    
+
     console.log(`Generated captcha for ${member.user.tag}: ${captchaCode}`);
 
     if (!captchachannel) {
@@ -123,7 +123,7 @@ module.exports = {
       const e2 = new EmbedBuilder(e0)
         .setColor(0xF04747)
         .setDescription(`❌ That code is incorrect.\n\nPlease try again. Check the image above carefully and enter the exact code shown.`);
-      
+
       const e3 = new EmbedBuilder(e0)
         .setColor(0x43B581)
         .setDescription(`✅ Verification Successful!\n\nWelcome to **${Server}**! You have been granted access to all channels and features.`)
@@ -136,7 +136,7 @@ module.exports = {
       userCaptchaData[member.id] = { captchaValue: captchaCode };
 
       const dmChannel = member.user.dmChannel || await member.user.createDM();
-      
+
       await dmChannel.send({
         embeds: [e1.setImage('attachment://captcha.png')],
         files: [captchaAttachment]
@@ -145,9 +145,9 @@ module.exports = {
           .setColor(0xF04747)
           .setTitle('❌ DM Failed')
           .setDescription('Unable to send you a DM. Please enable DMs from server members and try again.');
-        
-        return interaction.reply({ 
-          embeds: [dmErrorEmbed], 
+
+        return interaction.reply({
+          embeds: [dmErrorEmbed],
           flags: 64
         });
       });
@@ -160,9 +160,9 @@ module.exports = {
           { name: 'Next Step', value: 'Open the image in your DMs and reply with the code shown.', inline: false },
           { name: 'Can\'t See DMs?', value: 'Make sure you have DMs enabled from server members. You can change this in your Discord settings.', inline: false }
         );
-      
-      await interaction.reply({ 
-        embeds: [captchaSentEmbed], 
+
+      await interaction.reply({
+        embeds: [captchaSentEmbed],
         flags: 64
       });
 
@@ -194,10 +194,10 @@ module.exports = {
             if (roleObj) {
               await member.roles.add(roleObj);
               console.log(`Role added to ${member.user.tag}`);
-              
+
               // Track successful verification (prevents spam abuse)
               verificationAttempts.set(userId, Date.now());
-              
+
               await dmChannel.send({ embeds: [e3] });
 
               // Log verification
@@ -223,7 +223,7 @@ module.exports = {
           .setColor(0xFAA61A)
           .setTitle('⏱️ Timeout')
           .setDescription('Operation timed out. Please run `/verify` to try again.');
-        
+
         dmChannel.send({ embeds: [timeoutEmbed] }).catch((err) => {
           console.error(`[Verify] Failed to send timeout message: ${err.message}`);
         });
@@ -235,9 +235,9 @@ module.exports = {
         .setColor(0xF04747)
         .setTitle('❌ Error')
         .setDescription('An error occurred while generating your captcha. Please try again.');
-      
-      return interaction.reply({ 
-        embeds: [errorEmbed], 
+
+      return interaction.reply({
+        embeds: [errorEmbed],
         flags: 64
       });
     }

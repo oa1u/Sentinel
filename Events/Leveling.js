@@ -4,22 +4,22 @@ const { levelUpLogChannelId } = require('../Config/constants/channel.json');
 const { config: CONFIG, multipliers: MULTIPLIERS, levelRoles: LEVEL_ROLES } = require('../Config/constants/leveling.json');
 const misc = require('../Config/constants/misc.json');
 
-// This is the XP and leveling system! It tracks user messages, gives out XP, and handles level-up notifications and rewards.
-// TODO: Let admins set custom XP multipliers for each channel.
+// Leveling system: awards XP for messages, tracks progress, and handles level-up notifications and rewards.
+// TODO: Add per-channel/admin-configurable XP multipliers for finer control.
 
 const cooldowns = new Map();
 let lastCleanup = Date.now();
 const CLEANUP_INTERVAL = (misc.cleanup?.cooldownCleanupInterval || 300000);
 const MAX_COOLDOWN_SIZE = (misc.limits?.maxCooldownEntries || 10000);
 
-// Cleans up old cooldown entries so we don't waste memory or slow things down.
+// Remove old cooldown entries periodically to avoid memory growth and keep performance steady.
 function cleanupCooldowns(force = false) {
     const now = Date.now();
-    
+
     // If the map gets too big or enough time has passed, clean it up.
     if (force || cooldowns.size > MAX_COOLDOWN_SIZE || (now - lastCleanup > CLEANUP_INTERVAL)) {
         const cutoff = now - CONFIG.xpCooldownMs;
-        
+
         let removed = 0;
         for (const [key, timestamp] of cooldowns.entries()) {
             if (timestamp < cutoff) {
@@ -27,35 +27,35 @@ function cleanupCooldowns(force = false) {
                 removed++;
             }
         }
-        
+
         if (removed > 0) {
             console.log(`[Leveling] Cleaned ${removed} old cooldowns (Map size: ${cooldowns.size}/${MAX_COOLDOWN_SIZE})`);
         }
-        
+
         lastCleanup = now;
     }
 }
 
-// Figures out how much XP is needed to reach the next level.
+// Calculate how much XP is required to reach a given level.
 function calculateRequiredXP(level) {
     return Math.floor(CONFIG.baseLevelRequirement * Math.pow(CONFIG.levelRequirementMultiplier, level - 1));
 }
 
-// Works out what level a user should be based on their total XP.
+// Determine the level for a total XP value.
 function calculateLevel(xp) {
     let level = 1;
     let totalRequired = 0;
-    
+
     while (totalRequired <= xp) {
         totalRequired += calculateRequiredXP(level);
         if (totalRequired > xp) break;
         level++;
     }
-    
+
     return level - 1;
 }
 
-// Gets user's leveling data from the database.
+// Fetch a user's leveling record from the database (or return sensible defaults for new users).
 async function getUserData(userId) {
     try {
         const data = await MySQLDatabaseManager.getUserLevel(userId);
@@ -105,28 +105,28 @@ async function saveUserData(userId, data, username) {
 
 function calculateXPGain(message) {
     let xp = CONFIG.baseXpPerMessage + Math.floor(Math.random() * CONFIG.randomXpVariance);
-    
+
     if (message.content.length > 100) {
         xp *= MULTIPLIERS.longMessageXpMultiplier;
     }
-    
+
     if (message.attachments.size > 0) {
         xp *= MULTIPLIERS.messageHasImageXpMultiplier;
     }
-    
+
     if (message.content.match(/https?:\/\//)) {
         xp *= MULTIPLIERS.messageHasLinkXpMultiplier;
     }
-    
+
     return Math.floor(xp);
 }
 
-// Sends level up message
+// Notify the user (and optionally log) when they level up.
 async function sendLevelUpNotification(message, userData, newLevel) {
     const nextLevelXP = calculateRequiredXP(newLevel + 1);
     const currentLevelXP = calculateRequiredXP(newLevel);
     const progressPercentage = Math.round((userData.totalXP / nextLevelXP) * 100);
-    
+
     const levelUpEmbed = new EmbedBuilder()
         .setColor(0xFFD700)
         .setTitle('🎉 Congratulations on Your Level Up!')
@@ -146,7 +146,7 @@ async function sendLevelUpNotification(message, userData, newLevel) {
         .setTimestamp()
         .setFooter({ text: '⭐ Keep up the great work!' });
 
-    // Check for role rewards
+    // Apply any configured role reward for the new level.
     const levelRoleKey = `level${newLevel}RoleId`;
     if (LEVEL_ROLES[levelRoleKey]) {
         const role = message.guild.roles.cache.get(LEVEL_ROLES[levelRoleKey]);
@@ -164,7 +164,7 @@ async function sendLevelUpNotification(message, userData, newLevel) {
         }
     }
 
-    // Send notification
+    // Deliver the level-up notification to the user or the channel if direct reply fails.
     try {
         await message.reply({ embeds: [levelUpEmbed] });
     } catch {
@@ -176,7 +176,7 @@ async function sendLevelUpNotification(message, userData, newLevel) {
         }
     }
 
-    // Log to mod channel
+    // Post an admin-friendly log message about the level-up if a log channel is configured.
     const logChannel = message.guild.channels.cache.get(levelUpLogChannelId);
     if (logChannel) {
         const logEmbed = new EmbedBuilder()
@@ -193,7 +193,7 @@ async function sendLevelUpNotification(message, userData, newLevel) {
             .setThumbnail(message.author.displayAvatarURL({ size: 128 }))
             .setTimestamp()
             .setFooter({ text: 'Leveling System • Member Achievement Log' });
-        
+
         logChannel.send({ embeds: [logEmbed] }).catch((err) => {
             console.error(`[Leveling] Couldn't log: ${err.message}`);
         });
@@ -204,46 +204,46 @@ async function sendLevelUpNotification(message, userData, newLevel) {
 async function processXP(message) {
     if (message.author.bot) return;
     if (!message.guild) return;
-    
+
     const now = Date.now();
     const cooldownKey = `${message.author.id}_${message.guild.id}`;
-    
+
     // Clean up old cooldowns periodically
     if (now - lastCleanup > CLEANUP_INTERVAL) {
         cleanupCooldowns();
     }
-    
+
     if (cooldowns.has(cooldownKey)) {
         const expirationTime = cooldowns.get(cooldownKey) + CONFIG.xpCooldownMs;
         if (now < expirationTime) return;
     }
-    
+
     // Set new cooldown
     cooldowns.set(cooldownKey, now);
-    
+
     // Get user data
     const userData = await getUserData(message.author.id);
     const oldLevel = userData.level;
-    
+
     // Calculate and add XP
     const xpGain = calculateXPGain(message);
     userData.xp += xpGain;
     userData.totalXP += xpGain;
     userData.messages += 1;
     userData.lastXPGain = now;
-    
+
     // Check for level up
     let newLevel = oldLevel;
     while (userData.xp >= calculateRequiredXP(newLevel + 1)) {
         userData.xp -= calculateRequiredXP(newLevel + 1);
         newLevel++;
     }
-    
+
     userData.level = newLevel;
-    
+
     // Save to database
     await saveUserData(message.author.id, userData, message.author.username);
-    
+
     // Send level up notification if leveled up
     if (newLevel > oldLevel) {
         await sendLevelUpNotification(message, userData, newLevel);
@@ -264,7 +264,7 @@ async function getLeaderboard(limit = 10) {
                 totalXP: user.total_xp,
                 messages: user.messages
             }));
-        
+
         return sorted;
     } catch (error) {
         console.error('[Leveling] Error getting leaderboard:', error);
@@ -278,7 +278,7 @@ async function getUserRank(userId) {
         const allUsers = await MySQLDatabaseManager.getAllLevels();
         const sorted = allUsers
             .sort((a, b) => (b.total_xp || 0) - (a.total_xp || 0));
-        
+
         const rank = sorted.findIndex(u => u.user_id === userId) + 1;
         return rank || null;
     } catch (error) {
@@ -293,14 +293,14 @@ async function setUserXP(userId, xp, username = null) {
     userData.totalXP = xp;
     userData.xp = 0;
     userData.level = calculateLevel(xp);
-    
+
     // Recalculate current level XP
     let totalRequired = 0;
     for (let i = 1; i < userData.level; i++) {
         totalRequired += calculateRequiredXP(i);
     }
     userData.xp = xp - totalRequired;
-    
+
     await saveUserData(userId, userData, username);
     return userData;
 }

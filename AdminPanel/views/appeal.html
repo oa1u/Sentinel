@@ -1,11 +1,16 @@
 <!DOCTYPE html>
+<!-- Appeals — view and process user appeals in a centralized workflow. -->
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ban Appeal - Admin Panel</title>
+    <title id="websiteNameTitle">Ban Appeal</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+
+    <script src="/public/shared.js"></script>
+    <script src="/public/admin.js" defer></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/notifications.js" defer></script>
     <style>
@@ -19,6 +24,7 @@
             --bg-primary: #0f1419;
             --bg-secondary: #1a1f2e;
             --bg-tertiary: #252d3d;
+            --bg-hover: #2d3548;
             --color-text: #e5e7eb;
             --color-muted: #9ca3af;
             --color-border: #374151;
@@ -26,6 +32,8 @@
             --color-red: #ff4444;
             --color-yellow: #ffaa00;
             --color-blue: #3b82f6;
+            --color-purple: #8b5cf6;
+            --color-cyan: #06b6d4;
         }
 
         body {
@@ -33,178 +41,432 @@
             color: var(--color-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header Section */
+        .header-section {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header-logo {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .header-title {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+            background: linear-gradient(135deg, var(--color-blue), var(--color-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-subtitle {
+            font-size: 1.1rem;
+            color: var(--color-muted);
+        }
+
+        /* Action Tabs */
+        .action-tabs {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .action-tab {
+            background: var(--bg-secondary);
+            border: 2px solid var(--color-border);
+            border-radius: 0.75rem;
+            padding: 1.25rem 2rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 180px;
+        }
+
+        .action-tab:hover {
+            border-color: var(--color-blue);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .action-tab.active {
+            border-color: var(--color-blue);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .action-tab-icon {
+            font-size: 1.75rem;
+        }
+
+        .action-tab-content {
+            text-align: left;
+        }
+
+        .action-tab-title {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .action-tab-desc {
+            font-size: 0.85rem;
+            color: var(--color-muted);
+        }
+
+        /* Content Panels */
+        .content-panel {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .content-panel.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Card Container */
+        .card-grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        @media (max-width: 1100px) {
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .main-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.75rem;
+            padding: 2.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .sidebar-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.75rem;
+            padding: 1.75rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            position: sticky;
+            top: 2rem;
+        }
+
+        /* Progress Wizard */
+        .wizard-progress {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2.5rem;
+            position: relative;
+        }
+
+        .wizard-progress::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--color-border);
+            z-index: 0;
+        }
+
+        .wizard-step {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 1;
+        }
+
+        .wizard-step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--color-border);
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s;
         }
 
-        .container {
-            width: 100%;
-            max-width: 1000px;
-            display: flex;
-            gap: 2rem;
-            align-items: flex-start;
+        .wizard-step.completed .wizard-step-circle {
+            background: var(--color-green);
+            border-color: var(--color-green);
+            color: white;
         }
 
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--color-border);
-            border-radius: 0.5rem;
-            padding: 2rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-            flex: 1;
-            min-width: 0;
+        .wizard-step.active .wizard-step-circle {
+            background: var(--color-blue);
+            border-color: var(--color-blue);
+            color: white;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
         }
 
-        .sidebar {
-            width: 300px;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
+        .wizard-step-label {
+            font-size: 0.85rem;
+            color: var(--color-muted);
+            text-align: center;
         }
 
-        .eta-box {
-            background: var(--bg-secondary);
-            border: 1px solid var(--color-border);
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        .wizard-step.active .wizard-step-label {
+            color: var(--color-blue);
+            font-weight: 600;
         }
 
-        .eta-box h3 {
-            font-size: 1.1rem;
-            margin-bottom: 1rem;
+        /* Form Styling */
+        .form-section {
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .form-section-title {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
-        .eta-content {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .eta-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-size: 0.95rem;
-        }
-
-        .eta-item .icon {
-            font-size: 1.5rem;
-            min-width: 1.5rem;
-        }
-
-        .eta-value {
-            color: var(--color-green);
-            font-weight: 600;
-        }
-
-        .eta-divider {
-            height: 1px;
-            background: var(--color-border);
-            margin: 0.5rem 0;
-        }
-
-        @media (max-width: 900px) {
-            .container {
-                flex-direction: column;
-                max-width: 500px;
-            }
-
-            .sidebar {
-                width: 100%;
-            }
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-
-        .logo {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-
-        h1 {
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .subtitle {
+        .form-section-desc {
             color: var(--color-muted);
-            font-size: 0.95rem;
-        }
-
-        @media (max-width: 600px) {
-            .card {
-                padding: 1.5rem;
-            }
-
-            h1 {
-                font-size: 1.5rem;
-            }
-
-            .logo {
-                font-size: 2rem;
-            }
+            margin-bottom: 2rem;
+            line-height: 1.6;
         }
 
         .form-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.75rem;
         }
 
         .form-label {
-            display: block;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             margin-bottom: 0.5rem;
             font-weight: 500;
             color: var(--color-text);
         }
 
+        .form-label .required {
+            color: var(--color-red);
+        }
+
         .form-input,
         textarea {
             width: 100%;
-            padding: 0.75rem;
+            padding: 0.875rem;
             background: var(--bg-tertiary);
-            border: 1px solid var(--color-border);
-            border-radius: 0.25rem;
+            border: 2px solid var(--color-border);
+            border-radius: 0.5rem;
             color: var(--color-text);
             font-size: 1rem;
             font-family: inherit;
-            transition: border-color 0.2s;
+            transition: all 0.2s;
         }
 
         .form-input:focus,
         textarea:focus {
             outline: none;
             border-color: var(--color-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .form-input.valid {
+            border-color: var(--color-green);
+        }
+
+        .form-input.invalid {
+            border-color: var(--color-red);
         }
 
         textarea {
             resize: vertical;
-            min-height: 120px;
-            max-height: 300px;
+            min-height: 150px;
+            max-height: 400px;
+            line-height: 1.6;
         }
 
         .form-help {
             font-size: 0.85rem;
             color: var(--color-muted);
-            margin-top: 0.25rem;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .form-validation {
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .form-validation.success {
+            color: var(--color-green);
+        }
+
+        .form-validation.error {
+            color: var(--color-red);
+        }
+
+        /* Quality Analyzer */
+        .quality-analyzer {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .quality-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .quality-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .quality-score {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .quality-score.excellent {
+            color: var(--color-green);
+        }
+
+        .quality-score.good {
+            color: var(--color-cyan);
+        }
+
+        .quality-score.fair {
+            color: var(--color-yellow);
+        }
+
+        .quality-score.poor {
+            color: var(--color-red);
+        }
+
+        .quality-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .quality-metric {
+            background: var(--bg-secondary);
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            text-align: center;
+        }
+
+        .quality-metric-label {
+            font-size: 0.75rem;
+            color: var(--color-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .quality-metric-value {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        /* Navigation Buttons */
+        .form-nav {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--color-border);
         }
 
         .btn {
-            width: 100%;
-            padding: 0.75rem 1rem;
+            flex: 1;
+            padding: 1rem 1.5rem;
             border: none;
-            border-radius: 0.25rem;
+            border-radius: 0.5rem;
             font-size: 1rem;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
         }
 
         .btn-primary {
@@ -212,28 +474,110 @@
             color: white;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             background: #2563eb;
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
         }
 
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
         }
 
-        .message {
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--bg-hover);
+            border-color: var(--color-muted);
+        }
+
+        .btn-success {
+            background: var(--color-green);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #16a34a;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(34, 197, 94, 0.3);
+        }
+
+        /* Sidebar Sections */
+        .sidebar-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .sidebar-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .sidebar-title {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .sidebar-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .sidebar-item-icon {
+            font-size: 1.25rem;
+            min-width: 1.25rem;
+        }
+
+        .sidebar-divider {
+            height: 1px;
+            background: var(--color-border);
+            margin: 1.5rem 0;
+        }
+
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-left: 4px solid var(--color-blue);
             padding: 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .warning-box {
+            background: rgba(255, 170, 0, 0.1);
+            border: 1px solid rgba(255, 170, 0, 0.3);
+            border-left: 4px solid var(--color-yellow);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* Messages */
+        .message {
+            padding: 1.25rem;
             border-radius: 0.5rem;
             margin-bottom: 1.5rem;
             display: none;
+            animation: slideDown 0.3s ease;
         }
 
         .message.show {
-            display: block;
-            animation: slideDown 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
 
         @keyframes slideDown {
@@ -241,6 +585,7 @@
                 opacity: 0;
                 transform: translateY(-10px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -271,14 +616,123 @@
             color: var(--color-blue);
         }
 
-        .icon {
-            margin-right: 0.5rem;
+        /* Status Checker Results */
+        .status-result {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            display: none;
         }
 
+        .status-result.show {
+            display: block;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        .status-badge.pending {
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--color-yellow);
+        }
+
+        .status-badge.accepted {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--color-green);
+        }
+
+        .status-badge.denied {
+            background: rgba(255, 68, 68, 0.2);
+            color: var(--color-red);
+        }
+
+        .status-details {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .status-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border-radius: 0.375rem;
+        }
+
+        .status-detail-label {
+            color: var(--color-muted);
+            font-size: 0.9rem;
+        }
+
+        .status-detail-value {
+            font-weight: 500;
+        }
+
+        /* Appeal History */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            border-color: var(--color-blue);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+        }
+
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .history-item-case {
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .history-item-details {
+            display: grid;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .history-item-detail {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .history-item-detail-label {
+            color: var(--color-muted);
+        }
+
+        /* Loading Spinner */
         .loading {
             display: none;
             text-align: center;
-            padding: 1rem;
+            padding: 2rem;
         }
 
         .loading.show {
@@ -287,82 +741,21 @@
 
         .spinner {
             display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
             border-radius: 50%;
             border-top-color: var(--color-blue);
-            animation: spin 0.6s linear infinite;
+            animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
-        .info-box {
-            background: var(--bg-tertiary);
-            border-left: 4px solid var(--color-blue);
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-            border-radius: 0.25rem;
-        }
-
-        .info-box p {
-            font-size: 0.95rem;
-            line-height: 1.5;
-        }
-
-        .character-count {
-            text-align: right;
-            font-size: 0.85rem;
-            color: var(--color-muted);
-            margin-top: 0.25rem;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.75rem;
-            margin-bottom: 1.5rem;
-            padding: 1rem;
-            background: rgba(59, 130, 246, 0.05);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 0.25rem;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            margin-top: 0.35rem;
-            cursor: pointer;
-            min-width: 18px;
-            width: 18px;
-            height: 18px;
-            accent-color: var(--color-blue);
-        }
-
-        .checkbox-label {
-            flex: 1;
-            line-height: 1.5;
-            cursor: pointer;
-        }
-
-        .checkbox-label strong {
-            color: var(--color-blue);
-        }
-
-        .rules-link {
-            color: var(--color-blue);
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.2s;
-            border-bottom: 1px solid var(--color-blue);
-        }
-
-        .rules-link:hover {
-            color: #2563eb;
-            text-decoration: underline;
-        }
-
-        /* Modal Styles */
+        /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -383,19 +776,10 @@
             animation: fadeIn 0.3s ease;
         }
 
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-
         .modal-box {
             background: var(--bg-secondary);
             border: 1px solid var(--color-border);
-            border-radius: 0.5rem;
+            border-radius: 0.75rem;
             max-width: 600px;
             width: 100%;
             max-height: 80vh;
@@ -410,6 +794,7 @@
                 opacity: 0;
                 transform: translateY(20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -420,7 +805,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 1.5rem;
+            padding: 1.75rem;
             border-bottom: 1px solid var(--color-border);
         }
 
@@ -436,10 +821,10 @@
             background: transparent;
             border: none;
             color: var(--color-muted);
-            font-size: 1.5rem;
+            font-size: 1.75rem;
             cursor: pointer;
             padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
+            border-radius: 0.375rem;
             transition: all 0.2s;
         }
 
@@ -449,14 +834,9 @@
         }
 
         .modal-content {
-            padding: 1.5rem;
+            padding: 1.75rem;
             overflow-y: auto;
             flex: 1;
-            scrollbar-width: none;
-        }
-
-        .modal-content::-webkit-scrollbar {
-            display: none;
         }
 
         .rule-item {
@@ -482,120 +862,628 @@
             color: var(--color-muted);
             line-height: 1.6;
         }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem 0.5rem;
+            }
+
+            .header-logo {
+                font-size: 2.5rem;
+            }
+
+            .header-title {
+                font-size: 1.75rem;
+            }
+
+            .main-card,
+            .sidebar-card {
+                padding: 1.5rem;
+            }
+
+            .action-tabs {
+                flex-direction: column;
+            }
+
+            .action-tab {
+                min-width: 100%;
+            }
+
+            .wizard-progress {
+                flex-wrap: wrap;
+            }
+
+            .wizard-step {
+                min-width: 80px;
+            }
+
+            .wizard-step-label {
+                font-size: 0.75rem;
+            }
+
+            .form-nav {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="card">
-            <div class="header">
-                <div class="logo">📤</div>
-                <h1>Ban Appeal</h1>
-                <p class="subtitle">Submit an appeal to have your ban reviewed</p>
-            </div>
+    <div class="main-container">
+        <!-- Header -->
+        <div class="header-section">
+            <div class="header-logo">⚖️</div>
+            <h1 class="header-title">Advanced Ban Appeal System</h1>
+            <p class="header-subtitle">Submit appeals, check status, and view your appeal history</p>
+        </div>
 
-            <div class="checkbox-group">
-                <input type="checkbox" id="rulesCheckbox" required>
-                <label for="rulesCheckbox" class="checkbox-label">
-                    I have read and understand the <strong><a href="#" onclick="showServerRules(event)" class="rules-link">server rules</a></strong> and agree to follow them if my appeal is accepted. *
-                </label>
-            </div>
-
-            <div id="successMessage" class="message success">
-                <span class="icon">✅</span>
-                <span id="successText">Your appeal has been submitted successfully!</span>
-            </div>
-
-            <div id="errorMessage" class="message error">
-                <span class="icon">❌</span>
-                <span id="errorText">An error occurred. Please try again.</span>
-            </div>
-
-            <div id="warningMessage" class="message warning">
-                <span class="icon">⚠️</span>
-                <span id="warningText">You already have a pending appeal.</span>
-            </div>
-
-            <div id="infoMessage" class="message info">
-                <span class="icon">ℹ️</span>
-                <span id="infoText">You must be banned to submit an appeal.</span>
-            </div>
-
-            <form id="appealForm" onsubmit="submitAppeal(event)">
-                <div class="info-box">
-                    <p>💭 <strong>Please be respectful and provide a detailed reason</strong> for why your ban should be lifted. The server owner will review your appeal carefully.</p>
+        <!-- Action Tabs -->
+        <div class="action-tabs">
+            <div class="action-tab active" onclick="switchPanel('submit')">
+                <div class="action-tab-icon">📝</div>
+                <div class="action-tab-content">
+                    <div class="action-tab-title">Submit Appeal</div>
+                    <div class="action-tab-desc">File a new ban appeal</div>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label">Your Username *</label>
-                    <input type="text" id="userTag" class="form-input" placeholder="e.g., Your discord nickname" required>
-                    <p class="form-help">Your Discord username</p>
+            </div>
+            <div class="action-tab" onclick="switchPanel('status')">
+                <div class="action-tab-icon">🔍</div>
+                <div class="action-tab-content">
+                    <div class="action-tab-title">Check Status</div>
+                    <div class="action-tab-desc">Look up appeal progress</div>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label">Ban Case ID *</label>
-                    <input type="text" id="caseId" class="form-input" placeholder="e.g., BAN-kX7mP9qL2n" required>
-                    <p class="form-help">The case ID you received when banned (format: BAN-XXXXXXXXXX)</p>
+            </div>
+            <div class="action-tab" onclick="switchPanel('history')">
+                <div class="action-tab-icon">📚</div>
+                <div class="action-tab-content">
+                    <div class="action-tab-title">My History</div>
+                    <div class="action-tab-desc">View past appeals</div>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label">Discord User ID *</label>
-                    <input type="text" id="userId" class="form-input" placeholder="e.g., 123456789" required>
-                    <p class="form-help">Your Discord ID (right-click your name → Copy User ID)</p>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Appeal Reason *</label>
-                    <textarea id="reason" placeholder="Explain why you should be unbanned..." required maxlength="1000"></textarea>
-                    <div class="character-count">
-                        <span id="charCount">0</span> / 1000
-                    </div>
-                    <p class="form-help">Be honest and specific about what happened</p>
-                </div>
-
-                <button type="submit" class="btn btn-primary" id="submitBtn">
-                    <span class="icon">📤</span>
-                    <span>Submit Appeal</span>
-                </button>
-            </form>
-
-            <div id="loadingBox" class="loading">
-                <div class="spinner"></div>
-                <p style="margin-top: 0.5rem; color: var(--color-muted);">Submitting your appeal...</p>
             </div>
         </div>
 
-        <div class="sidebar">
-            <div class="eta-box">
-                <h3>⏱️ Review Timeline</h3>
-                <div class="eta-content">
-                    <div class="eta-item">
-                        <span class="icon">⚡</span>
-                        <div>
-                            <div>Standard Review</div>
-                            <div class="eta-value">24-48 hours</div>
+        <!-- Submit Appeal Panel -->
+        <div id="submitPanel" class="content-panel active">
+            <div class="card-grid">
+                <div class="main-card">
+                    <!-- Progress Wizard -->
+                    <div class="wizard-progress">
+                        <div class="wizard-step active" data-step="1">
+                            <div class="wizard-step-circle">1</div>
+                            <div class="wizard-step-label">Account Info</div>
+                        </div>
+                        <div class="wizard-step" data-step="2">
+                            <div class="wizard-step-circle">2</div>
+                            <div class="wizard-step-label">Ban Details</div>
+                        </div>
+                        <div class="wizard-step" data-step="3">
+                            <div class="wizard-step-circle">3</div>
+                            <div class="wizard-step-label">Your Appeal</div>
+                        </div>
+                        <div class="wizard-step" data-step="4">
+                            <div class="wizard-step-circle">4</div>
+                            <div class="wizard-step-label">Review</div>
                         </div>
                     </div>
-                    <div class="eta-divider"></div>
-                    <div class="eta-item">
-                        <span class="icon">🚀</span>
-                        <div>
-                            <div>Priority Review</div>
-                            <div class="eta-value">4-12 hours</div>
+
+                    <!-- Messages -->
+                    <div id="successMessage" class="message success">
+                        <span style="font-size: 1.5rem;">✅</span>
+                        <span id="successText">Your appeal has been submitted successfully!</span>
+                    </div>
+
+                    <div id="errorMessage" class="message error">
+                        <span style="font-size: 1.5rem;">❌</span>
+                        <span id="errorText">An error occurred. Please try again.</span>
+                    </div>
+
+                    <div id="warningMessage" class="message warning">
+                        <span style="font-size: 1.5rem;">⚠️</span>
+                        <span id="warningText">You already have a pending appeal.</span>
+                    </div>
+
+                    <!-- Form Step 1: Account Info -->
+                    <div class="form-section active" data-step="1">
+                        <h2 class="form-section-title">
+                            <span>👤</span>
+                            <span>Account Information</span>
+                        </h2>
+                        <p class="form-section-desc">Enter your Discord account details so we can verify your identity.
+                        </p>
+
+                        <div class="form-group">
+                            <label class="form-label" for="userTag">
+                                <span>Discord Username</span>
+                                <span class="required">*</span>
+                            </label>
+                            <input type="text" id="userTag" class="form-input" placeholder="e.g., Your Username"
+                                oninput="validateStep(1)">
+                            <p class="form-help">💡 Your current Discord username (not display name)</p>
+                            <div id="userTagValidation" class="form-validation"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="userId">
+                                <span>Discord User ID</span>
+                                <span class="required">*</span>
+                            </label>
+                            <input type="text" id="userId" class="form-input" placeholder="e.g., 123456789012345678"
+                                oninput="validateStep(1)">
+                            <p class="form-help">💡 Right-click your name → Copy User ID (Developer Mode required)</p>
+                            <div id="userIdValidation" class="form-validation"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="email">
+                                <span>Email Address</span>
+                                <span class="required">*</span>
+                            </label>
+                            <input type="email" id="email" class="form-input" placeholder="e.g., your.email@example.com"
+                                required oninput="validateStep(1)">
+                            <p class="form-help">📧 Required for appeal status notifications and updates</p>
+                            <div id="emailValidation" class="form-validation"></div>
+                        </div>
+
+                        <div class="form-nav">
+                            <button class="btn btn-secondary" disabled>
+                                <span>←</span>
+                                <span>Previous</span>
+                            </button>
+                            <button class="btn btn-primary" id="step1Next" disabled onclick="nextStep(2)">
+                                <span>Next</span>
+                                <span>→</span>
+                            </button>
                         </div>
                     </div>
-                    <div class="eta-divider"></div>
-                    <div style="font-size: 0.9rem; color: var(--color-muted); line-height: 1.4;">
-                        ℹ️ Appeals with <strong>detailed explanations</strong> are reviewed faster. Incomplete or low-effort appeals may take longer.
+
+                    <!-- Form Step 2: Ban Details -->
+                    <div class="form-section" data-step="2">
+                        <h2 class="form-section-title">
+                            <span>🚫</span>
+                            <span>Ban Information</span>
+                        </h2>
+                        <p class="form-section-desc">Provide the ban case ID you received when you were banned.</p>
+
+                        <div class="form-group">
+                            <label class="form-label" for="caseId">
+                                <span>Ban Case ID</span>
+                                <span class="required">*</span>
+                            </label>
+                            <input type="text" id="caseId" class="form-input" placeholder="e.g., BAN-kX7mP9qL2n"
+                                oninput="validateStep(2)">
+                            <p class="form-help">💡 Find this in your ban notification DM (format: BAN-XXXXXXXXXX)</p>
+                            <div id="caseIdValidation" class="form-validation"></div>
+                        </div>
+
+                        <div class="info-box">
+                            <strong>📌 Where to find your Ban Case ID:</strong><br>
+                            • Check the direct message you received from the bot when you were banned<br>
+                            • Look for a code starting with "BAN-" followed by random characters<br>
+                            • Example: BAN-kX7mP9qL2n
+                        </div>
+
+                        <div class="form-nav">
+                            <button class="btn btn-secondary" onclick="prevStep(1)">
+                                <span>←</span>
+                                <span>Previous</span>
+                            </button>
+                            <button class="btn btn-primary" id="step2Next" disabled onclick="nextStep(3)">
+                                <span>Next</span>
+                                <span>→</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Form Step 3: Appeal Reason -->
+                    <div class="form-section" data-step="3">
+                        <h2 class="form-section-title">
+                            <span>✍️</span>
+                            <span>Your Appeal</span>
+                        </h2>
+                        <p class="form-section-desc">Explain why your ban should be reconsidered. Be honest, detailed,
+                            and respectful.</p>
+
+                        <div class="form-group">
+                            <label class="form-label" for="reason">
+                                <span>Appeal Reason</span>
+                                <span class="required">*</span>
+                            </label>
+                            <textarea id="reason" class="form-input" placeholder="Explain your situation in detail..."
+                                maxlength="2000" oninput="analyzeAppealQuality()"></textarea>
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                                <p class="form-help">💭 Include: what happened, why you were banned, why you should be
+                                    unbanned</p>
+                                <span style="font-size: 0.85rem; color: var(--color-muted);">
+                                    <span id="charCount">0</span> / 2000
+                                </span>
+                            </div>
+                            <div id="reasonValidation" class="form-validation"></div>
+                        </div>
+
+                        <!-- Quality Analyzer -->
+                        <div class="quality-analyzer" id="qualityAnalyzer" style="display: none;">
+                            <div class="quality-header">
+                                <div class="quality-title">
+                                    <span>📊</span>
+                                    <span>Appeal Quality Analysis</span>
+                                </div>
+                                <div class="quality-score" id="qualityScore">-</div>
+                            </div>
+                            <div class="quality-metrics">
+                                <div class="quality-metric">
+                                    <div class="quality-metric-label">Word Count</div>
+                                    <div class="quality-metric-value" id="metricWords">0</div>
+                                </div>
+                                <div class="quality-metric">
+                                    <div class="quality-metric-label">Sentences</div>
+                                    <div class="quality-metric-value" id="metricSentences">0</div>
+                                </div>
+                                <div class="quality-metric">
+                                    <div class="quality-metric-label">Avg Length</div>
+                                    <div class="quality-metric-value" id="metricAvgLength">0</div>
+                                </div>
+                                <div class="quality-metric">
+                                    <div class="quality-metric-label">Est. Review</div>
+                                    <div class="quality-metric-value" id="metricEstimate">-</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="warning-box" style="margin-top: 1rem;">
+                            <strong>⚠️ Important Guidelines:</strong><br>
+                            • Be honest about what happened - lying may result in permanent rejection<br>
+                            • Show you understand why the rule exists and how you violated it<br>
+                            • Explain what you'll do differently if unbanned<br>
+                            • Avoid aggressive language or blaming others
+                        </div>
+
+                        <div class="form-nav">
+                            <button class="btn btn-secondary" onclick="prevStep(2)">
+                                <span>←</span>
+                                <span>Previous</span>
+                            </button>
+                            <button class="btn btn-primary" id="step3Next" disabled onclick="nextStep(4)">
+                                <span>Next</span>
+                                <span>→</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Form Step 4: Review & Submit -->
+                    <div class="form-section" data-step="4">
+                        <h2 class="form-section-title">
+                            <span>✅</span>
+                            <span>Review & Submit</span>
+                        </h2>
+                        <p class="form-section-desc">Please review your information before submitting.</p>
+
+                        <div
+                            style="background: var(--bg-tertiary); border: 1px solid var(--color-border); border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1.5rem;">
+                            <div style="display: grid; gap: 1rem;">
+                                <div>
+                                    <div style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">
+                                        Username</div>
+                                    <div style="font-weight: 500;" id="reviewUsername">-</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">
+                                        User ID</div>
+                                    <div style="font-weight: 500; font-family: monospace;" id="reviewUserId">-</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">
+                                        Email</div>
+                                    <div style="font-weight: 500;" id="reviewEmail">Not provided</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">
+                                        Ban Case ID</div>
+                                    <div style="font-weight: 500; font-family: monospace;" id="reviewCaseId">-</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">
+                                        Appeal Reason</div>
+                                    <div style="font-weight: 400; line-height: 1.6; max-height: 150px; overflow-y: auto;"
+                                        id="reviewReason">-</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-left: 4px solid var(--color-green); padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+                            <label style="display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer;">
+                                <input type="checkbox" id="rulesCheckbox"
+                                    style="margin-top: 0.25rem; min-width: 18px; width: 18px; height: 18px; accent-color: var(--color-green); cursor: pointer;"
+                                    oninput="validateStep(4)">
+                                <span style="line-height: 1.6;">
+                                    I confirm that all information is accurate, and I agree to follow the <a href="#"
+                                        onclick="showRulesModal(event)"
+                                        style="color: var(--color-green); text-decoration: underline;">server rules</a>
+                                    if my appeal is accepted.
+                                </span>
+                            </label>
+                        </div>
+
+                        <div id="loadingBox" class="loading">
+                            <div class="spinner"></div>
+                            <p style="margin-top: 1rem; color: var(--color-muted);">Submitting your appeal...</p>
+                        </div>
+
+                        <div class="form-nav">
+                            <button class="btn btn-secondary" onclick="prevStep(3)">
+                                <span>←</span>
+                                <span>Previous</span>
+                            </button>
+                            <button class="btn btn-success" id="submitBtn" disabled onclick="submitAppeal()">
+                                <span>📤</span>
+                                <span>Submit Appeal</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="sidebar-card">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">⏱️ Review Timeline</div>
+                        <div class="sidebar-list">
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">⚡</div>
+                                <div>
+                                    <div style="font-weight: 500; margin-bottom: 0.25rem;">Standard Review</div>
+                                    <div style="color: var(--color-green); font-weight: 600;">24-48 hours</div>
+                                </div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">🚀</div>
+                                <div>
+                                    <div style="font-weight: 500; margin-bottom: 0.25rem;">High Quality</div>
+                                    <div style="color: var(--color-cyan); font-weight: 600;">4-12 hours</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-divider"></div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">💡 Tips for Success</div>
+                        <div class="sidebar-list">
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">✅</div>
+                                <div>Be honest and take responsibility</div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">✅</div>
+                                <div>Provide detailed explanations</div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">✅</div>
+                                <div>Show you understand the rules</div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">✅</div>
+                                <div>Remain respectful throughout</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-divider"></div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">⚠️ Important Notes</div>
+                        <div class="sidebar-list">
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">❌</div>
+                                <div>Only one pending appeal allowed</div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">📧</div>
+                                <div>Email required for notifications</div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">⚖️</div>
+                                <div>Owner makes final decisions</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="eta-box" style="border-left: 4px solid var(--color-yellow);">
-                <h3>⚠️ Important Notes</h3>
-                <div style="font-size: 0.9rem; line-height: 1.6; color: var(--color-muted);">
-                    <p>• Multiple appeals will result in rejection</p>
-                    <p style="margin-top: 0.75rem;">• Be honest and respectful in your appeal</p>
-                    <p style="margin-top: 0.75rem;">• The final decision is made by the server owner</p>
-                    <p style="margin-top: 0.75rem;">• You'll be notified of the outcome via DM</p>
+        </div>
+
+        <!-- Check Status Panel -->
+        <div id="statusPanel" class="content-panel">
+            <div class="card-grid">
+                <div class="main-card">
+                    <h2 class="form-section-title">
+                        <span>🔍</span>
+                        <span>Check Appeal Status</span>
+                    </h2>
+                    <p class="form-section-desc">Enter your Case ID and User ID to check the status of your appeal.</p>
+
+                    <div id="statusSuccessMessage" class="message success">
+                        <span style="font-size: 1.5rem;">✅</span>
+                        <span id="statusSuccessText">Appeal found!</span>
+                    </div>
+
+                    <div id="statusErrorMessage" class="message error">
+                        <span style="font-size: 1.5rem;">❌</span>
+                        <span id="statusErrorText">No appeal found.</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="statusCaseId">
+                            <span>Ban Case ID</span>
+                            <span class="required">*</span>
+                        </label>
+                        <input type="text" id="statusCaseId" class="form-input" placeholder="e.g., BAN-kX7mP9qL2n">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="statusUserId">
+                            <span>Discord User ID</span>
+                            <span class="required">*</span>
+                        </label>
+                        <input type="text" id="statusUserId" class="form-input" placeholder="e.g., 123456789012345678">
+                        <p class="form-help">🔒 Required for security verification</p>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="checkAppealStatus()" style="max-width: 300px;">
+                        <span>🔍</span>
+                        <span>Check Status</span>
+                    </button>
+
+                    <div id="statusLoadingBox" class="loading">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 1rem; color: var(--color-muted);">Checking appeal status...</p>
+                    </div>
+
+                    <!-- Status Result -->
+                    <div id="statusResult" class="status-result">
+                        <div id="statusBadge" class="status-badge pending">
+                            <span>⏳</span>
+                            <span>Pending Review</span>
+                        </div>
+
+                        <div class="status-details">
+                            <div class="status-detail-row">
+                                <span class="status-detail-label">Case ID</span>
+                                <span class="status-detail-value" id="statusResultCaseId">-</span>
+                            </div>
+                            <div class="status-detail-row">
+                                <span class="status-detail-label">Submitted</span>
+                                <span class="status-detail-value" id="statusResultSubmitted">-</span>
+                            </div>
+                            <div id="statusResultDecidedRow" class="status-detail-row" style="display: none;">
+                                <span class="status-detail-label">Decided</span>
+                                <span class="status-detail-value" id="statusResultDecided">-</span>
+                            </div>
+                            <div id="statusResultResponseRow" class="status-detail-row" style="display: none;">
+                                <span class="status-detail-label">Response</span>
+                                <span class="status-detail-value" id="statusResultResponse">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-card">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">📌 Status Guide</div>
+                        <div class="sidebar-list">
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">⏳</div>
+                                <div>
+                                    <div style="font-weight: 500; color: var(--color-yellow);">Pending</div>
+                                    <div style="font-size: 0.85rem; color: var(--color-muted);">Awaiting review</div>
+                                </div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">✅</div>
+                                <div>
+                                    <div style="font-weight: 500; color: var(--color-green);">Accepted</div>
+                                    <div style="font-size: 0.85rem; color: var(--color-muted);">Ban lifted</div>
+                                </div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">❌</div>
+                                <div>
+                                    <div style="font-weight: 500; color: var(--color-red);">Denied</div>
+                                    <div style="font-size: 0.85rem; color: var(--color-muted);">Appeal rejected</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-divider"></div>
+
+                    <div class="info-box">
+                        <strong>🔒 Privacy Notice:</strong><br>
+                        We require your User ID and Case ID to verify ownership of the appeal. Your information is kept
+                        confidential.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Appeal History Panel -->
+        <div id="historyPanel" class="content-panel">
+            <div class="card-grid">
+                <div class="main-card">
+                    <h2 class="form-section-title">
+                        <span>📚</span>
+                        <span>Your Appeal History</span>
+                    </h2>
+                    <p class="form-section-desc">View all appeals you've submitted from this account.</p>
+
+                    <div id="historyErrorMessage" class="message error">
+                        <span style="font-size: 1.5rem;">❌</span>
+                        <span id="historyErrorText">Failed to load history.</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="historyUserId">
+                            <span>Discord User ID</span>
+                            <span class="required">*</span>
+                        </label>
+                        <input type="text" id="historyUserId" class="form-input" placeholder="e.g., 123456789012345678">
+                        <p class="form-help">🔒 Enter your User ID to access your appeal history</p>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="loadAppealHistory()" style="max-width: 300px;">
+                        <span>📚</span>
+                        <span>Load History</span>
+                    </button>
+
+                    <div id="historyLoadingBox" class="loading">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 1rem; color: var(--color-muted);">Loading your appeal history...</p>
+                    </div>
+
+                    <!-- History Results -->
+                    <div id="historyResults" style="display: none; margin-top: 2rem;">
+                        <h3
+                            style="font-size: 1.25rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>📊</span>
+                            <span>Your Appeals (<span id="historyCount">0</span>)</span>
+                        </h3>
+                        <div id="historyList" class="history-list"></div>
+                    </div>
+
+                    <div id="historyEmpty"
+                        style="display: none; margin-top: 2rem; text-align: center; padding: 3rem; background: var(--bg-tertiary); border: 1px dashed var(--color-border); border-radius: 0.5rem;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
+                        <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">No Appeals Found</div>
+                        <div style="color: var(--color-muted);">You haven't submitted any appeals yet.</div>
+                    </div>
+                </div>
+
+                <div class="sidebar-card">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">💡 About History</div>
+                        <div class="sidebar-list">
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">📊</div>
+                                <div>View up to 10 recent appeals</div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">🔒</div>
+                                <div>Secure user verification required</div>
+                            </div>
+                            <div class="sidebar-item">
+                                <div class="sidebar-item-icon">📅</div>
+                                <div>Sorted by submission date</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-divider"></div>
+
+                    <div class="warning-box">
+                        <strong>⚠️ Reminder:</strong><br>
+                        Multiple rejected appeals do not improve your chances. Focus on quality over quantity.
+                    </div>
                 </div>
             </div>
         </div>
@@ -613,7 +1501,8 @@
             </div>
             <div class="modal-content" id="rulesContent">
                 <div style="text-align: center; color: var(--color-muted);">
-                    Loading rules...
+                    <div class="spinner"></div>
+                    <p style="margin-top: 1rem;">Loading rules...</p>
                 </div>
             </div>
         </div>
@@ -621,9 +1510,11 @@
 
     <script>
         let appealCsrfToken = '';
+        let currentStep = 1;
 
-        async function getAppealCsrfToken() {
-            if (appealCsrfToken) return appealCsrfToken;
+        // Get CSRF Token
+        async function getAppealCsrfToken(forceRefresh = false) {
+            if (appealCsrfToken && !forceRefresh) return appealCsrfToken;
 
             const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
             if (metaToken) {
@@ -632,14 +1523,13 @@
             }
 
             const cookieMatch = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
-            if (cookieMatch && cookieMatch[1]) {
+            if (!forceRefresh && cookieMatch && cookieMatch[1]) {
                 appealCsrfToken = decodeURIComponent(cookieMatch[1]);
                 return appealCsrfToken;
             }
 
             try {
-                const response = await fetch('/api/csrf', { credentials: 'include' });
-                const data = await response.json().catch(() => ({}));
+                const { response, data } = await window.AdminPanel.api.getJson('/api/csrf');
                 if (response.ok && data?.csrfToken) {
                     appealCsrfToken = data.csrfToken;
                     return appealCsrfToken;
@@ -651,35 +1541,581 @@
             return '';
         }
 
-        // Character counter
-        const reasonInput = document.getElementById('reason');
-        const charCount = document.getElementById('charCount');
-        
-        reasonInput.addEventListener('input', () => {
-            charCount.textContent = reasonInput.value.length;
-        });
+        // Panel Switching
+        function switchPanel(panel) {
+            // Update tabs
+            document.querySelectorAll('.action-tab').forEach(tab => tab.classList.remove('active'));
+            event.currentTarget.classList.add('active');
 
-        // Show server rules in modal
-        async function showServerRules(event) {
+            // Update panels
+            document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById(panel + 'Panel').classList.add('active');
+
+            // Reset messages
+            hideAllMessages();
+        }
+
+        // Step Navigation
+        function nextStep(step) {
+            if (step === 4) {
+                updateReview();
+            }
+
+            // Hide current step
+            document.querySelector(`.form-section[data-step="${currentStep}"]`).classList.remove('active');
+            document.querySelector(`.wizard-step[data-step="${currentStep}"]`).classList.remove('active');
+            document.querySelector(`.wizard-step[data-step="${currentStep}"]`).classList.add('completed');
+
+            // Show next step
+            currentStep = step;
+            document.querySelector(`.form-section[data-step="${step}"]`).classList.add('active');
+            document.querySelector(`.wizard-step[data-step="${step}"]`).classList.add('active');
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function prevStep(step) {
+            // Hide current step
+            document.querySelector(`.form-section[data-step="${currentStep}"]`).classList.remove('active');
+            document.querySelector(`.wizard-step[data-step="${currentStep}"]`).classList.remove('active');
+
+            // Show previous step
+            currentStep = step;
+            document.querySelector(`.form-section[data-step="${step}"]`).classList.add('active');
+            document.querySelector(`.wizard-step[data-step="${step}"]`).classList.add('active');
+            document.querySelector(`.wizard-step[data-step="${step}"]`).classList.remove('completed');
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Validation Functions
+        function validateStep(step) {
+            if (step === 1) {
+                const userTag = document.getElementById('userTag').value.trim();
+                const userId = document.getElementById('userId').value.trim();
+                const email = document.getElementById('email').value.trim();
+
+                let valid = true;
+
+                // Validate username
+                if (userTag.length === 0) {
+                    setValidation('userTag', null);
+                    valid = false;
+                } else if (userTag.length < 2) {
+                    setValidation('userTag', false, 'Username too short');
+                    valid = false;
+                } else {
+                    setValidation('userTag', true, 'Valid username');
+                }
+
+                // Validate user ID
+                if (userId.length === 0) {
+                    setValidation('userId', null);
+                    valid = false;
+                } else if (!/^\d{17,19}$/.test(userId)) {
+                    setValidation('userId', false, 'Invalid User ID format (should be 17-19 digits)');
+                    valid = false;
+                } else {
+                    setValidation('userId', true, 'Valid User ID');
+                }
+
+                // Validate email (required)
+                if (email.length === 0) {
+                    setValidation('email', null);
+                    valid = false;
+                } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    setValidation('email', false, 'Invalid email format');
+                    valid = false;
+                } else {
+                    setValidation('email', true, 'Valid email');
+                }
+
+                document.getElementById('step1Next').disabled = !valid;
+                return valid;
+            }
+
+            if (step === 2) {
+                const caseId = document.getElementById('caseId').value.trim();
+
+                if (caseId.length === 0) {
+                    setValidation('caseId', null);
+                    document.getElementById('step2Next').disabled = true;
+                    return false;
+                } else if (!caseId.startsWith('BAN-') || caseId.length < 5 || caseId.length > 54) {
+                    setValidation('caseId', false, 'Invalid format (must be BAN- followed by 1-50 characters)');
+                    document.getElementById('step2Next').disabled = true;
+                    return false;
+                } else {
+                    setValidation('caseId', true, 'Valid Case ID');
+                    document.getElementById('step2Next').disabled = false;
+                    return true;
+                }
+            }
+
+            if (step === 3) {
+                const reason = document.getElementById('reason').value.trim();
+
+                if (reason.length === 0) {
+                    setValidation('reason', null);
+                    document.getElementById('step3Next').disabled = true;
+                    return false;
+                } else if (reason.length < 50) {
+                    setValidation('reason', false, 'Please provide more detail (at least 50 characters)');
+                    document.getElementById('step3Next').disabled = true;
+                    return false;
+                } else {
+                    setValidation('reason', true, 'Good length');
+                    document.getElementById('step3Next').disabled = false;
+                    return true;
+                }
+            }
+
+            if (step === 4) {
+                const rulesCheckbox = document.getElementById('rulesCheckbox').checked;
+                document.getElementById('submitBtn').disabled = !rulesCheckbox;
+                return rulesCheckbox;
+            }
+
+            return false;
+        }
+
+        function setValidation(fieldId, state, message) {
+            const input = document.getElementById(fieldId);
+            const validation = document.getElementById(fieldId + 'Validation');
+
+            if (state === null) {
+                input.classList.remove('valid', 'invalid');
+                validation.innerHTML = '';
+            } else if (state === true) {
+                input.classList.remove('invalid');
+                input.classList.add('valid');
+                validation.className = 'form-validation success';
+                validation.innerHTML = `<span>✓</span><span>${message}</span>`;
+            } else {
+                input.classList.remove('valid');
+                input.classList.add('invalid');
+                validation.className = 'form-validation error';
+                validation.innerHTML = `<span>✗</span><span>${message}</span>`;
+            }
+        }
+
+        // Appeal Quality Analyzer
+        function analyzeAppealQuality() {
+            const reason = document.getElementById('reason').value.trim();
+            const charCount = document.getElementById('charCount');
+            charCount.textContent = reason.length;
+
+            if (reason.length < 20) {
+                document.getElementById('qualityAnalyzer').style.display = 'none';
+                validateStep(3);
+                return;
+            }
+
+            document.getElementById('qualityAnalyzer').style.display = 'block';
+
+            // Calculate metrics
+            const words = reason.split(/\s+/).filter(w => w.length > 0);
+            const sentences = reason.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            const wordCount = words.length;
+            const sentenceCount = sentences.length;
+            const avgWordLength = Math.round(words.reduce((sum, w) => sum + w.length, 0) / wordCount);
+
+            // Calculate quality score
+            let score = 0;
+            let scoreLabel = 'Poor';
+            let scoreClass = 'poor';
+            let estimate = 'Priority';
+
+            if (wordCount >= 100) score += 30;
+            else if (wordCount >= 50) score += 20;
+            else if (wordCount >= 30) score += 10;
+
+            if (sentenceCount >= 5) score += 20;
+            else if (sentenceCount >= 3) score += 10;
+
+            if (avgWordLength >= 5) score += 20;
+            else if (avgWordLength >= 4) score += 10;
+
+            // Check for key phrases
+            const keyPhrases = ['i understand', 'i apologize', 'i was wrong', 'i will', 'i learned', 'mistake', 'responsibility', 'sorry'];
+            const lowerReason = reason.toLowerCase();
+            const foundPhrases = keyPhrases.filter(phrase => lowerReason.includes(phrase)).length;
+            score += foundPhrases * 5;
+
+            // Determine label
+            if (score >= 70) {
+                scoreLabel = 'Excellent';
+                scoreClass = 'excellent';
+                estimate = '4-8h';
+            } else if (score >= 50) {
+                scoreLabel = 'Good';
+                scoreClass = 'good';
+                estimate = '12-24h';
+            } else if (score >= 30) {
+                scoreLabel = 'Fair';
+                scoreClass = 'fair';
+                estimate = '24-48h';
+            } else {
+                scoreLabel = 'Poor';
+                scoreClass = 'poor';
+                estimate = '48h+';
+            }
+
+            // Update UI
+            document.getElementById('qualityScore').textContent = scoreLabel;
+            document.getElementById('qualityScore').className = 'quality-score ' + scoreClass;
+            document.getElementById('metricWords').textContent = wordCount;
+            document.getElementById('metricSentences').textContent = sentenceCount;
+            document.getElementById('metricAvgLength').textContent = avgWordLength;
+            document.getElementById('metricEstimate').textContent = estimate;
+
+            validateStep(3);
+        }
+
+        // Update Review Step
+        function updateReview() {
+            document.getElementById('reviewUsername').textContent = document.getElementById('userTag').value.trim();
+            document.getElementById('reviewUserId').textContent = document.getElementById('userId').value.trim();
+            const email = document.getElementById('email').value.trim();
+            document.getElementById('reviewEmail').textContent = email;
+            document.getElementById('reviewCaseId').textContent = document.getElementById('caseId').value.trim();
+            document.getElementById('reviewReason').textContent = document.getElementById('reason').value.trim();
+        }
+
+        // Submit Appeal
+        async function submitAppeal() {
+            const userTag = document.getElementById('userTag').value.trim();
+            const userId = document.getElementById('userId').value.trim();
+            const caseId = document.getElementById('caseId').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const reason = document.getElementById('reason').value.trim();
+            const rulesCheckbox = document.getElementById('rulesCheckbox').checked;
+
+            if (!rulesCheckbox) {
+                showMessage('error', 'You must agree to the server rules');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('loadingBox').classList.add('show');
+
+            try {
+                const submitAppealRequest = async (csrfToken) => {
+                    return window.AdminPanel.api.requestJson('/api/appeals/submit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-csrf-token': csrfToken
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            userId,
+                            userTag,
+                            caseId,
+                            reason,
+                            email
+                        })
+                    });
+                };
+
+                let csrfToken = await getAppealCsrfToken();
+                let { response, data } = await submitAppealRequest(csrfToken);
+
+                if (response.status === 403) {
+                    csrfToken = await getAppealCsrfToken(true);
+                    if (csrfToken) {
+                        const retryResult = await submitAppealRequest(csrfToken);
+                        response = retryResult.response;
+                        data = retryResult.data;
+                    }
+                }
+
+                if (response.ok) {
+                    // Reset form
+                    document.getElementById('userTag').value = '';
+                    document.getElementById('userId').value = '';
+                    document.getElementById('caseId').value = '';
+                    document.getElementById('email').value = '';
+                    document.getElementById('reason').value = '';
+                    document.getElementById('rulesCheckbox').checked = false;
+                    document.getElementById('charCount').textContent = '0';
+                    document.getElementById('qualityAnalyzer').style.display = 'none';
+
+                    // Reset wizard
+                    document.querySelectorAll('.wizard-step').forEach(step => {
+                        step.classList.remove('active', 'completed');
+                    });
+                    document.querySelectorAll('.form-section').forEach(section => {
+                        section.classList.remove('active');
+                    });
+                    document.querySelector('.wizard-step[data-step="1"]').classList.add('active');
+                    document.querySelector('.form-section[data-step="1"]').classList.add('active');
+                    currentStep = 1;
+
+                    showMessage('success', '✨ Your appeal has been submitted successfully! Check the "Check Status" tab to track progress.');
+
+                    // Scroll to message
+                    setTimeout(() => {
+                        document.getElementById('successMessage').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                } else {
+                    if (response.status === 429) {
+                        const retryAfter = response.headers.get('Retry-After');
+                        const retryText = retryAfter ? ` Please wait about ${retryAfter} seconds and try again.` : ' Please wait a bit and try again.';
+                        showMessage('warning', `Too many submit attempts.${retryText}`);
+                        return;
+                    }
+
+                    if (data.error.includes('already have a pending appeal')) {
+                        showMessage('warning', 'You already have a pending appeal. Please wait for a response before submitting another.');
+                    } else {
+                        showMessage('error', data.error || 'Failed to submit appeal');
+                    }
+                }
+            } catch (error) {
+                console.error('Error submitting appeal:', error);
+                showMessage('error', 'Network error. Please check your connection and try again.');
+            } finally {
+                document.getElementById('submitBtn').disabled = false;
+                document.getElementById('loadingBox').classList.remove('show');
+            }
+        }
+
+        // Check Appeal Status
+        async function checkAppealStatus() {
+            const caseId = document.getElementById('statusCaseId').value.trim();
+            const userId = document.getElementById('statusUserId').value.trim();
+
+            if (!caseId || !userId) {
+                showStatusMessage('error', 'Please enter both Case ID and User ID');
+                return;
+            }
+
+            hideStatusMessages();
+            document.getElementById('statusResult').classList.remove('show');
+            document.getElementById('statusLoadingBox').classList.add('show');
+
+            try {
+                const { response, data } = await window.AdminPanel.api.requestJson('/api/appeals/check-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ caseId, userId })
+                });
+
+                if (response.ok && data.success) {
+                    const appeal = data.appeal;
+
+                    // Update status badge
+                    const badgeEl = document.getElementById('statusBadge');
+                    badgeEl.className = `status-badge ${appeal.status}`;
+
+                    let badgeText = '';
+                    let badgeIcon = '';
+                    if (appeal.status === 'pending') {
+                        badgeIcon = '⏳';
+                        badgeText = 'Pending Review';
+                    } else if (appeal.status === 'accepted') {
+                        badgeIcon = '✅';
+                        badgeText = 'Accepted';
+                    } else if (appeal.status === 'denied') {
+                        badgeIcon = '❌';
+                        badgeText = 'Denied';
+                    }
+                    badgeEl.innerHTML = `<span>${badgeIcon}</span><span>${badgeText}</span>`;
+
+                    // Update details
+                    document.getElementById('statusResultCaseId').textContent = appeal.caseId;
+                    document.getElementById('statusResultSubmitted').textContent = new Date(appeal.submittedAt).toLocaleString();
+
+                    if (appeal.decidedAt) {
+                        document.getElementById('statusResultDecidedRow').style.display = 'flex';
+                        document.getElementById('statusResultDecided').textContent = new Date(appeal.decidedAt).toLocaleString();
+                    } else {
+                        document.getElementById('statusResultDecidedRow').style.display = 'none';
+                    }
+
+                    if (appeal.response) {
+                        document.getElementById('statusResultResponseRow').style.display = 'flex';
+                        document.getElementById('statusResultResponse').textContent = appeal.response;
+                    } else {
+                        document.getElementById('statusResultResponseRow').style.display = 'none';
+                    }
+
+                    document.getElementById('statusResult').classList.add('show');
+                    showStatusMessage('success', 'Appeal found!');
+                } else {
+                    showStatusMessage('error', data.error || 'No appeal found matching this Case ID and User ID');
+                }
+            } catch (error) {
+                console.error('Error checking status:', error);
+                showStatusMessage('error', 'Network error. Please try again.');
+            } finally {
+                document.getElementById('statusLoadingBox').classList.remove('show');
+            }
+        }
+
+        // Load Appeal History
+        async function loadAppealHistory() {
+            const userId = document.getElementById('historyUserId').value.trim();
+
+            if (!userId) {
+                showHistoryMessage('error', 'Please enter your User ID');
+                return;
+            }
+
+            hideHistoryMessages();
+            document.getElementById('historyResults').style.display = 'none';
+            document.getElementById('historyEmpty').style.display = 'none';
+            document.getElementById('historyLoadingBox').classList.add('show');
+
+            try {
+                const { response, data } = await window.AdminPanel.api.requestJson('/api/appeals/my-history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId })
+                });
+
+                if (response.ok && data.success) {
+                    const appeals = data.appeals;
+
+                    if (appeals.length === 0) {
+                        document.getElementById('historyEmpty').style.display = 'block';
+                    } else {
+                        document.getElementById('historyCount').textContent = appeals.length;
+
+                        const historyList = document.getElementById('historyList');
+                        historyList.innerHTML = '';
+
+                        appeals.forEach(appeal => {
+                            const statusBadgeClass = appeal.status;
+                            let statusIcon = '⏳';
+                            let statusText = 'Pending';
+                            if (appeal.status === 'accepted') {
+                                statusIcon = '✅';
+                                statusText = 'Accepted';
+                            } else if (appeal.status === 'denied') {
+                                statusIcon = '❌';
+                                statusText = 'Denied';
+                            }
+
+                            const itemEl = document.createElement('div');
+                            itemEl.className = 'history-item';
+                            itemEl.innerHTML = `
+                                <div class="history-item-header">
+                                    <div class="history-item-case">${appeal.caseId}</div>
+                                    <div class="status-badge ${statusBadgeClass}">
+                                        <span>${statusIcon}</span>
+                                        <span>${statusText}</span>
+                                    </div>
+                                </div>
+                                <div class="history-item-details">
+                                    <div class="history-item-detail">
+                                        <span class="history-item-detail-label">Submitted:</span>
+                                        <span>${new Date(appeal.submittedAt).toLocaleString()}</span>
+                                    </div>
+                                    ${appeal.decidedAt ? `
+                                        <div class="history-item-detail">
+                                            <span class="history-item-detail-label">Decided:</span>
+                                            <span>${new Date(appeal.decidedAt).toLocaleString()}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${appeal.response ? `
+                                        <div class="history-item-detail" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                                            <span class="history-item-detail-label">Response:</span>
+                                            <span style="line-height: 1.5;">${appeal.response}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `;
+                            historyList.appendChild(itemEl);
+                        });
+
+                        document.getElementById('historyResults').style.display = 'block';
+                    }
+                } else {
+                    showHistoryMessage('error', data.error || 'Failed to load appeal history');
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+                showHistoryMessage('error', 'Network error. Please try again.');
+            } finally {
+                document.getElementById('historyLoadingBox').classList.remove('show');
+            }
+        }
+
+        // Message Helpers
+        function showMessage(type, text) {
+            hideAllMessages();
+
+            if (type === 'success') {
+                document.getElementById('successText').textContent = text;
+                document.getElementById('successMessage').classList.add('show');
+            } else if (type === 'error') {
+                document.getElementById('errorText').textContent = text;
+                document.getElementById('errorMessage').classList.add('show');
+            } else if (type === 'warning') {
+                document.getElementById('warningText').textContent = text;
+                document.getElementById('warningMessage').classList.add('show');
+            }
+        }
+
+        function hideAllMessages() {
+            document.getElementById('successMessage').classList.remove('show');
+            document.getElementById('errorMessage').classList.remove('show');
+            document.getElementById('warningMessage').classList.remove('show');
+        }
+
+        function showStatusMessage(type, text) {
+            hideStatusMessages();
+
+            if (type === 'success') {
+                document.getElementById('statusSuccessText').textContent = text;
+                document.getElementById('statusSuccessMessage').classList.add('show');
+            } else if (type === 'error') {
+                document.getElementById('statusErrorText').textContent = text;
+                document.getElementById('statusErrorMessage').classList.add('show');
+            }
+        }
+
+        function hideStatusMessages() {
+            document.getElementById('statusSuccessMessage').classList.remove('show');
+            document.getElementById('statusErrorMessage').classList.remove('show');
+        }
+
+        function showHistoryMessage(type, text) {
+            hideHistoryMessages();
+
+            if (type === 'error') {
+                document.getElementById('historyErrorText').textContent = text;
+                document.getElementById('historyErrorMessage').classList.add('show');
+            }
+        }
+
+        function hideHistoryMessages() {
+            document.getElementById('historyErrorMessage').classList.remove('show');
+        }
+
+        // Rules Modal
+        async function showRulesModal(event) {
             event.preventDefault();
 
             const modal = document.getElementById('rulesModal');
             const rulesContent = document.getElementById('rulesContent');
 
-            // Prevent multiple modals from opening
             if (modal.classList.contains('show')) {
                 return;
             }
 
-            // Show modal
             modal.classList.add('show');
             document.body.style.overflow = 'hidden';
 
             try {
-                const response = await fetch('/api/rules');
-                const rules = await response.json();
+                const { response, data: rules } = await window.AdminPanel.api.getJson('/api/rules');
+                if (!response.ok) throw new Error('Failed to load rules');
 
-                // Build rules HTML
                 let rulesHTML = '';
                 rules.forEach(rule => {
                     rulesHTML += `
@@ -703,7 +2139,6 @@
         }
 
         function closeRulesModal(event) {
-            // Only close if clicking overlay or close button (not modal content)
             if (event && event.target !== event.currentTarget && event.type === 'click') {
                 return;
             }
@@ -713,124 +2148,19 @@
             document.body.style.overflow = '';
         }
 
-        // Close modal with Escape key
+        // Keyboard shortcuts
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 closeRulesModal();
             }
         });
 
-        async function submitAppeal(event) {
-            event.preventDefault();
-
-            const userTag = document.getElementById('userTag').value.trim();
-            const userId = document.getElementById('userId').value.trim();
-            const caseId = document.getElementById('caseId').value.trim();
-            const reason = document.getElementById('reason').value.trim();
-            const rulesCheckbox = document.getElementById('rulesCheckbox').checked;
-
-            // Validation
-            if (!userTag || !userId || !caseId || !reason) {
-                showMessage('error', 'Please fill in all fields');
-                return;
-            }
-
-            if (!rulesCheckbox) {
-                showMessage('error', 'You must agree to the server rules to submit an appeal');
-                return;
-            }
-
-            if (!/^\d+$/.test(userId)) {
-                showMessage('error', 'User ID must contain only numbers');
-                return;
-            }
-
-            // Validate case ID format
-            if (!caseId.startsWith('BAN-')) {
-                showMessage('error', 'Ban Case ID must start with "BAN-" (e.g., BAN-kX7mP9qL2n)');
-                return;
-            }
-
-            // Show loading
-            document.getElementById('submitBtn').disabled = true;
-            document.getElementById('loadingBox').classList.add('show');
-            document.getElementById('appealForm').style.opacity = '0.5';
-
-            try {
-                const csrfToken = await getAppealCsrfToken();
-
-                const response = await fetch('/api/appeals/submit', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-csrf-token': csrfToken
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        userId,
-                        userTag,
-                        caseId,
-                        reason
-                    })
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    document.getElementById('appealForm').reset();
-                    charCount.textContent = '0';
-                    showMessage('success', 'Your appeal has been submitted! The owner will review it soon.');
-                    
-                    // Scroll to message
-                    setTimeout(() => {
-                        document.getElementById('successMessage').scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-                } else {
-                    if (response.status === 429) {
-                        const retryAfter = response.headers.get('Retry-After');
-                        const retryText = retryAfter ? ` Please wait about ${retryAfter} seconds and try again.` : ' Please wait a bit and try again.';
-                        showMessage('warning', `Too many submit attempts.${retryText}`);
-                        return;
-                    }
-
-                    if (data.error.includes('already have a pending appeal')) {
-                        showMessage('warning', 'You already have a pending appeal. Please wait for a response.');
-                    } else {
-                        showMessage('error', data.error || 'Failed to submit appeal');
-                    }
-                }
-            } catch (error) {
-                console.error('Error submitting appeal:', error);
-                showMessage('error', 'Network error. Please check your connection and try again.');
-            } finally {
-                document.getElementById('submitBtn').disabled = false;
-                document.getElementById('loadingBox').classList.remove('show');
-                document.getElementById('appealForm').style.opacity = '1';
-            }
-        }
-
-        function showMessage(type, text) {
-            // Hide all messages
-            document.getElementById('successMessage').classList.remove('show');
-            document.getElementById('errorMessage').classList.remove('show');
-            document.getElementById('warningMessage').classList.remove('show');
-            document.getElementById('infoMessage').classList.remove('show');
-
-            // Show the requested message
-            if (type === 'success') {
-                document.getElementById('successText').textContent = text;
-                document.getElementById('successMessage').classList.add('show');
-            } else if (type === 'error') {
-                document.getElementById('errorText').textContent = text;
-                document.getElementById('errorMessage').classList.add('show');
-            } else if (type === 'warning') {
-                document.getElementById('warningText').textContent = text;
-                document.getElementById('warningMessage').classList.add('show');
-            } else if (type === 'info') {
-                document.getElementById('infoText').textContent = text;
-                document.getElementById('infoMessage').classList.add('show');
-            }
-        }
+        // Character counter
+        const reasonInput = document.getElementById('reason');
+        reasonInput.addEventListener('input', () => {
+            analyzeAppealQuality();
+        });
     </script>
 </body>
+
 </html>

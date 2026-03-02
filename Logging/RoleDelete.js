@@ -1,11 +1,11 @@
 const { EmbedBuilder } = require('discord.js');
 const { serverLogChannelId } = require("../Config/constants/channel.json");
 
-// Log role deletion events
+// Log when roles are deleted — capture previous role settings for audit purposes.
 module.exports = (client) => {
-	client.on("roleDelete", async(role) => {
-    const logs = client.channels.cache.get(serverLogChannelId);
-    if (!logs) return;
+    client.on("roleDelete", async (role) => {
+        const logs = client.channels.cache.get(serverLogChannelId);
+        if (!logs) return;
         const embed = new EmbedBuilder()
             .setTitle("🗑️ Role Deleted")
             .setColor(role.hexColor !== "#000000" ? parseInt(role.hexColor.replace('#', ''), 16) : 0xF04747)
@@ -21,6 +21,6 @@ module.exports = (client) => {
             )
             .setTimestamp()
             .setFooter({ text: "Role Deleted" });
-            return logs.send({embeds: [embed]});
+        return logs.send({ embeds: [embed] });
     })
 }

@@ -1,41 +1,137 @@
 const { EmbedBuilder, MessageFlags } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 const { administratorRoleId, moderatorRoleId } = require('../Config/constants/roles.json');
 const { serverLogChannelId } = require('../Config/constants/channel.json');
-const misc = require('../Config/constants/misc.json');
 const blockedWordsList = require('../Config/constants/blockedWords.json');
 
-// This is the AutoMod system! It watches for spam, blocked words, invite links, and more.
-// If someone breaks the rules, AutoMod will timeout or warn them automatically.
-// TODO: Let admins set custom auto-mute times in the future.
+// AutoMod: watches for spam, blocked words, invite links and other rule violations.
+// Automatically warns or mutes users when they break server rules.
 
-// Load AutoMod configuration with defaults
-const AUTOMOD_CONFIG = {
-    blockInvites: misc.blockExternalInvites !== undefined ? misc.blockExternalInvites : true,
-    maxMentions: misc.maxMentionsBeforeFlag || 6,
-    spamThreshold: 5,              // How many messages before it's considered spam
-    spamWindow: 5000,              // How quickly those messages have to be sent (ms)
-    capsThreshold: 0.70,           // If 70% of a message is caps, it's flagged
+
+const AUTOMOD_CONFIG_PATH = path.join(__dirname, '..', 'Config', 'constants', 'automod.json');
+
+const DEFAULT_AUTOMOD_CONFIG = {
+    blockInvites: true,
+    maxMentions: 6,
+    spamThreshold: 5,
+    spamWindow: 5000,
+    capsThreshold: 0.70,
     minLengthForCaps: 10,
-    spamTimeout: 10 * 60 * 1000,   // Spammers get timed out for 10 minutes
-    spamWarningThreshold: 2        // Users get 2 warnings before AutoMod acts
+    spamTimeout: 10 * 60 * 1000,
+    spamWarningThreshold: 2
 };
 
-// Grab the list of blocked words and phrases from the config.
+const DEFAULT_ADVANCED_AUTOMOD_CONFIG = {
+    exemptChannelIds: [],
+    exemptRoleIds: [],
+    inviteAllowlistGuildIds: [],
+    blockedRegexPatterns: [],
+    escalationThreshold24h: 4,
+    escalationTimeoutMs: 30 * 60 * 1000
+};
+
+let cachedAutoModConfig = null;
+let cachedAutoModConfigAt = 0;
+
+function compileBlockedRegexList(patterns) {
+    return patterns
+        .map((pattern) => {
+            try {
+                return new RegExp(pattern, 'i');
+            } catch (_) {
+                console.warn(`[AutoMod] Invalid blocked regex pattern skipped: ${pattern}`);
+                return null;
+            }
+        })
+        .filter(Boolean);
+}
+
+function readAutoModConfigSafe() {
+    try {
+        const raw = fs.readFileSync(AUTOMOD_CONFIG_PATH, 'utf8');
+        return JSON.parse(raw);
+    } catch (error) {
+        console.error('[AutoMod] Failed to read automod config, using defaults:', error.message);
+        return {};
+    }
+}
+
+function buildEffectiveConfig(rawConfig) {
+    const profileName = rawConfig?.autoModProfiles?.activeProfile;
+    const profile = profileName && rawConfig?.autoModProfiles?.profiles
+        ? rawConfig.autoModProfiles.profiles[profileName]
+        : null;
+
+    const mergedAutoMod = {
+        ...(rawConfig?.autoMod || {}),
+        ...((profile && profile.autoMod) || {})
+    };
+
+    const mergedAdvanced = {
+        ...(rawConfig?.autoModAdvanced || {}),
+        ...((profile && profile.autoModAdvanced) || {})
+    };
+
+    const automodConfig = {
+        blockInvites: profile?.blockExternalInvites !== undefined
+            ? Boolean(profile.blockExternalInvites)
+            : (rawConfig.blockExternalInvites !== undefined ? Boolean(rawConfig.blockExternalInvites) : DEFAULT_AUTOMOD_CONFIG.blockInvites),
+        maxMentions: Number.isFinite(Number(profile?.maxMentionsBeforeFlag))
+            ? Number(profile.maxMentionsBeforeFlag)
+            : (Number.isFinite(Number(rawConfig.maxMentionsBeforeFlag)) ? Number(rawConfig.maxMentionsBeforeFlag) : DEFAULT_AUTOMOD_CONFIG.maxMentions),
+        spamThreshold: Number.isFinite(Number(mergedAutoMod.spamThreshold)) ? Number(mergedAutoMod.spamThreshold) : DEFAULT_AUTOMOD_CONFIG.spamThreshold,
+        spamWindow: Number.isFinite(Number(mergedAutoMod.spamWindow)) ? Number(mergedAutoMod.spamWindow) : DEFAULT_AUTOMOD_CONFIG.spamWindow,
+        capsThreshold: Number.isFinite(Number(mergedAutoMod.capsThreshold)) ? Number(mergedAutoMod.capsThreshold) : DEFAULT_AUTOMOD_CONFIG.capsThreshold,
+        minLengthForCaps: Number.isFinite(Number(mergedAutoMod.minLengthForCaps)) ? Number(mergedAutoMod.minLengthForCaps) : DEFAULT_AUTOMOD_CONFIG.minLengthForCaps,
+        spamTimeout: Number.isFinite(Number(mergedAutoMod.spamTimeout)) ? Number(mergedAutoMod.spamTimeout) : DEFAULT_AUTOMOD_CONFIG.spamTimeout,
+        spamWarningThreshold: Number.isFinite(Number(mergedAutoMod.spamWarningThreshold)) ? Number(mergedAutoMod.spamWarningThreshold) : DEFAULT_AUTOMOD_CONFIG.spamWarningThreshold
+    };
+
+    const advancedConfig = {
+        exemptChannelIds: Array.isArray(mergedAdvanced.exemptChannelIds) ? mergedAdvanced.exemptChannelIds : DEFAULT_ADVANCED_AUTOMOD_CONFIG.exemptChannelIds,
+        exemptRoleIds: Array.isArray(mergedAdvanced.exemptRoleIds) ? mergedAdvanced.exemptRoleIds : DEFAULT_ADVANCED_AUTOMOD_CONFIG.exemptRoleIds,
+        inviteAllowlistGuildIds: Array.isArray(mergedAdvanced.inviteAllowlistGuildIds) ? mergedAdvanced.inviteAllowlistGuildIds : DEFAULT_ADVANCED_AUTOMOD_CONFIG.inviteAllowlistGuildIds,
+        blockedRegexPatterns: Array.isArray(mergedAdvanced.blockedRegexPatterns) ? mergedAdvanced.blockedRegexPatterns : DEFAULT_ADVANCED_AUTOMOD_CONFIG.blockedRegexPatterns,
+        escalationThreshold24h: Number.isFinite(Number(mergedAdvanced.escalationThreshold24h)) ? Number(mergedAdvanced.escalationThreshold24h) : DEFAULT_ADVANCED_AUTOMOD_CONFIG.escalationThreshold24h,
+        escalationTimeoutMs: Number.isFinite(Number(mergedAdvanced.escalationTimeoutMs)) ? Number(mergedAdvanced.escalationTimeoutMs) : DEFAULT_ADVANCED_AUTOMOD_CONFIG.escalationTimeoutMs
+    };
+
+    return {
+        profileName: profileName || 'base',
+        automodConfig,
+        advancedConfig,
+        blockedRegexList: compileBlockedRegexList(advancedConfig.blockedRegexPatterns)
+    };
+}
+
+function getRuntimeAutoModConfig() {
+    const now = Date.now();
+    if (cachedAutoModConfig && now - cachedAutoModConfigAt < 5000) {
+        return cachedAutoModConfig;
+    }
+
+    cachedAutoModConfig = buildEffectiveConfig(readAutoModConfigSafe());
+    cachedAutoModConfigAt = now;
+    return cachedAutoModConfig;
+}
+
+// Load blocked words and phrases from the config.
 const blockedWords = Array.isArray(blockedWordsList) ? blockedWordsList : [];
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord\.com\/invite)\/([A-Za-z0-9-]+)/gi;
 
-// We'll keep track of who is spamming, and clean up this data every so often.
+// Track recent message timestamps per user to detect spam; periodically prune old entries.
 const userMessageTimestamps = new Map();
 
-// Remove old spam data so we don't waste memory.
+// Purge stale spam timestamps to keep memory usage reasonable.
 function cleanupSpamData() {
     const now = Date.now();
-    const timeout = AUTOMOD_CONFIG.spamWindow * 2;
+    const timeout = getRuntimeAutoModConfig().automodConfig.spamWindow * 2;
 
     for (const [userId, timestamps] of userMessageTimestamps.entries()) {
         const validTimestamps = timestamps.filter(ts => now - ts < timeout);
-        
+
         if (validTimestamps.length === 0) {
             userMessageTimestamps.delete(userId);
         } else {
@@ -44,7 +140,7 @@ function cleanupSpamData() {
     }
 }
 
-// Every 5 minutes, clean up spam data to keep things running smoothly.
+// Run cleanup periodically to prevent unbounded memory growth.
 setInterval(cleanupSpamData, 5 * 60 * 1000);
 
 module.exports = {
@@ -52,8 +148,8 @@ module.exports = {
     runOnce: false,
     call: async (client, args) => {
         const [message] = args;
-        
-        // Don't bother with bots or direct messages—they aren't moderated here.
+
+        // Ignore bots and direct messages — moderation only runs inside guilds.
         if (!message || message.author.bot) return;
         if (!message.guild) return;
 
@@ -61,12 +157,15 @@ module.exports = {
         // If you're staff, you skip all filters. We trust you!
         const isStaff = member?.roles.cache.has(administratorRoleId) || member?.roles.cache.has(moderatorRoleId);
         if (isStaff) return;
+        const runtimeConfig = getRuntimeAutoModConfig();
+        if (runtimeConfig.advancedConfig.exemptChannelIds.includes(message.channelId)) return;
+        if (member?.roles?.cache && runtimeConfig.advancedConfig.exemptRoleIds.some(roleId => member.roles.cache.has(roleId))) return;
 
         try {
-            const violation = await detectViolation(message, client);
-            
+            const violation = await detectViolation(message, client, runtimeConfig);
+
             if (violation) {
-                await handleViolation(message, client, violation);
+                await handleViolation(message, client, violation, runtimeConfig);
             }
         } catch (error) {
             console.error('[AutoMod] Error processing message:', error);
@@ -75,29 +174,32 @@ module.exports = {
 };
 
 // Check the message for anything that breaks server rules.
-async function detectViolation(message, client) {
+async function detectViolation(message, client, runtimeConfig) {
     const lower = message.content.toLowerCase();
-    
+
     // Let's see if this message is spam.
-    const spamViolation = detectSpam(message);
+    const spamViolation = detectSpam(message, runtimeConfig.automodConfig);
     if (spamViolation) return spamViolation;
 
     // Now check if the message is mostly caps.
-    const capsViolation = detectExcessiveCaps(message);
+    const capsViolation = detectExcessiveCaps(message, runtimeConfig.automodConfig);
     if (capsViolation) return capsViolation;
 
     // Look for any blocked words or profanity.
     const profanityViolation = detectProfanity(lower);
     if (profanityViolation) return profanityViolation;
 
+    const regexViolation = detectBlockedRegex(message.content || '', runtimeConfig.blockedRegexList);
+    if (regexViolation) return regexViolation;
+
     // See if the message contains a Discord invite link.
-    if (AUTOMOD_CONFIG.blockInvites) {
-        const inviteViolation = await detectInvites(message, client);
+    if (runtimeConfig.automodConfig.blockInvites) {
+        const inviteViolation = await detectInvites(message, client, runtimeConfig.advancedConfig);
         if (inviteViolation) return inviteViolation;
     }
 
     // Check if the user is mentioning way too many people.
-    const mentionViolation = detectMassMentions(message);
+    const mentionViolation = detectMassMentions(message, runtimeConfig.automodConfig);
     if (mentionViolation) return mentionViolation;
 
     return null;
@@ -105,7 +207,7 @@ async function detectViolation(message, client) {
 
 // Detect spam violations
 
-function detectSpam(message) {
+function detectSpam(message, automodConfig) {
     const userId = message.author.id;
     const now = Date.now();
 
@@ -118,14 +220,14 @@ function detectSpam(message) {
 
     // Keep only recent timestamps
     const recentTimestamps = timestamps.filter(
-        ts => now - ts < AUTOMOD_CONFIG.spamWindow
+        ts => now - ts < automodConfig.spamWindow
     );
     userMessageTimestamps.set(userId, recentTimestamps);
 
-    if (recentTimestamps.length >= AUTOMOD_CONFIG.spamThreshold) {
+    if (recentTimestamps.length >= automodConfig.spamThreshold) {
         return {
             type: 'spam',
-            reason: `Spam detected (${recentTimestamps.length} messages in ${AUTOMOD_CONFIG.spamWindow / 1000}s)`,
+            reason: `Spam detected (${recentTimestamps.length} messages in ${automodConfig.spamWindow / 1000}s)`,
             action: 'warn'
         };
     }
@@ -135,15 +237,15 @@ function detectSpam(message) {
 
 // Detect excessive caps
 
-function detectExcessiveCaps(message) {
-    if (message.content.length < AUTOMOD_CONFIG.minLengthForCaps) {
+function detectExcessiveCaps(message, automodConfig) {
+    if (message.content.length < automodConfig.minLengthForCaps) {
         return null;
     }
 
     const capsCount = (message.content.match(/[A-Z]/g) || []).length;
     const totalLetters = (message.content.match(/[A-Za-z]/g) || []).length;
 
-    if (totalLetters > 0 && capsCount / totalLetters > AUTOMOD_CONFIG.capsThreshold) {
+    if (totalLetters > 0 && capsCount / totalLetters > automodConfig.capsThreshold) {
         const capsPercentage = Math.round((capsCount / totalLetters) * 100);
         return {
             type: 'caps',
@@ -156,7 +258,7 @@ function detectExcessiveCaps(message) {
 }
 
 // Detect profanity
- 
+
 function detectProfanity(lowerContent) {
     if (!blockedWords.length) return null;
 
@@ -175,9 +277,24 @@ function detectProfanity(lowerContent) {
     return null;
 }
 
+function detectBlockedRegex(content, blockedRegexList) {
+    if (!blockedRegexList.length || !content) return null;
+
+    const matched = blockedRegexList.find(regex => regex.test(content));
+    if (matched) {
+        return {
+            type: 'profanity',
+            reason: 'Message matched a blocked pattern',
+            action: 'delete'
+        };
+    }
+
+    return null;
+}
+
 // Detect invite links
 
-async function detectInvites(message, client) {
+async function detectInvites(message, client, advancedConfig) {
     if (!/(discord\.gg|discord\.com\/invite)\//i.test(message.content)) {
         return null;
     }
@@ -200,6 +317,9 @@ async function detectInvites(message, client) {
             }
 
             if (invite.guild?.id && invite.guild.id !== message.guild.id) {
+                if (advancedConfig.inviteAllowlistGuildIds.includes(invite.guild.id)) {
+                    continue;
+                }
                 return {
                     type: 'invites',
                     reason: 'External invite link detected',
@@ -220,10 +340,10 @@ async function detectInvites(message, client) {
 }
 
 // Detect mass mentions
-function detectMassMentions(message) {
+function detectMassMentions(message, automodConfig) {
     const mentionCount = (message.mentions.users.size || 0) + (message.mentions.roles.size || 0);
 
-    if (AUTOMOD_CONFIG.maxMentions > 0 && mentionCount >= AUTOMOD_CONFIG.maxMentions) {
+    if (automodConfig.maxMentions > 0 && mentionCount >= automodConfig.maxMentions) {
         return {
             type: 'mentions',
             reason: `Mass mentions (${mentionCount} mentions)`,
@@ -235,8 +355,9 @@ function detectMassMentions(message) {
 }
 
 // Handle the violation
-async function handleViolation(message, client, violation) {
+async function handleViolation(message, client, violation, runtimeConfig) {
     const { type, reason, action } = violation;
+    const { automodConfig, advancedConfig } = runtimeConfig;
     const userId = message.author.id;
     const caseId = `AUTOMOD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -268,10 +389,10 @@ async function handleViolation(message, client, violation) {
             const spamViolations = Array.isArray(violations)
                 ? violations.filter(v => v.violation_type === 'spam')
                 : [];
-            if (spamViolations.length >= AUTOMOD_CONFIG.spamWarningThreshold) {
+            if (spamViolations.length >= automodConfig.spamWarningThreshold) {
                 // Timeout after multiple violations
                 try {
-                    const timeoutMs = Number(AUTOMOD_CONFIG.spamTimeout) || 10 * 60 * 1000;
+                    const timeoutMs = Number(automodConfig.spamTimeout) || 10 * 60 * 1000;
                     // Check for existing active timeout for this user
                     const [existingTimeouts] = await MySQLDatabaseManager.connection.query(
                         `SELECT * FROM timeouts WHERE user_id = ? AND active = TRUE AND issued_by = 'AutoMod'`,
@@ -295,34 +416,62 @@ async function handleViolation(message, client, violation) {
                         );
                     }
                     // Always send notification for timeout
-                    sendUserNotification(message, `AutoMod: Repeated spam violations`, 'spam', caseId);
+                    sendUserNotification(message, `AutoMod: Repeated spam violations`, 'spam', caseId, automodConfig);
                 } catch (err) {
                     console.error(`[AutoMod] Failed to timeout user or save case: ${err.message}`);
                     // Still notify user even if timeout fails
-                    sendUserNotification(message, `AutoMod: Repeated spam violations`, 'spam', caseId);
+                    sendUserNotification(message, `AutoMod: Repeated spam violations`, 'spam', caseId, automodConfig);
                 }
             } else {
                 // Always send notification for warn action
-                sendUserNotification(message, reason, type, caseId);
+                sendUserNotification(message, reason, type, caseId, automodConfig);
             }
         } catch (err) {
             console.warn(`[AutoMod] Could not check violation history: ${err.message}`);
             // Always notify user if violation check fails
-            sendUserNotification(message, reason, type, caseId);
+            sendUserNotification(message, reason, type, caseId, automodConfig);
         }
         // Only send one embed for spam
         return;
     }
 
+    // Global escalation for repeated non-spam violations in last 24h
+    try {
+        const violations = await MySQLDatabaseManager.getAutomodViolations(userId, 24);
+        const totalRecent = Array.isArray(violations) ? violations.length : 0;
+
+        if (totalRecent >= advancedConfig.escalationThreshold24h) {
+            const timeoutMs = Math.max(5 * 60 * 1000, advancedConfig.escalationTimeoutMs);
+            try {
+                await message.member.timeout(timeoutMs, 'AutoMod: Repeated violations within 24 hours');
+                await MySQLDatabaseManager.connection.query(
+                    `INSERT INTO timeouts (user_id, username, case_id, reason, issued_at, expires_at, issued_by, active)
+                     VALUES (?, ?, ?, ?, NOW(), ?, 'AutoMod', TRUE)`,
+                    [
+                        userId,
+                        message.author.username,
+                        caseId,
+                        'AutoMod: Repeated violations within 24 hours',
+                        Date.now() + timeoutMs
+                    ]
+                );
+            } catch (timeoutErr) {
+                console.error(`[AutoMod] Failed escalation timeout: ${timeoutErr.message}`);
+            }
+        }
+    } catch (escalationErr) {
+        console.warn(`[AutoMod] Escalation check failed: ${escalationErr.message}`);
+    }
+
     // Send DM to user for other violation types
-    sendUserNotification(message, reason, type, caseId);
+    sendUserNotification(message, reason, type, caseId, automodConfig);
 
     // Log to server log channel
     logToServerChannel(message, client, reason, type, caseId);
 }
 
 // Send DM to violating user
-function sendUserNotification(message, reason, violationType, caseId) {
+function sendUserNotification(message, reason, violationType, caseId, automodConfig) {
     let embedDescription = 'Your message was automatically removed.';
     let fields = [
         { name: '📌 Reason', value: `\`${reason}\``, inline: true },
@@ -332,7 +481,7 @@ function sendUserNotification(message, reason, violationType, caseId) {
     // If user was muted/timed out for spam, show mute info
     if (reason.includes('Repeated spam violations')) {
         // Find timeout duration from config
-        const timeoutMs = Number(AUTOMOD_CONFIG.spamTimeout) || 10 * 60 * 1000;
+        const timeoutMs = Number(automodConfig?.spamTimeout) || 10 * 60 * 1000;
         const minutes = Math.round(timeoutMs / 60000);
         embedDescription = `You have been muted for ${minutes} minutes due to repeated spam violations.`;
         color = 0xFFA500;
@@ -354,8 +503,8 @@ function sendUserNotification(message, reason, violationType, caseId) {
                 embeds: [userEmbed],
                 flags: MessageFlags.SuppressNotifications
             }).then(msg => {
-                setTimeout(() => msg.delete().catch(() => {}), 8000);
-            }).catch(() => {});
+                setTimeout(() => msg.delete().catch(() => { }), 8000);
+            }).catch(() => { });
         }
     });
 }

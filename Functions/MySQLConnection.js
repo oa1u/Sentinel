@@ -1,8 +1,10 @@
 const mysql = require('mysql2/promise');
 const path = require('path');
 
-// Loads environment configuration for MySQL from .env file.
-require('dotenv').config({ 
+// Load MySQL credentials from `Config/credentials.env` so the DB connection
+// can be created using environment variables. This keeps secrets out of
+// source control and makes local/dev setups easier.
+require('dotenv').config({
     path: path.join(__dirname, '..', 'Config', 'credentials.env'),
     override: false,
     debug: false,
@@ -35,10 +37,10 @@ class MySQLConnection {
             const connection = await this.pool.getConnection();
             console.log('✅ MySQL Connected Successfully');
             connection.release();
-            
+
             this.isConnected = true;
             await this.initializeTables();
-            
+
             return true;
         } catch (error) {
             console.error('❌ MySQL Connection Failed:', error.message);
@@ -60,6 +62,28 @@ class MySQLConnection {
                     INDEX idx_username (username)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
+
+            // Add missing userinfo profile columns (migration)
+            const userInfoColumnsToAdd = [
+                { name: 'nickname', type: 'VARCHAR(255) DEFAULT NULL' },
+                { name: 'bio', type: 'TEXT DEFAULT NULL' },
+                { name: 'profile_sync_enabled', type: 'TINYINT(1) NOT NULL DEFAULT 0' },
+                { name: 'profile_last_selected_at', type: 'BIGINT DEFAULT NULL' },
+                { name: 'profile_last_synced_at', type: 'BIGINT DEFAULT NULL' }
+            ];
+            for (const col of userInfoColumnsToAdd) {
+                try {
+                    await this.pool.execute(`
+                        ALTER TABLE userinfo ADD COLUMN ${col.name} ${col.type}
+                    `);
+                } catch (err) {
+                    if (err.code === 'ER_DUP_FIELDNAME') {
+                        // Column already exists, skip
+                    } else {
+                        console.error(`Error adding column ${col.name} to userinfo:`, err.message);
+                    }
+                }
+            }
 
             // Create levels table
             await this.pool.execute(`
@@ -245,7 +269,7 @@ class MySQLConnection {
                     INDEX idx_completed (completed)
                 )
             `);
-            
+
             // Add case_id column if it doesn't exist (migration)
             try {
                 await this.pool.execute(`
@@ -258,7 +282,7 @@ class MySQLConnection {
                     console.error(`Note: case_id column migration:`, err.message);
                 }
             }
-            
+
             const columnsToAdd = [
                 { name: 'message', type: 'TEXT' },
                 { name: 'text', type: 'TEXT' },
@@ -272,7 +296,7 @@ class MySQLConnection {
                 { name: 'last_failure_reason', type: 'TEXT' },
                 { name: 'last_failure_time', type: 'BIGINT' }
             ];
-            
+
             for (const col of columnsToAdd) {
                 try {
                     await this.pool.execute(`
@@ -287,13 +311,13 @@ class MySQLConnection {
                     }
                 }
             }
-            
+
             // Add indexes if they don't exist
             const indexesToAdd = [
                 { name: 'idx_trigger', column: 'trigger_at' },
                 { name: 'idx_completed', column: 'completed' }
             ];
-            
+
             for (const idx of indexesToAdd) {
                 try {
                     await this.pool.execute(`
@@ -316,7 +340,7 @@ class MySQLConnection {
                 { name: 'banned_by', type: 'VARCHAR(20) DEFAULT NULL' },
                 { name: 'ban_reason', type: 'TEXT DEFAULT NULL' }
             ];
-            
+
             for (const col of banColumnsToAdd) {
                 try {
                     await this.pool.execute(`
@@ -331,12 +355,12 @@ class MySQLConnection {
                     }
                 }
             }
-            
+
             // Add indexes to user_bans if they don't exist
             const banIndexesToAdd = [
                 { name: 'idx_banned_at', column: 'banned_at' }
             ];
-            
+
             for (const idx of banIndexesToAdd) {
                 try {
                     await this.pool.execute(`
@@ -351,7 +375,7 @@ class MySQLConnection {
                     }
                 }
             }
-            
+
             // Migrate levels table to add username column
             try {
                 await this.pool.execute(`
@@ -365,7 +389,7 @@ class MySQLConnection {
                     console.error(`Error adding username column:`, err.message);
                 }
             }
-            
+
             // Migrate admin_users table to update role enum
             try {
                 await this.pool.execute(`
@@ -397,7 +421,7 @@ class MySQLConnection {
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 )
             `);
-            
+
             // Add case_id column if it doesn't exist (migration)
             try {
                 await this.pool.execute(`
@@ -408,6 +432,19 @@ class MySQLConnection {
                 // Column might already exist, ignore error
                 if (!err.message.includes('Duplicate column')) {
                     console.error(`Note: case_id column migration:`, err.message);
+                }
+            }
+
+            // Add guild_id column if it doesn't exist (migration)
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE giveaways 
+                    ADD COLUMN IF NOT EXISTS guild_id VARCHAR(20) NOT NULL AFTER host_id
+                `);
+            } catch (err) {
+                // Column might already exist, ignore error
+                if (!err.message.includes('Duplicate column')) {
+                    console.error(`Note: guild_id column migration:`, err.message);
                 }
             }
 
@@ -459,10 +496,40 @@ class MySQLConnection {
                 )
             `);
 
+            // Create birthdays table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS birthdays (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    month TINYINT UNSIGNED NOT NULL,
+                    day TINYINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_guild_user (guild_id, user_id),
+                    INDEX idx_guild_month_day (guild_id, month, day),
+                    INDEX idx_user_id (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create birthday announcements log table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS birthday_announcements (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    date_key CHAR(10) NOT NULL,
+                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_daily_announcement (guild_id, user_id, date_key),
+                    INDEX idx_guild_date (guild_id, date_key),
+                    INDEX idx_sent_at (sent_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
             // Create admin_users table for panel authentication
             await this.pool.execute(`
                 CREATE TABLE IF NOT EXISTS admin_users (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    id CHAR(36) PRIMARY KEY,
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role ENUM('owner', 'admin', 'moderator') DEFAULT 'moderator',
@@ -473,6 +540,59 @@ class MySQLConnection {
                     INDEX idx_active (active)
                 )
             `);
+
+            const adminUserColumnsToAdd = [
+                { name: 'email', type: 'VARCHAR(254) DEFAULT NULL' },
+                { name: 'email_verified', type: 'BOOLEAN DEFAULT FALSE' },
+                { name: 'email_verification_token', type: 'VARCHAR(128) DEFAULT NULL' },
+                { name: 'email_verification_expires', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                { name: 'password_reset_token', type: 'VARCHAR(128) DEFAULT NULL' },
+                { name: 'password_reset_expires', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                { name: 'two_factor_enabled', type: 'BOOLEAN DEFAULT FALSE' },
+                { name: 'two_factor_secret', type: 'TEXT DEFAULT NULL' },
+                { name: 'two_factor_enabled_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                { name: 'password_changed_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                { name: 'recovery_code_hashes', type: 'TEXT DEFAULT NULL' },
+                { name: 'recovery_codes_generated_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                { name: 'discord_user_id', type: 'VARCHAR(20) DEFAULT NULL' },
+                { name: 'discord_username', type: 'VARCHAR(100) DEFAULT NULL' },
+                { name: 'discord_linked_at', type: 'TIMESTAMP NULL DEFAULT NULL' }
+            ];
+
+            for (const col of adminUserColumnsToAdd) {
+                try {
+                    await this.pool.execute(`
+                        ALTER TABLE admin_users ADD COLUMN ${col.name} ${col.type}
+                    `);
+                } catch (err) {
+                    if (err.code !== 'ER_DUP_FIELDNAME') {
+                        console.error(`Error adding column ${col.name} to admin_users:`, err.message);
+                    }
+                }
+            }
+
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS admin_auth_events (
+                    id CHAR(36) PRIMARY KEY,
+                    username VARCHAR(50) NOT NULL,
+                    event_type ENUM('LOGIN_SUCCESS', 'LOGIN_FAILED', 'LOGIN_2FA_CHALLENGE', 'LOGIN_2FA_FAILED', 'LOGOUT', 'PASSWORD_CHANGED', 'TWO_FACTOR_ENABLED', 'TWO_FACTOR_DISABLED', 'SESSIONS_REVOKED', 'EMAIL_CHANGED', 'EMAIL_VERIFIED', 'PASSWORD_RESET_REQUESTED', 'PASSWORD_RESET_COMPLETED') NOT NULL,
+                    ip_address VARCHAR(64) DEFAULT NULL,
+                    user_agent VARCHAR(255) DEFAULT NULL,
+                    metadata JSON DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_admin_auth_username_created (username, created_at),
+                    INDEX idx_admin_auth_event_type (event_type)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE admin_auth_events
+                    MODIFY COLUMN event_type ENUM('LOGIN_SUCCESS', 'LOGIN_FAILED', 'LOGIN_2FA_CHALLENGE', 'LOGIN_2FA_FAILED', 'LOGOUT', 'PASSWORD_CHANGED', 'TWO_FACTOR_ENABLED', 'TWO_FACTOR_DISABLED', 'SESSIONS_REVOKED', 'EMAIL_CHANGED', 'EMAIL_VERIFIED', 'PASSWORD_RESET_REQUESTED', 'PASSWORD_RESET_COMPLETED') NOT NULL
+                `);
+            } catch (enumMigrationError) {
+                console.error('Error updating admin_auth_events enum:', enumMigrationError.message);
+            }
 
             // Create advanced logging table
             await this.pool.execute(`
@@ -507,6 +627,7 @@ class MySQLConnection {
                     title VARCHAR(100) NOT NULL,
                     description TEXT NOT NULL,
                     message_id VARCHAR(20),
+                    case_id VARCHAR(32),
                     status ENUM('pending', 'approved', 'denied', 'implemented') DEFAULT 'pending',
                     upvotes INT DEFAULT 0,
                     downvotes INT DEFAULT 0,
@@ -518,9 +639,23 @@ class MySQLConnection {
                     INDEX idx_status (status),
                     INDEX idx_guild_id (guild_id),
                     INDEX idx_user_id (user_id),
-                    INDEX idx_message_id (message_id)
+                    INDEX idx_message_id (message_id),
+                    INDEX idx_case_id (case_id)
                 )
             `);
+
+            // Add case_id column if it doesn't exist (migration)
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE suggestions 
+                    ADD COLUMN IF NOT EXISTS case_id VARCHAR(32) AFTER message_id
+                `);
+            } catch (err) {
+                // Column might already exist, ignore error
+                if (!err.message.includes('Duplicate column')) {
+                    console.error(`Note: case_id column migration (suggestions):`, err.message);
+                }
+            }
 
             // Create suggestion votes table
             await this.pool.execute(`
@@ -549,6 +684,27 @@ class MySQLConnection {
                     INDEX idx_user_id (user_id),
                     INDEX idx_violation_type (violation_type),
                     INDEX idx_timestamp (timestamp)
+                )
+            `);
+
+            // Create automod review state table (workflow queue status + reviewer notes)
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS automod_violation_reviews (
+                    violation_id INT PRIMARY KEY,
+                    status ENUM('pending', 'approved', 'dismissed') NOT NULL DEFAULT 'pending',
+                    severity ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
+                    reviewer_username VARCHAR(100) DEFAULT NULL,
+                    reviewed_at TIMESTAMP NULL,
+                    note TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_automod_review_violation
+                        FOREIGN KEY (violation_id)
+                        REFERENCES automod_violations(id)
+                        ON DELETE CASCADE,
+                    INDEX idx_automod_review_status (status),
+                    INDEX idx_automod_review_severity (severity),
+                    INDEX idx_automod_review_reviewed_at (reviewed_at)
                 )
             `);
 
@@ -692,11 +848,41 @@ class MySQLConnection {
                     used_at TIMESTAMP NULL DEFAULT NULL,
                     role ENUM('owner', 'admin', 'moderator') DEFAULT 'moderator',
                     active BOOLEAN DEFAULT TRUE,
+                    max_uses INT DEFAULT 1,
+                    current_uses INT DEFAULT 0,
+                    description TEXT NULL,
+                    revoked_by VARCHAR(50) NULL,
+                    revoked_at TIMESTAMP NULL,
+                    last_view_at TIMESTAMP NULL,
+                    view_count INT DEFAULT 0,
                     INDEX idx_code (code),
                     INDEX idx_active (active),
-                    INDEX idx_expires_at (expires_at)
+                    INDEX idx_expires_at (expires_at),
+                    INDEX idx_created_by (created_by)
                 )
             `);
+
+            // Add new columns if they don't exist (migration for existing installations)
+            const newColumns = [
+                ['max_uses', 'INT DEFAULT 1 AFTER active'],
+                ['current_uses', 'INT DEFAULT 0 AFTER max_uses'],
+                ['description', 'TEXT NULL AFTER current_uses'],
+                ['revoked_by', 'VARCHAR(50) NULL AFTER description'],
+                ['revoked_at', 'TIMESTAMP NULL AFTER revoked_by']
+            ];
+
+            for (const [columnName, columnDef] of newColumns) {
+                try {
+                    await this.pool.execute(`
+                        ALTER TABLE admin_invite_codes 
+                        ADD COLUMN IF NOT EXISTS ${columnName} ${columnDef}
+                    `);
+                } catch (err) {
+                    if (!err.message.includes('Duplicate column')) {
+                        console.warn(`[MySQLConnection] Warning adding column ${columnName} to admin_invite_codes:`, err.message);
+                    }
+                }
+            }
 
             await this.pool.execute(`
                 CREATE TABLE IF NOT EXISTS user_interactions (
@@ -847,6 +1033,17 @@ class MySQLConnection {
             `);;
             console.log('✅ Ban Appeals table initialized');
 
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE ban_appeals ADD COLUMN user_email VARCHAR(254) DEFAULT NULL
+                `);
+                console.log('✅ Added user_email column to ban_appeals table');
+            } catch (err) {
+                if (err.code !== 'ER_DUP_FIELDNAME') {
+                    console.error('Error adding user_email column to ban_appeals:', err.message);
+                }
+            }
+
             // Create alert settings table
             await this.pool.execute(`
                 CREATE TABLE IF NOT EXISTS alert_settings (
@@ -854,12 +1051,24 @@ class MySQLConnection {
                     alert_type ENUM('cpu', 'memory', 'error_rate', 'rate_limit', 'database') NOT NULL UNIQUE,
                     threshold FLOAT DEFAULT 80.0,
                     enabled BOOLEAN DEFAULT TRUE,
+                    last_triggered TIMESTAMP NULL DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     INDEX idx_type (alert_type)
                 )
             `);
             console.log('✅ Alert Settings table initialized');
+
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE alert_settings ADD COLUMN last_triggered TIMESTAMP NULL DEFAULT NULL
+                `);
+                console.log('✅ Added last_triggered column to alert_settings table');
+            } catch (err) {
+                if (err.code !== 'ER_DUP_FIELDNAME') {
+                    console.error('Error adding last_triggered column to alert_settings:', err.message);
+                }
+            }
 
             // Create active alerts table
             await this.pool.execute(`
@@ -878,6 +1087,48 @@ class MySQLConnection {
                 )
             `);
             console.log('✅ Active Alerts table initialized');
+
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS email_delivery_logs (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    recipient_email VARCHAR(254) NOT NULL,
+                    recipient_domain VARCHAR(255) NULL,
+                    template_name VARCHAR(100) DEFAULT 'generic',
+                    subject VARCHAR(255) NULL,
+                    status ENUM('sent', 'failed', 'blocked') NOT NULL,
+                    error_message TEXT NULL,
+                    message_id VARCHAR(255) NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_created (created_at),
+                    INDEX idx_status (status),
+                    INDEX idx_template (template_name),
+                    INDEX idx_recipient_domain (recipient_domain)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            console.log('✅ Email Delivery Logs table initialized');
+
+            // Create persistent scheduled jobs table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS scheduled_jobs (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    job_type VARCHAR(100) NOT NULL,
+                    payload JSON NULL,
+                    status ENUM('pending', 'running', 'completed', 'failed') DEFAULT 'pending',
+                    run_at BIGINT NOT NULL,
+                    attempts INT DEFAULT 0,
+                    max_attempts INT DEFAULT 3,
+                    locked_by VARCHAR(100) DEFAULT NULL,
+                    locked_at BIGINT DEFAULT NULL,
+                    last_error TEXT DEFAULT NULL,
+                    created_at BIGINT NOT NULL,
+                    updated_at BIGINT NOT NULL,
+                    completed_at BIGINT DEFAULT NULL,
+                    INDEX idx_jobs_status_run (status, run_at),
+                    INDEX idx_jobs_type (job_type),
+                    INDEX idx_jobs_lock (locked_by, locked_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            console.log('✅ Scheduled Jobs table initialized');
 
             // Initialize default alert settings if they don't exist
             try {

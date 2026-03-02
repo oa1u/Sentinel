@@ -41,15 +41,15 @@ module.exports = {
       .setColor(0xF04747)
       .setTitle(`❌ No Permission`)
       .setDescription(`You need the Administrator role to use this command!`);
-    
+
     // Only admins are allowed to use this command.
     if (!interaction.member.roles.cache.has(administratorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
-    
+
     const subcommand = interaction.options.getSubcommand();
     const user = interaction.options.getUser('user');
-    
+
     // Figure out which subcommand the user picked.
     switch (subcommand) {
       case 'single':
@@ -58,57 +58,74 @@ module.exports = {
         return await this.clearAllWarnings(interaction, user);
     }
   },
-  
+
   async clearSingleWarning(interaction, user) {
     const caseID = interaction.options.getString('caseid');
-    // Grab the warnings database for this user.
-    const warnsDB = DatabaseManager.getWarnsDB();
-    await warnsDB.ensure(user.id, {points: 0, warns: {}});
-    
-    const userData = await warnsDB.get(user.id);
-    // If the warning isn't found, let the user know.
-    if (!userData.warns[caseID]) {
-      const notFoundEmbed = new EmbedBuilder()
-        .setColor(0xF04747)
-        .setTitle('❌ Case Not Found')
-        .setDescription(`No warning found with case ID: \`${caseID}\``);
+
+    // Look up the warning in MySQL
+    try {
+      const [rows] = await DatabaseManager.connection.pool.query(
+        'SELECT reason FROM warns WHERE case_id = ? AND user_id = ?',
+        [caseID, user.id]
+      );
+
+      if (!rows || rows.length === 0) {
+        const notFoundEmbed = new EmbedBuilder()
+          .setColor(0xF04747)
+          .setTitle('❌ Case Not Found')
+          .setDescription(`No warning found with case ID: \`${caseID}\``);
+        return interaction.reply({
+          embeds: [notFoundEmbed],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      const caseReason = rows[0].reason;
+
+      // Delete the warning from MySQL
+      await DatabaseManager.connection.pool.query(
+        'DELETE FROM warns WHERE case_id = ?',
+        [caseID]
+      );
+
+      const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
+      const em = new EmbedBuilder()
+        .setTitle("🗑️ Warning Cleared")
+        .setColor(0x43B581)
+        .addFields(
+          { name: "👮 Administrator", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+          { name: "👤 User", value: `${user.tag} (${user.id})`, inline: true },
+          { name: "🔑 Case ID", value: `\`${caseID}\``, inline: true },
+          { name: "📝 Reason", value: `\`${caseReason}\`` }
+        )
+        .setFooter({ text: `Cleared by ${interaction.user.tag}` })
+        .setTimestamp();
+
+      // Log the warning removal if the log channel is set up.
+      if (clearedWarnsLog) await clearedWarnsLog.send({ embeds: [em] });
+
+      const successEmbed = new EmbedBuilder()
+        .setColor(0x43B581)
+        .setTitle('✅ Warning Cleared')
+        .setDescription(`Warning **\`${caseID}\`** has been removed from **${user.tag}**!`);
+
       return interaction.reply({
-        embeds: [notFoundEmbed],
+        embeds: [successEmbed],
+        flags: MessageFlags.Ephemeral
+      });
+    } catch (err) {
+      console.error('[clearwarns] Error clearing warning:', err);
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle('❌ Error')
+        .setDescription(`Failed to clear warning: ${err.message}`);
+      return interaction.reply({
+        embeds: [errorEmbed],
         flags: MessageFlags.Ephemeral
       });
     }
-    
-    const caseReason = userData.warns[caseID].reason;
-    // Remove the specific warning from the database.
-    await warnsDB.delete(user.id, `warns.${caseID}`);
-    
-    const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
-    const em = new EmbedBuilder()
-      .setTitle("🗑️ Warning Cleared")
-      .setColor(0x43B581)
-      .addFields(
-        { name: "👮 Administrator", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
-        { name: "👤 User", value: `${user.tag} (${user.id})`, inline: true },
-        { name: "🔑 Case ID", value: `\`${caseID}\``, inline: true },
-        { name: "📝 Reason", value: `\`${caseReason}\`` }
-      )
-      .setFooter({ text: `Cleared by ${interaction.user.tag}` })
-      .setTimestamp();
-    
-    // Log the warning removal if the log channel is set up.
-    if (clearedWarnsLog) await clearedWarnsLog.send({ embeds: [em] });
-    
-    const successEmbed = new EmbedBuilder()
-      .setColor(0x43B581)
-      .setTitle('✅ Warning Cleared')
-      .setDescription(`Warning **\`${caseID}\`** has been removed from **${user.tag}**!`);
-    
-    return interaction.reply({
-      embeds: [successEmbed],
-      flags: MessageFlags.Ephemeral
-    });
   },
-  
+
   async clearAllWarnings(interaction, user) {
     // Check if the user is banned before clearing all their warnings.
     const userBanned = await DatabaseManager.isUserBanned(user.id);
@@ -120,7 +137,7 @@ module.exports = {
     }
     // Remove every warning for this user.
     await DatabaseManager.clearUserWarns(user.id);
-    
+
     const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
     const em = new EmbedBuilder()
       .setTitle("🧹 Warnings Cleared")
@@ -132,15 +149,15 @@ module.exports = {
       )
       .setFooter({ text: `Cleared by ${interaction.user.tag}` })
       .setTimestamp();
-    
+
     // Log the clearing of all warnings if the log channel is set up.
     if (clearedWarnsLog) await clearedWarnsLog.send({ embeds: [em] });
-    
+
     const successEmbed = new EmbedBuilder()
       .setColor(0x43B581)
       .setTitle('✅ Warnings Cleared')
       .setDescription(`All warnings for **${user.tag}** have been removed!`);
-    
+
     return interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
   }
 }

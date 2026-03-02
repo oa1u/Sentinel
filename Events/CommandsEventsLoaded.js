@@ -1,8 +1,7 @@
-// Commands and Events Loaded Logger
-// This logger announces when all commands and events are loaded, so you know the bot is ready.
-// It prints a friendly startup message in the console, using colors to make it stand out.
+// Startup logger: prints a clear, colored summary when commands and events finish loading.
+// Keeps console output friendly and easy to read so you can verify the bot started correctly.
 
-// These are the ANSI color codes we use to make the console output look cool and easy to read.
+// ANSI color codes used to style the startup message.
 const colors = {
     reset: '\x1b[0m',
     bright: '\x1b[1m',
@@ -25,12 +24,12 @@ module.exports = {
         const commands = client.slashCommands.size;
         const events = client.eventNames().length;
         const categories = new Set();
-        
+
         // Let's count how many command categories there are, so we can show it in the startup log.
         client.slashCommands.forEach(cmd => {
             if (cmd.category) categories.add(cmd.category);
         });
-        
+
         console.log('\n');
         console.log(colors.cyan + colors.bright + '╔════════════════════════════════════════════════════════════════╗' + colors.reset);
         console.log(colors.cyan + '║' + colors.reset + '                                                                ' + colors.cyan + '║' + colors.reset);

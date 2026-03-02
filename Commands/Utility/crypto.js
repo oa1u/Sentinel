@@ -6,7 +6,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('crypto')
     .setDescription('Get current cryptocurrency prices')
-    .addStringOption(option =>
+        .addStringOption(option =>
       option.setName('coin')
         .setDescription('Cryptocurrency symbol (e.g., BTC, ETH, DOGE)')
         .setRequired(true)
@@ -125,8 +125,15 @@ function displayCryptoData(interaction, coinData, currency) {
   
   const em = new EmbedBuilder()
     .setColor(changeColor)
-    .setTitle(`💰 ${coinData.name} (${coinData.symbol.toUpperCase()})`)
-    .setDescription(rank ? `**Rank:** #${rank}` : 'Rank: N/A')
+    .setAuthor({
+      name: `${coinData.name} (${coinData.symbol.toUpperCase()})`,
+      iconURL: coinData.image || undefined
+    })
+    .setTitle('Cryptocurrency Price Overview')
+    .setDescription([
+      rank ? `**Rank:** #${rank}` : 'Rank: N/A',
+      `**Symbol:** \\\`${coinData.symbol.toUpperCase()}\\\``
+    ].join('\n'))
     .addFields(
       { name: '💵 Current Price', value: formatPrice(price), inline: true },
       { name: `${changeEmoji} 24h Change`, value: formatChange(change24h), inline: true },
@@ -135,7 +142,11 @@ function displayCryptoData(interaction, coinData, currency) {
       { name: '📦 24h Volume', value: formatLargeNumber(volume24h), inline: true },
       { name: '📈 7d Change', value: formatChange(change7d), inline: true }
     )
-    .setFooter({ text: `Data from CoinGecko • Requested by ${interaction.user.username}` })
+    .setThumbnail(coinData.image || null)
+    .setFooter({
+      text: `Data from CoinGecko • Requested by ${interaction.user.tag}`,
+      iconURL: interaction.user.displayAvatarURL({ size: 128 })
+    })
     .setTimestamp();
 
   interaction.editReply({ embeds: [em] });

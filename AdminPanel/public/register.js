@@ -8,10 +8,15 @@ const loading = document.getElementById('loading');
 const errorMsg = document.getElementById('errorMsg');
 const successMsg = document.getElementById('successMsg');
 const loginLink = document.getElementById('loginLink');
+const passwordStrengthFill = document.getElementById('passwordStrengthFill');
+const passwordStrengthLabel = document.getElementById('passwordStrengthLabel');
+const passwordMatchStatus = document.getElementById('passwordMatchStatus');
 const { ui, api } = window.AdminPanel || {};
 
 // Set up event listeners for registration form
 registerBtn.addEventListener('click', handleRegister);
+const registerForm = document.getElementById('registerForm');
+if (registerForm) registerForm.addEventListener('submit', handleRegister);
 if (loginLink) {
     loginLink.addEventListener('click', goToLogin);
 }
@@ -20,7 +25,22 @@ passwordInput.addEventListener('focus', showPasswordRequirements);
 passwordInput.addEventListener('blur', hidePasswordRequirementsIfEmpty);
 confirmPasswordInput.addEventListener('input', validateForm);
 document.getElementById('username').addEventListener('input', validateForm);
+document.getElementById('email').addEventListener('input', validateForm);
 document.getElementById('inviteCode').addEventListener('input', validateForm);
+document.querySelectorAll('.password-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        const input = targetId ? document.getElementById(targetId) : null;
+        if (!input) return;
+
+        // Toggle input type
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+
+        // Set icon based on state
+        btn.textContent = input.type === 'password' ? '👁️' : '👁️';
+    });
+});
 
 function showPasswordRequirements() {
     if (passwordRequirements) {
@@ -39,7 +59,7 @@ function validatePassword() {
         passwordRequirements.classList.add('show');
     }
     const password = passwordInput.value;
-    
+
     const requirements = {
         'req-length': password.length >= 8,
         'req-upper': /[A-Z]/.test(password),
@@ -57,21 +77,73 @@ function validatePassword() {
         }
     }
 
+    updatePasswordStrength(password, requirements);
+
     validateForm();
+}
+
+function updatePasswordStrength(password, requirements) {
+    if (!passwordStrengthFill || !passwordStrengthLabel) return;
+
+    const checks = Object.values(requirements).filter(Boolean).length;
+    const lengthBonus = password.length >= 12 ? 1 : 0;
+    const score = Math.min(checks + lengthBonus, 6);
+    const percent = Math.max((score / 6) * 100, 0);
+
+    let label = 'Strength: Not set';
+    let color = '#6b7280';
+
+    if (password.length > 0 && score <= 2) {
+        label = 'Strength: Weak';
+        color = '#ff8fa3';
+    } else if (score === 3 || score === 4) {
+        label = 'Strength: Medium';
+        color = '#facc15';
+    } else if (score >= 5) {
+        label = 'Strength: Strong';
+        color = '#75ec9c';
+    }
+
+    passwordStrengthFill.style.width = `${percent}%`;
+    passwordStrengthFill.style.backgroundColor = color;
+    passwordStrengthLabel.textContent = label;
+}
+
+function updateConfirmPasswordStatus(password, confirmPassword) {
+    if (!passwordMatchStatus) return;
+
+    passwordMatchStatus.classList.remove('good', 'bad');
+
+    if (!confirmPassword) {
+        passwordMatchStatus.textContent = '';
+        return;
+    }
+
+    if (password === confirmPassword) {
+        passwordMatchStatus.textContent = 'Passwords match';
+        passwordMatchStatus.classList.add('good');
+    } else {
+        passwordMatchStatus.textContent = 'Passwords do not match';
+        passwordMatchStatus.classList.add('bad');
+    }
 }
 
 function validateForm() {
     const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
     const inviteCode = document.getElementById('inviteCode').value.trim();
 
     const passwordValid = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/.test(password);
     const usernameValid = /^[a-zA-Z0-9_]{3,30}$/.test(username);
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     const passwordMatch = password === confirmPassword && password.length > 0;
     const inviteCodeValid = inviteCode.length > 0;
 
-    registerBtn.disabled = !(passwordValid && usernameValid && passwordMatch && inviteCodeValid);
+    updateConfirmPasswordStatus(password, confirmPassword);
+
+    registerBtn.disabled = !(passwordValid && usernameValid && emailValid && passwordMatch && inviteCodeValid);
 }
 
 async function handleRegister(e) {
@@ -79,12 +151,18 @@ async function handleRegister(e) {
     // console.log removed for production
 
     const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
     const inviteCode = document.getElementById('inviteCode').value.trim();
 
-    if (!username || !password || !confirmPassword || !inviteCode) {
+    if (!username || !email || !password || !confirmPassword || !inviteCode) {
         ui?.showMessage(errorMsg, 'Please fill in all fields', 'error');
+        return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        ui?.showMessage(errorMsg, 'Please enter a valid email address', 'error');
         return;
     }
 
@@ -124,6 +202,33 @@ async function handleRegister(e) {
         return;
     }
 
+    // Ask for confirmation before creating the account (typed username + acknowledgement)
+    try {
+        const confirmation = await showPromptModal({
+            title: 'Confirm Account Creation',
+            label: `Type the username \"${username}\" to confirm creating this account:`,
+            placeholder: username,
+            defaultValue: '',
+            confirmText: 'Confirm and Create',
+            cancelText: 'Cancel',
+            confirmClass: 'btn-primary',
+            includeCheckbox: { label: 'I understand this action is permanent and cannot be undone', required: true, errorText: 'You must acknowledge the permanence of this action' },
+            validate: (val) => {
+                if (!val) return 'Please type the username to confirm';
+                if (val !== String(username)) return 'Username does not match';
+                return true;
+            }
+        });
+
+        if (!confirmation) {
+            // User cancelled confirmation
+            return;
+        }
+    } catch (err) {
+        // If modal system fails, fall back to native confirm
+        if (!confirm(`Create account for ${username}?`)) return;
+    }
+
     registerBtn.disabled = true;
     ui?.setLoading(loading, true);
     ui?.hideMessage(errorMsg);
@@ -131,7 +236,7 @@ async function handleRegister(e) {
 
     try {
         // console.log removed for production
-        const { response, data } = await api.postJson('/api/register', { username, password, inviteCode });
+        const { response, data } = await api.postJson('/api/register', { username, email, password, inviteCode });
 
         if (response.ok && data?.success) {
             // console.log removed for production

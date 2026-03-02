@@ -31,11 +31,11 @@ module.exports = {
 
         // Grab info for each user on the leaderboard so we can display it.
         const leaderboardText = [];
-        
+
         for (let i = 0; i < leaderboard.length; i++) {
             const entry = leaderboard[i];
             const user = await interaction.client.users.fetch(entry.id).catch(() => null);
-            
+
             // Add medals for the top 3 users—gotta reward the best!
             let medal = '';
             if (i === 0) medal = '🥇';

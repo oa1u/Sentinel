@@ -1,3 +1,4 @@
+/* Moderator panel helpers — UI utilities and moderation actions for the moderator interface. */
 // This function lets you open and close the user dropdown menu. Makes navigation easier for moderators.
 function toggleUserDropdown() {
     const menu = document.getElementById('userDropdownMenu');
@@ -5,7 +6,7 @@ function toggleUserDropdown() {
     menu.classList.toggle('show');
     trigger.classList.toggle('active');
 }
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
     const dropdown = document.querySelector('.user-dropdown');
     if (dropdown && !dropdown.contains(event.target)) {
         document.getElementById('userDropdownMenu')?.classList.remove('show');
@@ -62,7 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     await loadOverviewStats();
     await loadRecentActions();
-    
+
     // Attach tab event listeners
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -120,21 +121,21 @@ async function checkModeratorAccess() {
 
 function switchTab(e, tabName) {
     e.preventDefault();
-    
+
     // Hide everything first
     document.querySelectorAll('.tab-content').forEach(tab => {
         if (tab && tab.classList) {
             tab.classList.remove('active');
         }
     });
-    
+
     // Deactivate all tab buttons
     document.querySelectorAll('.tab').forEach(btn => {
         if (btn && btn.classList) {
             btn.classList.remove('active');
         }
     });
-    
+
     // Show the one they clicked on
     const selectedTab = document.getElementById(tabName);
     if (selectedTab && selectedTab.classList) {
@@ -143,7 +144,7 @@ function switchTab(e, tabName) {
     if (e.target && e.target.classList) {
         e.target.classList.add('active');
     }
-    
+
     // Load data for whichever tab they're viewing
     if (tabName === 'bansTab') {
         loadBannedUsers();
@@ -181,18 +182,18 @@ async function loadRecentActions() {
         if (response.ok) {
             const actions = await response.json();
             const tbody = document.getElementById('recentActionsTable');
-            
+
             if (!Array.isArray(actions) || actions.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No recent actions</td></tr>';
                 return;
             }
-            
+
             tbody.innerHTML = actions.map(action => {
                 const username = action.username || 'Unknown';
                 const userId = action.userId || '';
                 const isSameAsId = userId && username && username.trim() === userId.toString().trim();
                 const userLabel = userId ? (isSameAsId ? `${userId}` : `${username} (${userId})`) : username;
-                
+
                 // Parse timestamp safely
                 let dateStr = 'Invalid Date';
                 if (action.timestamp) {
@@ -205,7 +206,7 @@ async function loadRecentActions() {
                         dateStr = 'Invalid Date';
                     }
                 }
-                
+
                 return `
                 <tr>
                     <td>${dateStr}</td>
@@ -229,12 +230,12 @@ if (!window.currentTickets) {
 
 function renderTickets(tickets) {
     const tbody = document.getElementById('ticketsTable');
-    
+
     if (!Array.isArray(tickets) || tickets.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No tickets are currently open</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = tickets.map(ticket => `
         <tr>
             <td>#${escapeHtml(ticket.id)}</td>
@@ -282,12 +283,11 @@ function closeTicketDetails() {
 
 async function claimTicket(ticketId) {
     try {
-        const response = await fetch(`/api/tickets/${ticketId}/claim`, { method: 'POST' });
-        if (response.ok) {
+        const { response, data } = await AdminPanel.api.postJson(`/api/tickets/${ticketId}/claim`, {});
+        if (response && response.ok) {
             showSuccess('Ticket claimed successfully');
-            // Optionally reload tickets here if needed
         } else {
-            showError('Failed to claim ticket');
+            showError((data && data.error) || 'Failed to claim ticket');
         }
     } catch (error) {
         showError('Error claiming ticket');
@@ -315,12 +315,12 @@ async function loadBannedUsers() {
 
 function renderBannedUsers(bans) {
     const tbody = document.getElementById('bannedUsersTable');
-    
+
     if (!Array.isArray(bans) || bans.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No banned users</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = bans.map((ban, idx) => {
         const bannedByDisplay = ban.banned_by_username ? `${ban.banned_by_username}` : ban.banned_by || 'Unknown';
         return `
@@ -337,7 +337,7 @@ function renderBannedUsers(bans) {
         </tr>
     `;
     }).join('');
-    
+
     // Store ban data globally and attach click handlers
     bans.forEach((ban, idx) => {
         window[`viewBanDetails_${idx}`] = () => viewBanDetails(ban);
@@ -363,12 +363,12 @@ async function loadTimeouts() {
 
 function renderTimeouts(timeouts) {
     const tbody = document.getElementById('timeoutsTable');
-    
+
     if (!Array.isArray(timeouts) || timeouts.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No active timeouts</td></tr>';
         return;
     }
-    
+
     // Remove duplicate timeouts for same user, reason, and issued_by
     const uniqueTimeouts = [];
     const seen = new Set();
@@ -404,33 +404,48 @@ function renderTimeouts(timeouts) {
 }
 
 async function unbanUser(userId) {
-    if (!confirm('Are you sure you want to unban this user?')) return;
-    
     try {
-        const response = await fetch(`/api/moderation/bans/${userId}`, { method: 'DELETE' });
-        const data = await response.json();
-        if (response.ok && data.success) {
+        let confirmed = true;
+        if (typeof modalManager !== 'undefined' && modalManager && typeof modalManager.showConfirm === 'function') {
+            confirmed = await modalManager.showConfirm({
+                title: 'Confirm Unban',
+                message: 'Are you sure you want to unban this user?',
+                confirmText: 'Unban',
+                cancelText: 'Cancel',
+                type: 'danger'
+            });
+        } else {
+            confirmed = confirm('Are you sure you want to unban this user?');
+        }
+        if (!confirmed) return;
+    } catch (err) {
+        console.error('Confirmation failed', err);
+        return;
+    }
+
+    try {
+        const { response, data } = await AdminPanel.api.requestJson(`/api/moderation/bans/${userId}`, { method: 'DELETE' });
+        if (response && response.ok && data && data.success) {
             const caseIdMsg = data.caseId ? ` (Case ID: ${data.caseId})` : '';
             showSuccess(`User unbanned successfully${caseIdMsg}`);
             await loadBannedUsers();
         } else {
-            showError(data.error || 'Failed to unban user');
-            console.error('Error unbanning user:', error);
+            showError((data && data.error) || 'Failed to unban user');
+            console.error('Error unbanning user:', data || response);
         }
     } catch (error) {
         showError('Error unbanning user');
     }
-// Advanced warnings tab features
 }
 
 async function removeTimeout(userId) {
     try {
-        const response = await fetch(`/api/moderation/timeouts/${userId}`, { method: 'DELETE' });
-        if (response.ok) {
+        const { response, data } = await AdminPanel.api.requestJson(`/api/moderation/timeouts/${userId}`, { method: 'DELETE' });
+        if (response && response.ok) {
             showSuccess('Timeout removed successfully');
             await loadTimeouts();
         } else {
-            showError('Failed to remove timeout');
+            showError((data && data.error) || 'Failed to remove timeout');
         }
     } catch (error) {
         showError('Error removing timeout');
@@ -444,26 +459,29 @@ async function searchWarnings() {
     if (!query) {
         return;
     }
-    
+
     try {
-        const response = await fetch(`/api/moderation/warnings/search?q=${encodeURIComponent(query)}`);
-        if (response.ok) {
-            const warnings = await response.json();
-            renderWarnings(warnings);
+        const { response, data } = await AdminPanel.api.requestJson(`/api/moderation/warnings/search?q=${encodeURIComponent(query)}`);
+        if (response && response.ok) {
+            const results = Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);
+            renderWarnings(results);
         }
     } catch (error) {
         console.error('Error searching warnings:', error);
     }
 }
 
+// Expose function to global scope for inline onclick handlers
+window.searchWarnings = searchWarnings;
+
 function renderWarnings(warnings) {
     const tbody = document.getElementById('warningsTable');
-    
+
     if (!Array.isArray(warnings) || warnings.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No warnings found</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = warnings.map((warn, idx) => `
         <tr>
             <td><code>${escapeHtml(warn.user_id)}</code></td>
@@ -479,7 +497,7 @@ function renderWarnings(warnings) {
     warnings.forEach((warn, idx) => {
         window[`viewWarnings_${idx}`] = () => viewWarningDetails(warn);
     });
-    
+
     // Store warning data globally and attach click handlers
     warnings.forEach((warn, idx) => {
         window[`viewWarnings_${idx}`] = () => viewWarningDetails(warn);
@@ -487,15 +505,32 @@ function renderWarnings(warnings) {
 }
 
 async function clearWarnings(userId) {
-    if (!confirm('Are you sure you want to clear all warnings for this user?')) return;
-    
     try {
-        const response = await fetch(`/api/moderation/warnings/${userId}`, { method: 'DELETE' });
-        if (response.ok) {
+        let confirmed = true;
+        if (typeof modalManager !== 'undefined' && modalManager && typeof modalManager.showConfirm === 'function') {
+            confirmed = await modalManager.showConfirm({
+                title: 'Clear Warnings',
+                message: 'Are you sure you want to clear all warnings for this user?',
+                confirmText: 'Clear',
+                cancelText: 'Cancel',
+                type: 'danger'
+            });
+        } else {
+            confirmed = confirm('Are you sure you want to clear all warnings for this user?');
+        }
+        if (!confirmed) return;
+    } catch (err) {
+        console.error('Confirmation failed', err);
+        return;
+    }
+
+    try {
+        const { response, data } = await AdminPanel.api.requestJson(`/api/moderation/warnings/${userId}`, { method: 'DELETE' });
+        if (response && response.ok) {
             showSuccess('Warnings cleared successfully');
             await searchWarnings();
         } else {
-            showError('Failed to clear warnings');
+            showError((data && data.error) || 'Failed to clear warnings');
         }
     } catch (error) {
         showError('Error clearing warnings');
@@ -506,7 +541,7 @@ function viewWarningDetails(warn) {
     const userDisplay = warn.username ? `${warn.username} (${warn.user_id})` : warn.user_id || 'N/A';
     document.getElementById('warningDetailUser').textContent = userDisplay;
     document.getElementById('warningDetailCount').textContent = warn.warn_count || 0;
-    
+
     // Create detailed warning list
     if (warn.warns && Array.isArray(warn.warns) && warn.warns.length > 0) {
         const warningsList = warn.warns.map(w => {
@@ -528,7 +563,7 @@ function viewWarningDetails(warn) {
         const warningsList_elem = document.getElementById('warningDetailsList');
         if (warningsList_elem) warningsList_elem.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No warnings found</p>';
     }
-    
+
     const modal = document.getElementById('warningsDetailsModal');
     if (modal) modal.style.display = 'flex';
 }
@@ -576,12 +611,12 @@ async function searchMembers() {
 
 function renderMembers(members) {
     const tbody = document.getElementById('membersTable');
-    
+
     if (!Array.isArray(members) || members.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No members found</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = members.map(member => `
         <tr>
             <td><code>${escapeHtml(member.user_id)}</code></td>
@@ -609,10 +644,9 @@ function closeNotesModal() {
 
 async function loadMemberNotes(userId) {
     try {
-        const response = await fetch(`/api/members/${userId}/notes`);
-        if (response.ok) {
-            const data = await response.json();
-            document.getElementById('notesTextarea').value = data.notes || '';
+        const { response, data } = await AdminPanel.api.requestJson(`/api/members/${userId}/notes`);
+        if (response && response.ok) {
+            document.getElementById('notesTextarea').value = (data && data.notes) || '';
         }
     } catch (error) {
         console.error('Error loading member notes:', error);
@@ -622,19 +656,14 @@ async function loadMemberNotes(userId) {
 async function saveNotes() {
     const userId = document.getElementById('notesMemberId').textContent.match(/\((\d+)\)/)[1];
     const notes = document.getElementById('notesTextarea').value;
-    
+
     try {
-        const response = await fetch(`/api/members/${userId}/notes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notes })
-        });
-        
-        if (response.ok) {
+        const { response, data } = await AdminPanel.api.postJson(`/api/members/${userId}/notes`, { notes });
+        if (response && response.ok) {
             showSuccess('Notes saved successfully');
             closeNotesModal();
         } else {
-            showError('Failed to save notes');
+            showError((data && data.error) || 'Failed to save notes');
         }
     } catch (error) {
         showError('Error saving notes');
@@ -666,11 +695,27 @@ function showSuccess(msg) {
 }
 
 function logout() {
-    if (confirm('Are you sure you want to logout?')) {
-        fetch('/api/logout', { method: 'POST' }).then(() => {
+    (async () => {
+        try {
+            let confirmed = true;
+            if (typeof modalManager !== 'undefined' && modalManager && typeof modalManager.showConfirm === 'function') {
+                confirmed = await modalManager.showConfirm({
+                    title: 'Logout',
+                    message: 'Are you sure you want to logout?',
+                    confirmText: 'Logout',
+                    cancelText: 'Cancel',
+                    type: 'warning'
+                });
+            } else {
+                confirmed = confirm('Are you sure you want to logout?');
+            }
+            if (!confirmed) return;
+            await AdminPanel.api.postJson('/api/logout', {});
             window.location.href = '/login';
-        });
-    }
+        } catch (err) {
+            console.error('Logout confirmation failed', err);
+        }
+    })();
 }
 
 
@@ -691,11 +736,92 @@ function escapeHtml(text) {
 function viewBanDetails(ban) {
     const userDisplay = ban.username ? `${ban.username} (${ban.user_id})` : ban.user_id || 'N/A';
     const bannedByDisplay = ban.banned_by_username ? `${ban.banned_by_username} (${ban.banned_by})` : ban.banned_by || 'Unknown';
+    const reason = ban.ban_reason || ban.reason || 'No reason provided';
+    const bannedAt = ban.banned_at ? new Date(ban.banned_at).toLocaleString() : 'N/A';
+    const caseId = ban.ban_case_id || 'N/A';
+
+    // If modalManager is available, show a polished modal. Otherwise fall back to legacy modal DOM.
+    if (typeof modalManager !== 'undefined' && modalManager && typeof modalManager.showDetails === 'function') {
+        // Ensure legacy static modal is hidden to avoid duplicate UI
+        try { document.getElementById('banDetailsModal').style.display = 'none'; } catch (e) { }
+        const modalTimestamp = Date.now();
+        const unbanBtnId = `unban-btn-${modalTimestamp}`;
+        const copyBtnId = `copy-id-${modalTimestamp}`;
+
+        const html = `
+            <div style="display:flex; gap:1rem; align-items:flex-start;">
+                <div style="flex:0 0 72px;">
+                    <div style="width:72px;height:72px;border-radius:8px;background:linear-gradient(180deg,#222,#111);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">${escapeHtml((ban.username || 'U').charAt(0).toUpperCase())}</div>
+                </div>
+                <div style="flex:1;">
+                    <h4 style="margin:0 0 0.25rem;color:var(--text-primary);">${escapeHtml(ban.username || 'Unknown')}</h4>
+                    <div style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:0.75rem;">ID: <code id="ban-id-${modalTimestamp}">${escapeHtml(ban.user_id || '')}</code> <button id="${copyBtnId}" class="btn btn-sm" style="margin-left:0.5rem;">Copy</button></div>
+
+                    <dl style="display:grid;grid-template-columns:120px 1fr;gap:0.5rem 1rem;color:var(--text-secondary);">
+                        <dt style="font-weight:600;color:var(--text-primary);">Reason</dt>
+                        <dd>${escapeHtml(reason)}</dd>
+                        <dt style="font-weight:600;color:var(--text-primary);">Banned By</dt>
+                        <dd>${escapeHtml(bannedByDisplay)}</dd>
+                        <dt style="font-weight:600;color:var(--text-primary);">When</dt>
+                        <dd>${escapeHtml(bannedAt)}</dd>
+                        <dt style="font-weight:600;color:var(--text-primary);">Case ID</dt>
+                        <dd>${escapeHtml(caseId)}</dd>
+                    </dl>
+                </div>
+            </div>
+        `;
+
+        const modal = modalManager.showDetails('Ban Details', html, null);
+
+        // Attach copy handler
+        try {
+            const copyBtn = document.getElementById(copyBtnId);
+            const idEl = document.getElementById(`ban-id-${modalTimestamp}`);
+            if (copyBtn && idEl) {
+                copyBtn.addEventListener('click', () => {
+                    navigator.clipboard.writeText(idEl.textContent || '');
+                    showSuccess('Copied', 'User ID copied to clipboard', 2000);
+                });
+            }
+        } catch (e) { /* ignore */ }
+
+        // Attach unban handler
+        try {
+            // Append an Unban button into the existing modal footer so there's only one Close button.
+            const footer = modal.querySelector('.modal-footer');
+            if (footer) {
+                const unbanBtn = document.createElement('button');
+                unbanBtn.className = 'btn btn-danger';
+                unbanBtn.textContent = 'Unban';
+                unbanBtn.style.marginLeft = '0.5rem';
+                footer.appendChild(unbanBtn);
+
+                unbanBtn.addEventListener('click', async () => {
+                    // close this modal and trigger unban
+                    if (modal && modal.id) modalManager.closeModal(modal.id);
+                    await unbanUser(String(ban.user_id));
+                });
+            } else {
+                // Fallback: if footer not found, attach to dynamically created button id
+                const btn = document.getElementById(unbanBtnId);
+                if (btn) {
+                    btn.addEventListener('click', async () => {
+                        if (modal && modal.id) modalManager.closeModal(modal.id);
+                        await unbanUser(String(ban.user_id));
+                    });
+                }
+            }
+        } catch (e) { console.error(e); }
+
+        return;
+    }
+
+    // Legacy fallback: populate existing static modal
     document.getElementById('banDetailUser').textContent = userDisplay;
-    document.getElementById('banDetailReason').textContent = ban.ban_reason || ban.reason || 'No reason provided';
+    document.getElementById('banDetailReason').textContent = reason;
     document.getElementById('banDetailBannedBy').textContent = bannedByDisplay;
-    document.getElementById('banDetailBannedAt').textContent = ban.banned_at ? new Date(ban.banned_at).toLocaleString() : 'N/A';
-    document.getElementById('banDetailCaseId').textContent = ban.ban_case_id || 'N/A';
+    document.getElementById('banDetailBannedAt').textContent = bannedAt;
+    document.getElementById('banDetailCaseId').textContent = caseId;
     document.getElementById('banDetailsModal').style.display = 'flex';
 }
 
@@ -711,7 +837,7 @@ function viewTimeoutDetails(timeout) {
     document.getElementById('timeoutDetailIssuedBy').textContent = issuedByDisplay;
     document.getElementById('timeoutDetailIssuedAt').textContent = timeout.issued_at ? new Date(timeout.issued_at).toLocaleString() : 'N/A';
     document.getElementById('timeoutDetailExpiresAt').textContent = timeout.expires_at ? new Date(timeout.expires_at).toLocaleString() : 'N/A';
-    
+
     // Calculate remaining time
     const now = Date.now();
     const expires = timeout.expires_at ? new Date(timeout.expires_at).getTime() : null;
@@ -725,7 +851,7 @@ function viewTimeoutDetails(timeout) {
         remaining = 'Expired';
     }
     document.getElementById('timeoutDetailRemaining').textContent = remaining;
-    
+
     document.getElementById('timeoutDetailsModal').style.display = 'flex';
 }
 

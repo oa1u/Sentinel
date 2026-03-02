@@ -1,6 +1,6 @@
-// Gets a member from a mention, ID, or username.
-// Handles different input formats like <@123>, 123456, or username.
-// Makes commands more flexible for users.
+// Helpers for resolving members and users from free-form input.
+// Accepts mentions, raw IDs, exact usernames/display names, and fuzzy matches
+// so commands can accept flexible input like `<@123456>`, `123456`, or `SomeUser`.
 
 async function getMemberFromMention(guild, input) {
     if (!guild) {
@@ -57,7 +57,7 @@ async function getMemberFromMention(guild, input) {
     return null;
 }
 
-// Get user from mention or ID
+// Resolve a User (not a GuildMember) from a mention or raw ID.
 async function getUserFromInput(client, input) {
     if (!client) {
         throw new Error('Client is required');
@@ -90,7 +90,7 @@ async function getUserFromInput(client, input) {
     return null;
 }
 
-// Check if member has a role
+// Return true if the member has the specified role (by id or role object).
 function memberHasRole(member, roleInput) {
     if (!member) return false;
     
@@ -98,7 +98,7 @@ function memberHasRole(member, roleInput) {
     return member.roles.cache.has(roleId);
 }
 
-// Get all members with a role
+// Return all guild members who have the given role.
 function getMembersWithRole(guild, roleInput) {
     if (!guild) {
         throw new Error('Guild is required');
@@ -108,7 +108,7 @@ function getMembersWithRole(guild, roleInput) {
     return guild.members.cache.filter(m => m.roles.cache.has(roleId));
 }
 
-// Add role to a member
+// Add the specified role to a member. Returns the member on success.
 async function addRoleToMember(member, roleInput, reason = 'No reason provided') {
     if (!member) return null;
     
@@ -124,7 +124,7 @@ async function addRoleToMember(member, roleInput, reason = 'No reason provided')
     }
 }
 
-// Remove role from a member
+// Remove the specified role from a member. Returns the member on success.
 async function removeRoleFromMember(member, roleInput, reason = 'No reason provided') {
     if (!member) return null;
     
@@ -140,7 +140,7 @@ async function removeRoleFromMember(member, roleInput, reason = 'No reason provi
     }
 }
 
-// Check if a member has elevated permissions in the guild
+// Simple check for elevated moderation/admin permissions.
 function isModOrAdmin(member) {
     if (!member) return false;
     return member.permissions.has('ModerateMembers') || member.permissions.has('Administrator');

@@ -1,8 +1,8 @@
-const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const moment = require("moment");
 require("moment-duration-format");
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const AdminPanelHelper = require("../../Functions/AdminPanelHelper");
 
@@ -41,7 +41,7 @@ module.exports = {
     .addStringOption(option =>
       option.setName('reason')
         .setDescription('Reason for the timeout')
-        .setRequired(false)
+        .setRequired(true)
     ),
   category: 'moderation',
   async execute(interaction) {
@@ -136,20 +136,26 @@ module.exports = {
     );
 
     // Send DM to user
-    const dmEmbed = new EmbedBuilder()
-      .setTitle('⏱️ Communication Timeout Notice')
-      .setColor(0xFAA61A)
-      .setDescription(`You have been temporarily muted in **${interaction.guild.name}**.`)
-      .addFields(
-        { name: 'Timeout Status', value: `**${'```'}${moment.duration(duration, 'minutes').format('d[d] h[h] m[m]')}${'```'}**`, inline: true },
-        { name: 'Issued At', value: `${moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm')}`, inline: true },
-        { name: 'Expires At', value: `<t:${Math.floor(expiresAt / 1000)}:F>`, inline: true },
-        { name: 'Reason for timeout', value: `	${'```'}${reason}${'```'}`, inline: false },
-        { name: 'Case ID', value: `${'```'}${caseID}${'```'}`, inline: true },
-        { name: 'Moderator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
-      )
-      .setFooter({ text: `${interaction.guild.name} • Moderation System` })
-      .setTimestamp();
+    const durationText = moment.duration(duration, 'minutes').format('d[d] h[h] m[m]');
+    const dmEmbed = createModerationDmEmbed({
+      actionTitle: 'Communication Timeout Notice',
+      actionEmoji: '⏱️',
+      color: 0xFAA61A,
+      guildName: interaction.guild.name,
+      description: `You have been temporarily muted in **${interaction.guild.name}**.`,
+      statusLabel: 'Timeout Status',
+      statusValue: '🛡️ **Active**',
+      effectiveDate: moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm'),
+      effectiveLabel: 'Issued At',
+      duration: durationText,
+      durationLabel: 'Timeout Length',
+      reason: reason,
+      caseId: caseID,
+      moderatorName: interaction.user.username,
+      extraFields: [
+        { name: 'Expires At', value: `<t:${Math.floor(expiresAt / 1000)}:F>`, inline: true }
+      ]
+    });
 
     const dmSent = await sendModerationDM(targetUser, dmEmbed);
 

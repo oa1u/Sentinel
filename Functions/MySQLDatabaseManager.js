@@ -1,60 +1,61 @@
 const mysqlConnection = require('./MySQLConnection');
 
-// This is the MySQL Database Manager.
-// It handles all database operations for users, moderation, levels, and more.
-// Handles queries, validation, and errors so you don't have to worry.
-// TODO: Add connection pooling to make things faster.
+// MySQL Database Manager
+// A centralized place for all database operations: users, moderation cases,
+// levels, bans, and more. This class wraps queries, handles basic validation
+// and migrations, and keeps DB logic out of command handlers.
 
 class MySQLDatabaseManager {
-        // Makes sure joined_at and created_at are valid ISO date strings for a user.
-        // If they're missing or invalid, sets them to fallback values and updates the database.
-        // userId: Discord user ID
-        // userData: Object with possible joined_at and created_at
-        // fallbackJoinedAt: Fallback date string for joined_at
-        // fallbackCreatedAt: Fallback date string for created_at
-        // Returns updated user info or null.
-        async ensureUserDates(userId, userData, fallbackJoinedAt, fallbackCreatedAt) {
-            const validId = this.validateDiscordId(userId);
-            if (!validId) return null;
-            // Helper to check date validity
-            function isValidDate(dateStr) {
-                if (!dateStr) return false;
-                const d = new Date(dateStr);
-                return !isNaN(d.getTime());
-            }
-            // Get current info
-            let info = await this.getUserInfo(validId) || {};
-            // Use provided data or fallback
-            const joinedAt = userData.joined_at || info.joined_at || fallbackJoinedAt;
-            const createdAt = userData.created_at || info.created_at || fallbackCreatedAt;
-            let updated = false;
-            // Validate and update if needed
-            if (!isValidDate(joinedAt)) {
-                info.joined_at = fallbackJoinedAt;
-                updated = true;
-            } else {
-                info.joined_at = joinedAt;
-            }
-            if (!isValidDate(createdAt)) {
-                info.created_at = fallbackCreatedAt;
-                updated = true;
-            } else {
-                info.created_at = createdAt;
-            }
-            // Copy other info
-            info = { ...info, ...userData };
-            // Update DB if changed
-            if (updated) {
-                await this.connection.query(
-                    `UPDATE userinfo SET joined_at = ?, created_at = ? WHERE user_id = ?`,
-                    [info.joined_at, info.created_at, validId]
-                );
-            }
-            return info;
+    // Makes sure joined_at and created_at are valid ISO date strings for a user.
+    // If they're missing or invalid, sets them to fallback values and updates the database.
+    // userId: Discord user ID
+    // userData: Object with possible joined_at and created_at
+    // fallbackJoinedAt: Fallback date string for joined_at
+    // fallbackCreatedAt: Fallback date string for created_at
+    // Returns updated user info or null.
+    async ensureUserDates(userId, userData, fallbackJoinedAt, fallbackCreatedAt) {
+        const validId = this.validateDiscordId(userId);
+        if (!validId) return null;
+        // Helper to check date validity
+        function isValidDate(dateStr) {
+            if (!dateStr) return false;
+            const d = new Date(dateStr);
+            return !isNaN(d.getTime());
         }
+        // Get current info
+        let info = await this.getUserInfo(validId) || {};
+        // Use provided data or fallback
+        const joinedAt = userData.joined_at || info.joined_at || fallbackJoinedAt;
+        const createdAt = userData.created_at || info.created_at || fallbackCreatedAt;
+        let updated = false;
+        // Validate and update if needed
+        if (!isValidDate(joinedAt)) {
+            info.joined_at = fallbackJoinedAt;
+            updated = true;
+        } else {
+            info.joined_at = joinedAt;
+        }
+        if (!isValidDate(createdAt)) {
+            info.created_at = fallbackCreatedAt;
+            updated = true;
+        } else {
+            info.created_at = createdAt;
+        }
+        // Copy other info
+        info = { ...info, ...userData };
+        // Update DB if changed
+        if (updated) {
+            await this.connection.query(
+                `UPDATE userinfo SET joined_at = ?, created_at = ? WHERE user_id = ?`,
+                [info.joined_at, info.created_at, validId]
+            );
+        }
+        return info;
+    }
     constructor() {
         this.connection = mysqlConnection;
         this.tempDatabases = new Map();
+        this._profileSyncColumnsEnsured = false;
     }
 
     // Validates and sanitizes a Discord ID.
@@ -77,6 +78,14 @@ class MySQLDatabaseManager {
         const trimmed = text.trim();
         if (trimmed.length === 0 || trimmed.length > maxLength) return null;
         return trimmed;
+    }
+
+    normalizeMemberNotesText(notes) {
+        if (typeof notes !== 'string' || !notes) return '';
+        return notes
+            .replace(/^\[(\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?\s+UTC\]\s*/gm, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
     }
 
     async initialize() {
@@ -141,6 +150,150 @@ class MySQLDatabaseManager {
         }
     }
 
+    async ensureUserProfileSyncColumns() {
+        try {
+            if (this._profileSyncColumnsEnsured) return true;
+
+            const columnMigrations = [
+                'ALTER TABLE userinfo ADD COLUMN nickname VARCHAR(255) NULL',
+                'ALTER TABLE userinfo ADD COLUMN bio TEXT NULL',
+                'ALTER TABLE userinfo ADD COLUMN profile_sync_enabled TINYINT(1) NOT NULL DEFAULT 0',
+                'ALTER TABLE userinfo ADD COLUMN profile_last_selected_at BIGINT NULL',
+                'ALTER TABLE userinfo ADD COLUMN profile_last_synced_at BIGINT NULL'
+            ];
+
+            for (const statement of columnMigrations) {
+                try {
+                    await this.connection.pool.execute(statement);
+                } catch (migrationError) {
+                    const duplicateColumn = migrationError?.code === 'ER_DUP_FIELDNAME'
+                        || String(migrationError?.message || '').toLowerCase().includes('duplicate column');
+                    if (!duplicateColumn) {
+                        throw migrationError;
+                    }
+                }
+            }
+
+            this._profileSyncColumnsEnsured = true;
+            return true;
+        } catch (error) {
+            console.error(`[MySQLDatabaseManager] Error ensuring user profile sync columns: ${error.message}`);
+            return false;
+        }
+    }
+
+    async upsertUserProfileSnapshot(userId, { username = null, nickname = null, bio = null, selectedAt = null, syncedAt = null, enableSync = true } = {}) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return false;
+
+            const columnsEnsured = await this.ensureUserProfileSyncColumns();
+
+            const safeUsername = username ? this.validateTextInput(String(username), 255) : null;
+            const safeNickname = nickname ? this.validateTextInput(String(nickname), 255) : null;
+            const safeBio = bio ? this.validateTextInput(String(bio), 4000) : null;
+            const selectedAtMs = Number.isFinite(Number(selectedAt)) ? Number(selectedAt) : null;
+            const syncedAtMs = Number.isFinite(Number(syncedAt)) ? Number(syncedAt) : null;
+
+            if (!columnsEnsured) {
+                await this.connection.query(
+                    `INSERT INTO userinfo (user_id, username, bio, last_seen)
+                     VALUES (?, ?, ?, NOW())
+                     ON DUPLICATE KEY UPDATE
+                        username = COALESCE(VALUES(username), username),
+                        bio = COALESCE(VALUES(bio), bio),
+                        last_seen = NOW()`,
+                    [validId, safeUsername, safeBio]
+                );
+                return true;
+            }
+
+            await this.connection.query(
+                `INSERT INTO userinfo (
+                    user_id,
+                    username,
+                    nickname,
+                    bio,
+                    profile_sync_enabled,
+                    profile_last_selected_at,
+                    profile_last_synced_at,
+                    last_seen
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE
+                    username = COALESCE(VALUES(username), username),
+                    nickname = COALESCE(VALUES(nickname), nickname),
+                    bio = COALESCE(VALUES(bio), bio),
+                    profile_sync_enabled = VALUES(profile_sync_enabled),
+                    profile_last_selected_at = COALESCE(GREATEST(COALESCE(profile_last_selected_at, 0), VALUES(profile_last_selected_at)), profile_last_selected_at),
+                    profile_last_synced_at = COALESCE(VALUES(profile_last_synced_at), profile_last_synced_at),
+                    last_seen = NOW()`,
+                [
+                    validId,
+                    safeUsername,
+                    safeNickname,
+                    safeBio,
+                    enableSync ? 1 : 0,
+                    selectedAtMs,
+                    syncedAtMs
+                ]
+            );
+
+            return true;
+        } catch (error) {
+            console.error(`[MySQLDatabaseManager] Error upserting user profile snapshot: ${error.message}`);
+            return false;
+        }
+    }
+
+    async markUserProfileSynced(userId, syncedAt = Date.now()) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return false;
+
+            await this.ensureUserProfileSyncColumns();
+
+            const syncedAtMs = Number.isFinite(Number(syncedAt)) ? Number(syncedAt) : Date.now();
+            await this.connection.query(
+                `UPDATE userinfo
+                 SET profile_last_synced_at = ?, profile_sync_enabled = 1, last_seen = NOW()
+                 WHERE user_id = ?`,
+                [syncedAtMs, validId]
+            );
+            return true;
+        } catch (error) {
+            console.error(`[MySQLDatabaseManager] Error marking user profile sync timestamp: ${error.message}`);
+            return false;
+        }
+    }
+
+    async getUsersDueForProfileSync(limit = 25, staleMs = 6 * 60 * 60 * 1000) {
+        try {
+            await this.ensureUserProfileSyncColumns();
+
+            const safeLimit = Math.max(1, Math.min(100, Number(limit) || 25));
+            const cutoff = Date.now() - Math.max(60 * 1000, Number(staleMs) || 6 * 60 * 60 * 1000);
+
+            const rows = await this.connection.query(
+                `SELECT user_id, username, profile_last_selected_at, profile_last_synced_at
+                 FROM userinfo
+                 WHERE profile_sync_enabled = 1
+                   AND profile_last_selected_at IS NOT NULL
+                   AND (
+                     profile_last_synced_at IS NULL
+                     OR profile_last_synced_at < ?
+                   )
+                 ORDER BY profile_last_selected_at DESC
+                 LIMIT ?`,
+                [cutoff, safeLimit]
+            );
+
+            return Array.isArray(rows) ? rows : [];
+        } catch (error) {
+            console.error(`[MySQLDatabaseManager] Error getting users due for profile sync: ${error.message}`);
+            return [];
+        }
+    }
+
     // Gets member notes from the database.
     // userId: Discord user ID
     // Returns notes text.
@@ -148,15 +301,15 @@ class MySQLDatabaseManager {
         try {
             const validId = this.validateDiscordId(userId);
             if (!validId) return '';
-            
+
             // First ensure the notes column exists
             await this.ensureNotesColumn();
-            
+
             const results = await this.connection.query(
                 'SELECT notes FROM userinfo WHERE user_id = ?',
                 [validId]
             );
-            return results[0]?.notes || '';
+            return this.normalizeMemberNotesText(results[0]?.notes || '');
         } catch (error) {
             console.error(`[MySQLDatabaseManager] Error getting member notes: ${error.message}`);
             return '';
@@ -168,15 +321,16 @@ class MySQLDatabaseManager {
         try {
             const validId = this.validateDiscordId(userId);
             if (!validId) return false;
-            
+            const normalizedNotes = this.normalizeMemberNotesText(typeof notes === 'string' ? notes : '');
+
             // Ensure notes column exists
             await this.ensureNotesColumn();
-            
+
             // Ensure user exists in userinfo table first
             await this.connection.query(
                 `INSERT INTO userinfo (user_id, notes) VALUES (?, ?)
                  ON DUPLICATE KEY UPDATE notes = ?`,
-                [validId, notes, notes]
+                [validId, normalizedNotes, normalizedNotes]
             );
             return true;
         } catch (error) {
@@ -233,7 +387,7 @@ class MySQLDatabaseManager {
     }
 
     // ========== LEVELS ==========
-    
+
     async getUserLevel(userId) {
         try {
             const validId = this.validateDiscordId(userId);
@@ -260,7 +414,7 @@ class MySQLDatabaseManager {
                 return false;
             }
             const { xp = 0, level = 1, messages = 0, total_xp = 0, last_message = 0, username = null } = data;
-            
+
             // Validate numeric inputs
             const validXp = Math.max(0, Math.floor(Number(xp)) || 0);
             const validLevel = Math.max(1, Math.floor(Number(level)) || 1);
@@ -331,7 +485,7 @@ class MySQLDatabaseManager {
     }
 
     // ========== WARNS ==========
-    
+
     async addCase(userId, caseId, caseData) {
         try {
             // Handle both old format (moderator, date) and new format (moderatorId, timestamp)
@@ -344,7 +498,7 @@ class MySQLDatabaseManager {
             const userName = caseData.userName || caseData.userTag || null;
             const moderatorName = caseData.moderatorName || caseData.moderatorTag || null;
             const moderatorSource = caseData.moderatorSource || (moderatorId ? 'discord' : null);
-            
+
             // Only insert into warns table for actual warnings (not timeouts/bans/kicks/automod)
             // AutoMod violations are logged separately to automod_violations table
             if (type === 'WARN') {
@@ -355,7 +509,7 @@ class MySQLDatabaseManager {
                     [userId, caseId, reason, moderatorId, userName, moderatorName, moderatorSource, type, timestamp, reason, moderatorId, userName, moderatorName, moderatorSource, type, timestamp]
                 );
             }
-            
+
             // Update user_bans table only for ban actions
             if (type === 'BAN' || type === 'ban') {
                 await this.connection.query(
@@ -373,7 +527,7 @@ class MySQLDatabaseManager {
                     [userId, caseId, moderatorId, reason, userName, moderatorName, moderatorSource, caseId, moderatorId, reason, userName, moderatorName, moderatorSource]
                 );
             }
-            
+
             return true;
         } catch (error) {
             console.error('Error adding case:', error);
@@ -387,12 +541,12 @@ class MySQLDatabaseManager {
                 'SELECT * FROM warns WHERE user_id = ? AND type = "WARN" ORDER BY created_at DESC',
                 [userId]
             );
-            
+
             const banInfo = await this.connection.query(
                 'SELECT * FROM user_bans WHERE user_id = ?',
                 [userId]
             );
-            
+
             // Convert to old format
             const warnsObj = {};
             let lastWarn = null;
@@ -407,7 +561,7 @@ class MySQLDatabaseManager {
                     lastWarn = warn;
                 }
             });
-            
+
             return {
                 warns: warnsObj,
                 banned: banInfo[0]?.banned || false,
@@ -584,25 +738,25 @@ class MySQLDatabaseManager {
     }
 
     // ========== REMINDERS ==========
-    
+
     async addReminder(userId, reminderData) {
         try {
             const reminderId = reminderData.id || `${userId}-${Date.now()}`;
-            const { 
+            const {
                 caseId,
-                message, 
-                text, 
-                timestamp, 
-                createdAt, 
-                triggerAt, 
-                channelId, 
-                guildId, 
-                completed, 
-                deliveryAttempts, 
-                lastFailureReason, 
-                lastFailureTime 
+                message,
+                text,
+                timestamp,
+                createdAt,
+                triggerAt,
+                channelId,
+                guildId,
+                completed,
+                deliveryAttempts,
+                lastFailureReason,
+                lastFailureTime
             } = reminderData;
-            
+
             // Use REPLACE to handle both insert and update
             await this.connection.query(
                 `REPLACE INTO reminders 
@@ -611,17 +765,17 @@ class MySQLDatabaseManager {
                 [
                     reminderId,
                     caseId || null,
-                    userId, 
-                    message, 
-                    text || message, 
-                    timestamp || triggerAt || Date.now(), 
-                    createdAt || Date.now(), 
-                    triggerAt || timestamp || Date.now(), 
-                    channelId, 
-                    guildId, 
-                    completed || false, 
-                    deliveryAttempts || 0, 
-                    lastFailureReason, 
+                    userId,
+                    message,
+                    text || message,
+                    timestamp || triggerAt || Date.now(),
+                    createdAt || Date.now(),
+                    triggerAt || timestamp || Date.now(),
+                    channelId,
+                    guildId,
+                    completed || false,
+                    deliveryAttempts || 0,
+                    lastFailureReason,
                     lastFailureTime
                 ]
             );
@@ -721,14 +875,14 @@ class MySQLDatabaseManager {
     }
 
     // ========== GIVEAWAYS ==========
-    
+
     async createGiveaway(id, data) {
         try {
             if (!id) {
                 console.error('[MySQL] Cannot create giveaway - id is null/undefined');
                 return false;
             }
-            
+
             // Only use columns that exist in the giveaways table
             const {
                 prize,
@@ -773,20 +927,20 @@ class MySQLDatabaseManager {
                 console.warn('[MySQL] getGiveaway called with null/undefined id');
                 return null;
             }
-            
+
             const results = await this.connection.query(
                 'SELECT * FROM giveaways WHERE id = ?',
                 [id]
             );
-            
+
             if (results.length === 0) return null;
-            
+
             // Get entries
             const entries = await this.connection.query(
                 'SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?',
                 [id]
             );
-            
+
             const giveaway = results[0];
             return {
                 id: giveaway.id,
@@ -811,7 +965,7 @@ class MySQLDatabaseManager {
         try {
             const fields = [];
             const values = [];
-            
+
             if (data.ended !== undefined) {
                 fields.push('ended = ?');
                 values.push(data.ended);
@@ -820,7 +974,7 @@ class MySQLDatabaseManager {
                 fields.push('end_time = ?');
                 values.push(data.endTime);
             }
-            
+
             if (fields.length > 0) {
                 values.push(id);
                 await this.connection.query(
@@ -853,14 +1007,14 @@ class MySQLDatabaseManager {
             const giveaways = await this.connection.query(
                 'SELECT * FROM giveaways ORDER BY created_at DESC'
             );
-            
+
             // Get entries for each giveaway
             const result = await Promise.all(giveaways.map(async (g) => {
                 const entries = await this.connection.query(
                     'SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?',
                     [g.id]
                 );
-                
+
                 return {
                     id: g.id,
                     prize: g.prize,
@@ -873,7 +1027,7 @@ class MySQLDatabaseManager {
                     entries: entries.map(e => e.user_id)
                 };
             }));
-            
+
             return result;
         } catch (error) {
             console.error('Error getting all giveaways:', error);
@@ -917,7 +1071,7 @@ class MySQLDatabaseManager {
     }
 
     // ========== TICKETS ==========
-    
+
     async createTicket(channelId, ticketData) {
         try {
             const { userId, userName, reason, priority, createdAt, claimedBy, status } = ticketData;
@@ -1065,7 +1219,7 @@ class MySQLDatabaseManager {
     }
 
     // ========== JOIN TO CREATE ==========
-    
+
     async createJTCChannel(channelId, ownerId, guildId, channelName) {
         try {
             await this.connection.query(
@@ -1134,8 +1288,365 @@ class MySQLDatabaseManager {
         }
     }
 
+    // ========== BIRTHDAYS ==========
+
+    isValidBirthday(month, day) {
+        const m = Number(month);
+        const d = Number(day);
+        if (!Number.isInteger(m) || !Number.isInteger(d)) return false;
+        if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+
+        const testDate = new Date(Date.UTC(2000, m - 1, d));
+        return testDate.getUTCMonth() === (m - 1) && testDate.getUTCDate() === d;
+    }
+
+    getNextBirthdayDate(month, day, fromDate = new Date()) {
+        const m = Number(month);
+        const d = Number(day);
+        if (!this.isValidBirthday(m, d)) return null;
+
+        const base = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()));
+        let year = base.getUTCFullYear();
+
+        for (let i = 0; i < 8; i++) {
+            const candidate = new Date(Date.UTC(year, m - 1, d));
+            if (candidate.getUTCMonth() !== (m - 1) || candidate.getUTCDate() !== d) {
+                year++;
+                continue;
+            }
+            if (candidate >= base) {
+                return candidate;
+            }
+            year++;
+        }
+
+        return null;
+    }
+
+    async setBirthday(guildId, userId, month, day) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return false;
+            if (!this.isValidBirthday(month, day)) return false;
+
+            const safeMonth = Number(month);
+            const safeDay = Number(day);
+
+            await this.connection.query(
+                `INSERT INTO birthdays (guild_id, user_id, month, day)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE month = VALUES(month), day = VALUES(day), updated_at = CURRENT_TIMESTAMP`,
+                [validGuildId, validUserId, safeMonth, safeDay]
+            );
+            return true;
+        } catch (error) {
+            console.error('Error setting birthday:', error);
+            return false;
+        }
+    }
+
+    async getBirthday(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return null;
+
+            const results = await this.connection.query(
+                'SELECT guild_id, user_id, month, day, created_at, updated_at FROM birthdays WHERE guild_id = ? AND user_id = ? LIMIT 1',
+                [validGuildId, validUserId]
+            );
+
+            if (!results || results.length === 0) return null;
+            return results[0];
+        } catch (error) {
+            console.error('Error getting birthday:', error);
+            return null;
+        }
+    }
+
+    async removeBirthday(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return false;
+
+            const result = await this.connection.query(
+                'DELETE FROM birthdays WHERE guild_id = ? AND user_id = ?',
+                [validGuildId, validUserId]
+            );
+
+            return (result?.affectedRows || 0) > 0;
+        } catch (error) {
+            console.error('Error removing birthday:', error);
+            return false;
+        }
+    }
+
+    async getUpcomingBirthdays(guildId, daysAhead = 7) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            if (!validGuildId) return [];
+
+            const windowDays = Math.max(1, Math.min(31, Number(daysAhead) || 7));
+            const today = new Date();
+            const startUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+            const rows = await this.connection.query(
+                'SELECT guild_id, user_id, month, day, created_at, updated_at FROM birthdays WHERE guild_id = ?',
+                [validGuildId]
+            );
+
+            const results = [];
+            for (const row of rows || []) {
+                const nextDate = this.getNextBirthdayDate(row.month, row.day, startUtc);
+                if (!nextDate) continue;
+
+                const daysUntil = Math.floor((nextDate.getTime() - startUtc.getTime()) / (24 * 60 * 60 * 1000));
+                if (daysUntil < 0 || daysUntil >= windowDays) continue;
+
+                results.push({
+                    ...row,
+                    daysUntil,
+                    nextDate: nextDate.toISOString()
+                });
+            }
+
+            results.sort((a, b) => a.daysUntil - b.daysUntil || Number(a.month) - Number(b.month) || Number(a.day) - Number(b.day));
+            return results;
+        } catch (error) {
+            console.error('Error getting upcoming birthdays:', error);
+            return [];
+        }
+    }
+
+    async getBirthdayAnnouncementUserIds(guildId, dateKey) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const safeDateKey = typeof dateKey === 'string' ? dateKey.trim() : '';
+            if (!validGuildId || !/^\d{4}-\d{2}-\d{2}$/.test(safeDateKey)) return [];
+
+            const rows = await this.connection.query(
+                'SELECT user_id FROM birthday_announcements WHERE guild_id = ? AND date_key = ?',
+                [validGuildId, safeDateKey]
+            );
+
+            return (rows || []).map(row => String(row.user_id));
+        } catch (error) {
+            console.error('Error getting birthday announcement user IDs:', error);
+            return [];
+        }
+    }
+
+    async markBirthdayAnnouncementsSent(guildId, dateKey, userIds = []) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const safeDateKey = typeof dateKey === 'string' ? dateKey.trim() : '';
+            if (!validGuildId || !/^\d{4}-\d{2}-\d{2}$/.test(safeDateKey)) return false;
+
+            const uniqueUserIds = [...new Set(
+                (Array.isArray(userIds) ? userIds : [])
+                    .map(id => this.validateDiscordId(id))
+                    .filter(Boolean)
+            )];
+
+            if (!uniqueUserIds.length) return true;
+
+            for (const userId of uniqueUserIds) {
+                await this.connection.query(
+                    `INSERT INTO birthday_announcements (guild_id, user_id, date_key)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE sent_at = sent_at`,
+                    [validGuildId, userId, safeDateKey]
+                );
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error marking birthday announcements as sent:', error);
+            return false;
+        }
+    }
+
+    // ========== SCHEDULED JOBS ==========
+
+    async enqueueJob(jobType, payload = {}, runAt = Date.now(), maxAttempts = 3) {
+        try {
+            const safeType = this.validateTextInput(String(jobType || ''), 100);
+            if (!safeType) return null;
+
+            const safeRunAt = Number(runAt) || Date.now();
+            const safeAttempts = Math.max(1, Math.min(10, Number(maxAttempts) || 3));
+            const now = Date.now();
+
+            const result = await this.connection.query(
+                `INSERT INTO scheduled_jobs (job_type, payload, status, run_at, attempts, max_attempts, created_at, updated_at)
+                 VALUES (?, ?, 'pending', ?, 0, ?, ?, ?)`,
+                [safeType, JSON.stringify(payload || {}), safeRunAt, safeAttempts, now, now]
+            );
+
+            return result?.insertId || null;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error enqueueing job:', error.message);
+            return null;
+        }
+    }
+
+    async claimDueJobs(workerId, limit = 10) {
+        try {
+            const safeWorker = this.validateTextInput(String(workerId || ''), 100) || 'default-worker';
+            const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const now = Date.now();
+
+            const candidates = await this.connection.query(
+                `SELECT id
+                 FROM scheduled_jobs
+                 WHERE status = 'pending' AND run_at <= ?
+                 ORDER BY run_at ASC
+                 LIMIT ?`,
+                [now, safeLimit]
+            );
+
+            const claimedIds = [];
+            for (const candidate of candidates || []) {
+                const updateResult = await this.connection.query(
+                    `UPDATE scheduled_jobs
+                     SET status = 'running', locked_by = ?, locked_at = ?, updated_at = ?, attempts = attempts + 1
+                     WHERE id = ? AND status = 'pending'`,
+                    [safeWorker, now, now, candidate.id]
+                );
+
+                if ((updateResult?.affectedRows || 0) > 0) {
+                    claimedIds.push(candidate.id);
+                }
+            }
+
+            if (!claimedIds.length) return [];
+
+            const placeholders = claimedIds.map(() => '?').join(',');
+            const rows = await this.connection.query(
+                `SELECT * FROM scheduled_jobs WHERE id IN (${placeholders}) ORDER BY run_at ASC`,
+                claimedIds
+            );
+
+            return rows || [];
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error claiming due jobs:', error.message);
+            return [];
+        }
+    }
+
+    async completeJob(jobId) {
+        try {
+            const id = Number(jobId);
+            if (!Number.isFinite(id) || id <= 0) return false;
+            const now = Date.now();
+
+            const result = await this.connection.query(
+                `UPDATE scheduled_jobs
+                 SET status = 'completed', completed_at = ?, updated_at = ?, locked_by = NULL, locked_at = NULL
+                 WHERE id = ? AND status = 'running'`,
+                [now, now, id]
+            );
+
+            return (result?.affectedRows || 0) > 0;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error completing job:', error.message);
+            return false;
+        }
+    }
+
+    async failJob(jobId, errorMessage = 'Unknown job error') {
+        try {
+            const id = Number(jobId);
+            if (!Number.isFinite(id) || id <= 0) return false;
+
+            const safeError = this.validateTextInput(String(errorMessage || ''), 2000) || 'Unknown job error';
+            const now = Date.now();
+
+            const rows = await this.connection.query('SELECT attempts, max_attempts FROM scheduled_jobs WHERE id = ? LIMIT 1', [id]);
+            const row = rows?.[0];
+            if (!row) return false;
+
+            const attempts = Number(row.attempts) || 0;
+            const maxAttempts = Number(row.max_attempts) || 3;
+            const shouldRetry = attempts < maxAttempts;
+            const nextRunAt = now + Math.min(30 * 60 * 1000, Math.max(10 * 1000, attempts * 10 * 1000));
+
+            const result = await this.connection.query(
+                `UPDATE scheduled_jobs
+                 SET status = ?, run_at = ?, last_error = ?, updated_at = ?, locked_by = NULL, locked_at = NULL
+                 WHERE id = ?`,
+                [shouldRetry ? 'pending' : 'failed', shouldRetry ? nextRunAt : now, safeError, now, id]
+            );
+
+            return (result?.affectedRows || 0) > 0;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error failing job:', error.message);
+            return false;
+        }
+    }
+
+    async releaseStaleRunningJobs(staleAfterMs = 10 * 60 * 1000) {
+        try {
+            const threshold = Date.now() - Math.max(60 * 1000, Number(staleAfterMs) || 10 * 60 * 1000);
+            const result = await this.connection.query(
+                `UPDATE scheduled_jobs
+                 SET status = 'pending', locked_by = NULL, locked_at = NULL, updated_at = ?
+                 WHERE status = 'running' AND (locked_at IS NULL OR locked_at < ?)`,
+                [Date.now(), threshold]
+            );
+            return result?.affectedRows || 0;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error releasing stale jobs:', error.message);
+            return 0;
+        }
+    }
+
+    async getScheduledJobs({ status = null, limit = 50 } = {}) {
+        try {
+            const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
+            const allowedStatuses = ['pending', 'running', 'completed', 'failed'];
+
+            if (status && allowedStatuses.includes(status)) {
+                return await this.connection.query(
+                    `SELECT * FROM scheduled_jobs WHERE status = ? ORDER BY run_at ASC LIMIT ?`,
+                    [status, safeLimit]
+                );
+            }
+
+            return await this.connection.query(
+                `SELECT * FROM scheduled_jobs ORDER BY run_at ASC LIMIT ?`,
+                [safeLimit]
+            );
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting scheduled jobs:', error.message);
+            return [];
+        }
+    }
+
+    async retryScheduledJob(jobId) {
+        try {
+            const id = Number(jobId);
+            if (!Number.isFinite(id) || id <= 0) return false;
+            const now = Date.now();
+
+            const result = await this.connection.query(
+                `UPDATE scheduled_jobs
+                 SET status = 'pending', run_at = ?, locked_by = NULL, locked_at = NULL, updated_at = ?, last_error = NULL
+                 WHERE id = ?`,
+                [now, now, id]
+            );
+
+            return (result?.affectedRows || 0) > 0;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error retrying scheduled job:', error.message);
+            return false;
+        }
+    }
+
     // ========== STATS ==========
-    
+
     async getStats() {
         try {
             const stats = {
@@ -1152,7 +1663,7 @@ class MySQLDatabaseManager {
     }
 
     // ========== ADMIN USERS ==========
-    
+
     async getAdminUser(username) {
         try {
             const results = await this.connection.query(
@@ -1188,9 +1699,11 @@ class MySQLDatabaseManager {
 
     async createAdminUser(username, passwordHash, role = 'moderator') {
         try {
+            const { v7: uuidv7 } = require('uuid');
+            const id = uuidv7();
             await this.connection.query(
-                'INSERT INTO admin_users (username, password_hash, role) VALUES (?, ?, ?)',
-                [username, passwordHash, role]
+                'INSERT INTO admin_users (id, username, password_hash, role) VALUES (?, ?, ?, ?)',
+                [id, username, passwordHash, role]
             );
             return true;
         } catch (error) {
@@ -1390,7 +1903,7 @@ class MySQLDatabaseManager {
         try {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            
+
             const results = await this.connection.query(
                 `SELECT event_type, COUNT(*) as count 
                  FROM member_activity 
@@ -1398,7 +1911,7 @@ class MySQLDatabaseManager {
                  GROUP BY event_type`,
                 [today]
             );
-            
+
             const activity = { joins: 0, leaves: 0 };
             if (results && results.length > 0) {
                 results.forEach(row => {
@@ -1406,7 +1919,7 @@ class MySQLDatabaseManager {
                     if (row.event_type === 'leave') activity.leaves = parseInt(row.count) || 0;
                 });
             }
-            
+
             return activity;
         } catch (error) {
             console.error('Error getting member activity today:', error);
@@ -1478,10 +1991,13 @@ class MySQLDatabaseManager {
     // ===== SUGGESTIONS =====
     async createSuggestion(guildId, userId, title, description) {
         try {
+            // Accepts an optional 5th argument: caseId
+            let caseId = arguments[4];
+            if (!caseId) caseId = null;
             const result = await this.connection.query(
-                `INSERT INTO suggestions (guild_id, user_id, title, description) 
-                 VALUES (?, ?, ?, ?)`,
-                [guildId, userId, title, description]
+                `INSERT INTO suggestions (guild_id, user_id, title, description, case_id) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [guildId, userId, title, description, caseId]
             );
             return result.insertId;
         } catch (error) {
@@ -1499,6 +2015,19 @@ class MySQLDatabaseManager {
             return results.length > 0 ? results[0] : null;
         } catch (error) {
             console.error('Error getting suggestion:', error);
+            return null;
+        }
+    }
+
+    async getSuggestionByCaseId(caseId) {
+        try {
+            const results = await this.connection.query(
+                'SELECT * FROM suggestions WHERE case_id = ?',
+                [caseId]
+            );
+            return results.length > 0 ? results[0] : null;
+        } catch (error) {
+            console.error('Error getting suggestion by case id:', error);
             return null;
         }
     }
@@ -1883,22 +2412,22 @@ class MySQLDatabaseManager {
             const data = new Map();
             const db = {
                 data,
-                get: function(key) { return this.data.get(key); },
-                set: function(key, value) { this.data.set(key, value); return value; },
-                has: function(key) { return this.data.has(key); },
-                delete: function(key) { return this.data.delete(key); },
-                ensure: function(key, defaultValue) {
+                get: function (key) { return this.data.get(key); },
+                set: function (key, value) { this.data.set(key, value); return value; },
+                has: function (key) { return this.data.has(key); },
+                delete: function (key) { return this.data.delete(key); },
+                ensure: function (key, defaultValue) {
                     if (!this.has(key)) {
                         this.set(key, defaultValue);
                     }
                     return this.get(key);
                 },
-                all: function() {
+                all: function () {
                     const obj = {};
                     this.data.forEach((value, key) => obj[key] = value);
                     return obj;
                 },
-                size: function() { return this.data.size; }
+                size: function () { return this.data.size; }
             };
             this.tempDatabases.set(name, db);
         }

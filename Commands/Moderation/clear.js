@@ -28,10 +28,10 @@ module.exports = {
     ),
   category: "moderation",
   async execute(interaction) {
-      // Respond right away so Discord doesn't time out while we delete
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-      }
+    // Respond right away so Discord doesn't time out while we delete
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
+    }
 
     // Only let people with Manage Messages permission use this
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
@@ -50,9 +50,9 @@ module.exports = {
     try {
       // Get the messages from the channel
       const messages = await interaction.channel.messages.fetch({ limit: amount });
-      
+
       // If a user is picked, only delete their messages
-      let toDelete = targetUser 
+      let toDelete = targetUser
         ? messages.filter(msg => msg.author.id === targetUser.id)
         : messages;
 
@@ -79,7 +79,7 @@ module.exports = {
         { name: '👤 Moderator', value: `${interaction.user}\n\`${interaction.user.id}\``, inline: true },
         { name: '💬 Reason', value: `\`\`\`${reason}\`\`\``, inline: false }
       ];
-      
+
       if (targetUser) {
         logFields.push({ name: '🎯 Target User', value: `${targetUser.tag}\n\`${targetUser.id}\``, inline: false });
       }
@@ -101,7 +101,7 @@ module.exports = {
         { name: '👤 Moderator', value: `${interaction.user}`, inline: true },
         { name: '💬 Reason', value: `\`\`\`${reason}\`\`\``, inline: false }
       ];
-      
+
       if (targetUser) {
         fields.push({ name: '🎯 Target User', value: `${targetUser.tag}\n\`${targetUser.id}\``, inline: false });
       }
@@ -117,9 +117,9 @@ module.exports = {
       await interaction.editReply({ embeds: [successEmbed] });
     } catch (err) {
       console.error(`Error clearing messages:`, err);
-      
+
       let errorMessage = 'Could not clear messages.';
-      
+
       // Provide specific error messages
       if (err.message.includes('Missing Permissions')) {
         errorMessage = 'I don\'t have permission to delete messages in this channel.';
@@ -130,7 +130,7 @@ module.exports = {
       } else if (err.message) {
         errorMessage = `Error: ${err.message}`;
       }
-      
+
       await sendErrorReply(
         interaction,
         'Clear Failed',

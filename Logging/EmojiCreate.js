@@ -1,14 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
 const { serverLogChannelId } = require("../Config/constants/channel.json");
 
-// Log emoji creation events
+// Log when new custom emojis are added — include metadata and a thumbnail.
 module.exports = (client) => {
-	client.on("emojiCreate", async(emoji) => {
-    const logs = client.channels.cache.get(serverLogChannelId);
-    if (!logs) return;
+    client.on("emojiCreate", async (emoji) => {
+        const logs = client.channels.cache.get(serverLogChannelId);
+        if (!logs) return;
         const embed = new EmbedBuilder()
-             .setTitle("😀 Emoji Added")
-             .setColor("#43B581")
+            .setTitle("😀 Emoji Added")
+            .setColor("#43B581")
             .setDescription(`New emoji added to server.`)
             .addFields(
                 { name: "Emoji", value: emoji.toString(), inline: true },
@@ -20,7 +20,7 @@ module.exports = (client) => {
             .setThumbnail(emoji.imageURL())
             .setTimestamp()
             .setFooter({ text: "Emoji Created" });
-             if (emoji.author) embed.addFields({ name: "Added By", value: `${emoji.author.tag} (${emoji.author.id})` });
-            return logs.send({embeds: [embed]});
-  })
+        if (emoji.author) embed.addFields({ name: "Added By", value: `${emoji.author.tag} (${emoji.author.id})` });
+        return logs.send({ embeds: [embed] });
+    })
 }

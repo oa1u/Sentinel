@@ -21,7 +21,7 @@ module.exports = {
                         .setRequired(true)
                         .setMinValue(0)
                         .setMaxValue(999999999) // Prevent integer overflow
-                            .setMaxValue(999999999) // Prevent crazy big numbers from breaking things
+                        .setMaxValue(999999999) // Prevent crazy big numbers from breaking things
                 )
         )
         .addSubcommand(subcommand =>
@@ -87,13 +87,13 @@ module.exports = {
             );
         } else if (subcommand === 'level') {
             const level = interaction.options.getInteger('amount');
-            
+
             // Figure out how much XP is needed for the chosen level.
             let totalXP = 0;
             for (let i = 1; i < level; i++) {
                 totalXP += calculateRequiredXP(i);
             }
-            
+
             const userData = await setUserXP(targetUser.id, totalXP);
 
             await sendSuccessReply(

@@ -1,18 +1,23 @@
 <!DOCTYPE html>
+<!-- Dashboard — quick overview of server stats and recent activity for admins. -->
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Bot Admin Panel</title>
+    <title id="websiteNameTitle">Dashboard</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/public/shared.js"></script>
     <script src="/public/dashboard.js?v=5" defer></script>
+
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo">🎛️ Dashboard</div>
+            <div class="logo"><span id="PanelEmoji"></span> Dashboard</div>
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link active">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
@@ -34,6 +39,8 @@
                         <a href="/profile">👤 My Profile</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
                     </div>
@@ -44,7 +51,7 @@
 
     <div class="container">
         <h1 style="margin-bottom: 2rem; font-size: 2rem; color: var(--text-primary);">📊 Server Overview</h1>
-        
+
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-icon blue">👥</div>
@@ -142,20 +149,23 @@
         </div>
     </div>
 
-            <footer class="page-footer">
-                <div class="footer-links">
-                    <span>© 2026 <strong>Admin Panel</strong></span>
-                    <span class="footer-sep">•</span>
-                    <a href="/changelog">Changelog</a>
-                    <span class="footer-sep">•</span>
-                    <a href="/license">License</a>
-                </div>
-            </footer>
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/public/shared.js"></script>
     <script src="/public/version.js"></script>
     <script src="/public/notifications.js" defer></script>
 
-    </script></body>
+    </script>
+</body>
+
 </html>

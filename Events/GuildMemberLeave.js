@@ -1,8 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 
-// When a member leaves, send a friendly goodbye message and log their departure in the database.
-// Also logs their departure to the database
+// When someone leaves the server, log the event and send a polite goodbye message (if configured).
+// We persist the leave event so admins can review member activity later.
 module.exports = {
   name: 'guildMemberRemove',
   async execute(member) {
@@ -14,32 +14,32 @@ module.exports = {
         'leave',
         member.guild.id
       );
-      
+
       const { leaveChannelId } = require('../Config/constants/channel.json');
-      
-      // If there's no leave channel set up, just warn and skip.
+
+      // If no leave channel is configured, warn and skip sending a message.
       if (!leaveChannelId || leaveChannelId === '') {
         console.warn('[Leave] Channel not configured');
         return;
       }
-      
+
       const channel = member.guild.channels.cache.get(leaveChannelId);
       if (!channel) {
         console.warn(`[Leave] Channel ${leaveChannelId} not found`);
         return;
       }
-      
-      // Figure out how long the member was in the server.
+
+      // Calculate how long the member was in the server for context in the goodbye embed.
       const joinedTimestamp = member.joinedTimestamp;
       const memberAge = Date.now() - joinedTimestamp;
       const days = Math.floor(memberAge / (1000 * 60 * 60 * 24));
       const hours = Math.floor((memberAge % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      
+
       let ageString = '';
       if (days > 0) ageString += `${days}d `;
       ageString += `${hours}h`;
-      
-      // Build a nice-looking embed to say goodbye.
+
+      // Construct a friendly embed to announce the member's departure.
       const leaveEmbed = new EmbedBuilder()
         .setColor(0xFF6B6B)
         .setTitle('👋 Member Left')
@@ -54,14 +54,14 @@ module.exports = {
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .setFooter({ text: `User left • ID: ${member.id}` })
         .setTimestamp();
-      
-      // If the member had any roles (besides @everyone), list them in the embed.
+
+      // If the member had roles (excluding @everyone), include them in the embed for context.
       if (member.roles.cache.size > 1) {
         const roleList = member.roles.cache
           .filter(role => !role.isEveryone)
           .map(role => `<@&${role.id}>`)
           .join(', ');
-        
+
         if (roleList) {
           leaveEmbed.addFields({
             name: '🏷️ Roles',
@@ -70,7 +70,7 @@ module.exports = {
           });
         }
       }
-      
+
       await channel.send({ embeds: [leaveEmbed] }).catch((err) => {
         console.error(`[Leave] Couldn't send message: ${err.message}`);
       });

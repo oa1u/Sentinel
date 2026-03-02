@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { updateStats } = require('./Functions/botStats');
 const eventLoader = require('./Events/_loader');
+const JobScheduler = require('./Functions/JobScheduler');
+
 
 const { EmbedBuilder: DiscordEmbedBuilder } = require('discord.js');
 let BuildersEmbedBuilder = null;
@@ -38,8 +40,8 @@ function patchEmbedBuilder(EmbedBuilder) {
 patchEmbedBuilder(DiscordEmbedBuilder);
 patchEmbedBuilder(BuildersEmbedBuilder);
 
-// Initialize the Discord client with all the intents we need
-// TODO: maybe reduce these later if we don't need all of them
+// Create the Discord client with the intents we currently need.
+// We can remove unused intents later if we want to tighten permissions.
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -57,13 +59,14 @@ const client = new Client({
   presence: require("./Config/presence.json"),
 });
 
-// Collections to store commands and events
+// Collections for commands, slash commands, and events — handy globals
 client.commands = new Collection();
 client.slashCommands = new Collection();
 client.events = new Collection();
+let jobScheduler = null;
 
-// Helper function to recursively get all command files
-// Skips folders/files starting with underscore
+// Recursively yield command file paths (.js) from a directory.
+// Files or folders that start with '_' are skipped (they're helpers/private).
 function* getCommandFiles(dir) {
   const files = fs.readdirSync(dir);
   for (const file of files) {
@@ -77,7 +80,7 @@ function* getCommandFiles(dir) {
   }
 }
 
-// Register slash commands with Discord
+// Load and register slash commands with Discord (guild-scoped when possible).
 async function registerCommands() {
   const TOKEN = process.env.TOKEN;
   const CLIENT_ID = process.env.CLIENT_ID;
@@ -92,7 +95,8 @@ async function registerCommands() {
   const commandsPath = path.join(__dirname, 'Commands');
 
   try {
-    // Loop through all command files and load them
+    // Load each command module, apply reasonable default permissions for
+    // moderation/management categories, and collect the JSON payloads.
     for (const filePath of getCommandFiles(commandsPath)) {
       try {
         const command = require(filePath);
@@ -125,8 +129,9 @@ async function registerCommands() {
   try {
     console.log(`\n⚙️  Registering ${commands.length} commands...`);
 
-    // Register to guild (faster) or globally (slower but works everywhere)
-    const route = GUILD_ID 
+    // Register to a guild (faster propagation) if `GUILD_ID` is set; otherwise
+    // register globally which can take longer to appear.
+    const route = GUILD_ID
       ? `/applications/${CLIENT_ID}/guilds/${GUILD_ID}/commands`
       : `/applications/${CLIENT_ID}/commands`;
 
@@ -139,7 +144,7 @@ async function registerCommands() {
   }
 }
 
-// Send a generic error message when a command fails
+// Reply with a generic ephemeral error message when a command throws.
 async function sendCommandErrorResponse(interaction) {
   const errorMessage = {
     content: '❌ There was an error while executing this command!',
@@ -160,26 +165,29 @@ async function sendCommandErrorResponse(interaction) {
 async function initializeBot() {
   try {
     console.log('\n🚀 Starting up...');
-    
+
     // Initialize MySQL connection first
     const DatabaseManager = require('./Functions/MySQLDatabaseManager');
     await DatabaseManager.initialize();
-    
+
     await eventLoader(client);
-    
+
     await require("./Commands/_slashLoader")(client.slashCommands).catch((err) => {
       console.error("❌ Couldn't load commands:", err.message);
       process.exit(1);
     });
-    
+
     const registered = await registerCommands();
     if (!registered) {
       console.warn('⚠️  Command registration failed but continuing anyway...');
     }
-    
+
     require("./Logging/index")(client);
     restoreGiveaways(client);
     startReminderChecker(client);
+
+    jobScheduler = new JobScheduler(client);
+    await jobScheduler.start();
   } catch (error) {
     console.error('❌ Fatal error during bot initialization:', error);
     process.exit(1);
@@ -187,62 +195,50 @@ async function initializeBot() {
 }
 
 /**
- * Start the reminder checker that runs periodically to check for pending reminders
+ * Start the periodic reminder checker. Runs once immediately and then on an interval.
+ * Responsible for delivering due reminders (DMs) and retrying or notifying staff on failures.
  */
 function startReminderChecker(client) {
   const { reminderCheckInterval } = require('./Config/constants/misc.json').timeouts;
-  
+
   // Check immediately on startup
   checkPendingReminders(client);
-  
+
   // Check every so often
   setInterval(() => {
     checkPendingReminders(client);
   }, reminderCheckInterval);
-  
-  console.log(`⏰ Reminder system started (checking every ${reminderCheckInterval / 1000}s)`);
 
-  // Schedule cleanup of inactive join_to_create entries (every 24 hours)
-  const cleanupInterval = 24 * 60 * 60 * 1000; // 24 hours
-  setInterval(async () => {
-    try {
-      const MySQLDatabaseManager = require('./Functions/MySQLDatabaseManager');
-      await MySQLDatabaseManager.deleteInactiveJoinToCreate(7); // Delete inactive entries older than 7 days
-    } catch (error) {
-      console.error('Error running join_to_create cleanup:', error);
-    }
-  }, cleanupInterval);
-  
-  console.log(`🧹 Join-to-create cleanup scheduler started (running every 24 hours)`);
+  console.log(`⏰ Reminder system started (checking every ${reminderCheckInterval / 1000}s)`);
 }
 
-// Check and deliver any pending reminders
+// Process pending reminders from the database and deliver them when due.
 async function checkPendingReminders(client) {
   try {
     const DatabaseManager = require('./Functions/MySQLDatabaseManager');
     const { EmbedBuilder } = require('discord.js');
     const moment = require('moment-timezone');
     const { reminders: reminderConfig } = require('./Config/constants/misc.json');
-    
+
     const remindDB = DatabaseManager.getRemindersDB();
     const now = Date.now();
-    
+
     // Get all reminders
     const allReminders = Object.values(await remindDB.all());
-    
+
     for (const reminder of allReminders) {
       // Skip if already completed
       if (reminder.completed) continue;
-      
+
       // Skip if not yet due
       if (reminder.triggerAt > now) continue;
-      
+
       try {
         // Initialize delivery attempt tracking
         if (!reminder.deliveryAttempts) {
           reminder.deliveryAttempts = 0;
         }
-        
+
         // Fetch user
         const user = await client.users.fetch(reminder.userId).catch(() => null);
         if (!user) {
@@ -251,7 +247,7 @@ async function checkPendingReminders(client) {
           await remindDB.set(reminder.id, reminder);
           continue;
         }
-        
+
         // Create reminder embed
         const reminderEmbed = new EmbedBuilder()
           .setColor(0xFFD700)
@@ -259,33 +255,33 @@ async function checkPendingReminders(client) {
           .setDescription(reminder.message)
           .setFooter({ text: `Set ${moment(reminder.createdAt).fromNow()}` })
           .setTimestamp();
-        
+
         try {
           // Attempt to send reminder DM first - mark as completed ONLY after successful send
           await user.send({ embeds: [reminderEmbed] });
           console.log(`[Remind] Reminder delivered to ${user.tag}`);
-          
+
           // ONLY mark as completed AFTER successful send to prevent race conditions
           reminder.completed = true;
           await remindDB.set(reminder.id, reminder);
-          
+
           // Clean up after a delay
           setTimeout(async () => {
             await remindDB.delete(reminder.id);
           }, 300000); // Keep for 5 minutes then delete
-          
+
         } catch (dmError) {
           // DM failed - implement retry logic
           reminder.deliveryAttempts++;
           reminder.lastFailureReason = dmError.message;
           reminder.lastFailureTime = Date.now();
-          
+
           console.warn(`[Remind] DM delivery failed for ${user.tag} (attempt ${reminder.deliveryAttempts}/${reminderConfig.maxDeliveryAttempts}): ${dmError.message}`);
-          
+
           // Check if we've exceeded max attempts
           if (reminder.deliveryAttempts >= reminderConfig.maxDeliveryAttempts) {
             console.error(`[Remind] Max delivery attempts reached for reminder ${reminder.id}`);
-            
+
             // Try to notify in notification channel
             const notificationChannelId = reminderConfig.notificationChannelId;
             if (notificationChannelId && notificationChannelId !== 'YOUR_NOTIFICATIONS_CHANNEL_ID') {
@@ -303,7 +299,7 @@ async function checkPendingReminders(client) {
                     )
                     .setFooter({ text: `Reminder ID: ${reminder.id}` })
                     .setTimestamp();
-                  
+
                   await channel.send({ embeds: [failedEmbed] }).catch(sendErr => {
                     console.error(`[Remind] Failed to notify staff channel: ${sendErr.message}`);
                   });
@@ -313,7 +309,7 @@ async function checkPendingReminders(client) {
                 console.error(`[Remind] Could not send notification to staff channel: ${notifyError.message}`);
               }
             }
-            
+
             // Mark as completed after max attempts
             reminder.completed = true;
             await remindDB.set(reminder.id, reminder);
@@ -334,24 +330,24 @@ async function checkPendingReminders(client) {
   }
 }
 
-// Load any active giveaways from the database
+// Restore active giveaways from the database and resume their countdowns.
 async function restoreGiveaways(client) {
   try {
     const DatabaseManager = require('./Functions/MySQLDatabaseManager');
     const giveawayDB = DatabaseManager.getGiveawaysDB();
-    
+
     const allGiveaways = Object.values(await giveawayDB.all());
     let restored = 0;
     let invalid = 0;
-    
+
     if (!allGiveaways || allGiveaways.length === 0) {
       return;
     }
-    
+
     for (const giveaway of allGiveaways) {
       if (!giveaway || giveaway.completed) continue;
-      
-      // Validate giveaway data - MUST have all required fields
+
+      // Ensure giveaway has all required fields; delete invalid entries to avoid buildup.
       if (!giveaway.channelId || !giveaway.messageId || !giveaway.endTime || !giveaway.prize) {
         console.log(`[Giveaway] Invalid giveaway data, cleaning up: ${JSON.stringify(giveaway)}`);
         // DELETE invalid giveaway from database to prevent accumulation
@@ -363,24 +359,24 @@ async function restoreGiveaways(client) {
         }
         continue;
       }
-      
+
       try {
         const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
         if (!channel) continue;
-        
+
         const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
         if (!message) continue;
-        
+
         // Calculate remaining time
         const timeRemaining = Math.max(0, giveaway.endTime - Date.now());
-        
+
         // If giveaway has already ended, finalize it
         if (timeRemaining === 0) {
           await finalizeGiveawayFromDB(message, giveaway, client);
           restored++;
           continue;
         }
-        
+
         // Resume countdown for giveaway
         const durationInSeconds = Math.ceil(timeRemaining / 1000);
         runGiveawayCountdown(message, giveaway.messageId, client, durationInSeconds, giveaway.prize, giveaway.hostName);
@@ -399,11 +395,11 @@ async function restoreGiveaways(client) {
 async function finalizeGiveawayFromDB(message, giveaway, client) {
   try {
     let participants = [];
-    
+
     // Check if message and reactions exist
     if (message && message.reactions && message.reactions.cache) {
       const reaction = message.reactions.cache.get('🎉');
-      
+
       if (reaction) {
         try {
           const users = await reaction.users.fetch();
@@ -416,10 +412,11 @@ async function finalizeGiveawayFromDB(message, giveaway, client) {
       console.warn('[Giveaway] Message reactions not available for finalization');
     }
 
-    // Check if message is valid and has edit method
+    // Ensure the message can be edited. If not, mark the giveaway completed to
+    // avoid retry loops; don't attempt to edit a non-editable object.
     if (!message || typeof message.edit !== 'function') {
       console.warn('[Giveaway] Cannot finalize - message object is invalid or missing edit method');
-      
+
       // Mark as completed anyway to prevent retry loops - but don't try to save if we don't have valid data
       if (giveaway && (giveaway.messageId || giveaway.id)) {
         try {
@@ -478,7 +475,7 @@ async function finalizeGiveawayFromDB(message, giveaway, client) {
       giveaway.completed = true;
       giveaway.ended = true;
       const giveawayId = giveaway.id || giveaway.messageId;
-      
+
       if (giveawayId) {
         await giveawayDB.set(giveawayId, giveaway);
       } else {
@@ -493,7 +490,7 @@ async function finalizeGiveawayFromDB(message, giveaway, client) {
   }
 }
 
-// Update giveaway message as time counts down
+// Update the giveaway message periodically while the countdown runs.
 async function runGiveawayCountdown(message, giveawayId, client, duration, prize, host) {
   let timeRemaining = duration;
   const updateInterval = Math.min(30, Math.max(5, Math.floor(duration / 10)));
@@ -532,7 +529,7 @@ async function runGiveawayCountdown(message, giveawayId, client, duration, prize
   await finalizeGiveaway(message, giveawayId, client, prize, host);
 }
 
-// Convert seconds to readable time
+// Format a duration given in seconds into a human-friendly string.
 function toTime(seconds) {
   seconds = Number(seconds);
   const d = Math.floor(seconds / (3600 * 24));
@@ -544,7 +541,7 @@ function toTime(seconds) {
   const hDisplay = h > 0 ? `${h}${h === 1 ? ' hour' : ' hours'}, ` : '';
   const mDisplay = m > 0 ? `${m}${m === 1 ? ' minute' : ' minutes'}, ` : '';
   const sDisplay = s > 0 ? `${s}${s === 1 ? ' second' : ' seconds'}` : '';
-  
+
   const result = `${dDisplay}${hDisplay}${mDisplay}${sDisplay}`.replace(/, $/, '');
   return result || '0 seconds';
 }
@@ -553,12 +550,12 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Pick winner and update giveaway message
+// Select a giveaway winner (random) and update the end embed accordingly.
 async function finalizeGiveaway(message, giveawayId, client, prize, host) {
   try {
     const reaction = await message.reactions.cache.get('🎉');
     const users = reaction ? await reaction.users.fetch() : new Map();
-    
+
     const participants = users.filter(user => !user.bot).map(user => user.username);
 
     let endEmbed;
@@ -610,7 +607,7 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
   }
 }
 
-// Interaction handler for slash commands
+// Handle slash command interactions: permission checks, rate limiting, execution.
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -626,7 +623,7 @@ client.on("interactionCreate", async (interaction) => {
   const { administratorRoleId, moderatorRoleId } = require('./Config/constants/roles.json');
   const DatabaseManager = require('./Functions/MySQLDatabaseManager');
 
-  // Role + permission checks for moderation/management commands
+  // Role and permission checks for moderation/management commands
   const category = command.category || 'uncategorized';
   const member = interaction.member;
 
@@ -660,28 +657,28 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({
         content: '❌ You do not have the required role and permissions for this command.',
         flags: MessageFlags.Ephemeral
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }
-  
-  // Check if user is exempt (admins/mods)
+
+  // Determine if the user is exempt from rate limits (admins/mods).
   const isExempt = RateLimiter.isExempt(interaction.member, [administratorRoleId, moderatorRoleId]);
-  
+
   if (!isExempt) {
     const rateLimit = RateLimiter.checkLimit(interaction.user.id, interaction.commandName);
-    
+
     if (rateLimit.limited) {
       const errorMessage = rateLimit.type === 'global'
         ? `⏱️ You're using commands too quickly! Please wait **${rateLimit.retryAfter}s** before trying again.`
         : `⏱️ You're using this command too quickly! Please wait **${rateLimit.retryAfter}s** before using \`/${interaction.commandName}\` again.`;
-      
+
       await logInteraction('RATE_LIMIT', errorMessage);
       return interaction.reply({
         content: errorMessage,
         flags: MessageFlags.Ephemeral
-      }).catch(() => {});
+      }).catch(() => { });
     }
-    
+
     // Record usage
     RateLimiter.recordUsage(interaction.user.id, interaction.commandName);
   }
@@ -696,17 +693,18 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// Validate required environment variables
+// Make sure required environment variables exist and have values; exit with
+// clear instructions if anything is missing.
 function validateEnvironment() {
   const required = {
     'TOKEN': 'Discord Bot Token',
     'CLIENT_ID': 'Discord Application ID',
     'GUILD_ID': 'Discord Server ID'
   };
-  
+
   const missing = [];
   const empty = [];
-  
+
   for (const [key, description] of Object.entries(required)) {
     if (!(key in process.env)) {
       missing.push(`${key} (${description})`);
@@ -714,34 +712,34 @@ function validateEnvironment() {
       empty.push(`${key} (${description})`);
     }
   }
-  
+
   if (missing.length > 0) {
     console.error('❌ Missing required environment variables:');
     missing.forEach(item => console.error(`   - ${item}`));
     console.error('\n📖 Please configure these in Config/credentials.env\n');
     process.exit(1);
   }
-  
+
   if (empty.length > 0) {
     console.error('❌ Empty environment variables (must have values):');
     empty.forEach(item => console.error(`   - ${item}`));
     console.error('\n📖 Please add values in Config/credentials.env\n');
     process.exit(1);
   }
-  
+
   console.log('✅ All required environment variables configured\n');
 }
 
 client.once("clientReady", () => {
   client.emit("commandsAndEventsLoaded", 1);
-  
-  // Update bot stats immediately and then every 30 seconds
+
+  // Send bot stats immediately on ready, then update every 30 seconds.
   const updateBotStats = () => {
     try {
       const guildCount = client.guilds.cache.size;
       let totalMembers = 0;
       let botMembers = 0;
-      
+
       // Count total members and bots
       client.guilds.cache.forEach(guild => {
         totalMembers += guild.memberCount;
@@ -750,11 +748,11 @@ client.once("clientReady", () => {
           if (member.user.bot) botMembers++;
         });
       });
-      
+
       const totalRoles = client.guilds.cache.reduce((acc, guild) => acc + guild.roles.cache.size, 0);
       const totalChannels = client.guilds.cache.reduce((acc, guild) => acc + guild.channels.cache.size, 0);
       const totalEmojis = client.guilds.cache.reduce((acc, guild) => acc + guild.emojis.cache.size, 0);
-      
+
       updateStats({
         uptime: Math.floor(client.uptime / 1000), // Convert to seconds
         guildCount: guildCount,
@@ -770,10 +768,10 @@ client.once("clientReady", () => {
       console.error('Error updating bot stats:', err.message);
     }
   };
-  
+
   // Update immediately on ready
   updateBotStats();
-  
+
   // Then update every 30 seconds
   setInterval(updateBotStats, 30000);
 });
@@ -785,19 +783,19 @@ client.on('warn', (msg) => {
   console.warn('⚠️  Client warn:', msg);
 });
 
-// Handle unhandled promise rejections
+// Log unhandled promise rejections and exit to avoid inconsistent state.
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Promise Rejection:', err);
   process.exit(1);
 });
 
-// Handle uncaught exceptions
+// Log uncaught exceptions and exit to prevent the bot from running in a bad state.
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
   process.exit(1);
 });
 
-// Graceful shutdown
+// Graceful shutdown on SIGINT: destroy the client and exit cleanly.
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down...');
   await client.destroy();
@@ -810,7 +808,7 @@ process.on('SIGINT', async () => {
     validateEnvironment();
     await initializeBot();
     client.login(process.env.TOKEN);
-    
+
     // Start admin panel if enabled
     if (process.env.ENABLE_ADMIN_PANEL !== 'false') {
       try {
@@ -818,7 +816,7 @@ process.on('SIGINT', async () => {
         if (typeof adminPanel.setDiscordClient === 'function') {
           adminPanel.setDiscordClient(client);
         }
-        console.log('🎛️  Admin Panel: Enabled');
+        console.log('Admin Panel: Enabled');
       } catch (err) {
         console.warn('⚠️  Admin panel could not start:', err.message);
       }

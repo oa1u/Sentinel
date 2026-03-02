@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
 </head>
+
 <body>
     <header class="header">
         <div class="header-content">
@@ -32,6 +34,8 @@
                         <a href="/profile">👤 My Profile</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
                     </div>
@@ -41,225 +45,417 @@
     </header>
 
     <main class="container">
-        <h1 style="margin-bottom: 1.5rem; font-size: 2rem; color: var(--text-primary);">Changelog</h1>
-        <div class="tabs" id="changelogTabs" style="margin-bottom:2.5rem;">
-            <button class="tab active" data-tab="overview" style="--tab-color:#5b7fff;"><span class="tab-icon">🚀</span> <span>Overview</span></button>
-            <button class="tab" data-tab="updates" style="--tab-color:#ffd45b;"><span class="tab-icon">✨</span> <span>Updates</span></button>
-            <button class="tab" data-tab="planned" style="--tab-color:#b55bff;"><span class="tab-icon">🧩</span> <span>Planned</span></button>
-            <button class="tab" data-tab="bugs" style="--tab-color:#f44336;"><span class="tab-icon">🐞</span> <span>To Fix / Bugs</span></button>
-        </div>
-        <div class="tab-content active" id="overview">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">🚀</span>
-                    <span>Release Notes</span>
+        <div class="profile-layout">
+            <aside class="profile-sidebar">
+                <div class="profile-user-card playbook-intro-card">
+                    <div class="profile-avatar-large">🧾</div>
+                    <div class="profile-name-large">Changelog</div>
+                    <div class="profile-role-badge">Release History</div>
+                    <p class="playbook-intro-note">Keep track of the latest updates, features, improvements, and known
+                        bugs across <span class="botNameDisplay">the bot</span>.</p>
                 </div>
-                    <p class="text-secondary">Sentinel is a comprehensive, professional-grade solution for Discord server moderation and community management. Explore the latest major updates and feature enhancements below.</p>
-            </div>
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📅</span>
-                    <span>Major Update 5.0.0</span>
-                    <span style="color: var(--text-secondary); font-weight: 500; margin-left: auto;">February 3, 2026</span>
+
+                <nav class="profile-nav-menu" id="changelogTabs">
+                    <button class="profile-nav-item active" data-tab="overview">
+                        <span class="profile-nav-icon">🚀</span> Overview
+                    </button>
+                    <button class="profile-nav-item" data-tab="bugs">
+                        <span class="profile-nav-icon">🐞</span> Known Bugs
+                    </button>
+                    <button class="profile-nav-item" data-tab="planned">
+                        <span class="profile-nav-icon">📅</span> Planned Features
+                    </button>
+                </nav>
+            </aside>
+
+            <div class="profile-content-area">
+                <div class="tab-content active" id="overview">
+                    <div class="card">
+                        <div class="card-header"><span class="card-header-icon">🚀</span> Overview</div>
+                        <div class="profile-card-body" style="padding: 0;">
+                            <div
+                                style="padding: 1.5rem; border-bottom: 1px solid var(--border-color); background: rgba(52, 152, 219, 0.05);">
+                                <p class="text-secondary" style="margin: 0; line-height: 1.6;"><span
+                                        class="botNameDisplay">Sentinel</span> is a comprehensive, professional-grade
+                                    solution for Discord server moderation and community management. Explore the latest
+                                    major updates and feature enhancements below.</p>
+                            </div>
+
+                            <div style="padding: 1.5rem;">
+                                <div class="changelog-entry" style="margin-bottom: 2rem;">
+                                    <div class="changelog-header"
+                                        style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                        <span
+                                            style="background: var(--color-blue); color: #fff; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">NEW</span>
+                                        <span class="changelog-title" style="margin: 0; font-size: 1.15rem;">Major
+                                            Update 6.0.0</span>
+                                        <span class="changelog-date" style="margin-left: auto;">March 2026</span>
+                                    </div>
+                                    <ul class="changelog-list" style="margin-top: 1rem;">
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Added an email system for notifications and
+                                                alerts</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Added a "link discord" system</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Added an TOTP system</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Admin Panel: Modernized tab system implemented across
+                                                all major pages (Admin, Moderator, Owner, Features, Changelog)</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-enhance"
+                                                style="min-width: 70px; text-align: center;">Enhance</span>
+                                            <span style="flex: 1;">Navbar now displays username and account role and
+                                                functions consistently on all pages</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Performance: Faster page routing and real-time metric
+                                                updates via optimized WebSockets</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-security"
+                                                style="min-width: 70px; text-align: center;">Security</span>
+                                            <span style="flex: 1;">Global Security: Enhanced role checks and strict
+                                                permission validation routines</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-enhance"
+                                                style="min-width: 70px; text-align: center;">Enhance</span>
+                                            <span style="flex: 1;">Reworked appeals process and appeal system</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-bugfix"
+                                                style="min-width: 70px; text-align: center;">Bugfix</span>
+                                            <span style="flex: 1;">Fixed responsive CSS padding and dropdown menu
+                                                Z-index overlap issues</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Added a music system and improved join to create and
+                                                the commands associated with it</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Added a "Ghost Ping" feature that notifies users when
+                                                they are mentioned in a message but the message is deleted shortly
+                                                after</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-bugfix"
+                                                style="min-width: 70px; text-align: center;">Bugfix</span>
+                                            <span style="flex: 1;">Fixed minor UI glitches and improved overall
+                                                stability</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Added multiple utility commands such as "avatar",
+                                                "banner", "birthday"</span>
+                                        </li>
+                                        <li>
+                                            <span class="tag tag-feature"
+                                                style="min-width: 70px; text-align: center;">Feature</span>
+                                            <span style="flex: 1;">Added new moderation commands such as "audit",
+                                                "slowdown", "Modlogs"</span>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="changelog-entry" style="margin-bottom: 2rem; opacity: 0.9;">
+                                    <div class="changelog-header"
+                                        style="border-bottom: 1px dashed var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                        <span
+                                            style="background: var(--bg-hover); color: var(--text-secondary); padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; border: 1px solid var(--border-color);">v5.0.0</span>
+                                        <span class="changelog-title"
+                                            style="margin: 0; font-size: 1.1rem; color: var(--text-secondary);">Major
+                                            Update 5.0.0</span>
+                                        <span class="changelog-date" style="margin-left: auto;">February 3, 2026</span>
+                                    </div>
+                                    <ul class="changelog-list">
+                                        <li><b>Total Redesign:</b> Completely redesigned Admin Panel with a modern tab
+                                            system and enhanced dashboard modules.</li>
+                                        <li><b>Advanced Moderation Suite:</b> Ban, kick, timeout, warn, clear messages,
+                                            and comprehensive audit logging.</li>
+                                        <li><b>Enterprise Support Tickets:</b> Featuring claim management, user
+                                            addition/removal, status tracking, and transcript logging.</li>
+                                        <li><b>Smart Auto-Moderation:</b> Filters for blocked words, spam prevention,
+                                            invite protection, and DM alerts.</li>
+                                        <li><b>XP & Leveling Engine:</b> Customizable XP scaling, leaderboard
+                                            generation, aesthetic rank cards, and full admin wipe controls.</li>
+                                        <li><b>Giveaway Module:</b> Timed giveaways, participant roll tracking, and
+                                            automatic winner selection.</li>
+                                        <li><b>Fun & Utilities:</b> 8ball, trivia, coinflip, reminders, polls,
+                                            server/user info lookups, crypto tracking, and complete member verification.
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <details class="changelog-details changelog-entry"
+                                    style="margin-bottom: 0; opacity: 0.8;">
+                                    <summary class="changelog-header"
+                                        style="border-bottom: 1px dashed var(--border-color); padding-bottom: 0.5rem; margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none;">
+                                        <span
+                                            style="background: transparent; color: var(--text-muted); font-size: 0.9rem;">⏳</span>
+                                        <span class="changelog-title"
+                                            style="margin: 0; font-size: 1.05rem; color: var(--text-muted);">Archive /
+                                            Previous Releases <span
+                                                style="font-size: 0.85rem; font-weight: normal;">(Click to
+                                                expand)</span></span>
+                                        <span
+                                            style="margin-left: auto; color: var(--text-muted); font-size: 0.8rem;">▼</span>
+                                    </summary>
+                                    <div style="margin-top: 1.5rem; padding-left: 0.5rem;">
+                                        <ul class="changelog-list" style="font-size: 0.95rem;">
+                                            <li><b>v4.x.x Series:</b>
+                                                <ul>
+                                                    <li>Introduced new <b>Fun</b> commands: <i>8ball, coinflip, fact,
+                                                            joke</i>.</li>
+                                                    <li>Reorganized command listener structure for improved codebase
+                                                        maintainability.</li>
+                                                    <li>Significant core database refactoring and query performance
+                                                        enhancements.</li>
+                                                </ul>
+                                            </li>
+                                            <li><b>v3.x.x Series:</b>
+                                                <ul>
+                                                    <li>Major structural refactor of core Discord interaction logic.
+                                                    </li>
+                                                    <li>Added foundational moderation commands (kick/ban/warn).</li>
+                                                </ul>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <ul class="text-secondary" style="padding-left: 1.25rem; line-height: 1.8;">
-                        <li>Completely redesigned Admin Panel with a modern tab system and enhanced user information display</li>
-                    <li>Advanced moderation: Ban, kick, timeout, warn, clear, and audit logging</li>
-                        <li>Enterprise-grade ticket system featuring claim management, user addition/removal, status tracking, and full logging</li>
-                    <li>Smart Auto-Moderation: Blocked words, spam, invite protection, and DM notifications</li>
-                    <li>XP & Leveling: Customizable XP, leaderboard, rank cards, and admin controls</li>
-                    <li>Giveaway system: Timed giveaways, participant tracking, and winner selection</li>
-                    <li>Fun commands: 8ball, trivia, coinflip, joke, fact, pickup, roast, and more</li>
-                    <li>Utility: Reminders, polls, server/user info, crypto, define, and verification</li>
-                    <li>Comprehensive configuration: JSON-based, modular, and secure</li>
-                    <li>Performance and security improvements throughout the codebase</li>
-                </ul>
-            </div>
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📅</span>
-                    <span>Previous Releases</span>
+
+                <div class="tab-content" id="bugs" style="display:none;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-header-icon">🐞</span> To Fix / Known Bugs</div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="changelog-entry" style="margin-bottom: 0;">
+                                <ul class="changelog-list">
+                                    <li>The website is currently in active development. Some features may be incomplete
+                                        or non-functional; your patience is appreciated as I continue to improve the
+                                        bot.</li>
+                                    <li>Occasionally, WebSocket live updates may fail if <code>socket.io</code> is not
+                                        loaded.</li>
+                                    <li>Ticket system: Channel transcripts may omit very old messages.</li>
+                                    <li>API rate limits may occasionally delay command execution.</li>
+                                    <li>Havent tested mobile UI yet so might be an issue.</li>
+                                    <li>Manage Giveaway isnt functional yet.</li>
+                                    <li>If you encounter a bug, please report it via <a id="githubIssuesLink" href="#"
+                                            target="_blank"
+                                            style="color: var(--text-primary); text-decoration: underline;">GitHub
+                                            Issues</a>.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                    <ul class="text-secondary" style="padding-left: 1.25rem; line-height: 1.8;">
-                        <li><b>v4.x.x:</b> <br>
-                            <ul style="margin-top:0.25rem; margin-bottom:0.5rem;">
-                                <li>Introduced new <b>Fun</b> commands: <i>8ball, coinflip, fact, joke</i></li>
-                                <li>Reorganized command structure for improved maintainability</li>
-                                <li>Significant codebase refactoring and performance enhancements</li>
-                                <li>Expanded bot functionality and feature set</li>
-                            </ul>
-                        </li>
-                        <li><b>v3.x.x:</b> <br>
-                            <ul style="margin-top:0.25rem; margin-bottom:0.5rem;">
-                                <li>Major refactor of core bot logic</li>
-                                <li>Added new moderation and management commands</li>
-                                <li>Improved stability and reliability</li>
-                            </ul>
-                        </li>
-                        <li><b>v2.x.x:</b> <br>
-                            <ul style="margin-top:0.25rem; margin-bottom:0.5rem;">
-                                <li>Introduced new modules for management and utility</li>
-                                <li>Enhanced ticket and suggestion systems</li>
-                                <li>Minor update (2.1.0): Bug fixes and incremental improvements</li>
-                            </ul>
-                        </li>
-                        <li><b>v1.x.x:</b> <br>
-                            <ul style="margin-top:0.25rem; margin-bottom:0.5rem;">
-                                <li>Initial major release: Core bot functionality established</li>
-                                <li>Basic moderation, ticketing, and utility features</li>
-                                <li>Minor updates (1.1.0, 1.1.1): Bug fixes and small enhancements</li>
-                            </ul>
-                        </li>
-                    </ul>
-            </div>
-        </div>
-        <div class="tab-content" id="updates">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">✨</span>
-                    <span>Recent Updates</span>
-                    <span style="color: var(--text-secondary); font-weight: 500; margin-left: auto;">February 2026</span>
+
+                <div class="tab-content" id="planned" style="display:none;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-header-icon">📅</span> Planned Features</div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="changelog-entry" style="margin-bottom: 0;">
+                                <ul class="changelog-list">
+                                    <li>Full mobile responsiveness for the Admin Panel.</li>
+                                    <li>Notification system: Further improvements and bug fixes are planned.</li>
+                                    <li>AutoMod: Custom auto-mute durations are not yet configurable (enhancement
+                                        planned).</li>
+                                    <li>Automated database backups directly from the control panel.</li>
+                                    <li>Web-based ticket transcripts viewer inside the dashboard.</li>
+                                    <li>Remove all deprecated features and code.</li>
+                                    <li>Test the new email notification system and improve its reliability.</li>
+                                    <li>Add a reset password section in profile page</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <ul class="text-secondary" style="padding-left: 1.25rem; line-height: 1.8;">
-                    <li>Admin Panel: Modernized tab system implemented across all major pages (Admin, Moderator, Owner, Features, Changelog)</li>
-                    <li>Navbar now displays username and account role on all pages</li>
-                    <li>Improved tab content visuals and layout for features and changelog</li>
-                    <li>Removed large feature icons for a cleaner look</li>
-                    <li>Performance: Faster loading and real-time updates via WebSocket</li>
-                    <li>Security: Enhanced role checks and permission validation</li>
-                    <li>Bugfix: Fixed user info not loading in navbar on some pages</li>
-                    <li>Bugfix: Tab switching animation glitch on mobile resolved</li>
-                    <li>Bugfix: Dropdown menu overlap issue fixed</li>
-                </ul>
-            </div>
-        </div>
-        <div class="tab-content" id="planned">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">🧩</span>
-                    <span>Planned Features</span>
-                </div>
-                <ul class="text-secondary" style="padding-left: 1.25rem; line-height: 1.8;">
-                    <li>Web dashboard: Real-time analytics and a comprehensive management console</li>
-                    <li>Expanded website content and improved informational pages</li>
-                    <li>Auto-responses: Customizable triggers for automated replies</li>
-                    <li>Enhanced command embeds for a more polished and professional appearance</li>
-                    <li>Voice channel improvements: Advanced join-to-create, naming templates, and user limits</li>
-                    <li>Reaction roles: Assign roles through interactive messages</li>
-                    <li>Music integration: Queue and play music directly in voice channels</li>
-                    <li>Advanced analytics: In-depth member activity tracking and insights</li>
-                    <li>Multi-language support for broader accessibility</li>
-                </ul>
-            </div>
-        </div>
-        <div class="tab-content" id="bugs">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">🐞</span>
-                    <span>To Fix / Known Bugs</span>
-                </div>
-                <ul class="text-secondary" style="padding-left: 1.25rem; line-height: 1.8;">
-                    <li>The website is currently in active development. Some features may be incomplete or non-functional; your patience is appreciated as I continue to improve the bot.</li>
-                    <li>Occasionally, WebSocket live updates may fail if <code>socket.io</code> is not loaded.</li>
-                    <li>Notification system: Further improvements and bug fixes are planned.</li>
-                    <li>Revoke invites: This feature is not yet operational.</li>
-                    <li>AutoMod: Custom auto-mute durations are not yet configurable (enhancement planned).</li>
-                    <li>Ticket system: Channel transcripts may omit very old messages.</li>
-                    <li>Appeals system: Ongoing improvements and bug fixes are scheduled.</li>
-                    <li>API rate limits may occasionally delay command execution.</li>
-                    <li>Admin/Owner pages: Some features are still under development and may not function as intended.</li>
-                    <li>Havent tested mobile UI yet so might be an issue.</li>
-                    <li>Manage Giveaway isnt functional yet.</li>
-                    <li>If you encounter a bug, please report it via <a id="githubIssuesLink" href="#" target="_blank">GitHub Issues</a>.</li>
-                </ul>
             </div>
         </div>
     </main>
 
     <style>
-    .tabs {
-        display: flex;
-        gap: 2.5rem;
-        border-bottom: 2px solid var(--border-color);
-        margin: 2.5rem 0 2rem 0;
-        padding-left: 0.5rem;
-        align-items: center;
-    }
-    .tab {
-        background: none;
-        border: none;
-        outline: none;
-        color: var(--text-secondary);
-        font-size: 1.1rem;
-        font-weight: 600;
-        padding: 0.75rem 1.5rem 0.5rem 1.5rem;
-        border-radius: var(--radius-md) var(--radius-md) 0 0;
-        cursor: pointer;
-        transition: color 0.2s, background 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        position: relative;
-    }
-    .tab.active {
-        color: var(--tab-color, #5b7fff);
-        background: var(--bg-card);
-        box-shadow: 0 2px 8px rgba(91,127,255,0.08);
-        border-bottom: 2px solid var(--tab-color, #5b7fff);
-        z-index: 2;
-    }
-    .tab:not(.active):hover {
-        color: var(--tab-color, #5b7fff);
-        background: var(--bg-card-hover);
-    }
-    .tab .tab-icon {
-        font-size: 1.25rem;
-        margin-right: 0.5rem;
-        vertical-align: middle;
-    }
+        .changelog-entry {
+            margin-bottom: 2.5rem;
+        }
+
+        .changelog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .changelog-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .changelog-date {
+            font-size: 0.9rem;
+            color: var(--text-muted, #888);
+        }
+
+        .changelog-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+        .changelog-list li {
+            position: relative;
+            padding-left: 1.25rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .changelog-list>li::before {
+            content: "—";
+            position: absolute;
+            left: 0;
+            color: var(--text-muted, #888);
+        }
+
+        .changelog-list ul {
+            list-style: none;
+            padding-left: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .changelog-list ul li {
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .changelog-list ul li::before {
+            content: "•";
+            font-size: 0.8rem;
+            position: absolute;
+            left: 0;
+            top: 0.15rem;
+            color: var(--text-muted, #888);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-right: 0.75rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .tag-feature {
+            background: rgba(46, 204, 113, 0.15);
+            color: #2ecc71;
+            border: 1px solid rgba(46, 204, 113, 0.3);
+        }
+
+        .tag-enhance {
+            background: rgba(52, 152, 219, 0.15);
+            color: #3498db;
+            border: 1px solid rgba(52, 152, 219, 0.3);
+        }
+
+        .tag-security {
+            background: rgba(155, 89, 182, 0.15);
+            color: #9b59b6;
+            border: 1px solid rgba(155, 89, 182, 0.3);
+        }
+
+        .tag-bugfix {
+            background: rgba(231, 76, 60, 0.15);
+            color: #e74c3c;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+
+        .changelog-entry .changelog-list>li {
+            display: flex;
+            align-items: flex-start;
+            padding-left: 0;
+        }
+
+        .changelog-entry .changelog-list>li::before {
+            display: none;
+        }
     </style>
     <script>
-    // Enhanced tab system for changelog page
-    document.addEventListener('DOMContentLoaded', function() {
-        const tabs = document.querySelectorAll('#changelogTabs .tab');
-        const tabContents = document.querySelectorAll('.tab-content');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', function() {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                const tabName = tab.getAttribute('data-tab');
-                tabContents.forEach(tc => {
-                    if (tc.id === tabName) {
-                        tc.classList.add('active');
-                        tc.style.display = '';
-                    } else {
-                        tc.classList.remove('active');
-                        tc.style.display = 'none';
-                    }
+        // Enhanced tab system for changelog page
+        document.addEventListener('DOMContentLoaded', function () {
+            const tabs = document.querySelectorAll('#changelogTabs .profile-nav-item');
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function () {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const tabName = tab.getAttribute('data-tab');
+                    tabContents.forEach(tc => {
+                        if (tc.id === tabName) {
+                            tc.classList.add('active');
+                            tc.style.display = '';
+                        } else {
+                            tc.classList.remove('active');
+                            tc.style.display = 'none';
+                        }
+                    });
                 });
             });
-        });
-        // Hide all but the first tab content on load
-        tabContents.forEach((tc, idx) => {
-            if (idx !== 0) tc.style.display = 'none';
-        });
-
-        // Set GitHub Issues link from main.json
-        fetch('/Config/main.json')
-            .then(res => res.json())
-            .then(cfg => {
-                const githubLink = cfg.githublink || 'https://github.com/oa1u/oa1u-Bot';
-                document.getElementById('githubIssuesLink').href = githubLink + '/issues';
+            // Hide all but the first tab content on load
+            tabContents.forEach((tc, idx) => {
+                if (idx !== 0) tc.style.display = 'none';
             });
-    });
+
+            // Set GitHub Issues link and botName from main.json
+            fetch('/Config/main.json')
+                .then(res => res.json())
+                .then(cfg => {
+                    const githubLink = cfg.githublink || 'https://github.com/oa1u/oa1u-Bot';
+                    document.getElementById('githubIssuesLink').href = githubLink + '/issues';
+                    const botName = cfg.botName || 'Sentinel';
+                    document.querySelectorAll('.botNameDisplay').forEach(el => {
+                        el.textContent = botName;
+                    });
+                });
+        });
     </script>
     <script src="/public/changelog.js"></script>
 
     <footer class="page-footer">
         <div class="footer-links">
-            <span>© 2026 <strong>Admin Panel</strong></span>
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
             <span class="footer-sep">•</span>
             <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
             <span class="footer-sep">•</span>
             <a href="/license">License</a>
         </div>
@@ -270,4 +466,5 @@
     <script src="/public/version.js"></script>
     <script src="/public/changelog.js" defer></script>
 </body>
+
 </html>

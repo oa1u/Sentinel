@@ -36,14 +36,14 @@ module.exports = {
   category: 'fun',
   async execute(interaction) {
     const line = pickupLines[Math.floor(Math.random() * pickupLines.length)];
-    
+
     const em = new EmbedBuilder()
       .setColor(0xFF69B4)
       .setTitle('💘 Pickup Line')
       .setDescription(line)
       .setFooter({ text: `Use at your own risk!` })
       .setTimestamp();
-    
+
     await interaction.reply({ embeds: [em] });
   }
 };

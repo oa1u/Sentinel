@@ -1,16 +1,16 @@
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 const { EmbedBuilder } = require('discord.js');
 
-// Handles upvotes and downvotes on suggestions. Tracks reactions and updates the suggestion status.
+// Handle upvote/downvote reactions on suggestion messages and persist votes to the DB.
 module.exports = {
     name: 'messageReactionAdd',
     runOnce: false,
     call: async (client, args) => {
         const [reaction, user] = args;
-        
+
         if (user.bot) return;
-        
-        // Make sure we have the full reaction data if it's partial.
+
+        // Ensure we have full reaction data for reliable processing.
         if (reaction.partial) {
             try {
                 await reaction.fetch();
@@ -51,10 +51,10 @@ module.exports = {
             };
 
             const embed = EmbedBuilder.from(message.embeds[0])
-                .spliceFields(2, 1, { 
-                    name: '📈 Votes', 
-                    value: `👍 ${updated.upvotes} | 👎 ${updated.downvotes}`, 
-                    inline: true 
+                .spliceFields(2, 1, {
+                    name: '📈 Votes',
+                    value: `👍 ${updated.upvotes} | 👎 ${updated.downvotes}`,
+                    inline: true
                 });
 
             await message.edit({ embeds: [embed] });

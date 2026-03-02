@@ -1,8 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 
-// Formats error messages so they're consistent everywhere.
-// Uses standard colors, emojis, and formatting.
-// Makes error messages look professional and easy to read.
+// Helpers for building consistent error/success/info embeds and formatting
+// error messages. This keeps user-facing messages clear and uniform across
+// the bot.
 
 // Standard colors for different types of messages.
 const COLORS = {
@@ -126,12 +126,12 @@ function createInvalidArgumentEmbed(argumentName, reason) {
 
 function formatErrorMessage(error) {
     if (!error) return 'An unknown error occurred';
-    
+
     // Handle common Discord.js errors
     if (error.message.includes('Missing Permissions')) {
         return 'I don\'t have permission to perform this action. Please check my role permissions.';
     }
-    
+
     if (error.message.includes('Unknown User')) {
         return 'User not found. Please check the user ID or mention.';
     }

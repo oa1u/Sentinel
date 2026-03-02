@@ -16,13 +16,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 				document.getElementById('dropdownRole').textContent = (accountInfo.role || 'User').toUpperCase();
 			}
 		}
-	} catch (err) {}
+	} catch (err) { }
 
 	// Tab system logic
 	const tabs = document.querySelectorAll('.tab');
 	const tabContents = document.querySelectorAll('.tab-content');
 	tabs.forEach(tab => {
-		tab.addEventListener('click', function() {
+		tab.addEventListener('click', function () {
 			tabs.forEach(t => t.classList.remove('active'));
 			tab.classList.add('active');
 			const tabName = tab.getAttribute('data-tab');
@@ -51,7 +51,7 @@ function toggleUserDropdown() {
 		trigger.classList.toggle('active');
 	}
 }
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
 	const dropdown = document.querySelector('.user-dropdown');
 	if (dropdown && !dropdown.contains(event.target)) {
 		const menu = document.getElementById('userDropdownMenu');

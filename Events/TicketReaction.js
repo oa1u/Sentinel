@@ -3,24 +3,24 @@ const { ticketCategoryId, ticketLogChannelId } = require("../Config/constants/ch
 const { supportTeamRoleId } = require("../Config/constants/roles.json");
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 
-// Ticket reaction handler
-// Handles ticket panel reactions. Lets users and staff close tickets with a reaction.
+// Ticket reaction handler — manages close reactions on ticket channels.
+// Users or staff can close tickets with the ❌ reaction and the handler archives the transcript.
 module.exports = {
     name: "messageReactionAdd",
     runOnce: false,
     call: async (client, args) => {
         if (!args || !args[0] || !args[1]) return;
-        
+
         const reaction = args[0];
         const user = args[1];
-        
-        // Ignore bot reactions.
+
+        // Ignore any reactions made by bots.
         if (user.bot) return;
-        
-        // Only care about the close emoji.
+
+        // We only care about the ❌ emoji for closing tickets.
         if (reaction.emoji.name !== '❌') return;
-        
-        // Make sure we have the full message data if it's partial.
+
+        // Fetch the full reaction/message if Discord gave us a partial object.
         if (reaction.partial) {
             try {
                 await reaction.fetch();
@@ -29,27 +29,27 @@ module.exports = {
                 return;
             }
         }
-        
+
         const channel = reaction.message.channel;
-        
-        // Is this a ticket channel? Check the parent category.
+
+        // Confirm this channel belongs to the ticket category before proceeding.
         if (channel.parentId !== ticketCategoryId) return;
-        
+
         // Double check the channel name contains 'ticket-'.
         if (!channel.name.includes('-ticket-')) return;
-        
-        // Get the member who reacted.
+
+        // Load the member who reacted so we can check permissions.
         const member = await channel.guild.members.fetch(user.id).catch(() => null);
         if (!member) return;
-        
+
         // Figure out who owns this ticket from the channel name.
         const ticketOwnerName = channel.name.split('-ticket-')[1];
-        
-        // Only ticket owner or staff can close tickets.
+
+        // Only the ticket owner, support staff, or admins can close the ticket.
         const isTicketOwner = user.username.toLowerCase() === ticketOwnerName.toLowerCase();
         const hasSupport = member.roles.cache.has(supportTeamRoleId);
         const isAdmin = member.permissions.has('Administrator');
-        
+
         if (!isTicketOwner && !hasSupport && !isAdmin) {
             // Remove their reaction if they don't have permission.
             await reaction.users.remove(user.id).catch((err) => {
@@ -57,11 +57,11 @@ module.exports = {
             });
             return;
         }
-        
-        // Grab the ticket info from database
+
+        // Fetch stored ticket metadata from the database.
         const ticketData = await MySQLDatabaseManager.getTicket(channel.id) || {};
-        
-        // Create transcript
+
+        // Build a transcript text file from recent messages for the log.
         let transcript = `📋 Ticket Transcript - ${channel.name}\n`;
         transcript += `─────────────────\n\n`;
         transcript += `🎫 Info:\n`;
@@ -112,8 +112,8 @@ module.exports = {
             console.error('Error generating transcript:', err);
             transcript += `\n⚠️ Error fetching message history\n`;
         }
-        
-        // Send transcript to log channel
+
+        // Send the transcript into the configured ticket log channel and DM the user if possible.
         const logChannel = channel.guild.channels.cache.get(ticketLogChannelId);
         if (logChannel) {
             const logEmbed = new EmbedBuilder()
@@ -134,8 +134,8 @@ module.exports = {
                 .setTimestamp();
 
             const transcriptBuffer = Buffer.from(transcript, 'utf-8');
-            const attachment = new AttachmentBuilder(transcriptBuffer, { 
-                name: `transcript-${channel.name}-${Date.now()}.txt` 
+            const attachment = new AttachmentBuilder(transcriptBuffer, {
+                name: `transcript-${channel.name}-${Date.now()}.txt`
             });
 
             await logChannel.send({ embeds: [logEmbed], files: [attachment] }).catch(err => {
@@ -154,7 +154,7 @@ module.exports = {
                 console.error(`[TicketReaction] Could not open DM with user: ${err.message}`);
             }
         }
-        
+
         // Update database
         await MySQLDatabaseManager.updateTicket(channel.id, {
             status: 'closed',
@@ -162,21 +162,21 @@ module.exports = {
             closedBy: user.id,
             closeReason: 'Closed via ❌ reaction'
         });
-        
+
         // Close the ticket
         const closeEmbed = new EmbedBuilder()
             .setColor('#F04747')
             .setTitle('🔒 Ticket Closing')
             .setDescription(`Ticket closed by ${user}\n⏱️ This channel will be deleted in 5 seconds...`)
             .setTimestamp();
-        
+
         await channel.send({ embeds: [closeEmbed] }).catch((err) => {
             console.error(`[TicketReaction] Failed to send close message: ${err.message}`);
         });
-        
+
         // Store channel ID before deletion
         const channelId = channel.id;
-        
+
         setTimeout(async () => {
             await channel.delete().catch((err) => {
                 console.error(`[TicketReaction] Failed to delete ticket channel: ${err.message}`);

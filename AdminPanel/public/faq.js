@@ -1,3 +1,4 @@
+/* FAQ page script — small helpers for loading account info and controlling the FAQ accordion. */
 // Load user info and update navbar for FAQ page
 document.addEventListener('DOMContentLoaded', async () => {
 	try {
@@ -12,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 				document.getElementById('dropdownRole').textContent = (accountInfo.role || 'User').toUpperCase();
 			}
 		}
-	} catch (err) {}
+	} catch (err) { }
 });
 
 function toggleUserDropdown() {
@@ -23,7 +24,7 @@ function toggleUserDropdown() {
 		trigger.classList.toggle('active');
 	}
 }
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
 	const dropdown = document.querySelector('.user-dropdown');
 	if (dropdown && !dropdown.contains(event.target)) {
 		const menu = document.getElementById('userDropdownMenu');

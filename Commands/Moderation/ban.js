@@ -1,9 +1,9 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
+const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const moment = require("moment");
 require("moment-duration-format");
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const { AppealLink } = require("../../Config/main.json");
 const { formatErrorMessage } = require("../../Functions/ErrorFormatter");
@@ -27,7 +27,7 @@ module.exports = {
   async execute(interaction) {
     try {
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
       }
 
       const targetUser = interaction.options.getUser('user');
@@ -54,20 +54,20 @@ module.exports = {
       });
 
       // Try to send the user a DM first so they know why they're getting banned.
-      const dmEmbed = new EmbedBuilder()
-        .setTitle('🔨 Server Ban Notice')
-        .setColor(0xF04747)
-        .setDescription(`⚠️ You have been permanently removed from **${interaction.guild.name}**.`)
-        .addFields(
-          { name: 'Ban Status', value: '🛡️ **Permanent**', inline: true },
-          { name: 'Effective Date', value: `${moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm')}`, inline: true },
-          { name: 'Reason for Ban', value: `	${'```'}${reason}${'```'}`, inline: false },
-          { name: 'Case ID', value: `${'```'}${caseID}${'```'}`, inline: true },
-          { name: 'Moderator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
-          { name: 'Appeal Process', value: `[Submit Ban Appeal](${AppealLink})`, inline: false }
-        )
-        .setFooter({ text: `${interaction.guild.name} • Moderation System • ${moment(Date.now()).format('HH:mm')}` })
-        .setTimestamp();
+      const dmEmbed = createModerationDmEmbed({
+        actionTitle: 'Server Ban Notice',
+        actionEmoji: '🔨',
+        color: 0xF04747,
+        guildName: interaction.guild.name,
+        description: `⚠️ You have been permanently removed from **${interaction.guild.name}**.`,
+        statusLabel: 'Ban Status',
+        statusValue: '🛡️ **Permanent**',
+        effectiveDate: moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm'),
+        reason: reason,
+        caseId: caseID,
+        moderatorName: interaction.user.username,
+        appealLink: AppealLink
+      });
 
       const dmSent = await sendModerationDM(targetUser, dmEmbed);
 
@@ -92,7 +92,7 @@ module.exports = {
       // Actually ban the user now.
       try {
         await interaction.guild.members.ban(targetUser, { reason });
-        
+
         await sendSuccessReply(
           interaction,
           'Member Banned',

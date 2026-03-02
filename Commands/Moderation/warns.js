@@ -16,36 +16,47 @@ module.exports = {
   async execute(interaction) {
     let Prohibited = new EmbedBuilder()
       .setColor(0xFAA61A)
-        .setTitle(`Prohibited User`)
-        .setDescription(`You have to be in the moderation team to look at other people's warnings`);
-    
+      .setTitle(`Prohibited User`)
+      .setDescription(`You have to be in the moderation team to look at other people's warnings`);
+
     // Check for Mod role permission
-    if(!interaction.member.roles.cache.has(moderatorRoleId)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
-    
-    const warnsDB = DatabaseManager.getWarnsDB();
+    if (!interaction.member.roles.cache.has(moderatorRoleId)) return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+
     const userOption = interaction.options.getUser('user');
 
     // Use the user ID given, or default to the person running the command
     const targetUserId = userOption ? userOption.id : interaction.user.id;
     const viewingSelf = targetUserId === interaction.user.id;
 
-    await warnsDB.ensure(targetUserId, { points: 0, warns: {} });
-
     const targetUserObj = await interaction.client.users.fetch(targetUserId).catch(() => null);
     const userLabel = targetUserObj ? `${targetUserObj.tag} (${targetUserId})` : `${targetUserId}`;
 
-    const userData = await warnsDB.get(targetUserId);
-    const warns = userData?.warns || {};
-    const warnKeys = Object.keys(warns);
+    // Fetch warnings from MySQL
+    let warns = [];
+    try {
+      const [rows] = await DatabaseManager.connection.pool.query(
+        'SELECT case_id, reason, type, timestamp, created_at FROM warns WHERE user_id = ? ORDER BY timestamp DESC',
+        [targetUserId]
+      );
+      warns = rows || [];
+    } catch (err) {
+      console.error('[warns] Error fetching warnings:', err);
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle('❌ Error')
+        .setDescription(`Failed to fetch warnings: ${err.message}`);
+      return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+
     const noneMsg = viewingSelf ? 'You have not been warned before' : 'User has not been warned before';
-    const list = warnKeys.length ? warnKeys.map((id, idx) => `${idx + 1}. ${id}`).join('\n') : noneMsg;
+    const list = warns.length ? warns.map((w, idx) => `${idx + 1}. ${w.case_id}`).join('\n') : noneMsg;
 
     const em = new EmbedBuilder()
       .setTitle("Warnings")
       .setColor(0xFAA61A)
       .addFields(
         { name: "User", value: userLabel },
-        { name: "Total warnings", value: `${warnKeys.length}` },
+        { name: "Total warnings", value: `${warns.length}` },
         { name: "Cases", value: `\`${list}\`` }
       );
 

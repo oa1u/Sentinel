@@ -38,7 +38,7 @@ module.exports = {
   async execute(interaction) {
     const question = interaction.options.getString('question');
     const response = responses[Math.floor(Math.random() * responses.length)];
-    
+
     const em = new EmbedBuilder()
       .setColor(0x000000)
       .setTitle('🎱 Magic 8 Ball')
@@ -48,7 +48,7 @@ module.exports = {
       )
       .setFooter({ text: `Asked by ${interaction.user.username}` })
       .setTimestamp();
-    
+
     await interaction.reply({ embeds: [em] });
   }
 };

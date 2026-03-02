@@ -5,8 +5,8 @@ const { verifiedRoleId, administratorRoleId } = require("../Config/constants/rol
 const { welcomeChannelId, verificationChannelId, captchaLogChannelId } = require("../Config/constants/channel.json");
 const { Version } = require("../Config/main.json");
 
-// Handles captcha verification for new members. Sends a DM with a captcha image, checks their response, and gives them the verified role.
-// TODO: Make difficulty levels configurable for more flexibility.
+// Verification system: generates a captcha for new members, verifies their reply, and grants the verified role.
+// TODO: Add configurable difficulty and retry behavior to improve flexibility.
 
 const Color = "#32CD32"; // This is the accent color for verification stuff.
 
@@ -34,24 +34,24 @@ module.exports = {
         // Human verification: generate a captcha and send it to the user.
         const captcha = new CaptchaGenerator()
             .setDimension(600, 600)
-            .setCaptcha({ 
-                text: Math.random().toString(36).substring(2, 8).toUpperCase(), 
-                size: 70, 
-                color: "#32CD32" 
+            .setCaptcha({
+                text: Math.random().toString(36).substring(2, 8).toUpperCase(),
+                size: 70,
+                color: "#32CD32"
             })
             .setDecoy({ opacity: 0.2 })
             .setTrace({ color: "#32CD32", size: 2 });
 
         const captchaBuffer = await captcha.generate();
         const captchaCode = captcha.text;
-        
+
 
         if (!captchachannel) {
             const systemErrorEmbed = new EmbedBuilder()
                 .setColor(0xF04747)
                 .setTitle('❌ Verification Error')
                 .setDescription(`Verification system failed. Contact an <@&${administratorRoleId}> ASAP.`);
-            
+
             return member.send({ embeds: [systemErrorEmbed] }).catch((err) => {
                 console.error(`[Verify] Couldn't send error DM: ${err.message}`);
             });
@@ -87,14 +87,17 @@ module.exports = {
                     { name: 'Trouble?', value: '🔄 Run `/verify` for a new code\n🔍 Check for similar letters (e.g. O/0, I/1)', inline: true },
                     { name: 'DM Settings', value: '⚠️ Make sure DMs from server members are enabled in your Discord privacy settings.', inline: false },
                     { name: 'Need Help?', value: '❓ If you have issues, contact a moderator or admin.', inline: false }
-                );
+                )
+                .setImage(captchaImageUrl)
+                .setTimestamp()
+                .setFooter({ text: `${Version} • Expires in 10 minutes` });
 
             const e2 = new EmbedBuilder(baseEmbed)
                 .setColor('#FF0000')
                 .setDescription('❌ **Wrong Code**\n\n⚠️ Code doesn\'t match.\n\n**Try again:**\n> Check the image\n> Type all 6 characters\n> Case doesn\'t matter');
 
             const dmChannel = member.user.dmChannel || await member.user.createDM();
-            
+
             // Always ping user in verification channel first
             if (verifyChannel) {
                 const verifyEmbed = new EmbedBuilder()
@@ -111,7 +114,7 @@ module.exports = {
                     .setImage('https://i.imgur.com/sEkQOCf.png')
                     .setTimestamp()
                     .setFooter({ text: '🛡️ Keeps the community safe' });
-                
+
                 verifyChannel.send({ content: `${member}`, embeds: [verifyEmbed] })
                     .then(msg => setTimeout(() => msg.delete().catch((err) => {
                         console.error(`[Verification] Failed to delete verification prompt: ${err.message}`);
@@ -155,7 +158,7 @@ module.exports = {
                         const roleObj = member.guild.roles.cache.get(verifiedRoleId);
                         if (roleObj) {
                             await member.roles.add(roleObj);
-                            
+
                             // Send success message with actual role name
                             const successEmbed = new EmbedBuilder()
                                 .setAuthor({ name: `${Server} Verification System`, iconURL: member.guild.iconURL() })
@@ -165,7 +168,7 @@ module.exports = {
                                 .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
                                 .setFooter({ text: `${Version} • Thanks for verifying!` })
                                 .setTimestamp();
-                            
+
                             await dmChannel.send({ embeds: [successEmbed] });
 
                             // Log verification
@@ -196,7 +199,7 @@ module.exports = {
                     .setColor(0xFAA61A)
                     .setTitle('⏱️ Timeout')
                     .setDescription('Operation timed out. Please run `/verify` to try again.');
-                
+
                 dmChannel.send({ embeds: [timeoutEmbed] }).catch((err) => {
                     console.error(`[Verification] Failed to send timeout message: ${err.message}`);
                 });

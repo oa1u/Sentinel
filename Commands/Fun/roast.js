@@ -37,18 +37,18 @@ module.exports = {
   category: 'fun',
   async execute(interaction) {
     await interaction.deferReply();
-    
+
     const targetUser = interaction.options.getUser('user') || interaction.user;
     let roast;
-    
+
     roast = fallbackRoasts[Math.floor(Math.random() * fallbackRoasts.length)];
-    
+
     const em = new EmbedBuilder()
       .setColor(0xFF4500)
       .setTitle('🔥 Roast')
       .setDescription(`${targetUser}, ${roast}`)
       .setTimestamp();
-    
+
     await interaction.editReply({ embeds: [em] });
   }
 };

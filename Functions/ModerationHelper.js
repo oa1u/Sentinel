@@ -6,17 +6,41 @@ const { getMember, getUser } = require('./Helpers');
 // Helper functions for moderation commands.
 // Checks permissions, logs actions, and sends DM notifications for mod actions.
 // Helps keep moderation commands clean and simple.
+// Moderation helpers
+// A small collection of helper functions used by moderation commands.
+// They handle permission checks, role-hierarchy validation, logging to the
+// moderation channel, and sending DMs to users — keeping command files
+// focused on the actual moderation workflow.
 
-// Checks if the person running the command can moderate the target user.
+// Check whether the command executor is allowed to act on the target user.
+// This validates permissions, prevents self-actions, and enforces role hierarchy.
 async function canModerateMember(interaction, targetUser, actionName = 'action') {
     const executor = interaction.member;
     const guild = interaction.guild;
 
-    if (!isModOrAdmin(executor)) {
+    // Map common moderation actions to the Discord permission required for that action
+    const actionPermissionMap = {
+        ban: 'BanMembers',
+        kick: 'KickMembers',
+        timeout: 'ModerateMembers',
+        untimeout: 'ModerateMembers',
+        clear: 'ManageMessages',
+        deletemsg: 'ManageMessages',
+        slowmode: 'ManageMessages',
+        warn: 'ModerateMembers',
+        note: 'ModerateMembers',
+    };
+
+    const requiredPerm = actionPermissionMap[actionName?.toLowerCase()] || null;
+
+    // Allow if the executor has the explicit permission for this action,
+    // or if they have moderator/admin level permissions (ModerateMembers or Administrator).
+    const hasExplicit = requiredPerm ? executor.permissions.has(requiredPerm) : false;
+    if (!hasExplicit && !isModOrAdmin(executor)) {
         await sendErrorReply(
             interaction,
             'No Permission',
-            `You need mod permissions to ${actionName} members!`
+            `You need permission to ${actionName} members!`
         );
         return false;
     }
@@ -62,7 +86,7 @@ async function sendModerationDM(user, embed) {
             });
             return true;
         }
-        
+
         // Try to DM them directly if they have an ID
         if (user && user.id) {
             try {
@@ -73,7 +97,7 @@ async function sendModerationDM(user, embed) {
                 return false;
             }
         }
-        
+
         console.warn(`Invalid user object for DM: ${user?.id || 'unknown'}`);
         return false;
     } catch (err) {

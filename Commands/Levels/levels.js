@@ -14,7 +14,7 @@ module.exports = {
     category: 'levels',
     async execute(interaction) {
         const targetUser = interaction.options.getUser('user') || interaction.user;
-        
+
         // Don't let people check bot ranks—bots don't need XP!
         if (targetUser.bot) {
             const errorEmbed = new EmbedBuilder()
@@ -37,26 +37,26 @@ module.exports = {
 
         const rankEmbed = new EmbedBuilder()
             .setColor(0x5865F2)
-            .setAuthor({ 
-                name: `${targetUser.username}'s Rank`, 
-                iconURL: targetUser.displayAvatarURL() 
+            .setAuthor({
+                name: `${targetUser.username}'s Rank`,
+                iconURL: targetUser.displayAvatarURL()
             })
             .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
             .addFields(
-                { 
-                    name: '📊 Level', 
-                    value: `**${userData.level}**`, 
-                    inline: true 
+                {
+                    name: '📊 Level',
+                    value: `**${userData.level}**`,
+                    inline: true
                 },
-                { 
-                    name: '🏆 Rank', 
-                    value: rank ? `**#${rank}**` : 'Unranked', 
-                    inline: true 
+                {
+                    name: '🏆 Rank',
+                    value: rank ? `**#${rank}**` : 'Unranked',
+                    inline: true
                 },
-                { 
-                    name: '💬 Messages', 
-                    value: `**${userData.messages.toLocaleString()}**`, 
-                    inline: true 
+                {
+                    name: '💬 Messages',
+                    value: `**${userData.messages.toLocaleString()}**`,
+                    inline: true
                 },
                 {
                     name: '⬆️ Progress to Next Level',

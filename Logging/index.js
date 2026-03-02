@@ -1,6 +1,6 @@
-// Server logging system
-// Logs all server events (channels, roles, members, emojis, invites) to a log channel
-// Makes it easy to track changes and audit server activity
+// Server logging loader
+// Registers handlers that post server activity (channels, roles, members, emojis, invites)
+// into a central log channel for auditing and review.
 
 module.exports = (client) => {
     const channelCreate = require("./ChannelCreate");
@@ -16,7 +16,7 @@ module.exports = (client) => {
     const roleCreate = require("./RoleCreate");
     const roleDelete = require("./RoleDelete");
     const roleUpdate = require("./RoleUpdate");
-    
+
     channelCreate(client);
     channelDelete(client);
     emojiCreate(client);

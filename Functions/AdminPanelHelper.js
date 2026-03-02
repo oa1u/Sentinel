@@ -1,7 +1,7 @@
-// Helper for the Admin Panel API.
-// Provides wrapper methods for admin panel API calls.
-// Handles database queries for bans, timeouts, warnings, and more.
-// TODO: Cache frequently accessed data for better performance.
+// Admin panel helpers
+// Thin wrappers around the database for admin-panel-related operations
+// (bans, timeouts, warnings, kicks, etc.). Keeps API handlers small and
+// focused by centralizing DB logic here.
 
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
 
@@ -10,7 +10,7 @@ class AdminPanelHelper {
     static async getAdminUser(username) {
         try {
             const query = 'SELECT * FROM admin_users WHERE username = ?';
-            const results = await MySQLDatabaseManager.connection.query(query, [username]);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [username]);
             return results[0] || null;
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting admin user:', err.message);
@@ -22,7 +22,7 @@ class AdminPanelHelper {
     static async getAdminUserById(userId) {
         try {
             const query = 'SELECT * FROM admin_users WHERE id = ?';
-            const results = await MySQLDatabaseManager.connection.query(query, [userId]);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [userId]);
             return results[0] || null;
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting admin user by ID:', err.message);
@@ -34,7 +34,7 @@ class AdminPanelHelper {
     static async getAllAdminUsers() {
         try {
             const query = 'SELECT id, username, role, created_at, last_login FROM admin_users';
-            const results = await MySQLDatabaseManager.connection.query(query);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query);
             return results || [];
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting all admin users:', err.message);
@@ -46,7 +46,7 @@ class AdminPanelHelper {
     static async getAdminUsersCount() {
         try {
             const query = 'SELECT COUNT(*) as count FROM admin_users';
-            const results = await MySQLDatabaseManager.connection.query(query);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query);
             return results[0]?.count || 0;
         } catch (err) {
             console.error('[AdminPanelHelper] Error counting admin users:', err.message);
@@ -95,8 +95,13 @@ class AdminPanelHelper {
     static async unbanUser(userId) {
         try {
             const query = 'UPDATE user_bans SET banned = FALSE WHERE user_id = ?';
-            await MySQLDatabaseManager.connection.query(query, [userId]);
-            return true;
+            const result = await MySQLDatabaseManager.connection.pool.query(query, [userId]);
+
+            const affectedRows = Array.isArray(result)
+                ? (result[0]?.affectedRows ?? result[0]?.changedRows ?? 0)
+                : (result?.affectedRows ?? result?.changedRows ?? 0);
+
+            return affectedRows > 0;
         } catch (err) {
             console.error('[AdminPanelHelper] Error unbanning user:', err.message);
             return false;
@@ -141,7 +146,7 @@ class AdminPanelHelper {
     static async getWarnsCount() {
         try {
             const query = "SELECT COUNT(*) as count FROM warns WHERE (type IS NULL OR type = 'WARN')";
-            const results = await MySQLDatabaseManager.connection.query(query);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query);
             const row = Array.isArray(results) ? results[0] : null;
             return row?.count || 0;
         } catch (err) {
@@ -292,7 +297,7 @@ class AdminPanelHelper {
         try {
             const now = Date.now();
             const query = 'SELECT COUNT(*) as count FROM timeouts WHERE active = TRUE AND (expires_at IS NULL OR expires_at > ?)';
-            const results = await MySQLDatabaseManager.connection.query(query, [now]);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [now]);
             return results?.[0]?.count || 0;
         } catch (err) {
             console.error('[AdminPanelHelper] Error counting timeouts:', err.message);
@@ -313,7 +318,8 @@ class AdminPanelHelper {
                     user_name,
                     moderator_name,
                     moderator_source,
-                    action
+                    action,
+                    case_id
                 FROM (
                     SELECT 
                         CONVERT(CAST(w.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
@@ -323,7 +329,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(COALESCE(w.user_name, ui.username, u.username, w.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
                         CONVERT(CAST(CASE WHEN w.moderator_source = 'panel' THEN w.moderator_name ELSE COALESCE(m_ui.username, m.username, w.moderator_id, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(w.moderator_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('WARN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action
+                        CONVERT('WARN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
+                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
                     FROM warns w
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(w.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
@@ -343,13 +350,14 @@ class AdminPanelHelper {
                         CONVERT(CAST(COALESCE(b.user_name, ui.username, u.username, b.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
                         CONVERT(CAST(CASE WHEN b.banned_by_source = 'panel' THEN b.banned_by_name ELSE COALESCE(m_ui.username, m.username, b.banned_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(b.banned_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('BAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action
+                        CONVERT('BAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
+                        CONVERT(CAST(b.ban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
                     FROM user_bans b
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(b.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = b.user_id COLLATE utf8mb4_unicode_ci
                     LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(b.banned_by AS UNSIGNED)
                     LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = b.banned_by COLLATE utf8mb4_unicode_ci
-                    WHERE b.banned = TRUE
+                    WHERE b.ban_case_id IS NOT NULL
                     
                     UNION ALL
 
@@ -361,7 +369,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(COALESCE(ub.user_name, ui.username, u.username, ub.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
                         CONVERT(CAST(CASE WHEN ub.unbanned_by_source = 'panel' THEN ub.unbanned_by_name ELSE COALESCE(ub.unbanned_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(ub.unbanned_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('UNBAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action
+                        CONVERT('UNBAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
+                        CONVERT(CAST(ub.unban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
                     FROM unbans ub
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(ub.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = ub.user_id COLLATE utf8mb4_unicode_ci
@@ -376,7 +385,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(COALESCE(t.username, ui.username, u.username, t.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
                         CONVERT(CAST(CASE WHEN t.issued_by_source = 'panel' THEN t.issued_by_name ELSE COALESCE(m_ui.username, m.username, t.issued_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(t.issued_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('TIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action
+                        CONVERT('TIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
+                        CONVERT(CAST(t.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
                     FROM timeouts t
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(t.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = t.user_id COLLATE utf8mb4_unicode_ci
@@ -393,7 +403,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(COALESCE(w.user_name, ui.username, u.username, w.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
                         CONVERT(CAST(CASE WHEN w.moderator_source = 'panel' THEN w.moderator_name ELSE COALESCE(m_ui.username, m.username, w.moderator_id, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(w.moderator_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('UNTIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action
+                        CONVERT('UNTIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
+                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
                     FROM warns w
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(w.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
@@ -411,7 +422,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(COALESCE(k.username, ui.username, u.username, k.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
                         CONVERT(CAST(CASE WHEN k.kicked_by_source = 'panel' THEN k.kicked_by_name ELSE COALESCE(m_ui.username, m.username, k.kicked_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(k.kicked_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('KICK' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action
+                        CONVERT('KICK' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
+                        CONVERT(CAST(k.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
                     FROM kicks k
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(k.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = k.user_id COLLATE utf8mb4_unicode_ci
@@ -422,7 +434,7 @@ class AdminPanelHelper {
                 LIMIT ?
             `;
             const [rows] = await MySQLDatabaseManager.connection.pool.query(query, [limit]);
-            
+
             // Map results to action objects
             const actions = (rows || []).map(row => ({
                 timestamp: row.timestamp,
@@ -432,9 +444,10 @@ class AdminPanelHelper {
                 moderatorId: row.moderator_id,
                 moderatorName: row.moderator_name,
                 moderatorSource: row.moderator_source,
-                reason: row.reason
+                reason: row.reason,
+                caseId: row.case_id
             }));
-            
+
             // Results are already sorted by timestamp DESC and limited, return as-is
             return actions;
         } catch (err) {
@@ -448,7 +461,7 @@ class AdminPanelHelper {
         try {
             // Count giveaways that haven't ended
             const query = 'SELECT COUNT(*) as count FROM giveaways WHERE ended = FALSE';
-            const results = await MySQLDatabaseManager.connection.query(query).catch(() => null);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query).catch(() => [null]);
             return results?.[0]?.count || 0;
         } catch (err) {
             console.warn('[AdminPanelHelper] Giveaways table may not exist:', err.message);
@@ -460,7 +473,7 @@ class AdminPanelHelper {
     static async getTotalGiveawaysCount() {
         try {
             const query = 'SELECT COUNT(*) as count FROM giveaways';
-            const results = await MySQLDatabaseManager.connection.query(query).catch(() => null);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query).catch(() => [null]);
             return results?.[0]?.count || 0;
         } catch (err) {
             console.warn('[AdminPanelHelper] Giveaways table may not exist:', err.message);
@@ -473,14 +486,14 @@ class AdminPanelHelper {
         try {
             let query = 'SELECT * FROM tickets';
             const params = [];
-            
+
             if (status) {
                 query += ' WHERE status = ?';
                 params.push(status);
             }
-            
+
             query += ' ORDER BY created_at DESC LIMIT 100';
-            const results = await MySQLDatabaseManager.connection.query(query, params);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query, params);
             return results || [];
         } catch (err) {
             console.warn('[AdminPanelHelper] Tickets table may not exist:', err.message);
@@ -492,7 +505,7 @@ class AdminPanelHelper {
     static async getActiveTickets() {
         try {
             const query = 'SELECT * FROM tickets WHERE status != ? ORDER BY created_at DESC LIMIT 100';
-            const results = await MySQLDatabaseManager.connection.query(query, ['closed']);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query, ['closed']);
             return results || [];
         } catch (err) {
             console.warn('[AdminPanelHelper] Tickets table may not exist:', err.message);
@@ -520,7 +533,7 @@ class AdminPanelHelper {
         try {
             const fields = [];
             const values = [];
-            
+
             if (updates.username) {
                 fields.push('username = ?');
                 values.push(updates.username);
@@ -529,12 +542,12 @@ class AdminPanelHelper {
                 fields.push('role = ?');
                 values.push(updates.role);
             }
-            
+
             if (fields.length === 0) return true;
-            
+
             values.push(userId);
             const query = `UPDATE admin_users SET ${fields.join(', ')} WHERE id = ?`;
-            await MySQLDatabaseManager.connection.query(query, values);
+            await MySQLDatabaseManager.connection.pool.query(query, values);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error updating admin user:', err.message);
@@ -546,7 +559,7 @@ class AdminPanelHelper {
     static async updateLastLogin(username) {
         try {
             const query = 'UPDATE admin_users SET last_login = NOW() WHERE username = ?';
-            await MySQLDatabaseManager.connection.query(query, [username]);
+            await MySQLDatabaseManager.connection.pool.query(query, [username]);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error updating last login:', err.message);
@@ -555,13 +568,13 @@ class AdminPanelHelper {
     }
 
     // Creates an admin user account.
-    static async createAdminUser(username, passwordHash, role = 'moderator') {
+    static async createAdminUser(username, passwordHash, role = 'moderator', email = null) {
         try {
             const query = `
-                INSERT INTO admin_users (username, password_hash, role, created_at)
-                VALUES (?, ?, ?, NOW())
+                INSERT INTO admin_users (username, email, password_hash, role, created_at, password_changed_at)
+                VALUES (?, ?, ?, ?, NOW(), NOW())
             `;
-            await MySQLDatabaseManager.connection.query(query, [username, passwordHash, role]);
+            await MySQLDatabaseManager.connection.pool.query(query, [username, email, passwordHash, role]);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error creating admin user:', err.message);
@@ -573,7 +586,7 @@ class AdminPanelHelper {
     static async deleteAdminUser(userId) {
         try {
             const query = 'DELETE FROM admin_users WHERE id = ?';
-            await MySQLDatabaseManager.connection.query(query, [userId]);
+            await MySQLDatabaseManager.connection.pool.query(query, [userId]);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error deleting admin user:', err.message);
@@ -589,7 +602,7 @@ class AdminPanelHelper {
                 WHERE user_id = ? AND type = "WARN"
                 ORDER BY created_at DESC
             `;
-            const results = await MySQLDatabaseManager.connection.query(query, [userId]);
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [userId]);
             return results || [];
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting user warnings:', err.message);
@@ -601,7 +614,7 @@ class AdminPanelHelper {
     static async clearUserWarns(userId) {
         try {
             const query = 'DELETE FROM warns WHERE user_id = ?';
-            await MySQLDatabaseManager.connection.query(query, [userId]);
+            await MySQLDatabaseManager.connection.pool.query(query, [userId]);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error clearing user warnings:', err.message);

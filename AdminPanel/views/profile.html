@@ -1,17 +1,22 @@
 <!DOCTYPE html>
+<!-- Profile — view and edit your Admin Panel profile and preferences. -->
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile - Admin Panel</title>
+    <title id="websiteNameTitle">Profile</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/public/shared.js"></script>
     <script src="/public/notifications.js" defer></script>
     <script src="/public/profile.js" defer></script>
 </head>
+
 <body>
-    <div class="header">
+    <header class="header">
         <div class="header-content">
             <div class="logo">👤 Profile</div>
             <nav class="header-nav">
@@ -35,641 +40,630 @@
                         <a href="/profile">👤 My Profile</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </header>
 
-    <!-- Main Container -->
-    <div class="container">
-        <!-- Error/Success Messages -->
+    <main class="container">
         <div class="message error hidden" id="errorMsg"></div>
         <div class="message success hidden" id="successMsg"></div>
 
-        <!-- Profile Header Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-header-icon">👤</span>
-                Account Information
-            </div>
-            <div style="padding: 2rem;">
-                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-                    <div>
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">Username</div>
-                        <div style="font-size: 1.25rem; font-weight: 600; color: var(--color-text);" id="profileUsername">-</div>
-                    </div>
-                    <div id="profileUserIdContainer" style="display: none;">
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">User ID</div>
-                        <div style="font-size: 1rem; color: var(--color-text); font-family: monospace;" id="profileUserId">-</div>
-                    </div>
-                    <div>
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">Role</div>
-                        <div>
-                            <span class="role-badge" id="profileRole" style="font-size: 1rem; padding: 0.5rem 1rem;">-</span>
+        <div class="profile-layout">
+            <aside class="profile-sidebar">
+                <div class="profile-user-card">
+                    <div class="profile-avatar-large" id="profileHeroAvatar">--</div>
+                    <div class="profile-name-large" id="profileHeroTitle">Loading...</div>
+                    <div class="profile-role-badge" id="profileHeroRole">-</div>
+                    <div class="profile-meta-list">
+                        <div class="profile-meta-item">
+                            <span>User Since</span>
+                            <span class="profile-meta-value" id="profileHeroCreated">-</span>
                         </div>
-                    </div>
-                    <div id="profileWarningsContainer" style="display: none;">
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">Warnings</div>
-                        <div style="font-size: 1.25rem; font-weight: 600; color: var(--color-orange);" id="profileWarnings">0</div>
-                    </div>
-                    <div>
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">Created</div>
-                        <div style="font-size: 1rem; color: var(--color-text);" id="profileCreated">-</div>
-                    </div>
-                    <div id="profileMessagesContainer" style="display: none;">
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">Messages Sent</div>
-                        <div style="font-size: 1.25rem; font-weight: 600; color: var(--color-text);" id="profileMessages">0</div>
-                    </div>
-                    <div id="profileLastLoginContainer">
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">Last Login</div>
-                        <div style="font-size: 1rem; color: var(--color-text);" id="profileLastLogin">-</div>
-                    </div>
-                    <div id="profileBanStatusContainer" style="display: none;">
-                        <div style="color: var(--color-text-light); font-size: 0.875rem; margin-bottom: 0.5rem;">Ban Status</div>
-                        <div style="font-size: 1rem;">
-                            <span class="role-badge role-user" id="profileBanStatus" style="background: var(--color-green); font-size: 0.875rem; padding: 0.375rem 0.75rem;">✓ Active</span>
+                        <div class="profile-meta-item">
+                            <span>Last Active</span>
+                            <span class="profile-meta-value" id="profileHeroLastActive">-</span>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- User Actions (only for Discord users) -->
-        <div class="card" id="userActionsCard" style="display: none;">
-            <div class="card-header">
-                <span class="card-header-icon">⚡</span>
-                Actions
-            </div>
-            <div style="padding: 2rem;">
-                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                    <button onclick="warnUser()" class="btn" style="background: var(--color-orange); color: white; padding: 0.75rem 1.5rem; font-size: 1rem; min-width: 150px;">
-                        ⚠️ Warn
+                <nav class="profile-nav-menu" id="profileTabs">
+                    <button class="profile-nav-item active" id="profileSecurityTabBtn" data-tab="security">
+                        <span class="profile-nav-icon">🛡️</span> Security Center
                     </button>
-                    <button onclick="banUser()" class="btn" style="background: var(--color-red); color: white; padding: 0.75rem 1.5rem; font-size: 1rem; min-width: 150px;">
-                        🚫 Ban
+                    <button class="profile-nav-item" id="profileAccountTabBtn" data-tab="account">
+                        <span class="profile-nav-icon">⚙️</span> Account Settings
                     </button>
-                </div>
-            </div>
-        </div>
+                    <button class="profile-nav-item" id="profileGeoTabBtn" data-tab="geo">
+                        <span class="profile-nav-icon">🌍</span> Geo Snapshot
+                    </button>
+                    <button class="profile-nav-item" id="profileRecoveryTabBtn" data-tab="recovery">
+                        <span class="profile-nav-icon">🧷</span> Account Recovery
+                    </button>
+                    <button class="profile-nav-item" id="profileDiscordTabBtn" data-tab="discord">
+                        <span class="profile-nav-icon">🔗</span> Linked Discord
+                    </button>
+                </nav>
 
-        <!-- Activity Stats -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-header-icon">📊</span>
-                Activity Statistics
-            </div>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon green">✓</div>
-                    <div class="stat-content">
-                        <div class="stat-value" id="loginCount">-</div>
-                        <div class="stat-label">Login Sessions</div>
-                        <div class="stat-sublabel">Total logins</div>
+                <div class="card profile-feature-card" id="userActionsCard" style="display: none; margin-bottom: 2rem;">
+                    <div class="card-header">
+                        <span class="card-header-icon">⚡</span>
+                        Moderation Actions
+                    </div>
+                    <div class="profile-card-body" style="padding: 1.5rem;">
+                        <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">Apply
+                            direct moderation actions to the selected Discord user profile.</div>
+                        <div class="profile-actions-row" style="display: flex; gap: 1rem;">
+                            <button onclick="warnUser()" class="btn"
+                                style="background: var(--color-orange); color: white; padding: 0.75rem 1.5rem; font-size: 1rem; min-width: 150px;">⚠️
+                                Warn</button>
+                            <button onclick="banUser()" class="btn"
+                                style="background: var(--color-red); color: white; padding: 0.75rem 1.5rem; font-size: 1rem; min-width: 150px;">🚫
+                                Ban</button>
+                        </div>
                     </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon purple">⏱️</div>
-                    <div class="stat-content">
-                        <div class="stat-value" id="avgSessionTime">-</div>
-                        <div class="stat-label">Avg Session</div>
-                        <div class="stat-sublabel">Average session time</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+            </aside>
 
-        <!-- Change Password -->
-        <div class="card" id="changePasswordCard">
-            <div class="card-header">
-                <span class="card-header-icon">🔐</span>
-                Change Password
-            </div>
-            <div style="padding: 2rem;">
-                <form id="changePasswordForm" class="change-password-form">
-                    <div class="form-group">
-                        <label for="currentPassword" class="form-label">
-                            <span class="label-icon">🔑</span>
-                            Current Password
-                        </label>
-                        <div class="input-wrapper">
-                            <input type="password" id="currentPassword" name="currentPassword" class="form-input" required minlength="8" placeholder="Enter your current password">
-                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('currentPassword')">👁️</button>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="newPassword" class="form-label">
-                            <span class="label-icon">🆕</span>
-                            New Password
-                        </label>
-                        <div class="input-wrapper">
-                            <input type="password" id="newPassword" name="newPassword" class="form-input password-strength-input" required minlength="8" placeholder="Create a strong password" oninput="updatePasswordStrength(this.value)">
-                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('newPassword')">👁️</button>
-                        </div>
-                        <div class="password-strength-meter" id="strengthMeter">
-                            <div class="strength-bar" id="strengthBar"></div>
-                        </div>
-                        <div class="password-strength-text" id="strengthText"></div>
-                        <div class="password-requirements" id="newPasswordRequirements">
-                            <div class="requirement">
-                                <span class="requirement-check" id="check-length">✓</span>
-                                <span>At least 8 characters</span>
-                            </div>
-                            <div class="requirement">
-                                <span class="requirement-check" id="check-upper">✓</span>
-                                <span>One uppercase letter</span>
-                            </div>
-                            <div class="requirement">
-                                <span class="requirement-check" id="check-lower">✓</span>
-                                <span>One lowercase letter</span>
-                            </div>
-                            <div class="requirement">
-                                <span class="requirement-check" id="check-number">✓</span>
-                                <span>One number</span>
-                            </div>
-                            <div class="requirement">
-                                <span class="requirement-check" id="check-special">✓</span>
-                                <span>One special character (@$!%*?&)</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="confirmPassword" class="form-label">
-                            <span class="label-icon">✔️</span>
-                            Confirm New Password
-                        </label>
-                        <div class="input-wrapper">
-                            <input type="password" id="confirmPassword" name="confirmPassword" class="form-input" required minlength="8" placeholder="Confirm your new password" oninput="validatePasswordMatch()">
-                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirmPassword')">👁️</button>
-                        </div>
-                        <div class="password-match-indicator" id="matchIndicator"></div>
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary btn-large" style="margin-top: 1rem;">
-                            <span id="changePasswordBtnText">🔄 Change Password</span>
-                            <div class="loading hidden" id="changePasswordLoading"></div>
+            <div class="profile-content-area">
+                <div id="profileSecurityContent" class="tab-content active">
+                    <div class="security-workspace-tabs" id="securityWorkspaceTabs" role="tablist"
+                        aria-label="Security Workspace Views"
+                        style="display: flex; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+                        <button class="security-workspace-tab active btn btn-secondary" type="button"
+                            data-security-view="center" role="tab" aria-selected="true">
+                            <span class="security-tab-main"><span>🧠</span> <span>Command Center</span></span>
+                            <span class="security-tab-badge" id="securityTabBadgeCenter"
+                                style="background: var(--bg-card-hover); padding: 0.1rem 0.4rem; border-radius: 10px; font-size: 0.8rem; margin-left: 0.5rem;">0</span>
                         </button>
-                        <button type="reset" class="btn btn-secondary btn-large" style="margin-top: 1rem;">
-                            Cancel
+                        <button class="security-workspace-tab btn btn-secondary" type="button"
+                            data-security-view="sessions" role="tab" aria-selected="false">
+                            <span class="security-tab-main"><span>🖥️</span> <span>Active Sessions</span></span>
+                            <span class="security-tab-badge" id="securityTabBadgeSessions"
+                                style="background: var(--bg-card-hover); padding: 0.1rem 0.4rem; border-radius: 10px; font-size: 0.8rem; margin-left: 0.5rem;">0</span>
+                        </button>
+                        <button class="security-workspace-tab btn btn-secondary" type="button"
+                            data-security-view="events" role="tab" aria-selected="false">
+                            <span class="security-tab-main"><span>🧾</span> <span>Event Log</span></span>
+                            <span class="security-tab-badge" id="securityTabBadgeEvents"
+                                style="background: var(--bg-card-hover); padding: 0.1rem 0.4rem; border-radius: 10px; font-size: 0.8rem; margin-left: 0.5rem;">0</span>
                         </button>
                     </div>
-                </form>
+
+                    <div class="card security-feature-card" id="securityCenterCard" style="margin-bottom: 1.5rem;">
+                        <div class="card-header">
+                            <span class="card-header-icon">🛡️</span>
+                            Security Command Center
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="security-ops-grid" aria-label="Security Intelligence Panels"
+                                style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 1.5rem;">
+                                <article class="security-ops-panel"
+                                    style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
+                                    <div class="security-ops-panel-head" style="margin-bottom: 1rem;">
+                                        <h5 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">Security
+                                            Health Matrix</h5>
+                                        <span style="font-size: 0.85rem; color: var(--text-secondary);">Current
+                                            Posture</span>
+                                    </div>
+                                    <div class="security-overview-grid" id="securityOverviewPrimary"
+                                        style="display: grid; gap: 0.75rem; margin-bottom: 0.75rem;">
+                                        <div class="security-overview-item"><strong>Security Status</strong><span
+                                                class="overview-value"
+                                                style="color: var(--text-secondary);">Loading...</span></div>
+                                        <div class="security-overview-item"><strong>Active Sessions</strong><span
+                                                class="overview-value"
+                                                style="color: var(--text-secondary);">Loading...</span></div>
+                                    </div>
+                                    <div class="security-overview-grid" id="securityOverviewSecondary"
+                                        style="display: grid; gap: 0.75rem;">
+                                        <div class="security-overview-item"><strong>2FA Posture</strong><span
+                                                class="overview-value"
+                                                style="color: var(--text-secondary);">Loading...</span></div>
+                                        <div class="security-overview-item"><strong>Failed Events (Recent)</strong><span
+                                                class="overview-value"
+                                                style="color: var(--text-secondary);">Loading...</span></div>
+                                    </div>
+                                </article>
+
+                                <article class="security-ops-panel"
+                                    style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
+                                    <div class="security-block-title"
+                                        style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                                        <div>
+                                            <h4
+                                                style="margin: 0 0 0.25rem 0; font-size: 1.1rem; color: var(--text-primary);">
+                                                Two-Factor Authentication</h4>
+                                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">
+                                                Enforce second-factor verification.</p>
+                                        </div>
+                                        <div class="security-inline-actions">
+                                            <button id="setup2faBtn" class="btn btn-primary btn-sm"
+                                                onclick="startTwoFactorSetup()">Enable 2FA</button>
+                                            <button id="disable2faBtn" class="btn btn-danger btn-sm"
+                                                onclick="disableTwoFactor()" style="display:none;">Disable 2FA</button>
+                                        </div>
+                                    </div>
+                                    <div class="security-status-box"
+                                        style="background: var(--bg-card-hover); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
+                                        <div class="security-status-heading"
+                                            style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                                            Current 2FA State</div>
+                                        <div id="twoFactorStatusText"
+                                            style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">
+                                            Loading...</div>
+                                        <div id="twoFactorStatusHint"
+                                            style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem;">
+                                            Checking 2FA state...</div>
+                                    </div>
+                                    <div class="security-split-stack" style="display: grid; gap: 0.75rem;">
+                                        <div id="twoFactorMetaPrimary" class="security-mini-grid"
+                                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                            <div class="security-mini-card"><strong
+                                                    style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Enabled
+                                                    Since</strong><span class="security-mini-value"
+                                                    style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
+                                            </div>
+                                            <div class="security-mini-card"><strong
+                                                    style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Last
+                                                    2FA Failure</strong><span class="security-mini-value"
+                                                    style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
+                                            </div>
+                                        </div>
+                                        <div id="twoFactorMetaSecondary" class="security-mini-grid"
+                                            style="display: grid; grid-template-columns: 1fr; gap: 0.75rem;">
+                                            <div class="security-mini-card"><strong
+                                                    style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Recovery
+                                                    Logins</strong><span class="security-mini-value"
+                                                    style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </article>
+                            </div>
+
+                            <div id="twoFactorSetupPanel" class="security-subcard security-subcard-wide"
+                                style="display:none; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card); margin-bottom: 1.5rem;">
+                                <div class="security-block-title" style="margin-bottom: 1rem;">
+                                    <h4 style="margin: 0 0 0.25rem 0; font-size: 1.1rem; color: var(--text-primary);">
+                                        2FA Enrollment Workflow</h4>
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Issue a
+                                        fresh secret, verify one-time code, and lock in multi-factor authentication.</p>
+                                </div>
+                                <p class="security-setup-note"
+                                    style="color: var(--text-secondary); margin-bottom: 1rem;">Scan the QR code with
+                                    your authenticator app or use the secret directly, then confirm with a valid 6-digit
+                                    token.</p>
+                                <div id="twoFactorQrWrap" style="display:none; margin-bottom: 1rem; text-align:center;">
+                                    <img id="twoFactorQrImage" alt="2FA QR Code"
+                                        style="max-width: 220px; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border-color); background: #fff; padding: 0.5rem;">
+                                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                        Scan this QR code in Google Authenticator, Authy, or 1Password.</div>
+                                </div>
+                                <div style="margin-bottom: 1rem;">
+                                    <label class="form-label" for="twoFactorSecret">2FA Secret</label>
+                                    <input id="twoFactorSecret" class="form-input" readonly>
+                                </div>
+                                <div style="margin-bottom: 1rem;">
+                                    <label class="form-label" for="twoFactorUri">OTP Auth URI</label>
+                                    <textarea id="twoFactorUri" class="form-input" rows="2" readonly></textarea>
+                                </div>
+                                <div class="security-setup-inline"
+                                    style="display: flex; gap: 1rem; align-items: flex-end;">
+                                    <div style="flex:1; min-width:200px;">
+                                        <label class="form-label" for="twoFactorVerifyCode">Verification Code</label>
+                                        <input id="twoFactorVerifyCode" class="form-input"
+                                            placeholder="Enter 6-digit code" inputmode="numeric" maxlength="6">
+                                    </div>
+                                    <button class="btn btn-success" onclick="confirmTwoFactorSetup()">Confirm &
+                                        Enable</button>
+                                </div>
+                            </div>
+
+                            <div class="security-group">
+                                <h4 class="security-group-title"
+                                    style="margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--text-primary);">Activity
+                                    & Risk Insights</h4>
+                                <div class="security-cards-grid security-cards-grid-metrics"
+                                    style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                                    <div class="security-subcard"
+                                        style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
+                                        <div class="security-block-title" style="margin-bottom: 1rem;">
+                                            <h4
+                                                style="margin: 0 0 0.25rem 0; font-size: 1rem; color: var(--text-primary);">
+                                                Session Intelligence</h4>
+                                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">
+                                                Access continuity, session freshness, and network-origin visibility.</p>
+                                        </div>
+                                        <div class="security-split-stack" style="display: grid; gap: 0.75rem;">
+                                            <div id="securitySessionStatsPrimary" class="security-mini-grid"
+                                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                                <div class="security-mini-card"><strong
+                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Current
+                                                        Session</strong><span class="security-mini-value"
+                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
+                                                </div>
+                                                <div class="security-mini-card"><strong
+                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Other
+                                                        Sessions</strong><span class="security-mini-value"
+                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
+                                                </div>
+                                            </div>
+                                            <div id="securitySessionStatsSecondary" class="security-mini-grid"
+                                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                                <div class="security-mini-card"><strong
+                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Unique
+                                                        Session IPs</strong><span class="security-mini-value"
+                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
+                                                </div>
+                                                <div class="security-mini-card"><strong
+                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Logins
+                                                        (Recent)</strong><span class="security-mini-value"
+                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card security-feature-card" id="securitySessionsCard"
+                        style="margin-bottom: 1.5rem; display: none;">
+                        <div class="card-header">
+                            <span class="card-header-icon">🖥️</span>
+                            Active Sessions
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div id="securitySessionsOverview" class="security-mini-grid"
+                                style="display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1rem;">
+                            </div>
+
+                            <div id="hiddenSessionsHint"
+                                style="display:none; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card-hover); color: var(--text-secondary); font-size: 0.85rem;">
+                            </div>
+
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Device</th>
+                                            <th>IP Address</th>
+                                            <th>Login Time</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="securitySessionsTable">
+                                        <tr>
+                                            <td colspan="5" style="text-align:center; color: var(--text-secondary);">
+                                                Loading active sessions...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card security-feature-card" id="securityEventsCard"
+                        style="margin-bottom: 1.5rem; display: none;">
+                        <div class="card-header">
+                            <span class="card-header-icon">🧾</span>
+                            Security Event Log
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="security-mini-grid"
+                                style="display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 1rem;">
+                                <div class="security-mini-card">
+                                    <strong>Total Events</strong>
+                                    <div id="securityEventsMetricTotal" class="security-mini-value">0</div>
+                                </div>
+                                <div class="security-mini-card">
+                                    <strong>Warnings</strong>
+                                    <div id="securityEventsMetricWarnings" class="security-mini-value">0</div>
+                                </div>
+                                <div class="security-mini-card">
+                                    <strong>Successful</strong>
+                                    <div id="securityEventsMetricSuccess" class="security-mini-value">0</div>
+                                </div>
+                                <div class="security-mini-card">
+                                    <strong>Latest Event</strong>
+                                    <div id="securityEventsMetricLatest" class="security-mini-value">Unavailable</div>
+                                </div>
+                            </div>
+
+                            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+                                <select id="securityEventToneFilter" class="form-input" style="max-width: 180px;">
+                                    <option value="all">All tones</option>
+                                    <option value="positive">Positive</option>
+                                    <option value="warning">Warning</option>
+                                </select>
+                                <input id="securityEventSearch" class="form-input"
+                                    placeholder="Search event context or IP..." style="flex:1; min-width:220px;">
+                                <button id="securityEventFilterReset" class="btn btn-secondary"
+                                    type="button">Reset</button>
+                            </div>
+
+                            <div id="securityEventTypeFilters"
+                                style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+                                <button class="security-events-chip active btn btn-secondary btn-sm" type="button"
+                                    data-event-filter="all" aria-pressed="true">All</button>
+                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
+                                    data-event-filter="LOGIN_SUCCESS" aria-pressed="false">Logins</button>
+                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
+                                    data-event-filter="LOGIN_FAILED" aria-pressed="false">Login Failed</button>
+                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
+                                    data-event-filter="TWO_FA_FAILED" aria-pressed="false">2FA Failed</button>
+                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
+                                    data-event-filter="RECOVERY_CODE_USED" aria-pressed="false">Recovery</button>
+                            </div>
+
+                            <div style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size: 0.85rem;">
+                                Showing <strong id="securityEventVisibleCount"
+                                    style="color: var(--text-primary);">0</strong>
+                                of <strong id="securityEventTotalCount" style="color: var(--text-primary);">0</strong>
+                                events
+                            </div>
+
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Event</th>
+                                            <th>IP / Location</th>
+                                            <th>Timestamp</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="securityEventsTable">
+                                        <tr>
+                                            <td colspan="3" style="text-align:center; color: var(--text-secondary);">
+                                                Loading security events...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="profileAccountContent" class="tab-content" style="display: none;">
+                    <div class="card" id="emailVerificationCard" style="margin-bottom: 1.5rem;">
+                        <div class="card-header">
+                            <span class="card-header-icon">✅</span>
+                            Email Verification
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">Keep
+                                your account recovery secure by maintaining a verified email address.</div>
+                            <div class="account-status-row"
+                                style="display: flex; justify-content: space-between; align-items: center;">
+                                <div id="emailVerificationStatus" class="account-status-value"
+                                    style="font-weight: bold;">Loading verification status...</div>
+                                <button type="button" class="btn btn-secondary" id="resendVerificationBtn">Resend
+                                    Verification Email</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card" id="changeEmailCard" style="margin-bottom: 1.5rem; display: none;">
+                        <div class="card-header">
+                            <span class="card-header-icon">✉️</span>
+                            Change Email
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">Update
+                                your account email address. After changing, you'll receive a verification email at the
+                                new address.</div>
+                            <div style="display:grid; gap:0.9rem;">
+                                <div>
+                                    <label class="form-label">Current Email</label>
+                                    <div id="changeEmailCurrentValue" class="form-input"
+                                        style="background: var(--bg-secondary);">Loading...</div>
+                                </div>
+
+                                <form id="changeEmailForm" style="display:grid; gap:0.6rem;">
+                                    <div>
+                                        <label class="form-label" for="newEmail">New Email</label>
+                                        <input id="newEmail" class="form-input" type="email"
+                                            placeholder="you@example.com" required>
+                                    </div>
+                                    <div>
+                                        <label class="form-label" for="confirmNewEmail">Confirm New Email</label>
+                                        <input id="confirmNewEmail" class="form-input" type="email"
+                                            placeholder="you@example.com" required>
+                                        <div id="emailMatchIndicator"
+                                            style="margin-top:0.35rem; color:var(--text-secondary); font-size:0.9rem;">
+                                        </div>
+                                    </div>
+                                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                                        <button id="changeEmailSubmitBtn" class="btn btn-primary" type="submit">
+                                            <span id="changeEmailBtnText">Change Email</span>
+                                            <span id="changeEmailLoading" class="hidden"
+                                                style="margin-left:0.5rem;">⏳</span>
+                                        </button>
+                                        <div style="color:var(--text-secondary); font-size:0.9rem;">We'll send a
+                                            verification link to the new address.</div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="profileGeoContent" class="tab-content" style="display: none;">
+                    <div class="card" id="geoSnapshotCard" style="margin-bottom: 1.5rem;">
+                        <div class="card-header">
+                            <span class="card-header-icon">🌍</span>
+                            Login Geo Snapshot
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">
+                                Approximate network/location intelligence for the latest authentication signals.</div>
+                            <div id="loginGeoSnapshot" class="profile-status-panel"
+                                style="background: var(--bg-card-hover); padding: 1.5rem; border-radius: var(--radius-md); text-align: center; color: var(--text-secondary);">
+                                Loading location snapshot...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="profileRecoveryContent" class="tab-content" style="display: none;">
+                    <div class="card" id="accountRecoveryCard" style="margin-bottom: 1.5rem;">
+                        <div class="card-header">
+                            <span class="card-header-icon">🧷</span>
+                            Account Recovery
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="recovery-layout recovery-workspace">
+                                <section class="recovery-ops-header" aria-label="Recovery Operations Overview"
+                                    style="margin-bottom: 1.5rem;">
+                                    <div class="recovery-ops-main">
+                                        <h3 class="recovery-ops-title"
+                                            style="margin: 0 0 0.5rem 0; font-size: 1.2rem; color: var(--text-primary);">
+                                            Emergency Access Console</h3>
+                                        <p class="recovery-ops-subtitle"
+                                            style="margin: 0; color: var(--text-secondary); line-height: 1.5;">Maintain
+                                            recovery readiness with posture visibility, lifecycle guidance, and secure
+                                            one-time code handling.</p>
+                                    </div>
+                                </section>
+
+                                <div class="recovery-action-row"
+                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                                    <div class="recovery-title-stack">
+                                        <div class="recovery-title"
+                                            style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
+                                            Recovery Code Operations</div>
+                                        <div class="recovery-action-note"
+                                            style="font-size: 0.85rem; color: var(--text-secondary);">Generate a new
+                                            code set to rotate access and invalidate previously issued recovery codes.
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-secondary"
+                                        onclick="generateRecoveryCodesForAccount()">Generate Recovery Codes</button>
+                                </div>
+
+                                <div class="recovery-main-grid"
+                                    style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 1.5rem;">
+                                    <div id="recoveryStatusBox" class="recovery-status-shell"
+                                        style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
+                                        Recovery status loading...
+                                    </div>
+                                    <aside class="recovery-practices"
+                                        style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card-hover);">
+                                        <strong class="recovery-practices-title"
+                                            style="display: block; margin-bottom: 0.75rem; color: var(--text-primary);">Recovery
+                                            Best Practices</strong>
+                                        <ul class="recovery-practices-list"
+                                            style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                                            <li>Store codes in an encrypted password manager or offline secure location.
+                                            </li>
+                                            <li>Treat each code as sensitive one-time emergency access material.</li>
+                                            <li>Rotate immediately if compromise is suspected or after major account
+                                                changes.</li>
+                                        </ul>
+                                    </aside>
+                                </div>
+
+                                <div id="recoveryCodesWrap" class="recovery-codes-wrap"
+                                    style="display: none; margin-top: 1.5rem;">
+                                    <label class="form-label" for="recoveryCodesOutput">Your New Recovery Codes (store
+                                        these securely)</label>
+                                    <textarea id="recoveryCodesOutput" class="form-input sensitive-blur" rows="6"
+                                        readonly onclick="this.classList.toggle('revealed')"
+                                        style="font-family: monospace; letter-spacing: 0.1em; text-align: center; font-size: 1.1rem; cursor: pointer; filter: blur(5px); transition: filter 0.3s;"></textarea>
+                                    <div class="recovery-codes-note"
+                                        style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; text-align: center;">
+                                        Click the box to reveal codes.</div>
+                                    <div class="recovery-codes-actions"
+                                        style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
+                                        <button class="btn btn-secondary" onclick="downloadRecoveryCodes()">Download
+                                            Codes</button>
+                                        <button class="btn btn-primary" onclick="copyRecoveryCodes()">Copy Recovery
+                                            Codes</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="profileDiscordContent" class="tab-content" style="display: none;">
+                    <div class="card" id="discordLinkCard" style="margin-bottom: 1.5rem;">
+                        <div class="card-header">
+                            <span class="card-header-icon">🔗</span>
+                            Linked Discord Account
+                        </div>
+                        <div class="profile-card-body discord-workspace-v2" style="padding: 1.5rem;">
+                            <section class="discord-ops-header" aria-label="Discord Identity Overview"
+                                style="margin-bottom: 1.5rem;">
+                                <div class="discord-ops-main">
+                                    <h3 class="discord-ops-title"
+                                        style="margin: 0 0 0.5rem 0; font-size: 1.2rem; color: var(--text-primary);">
+                                        Discord Connection Console</h3>
+                                    <p class="discord-ops-subtitle"
+                                        style="margin: 0; color: var(--text-secondary); line-height: 1.5;">Link this
+                                        profile to a Discord identity for trusted ownership context, profile visibility,
+                                        and account continuity checks.</p>
+                                </div>
+                            </section>
+                            <div id="discordLinkStatus" class="discord-status-shell"
+                                style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card); margin-bottom: 1rem;">
+                                Discord link status loading...
+                            </div>
+                            <div id="discordProfileRefreshMeta"
+                                style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Last
+                                refreshed: --</div>
+                            <div id="discordOAuthHostWarning" class="profile-status-panel"
+                                style="display:none; background: var(--color-orange); color: white; padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+                            </div>
+                            <div class="discord-action-row" style="display: flex; gap: 1rem;">
+                                <button id="discordAuthorizeBtn" class="btn btn-primary"
+                                    onclick="startDiscordOAuthLink()">Authorize with Discord</button>
+                                <button id="discordUnlinkBtn" class="btn btn-danger" onclick="unlinkDiscordAccount()"
+                                    style="display: none;">Unlink</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <!-- Recent Activity -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-header-icon">📋</span>
-                Recent Activity
+            <div id="sessionDetailsDrawer" style="display:none; position:fixed; inset:0; z-index:1200;">
+                <div onclick="closeSessionDetails()" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);">
+                </div>
+                <aside
+                    style="position:absolute; top:0; right:0; width:min(440px, 100%); height:100%; background:var(--bg-card); border-left:1px solid var(--border-color); box-shadow: var(--shadow-lg); padding:1rem; overflow-y:auto;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                        <h3 style="margin:0; font-size:1.1rem; color: var(--text-primary);">Session Details</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="closeSessionDetails()">Close</button>
+                    </div>
+                    <div id="sessionDetailsBody" style="display:grid; gap:0.7rem; color:var(--text-secondary);"></div>
+                </aside>
             </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Action</th>
-                            <th>Details</th>
-                            <th>Time</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recentActivityTable">
-                        <tr>
-                            <td colspan="3" style="text-align: center; padding: 2rem; color: var(--color-text-light);">
-                                <div class="loading show">Loading activity...</div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div id="passwordConfirmModal" class="modal-overlay"
+                style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1300; align-items:center; justify-content:center;">
+                <div class="modal-box"
+                    style="background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); width:min(400px, 90%); box-shadow:var(--shadow-lg);">
+                    <h3 class="modal-title" style="margin:0 0 0.5rem 0; color:var(--text-primary);">Confirm Password
+                    </h3>
+                    <p style="color:var(--text-secondary); margin-bottom:1.5rem; font-size:0.9rem;">Please enter your
+                        current password to continue.</p>
+                    <form id="passwordConfirmForm" onsubmit="handlePasswordConfirm(event)">
+                        <div class="form-group" style="margin-bottom:1.5rem;">
+                            <input type="password" id="confirmPasswordInput" class="form-input"
+                                placeholder="Current Password" required autocomplete="current-password"
+                                style="width:100%;">
+                        </div>
+                        <div class="modal-actions" style="display:flex; justify-content:flex-end; gap:1rem;">
+                            <button type="button" class="btn btn-secondary"
+                                onclick="closePasswordModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Confirm</button>
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
-    </div>
-
-    <script>
-        let currentUser = null;
-
-        // Toggle password visibility
-        function togglePasswordVisibility(fieldId) {
-            const field = document.getElementById(fieldId);
-            const isPassword = field.type === 'password';
-            field.type = isPassword ? 'text' : 'password';
-        }
-
-        // Update password strength indicator
-        function updatePasswordStrength(password) {
-            const requirements = [
-                { id: 'check-length', regex: /.{8,}/, text: 'At least 8 characters' },
-                { id: 'check-upper', regex: /[A-Z]/, text: 'One uppercase letter' },
-                { id: 'check-lower', regex: /[a-z]/, text: 'One lowercase letter' },
-                { id: 'check-number', regex: /\d/, text: 'One number' },
-                { id: 'check-special', regex: /[@$!%*?&]/, text: 'One special character' }
-            ];
-
-            let strength = 0;
-            requirements.forEach(req => {
-                const element = document.getElementById(req.id);
-                const isMet = req.regex.test(password);
-                
-                if (isMet) {
-                    element.classList.add('active');
-                    strength += 20;
-                } else {
-                    element.classList.remove('active');
-                }
-            });
-
-            // Update strength bar
-            const strengthBar = document.getElementById('strengthBar');
-            strengthBar.style.width = strength + '%';
-            
-            const strengthText = document.getElementById('strengthText');
-            let strengthLabel = '';
-            if (strength === 0) {
-                strengthLabel = '';
-            } else if (strength <= 20) {
-                strengthLabel = '🔴 Weak';
-                strengthBar.style.background = '#ff5b5b';
-            } else if (strength <= 40) {
-                strengthLabel = '🟠 Fair';
-                strengthBar.style.background = '#ff9d5b';
-            } else if (strength <= 60) {
-                strengthLabel = '🟡 Good';
-                strengthBar.style.background = '#ffd45b';
-            } else if (strength <= 80) {
-                strengthLabel = '🟢 Strong';
-                strengthBar.style.background = '#5bffb8';
-            } else {
-                strengthLabel = '✅ Very Strong';
-                strengthBar.style.background = '#5bffb8';
-            }
-            
-            strengthText.textContent = strengthLabel;
-        }
-
-        // Validate password match
-        function validatePasswordMatch() {
-            const newPassword = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-            const matchIndicator = document.getElementById('matchIndicator');
-
-            if (!confirmPassword) {
-                matchIndicator.classList.remove('show');
-                return;
-            }
-
-            matchIndicator.classList.add('show');
-            if (newPassword === confirmPassword && confirmPassword.length > 0) {
-                matchIndicator.classList.add('match');
-                matchIndicator.classList.remove('mismatch');
-                matchIndicator.textContent = '✓ Passwords match';
-            } else {
-                matchIndicator.classList.remove('match');
-                matchIndicator.classList.add('mismatch');
-                matchIndicator.textContent = '✗ Passwords do not match';
-            }
-        }
-
-        // Show/hide password requirements
-        document.getElementById('newPassword').addEventListener('focus', function() {
-            document.getElementById('newPasswordRequirements').classList.add('show');
-        });
-
-        document.getElementById('newPassword').addEventListener('blur', function() {
-            if (!this.value) {
-                document.getElementById('newPasswordRequirements').classList.remove('show');
-            }
-        });
-
-        // Load user profile
-        async function loadProfile() {
-            try {
-                // Check if viewing another user's profile
-                const urlParams = new URLSearchParams(window.location.search);
-                const viewUserId = urlParams.get('userId');
-                
-                // If viewing another user, fetch their data from /api/users/:userId
-                const endpoint = viewUserId ? `/api/users/${encodeURIComponent(viewUserId)}` : '/api/user';
-                const response = await fetch(endpoint);
-                if (response.ok) {
-                    const data = await response.json();
-                    // Handle different response formats
-                    currentUser = viewUserId ? (data.user || data) : data;
-                    
-                    // Update header - handle both admin users and Discord users
-                    const displayUsername = currentUser.username || '-';
-                    const displayRole = viewUserId ? 'Discord User' : (currentUser.role || 'user').toUpperCase();
-                    
-                    document.getElementById('headerUsername').textContent = displayUsername;
-                    document.getElementById('headerRole').textContent = displayRole;
-                    document.getElementById('headerRole').className = 'role-badge role-' + (viewUserId ? 'user' : (currentUser.role || 'user'));
-                    
-                    // Update profile info
-                    document.getElementById('profileUsername').textContent = displayUsername;
-                    document.getElementById('profileRole').textContent = displayRole;
-                    document.getElementById('profileRole').className = 'role-badge role-' + (viewUserId ? 'user' : (currentUser.role || 'user'));
-                    
-                    // Handle different date fields for Discord users vs admin users
-                    const createdDate = currentUser.created_at || currentUser.joined_at ? new Date(currentUser.created_at || currentUser.joined_at) : null;
-                    document.getElementById('profileCreated').textContent = createdDate ? createdDate.toLocaleDateString() : 'Unknown';
-                    
-                    const lastLoginDate = currentUser.last_login ? new Date(currentUser.last_login) : null;
-                    document.getElementById('profileLastLogin').textContent = lastLoginDate ? 
-                        lastLoginDate.toLocaleString() : (viewUserId ? 'N/A' : 'First login');
-                    
-                    // Show Discord-specific fields if viewing a Discord user
-                    if (viewUserId) {
-                        document.getElementById('profileUserIdContainer').style.display = 'block';
-                        document.getElementById('profileUserId').textContent = currentUser.user_id || viewUserId;
-                        document.getElementById('profileWarningsContainer').style.display = 'block';
-                        document.getElementById('profileWarnings').textContent = currentUser.warnings || 0;
-                        document.getElementById('profileMessagesContainer').style.display = 'block';
-                        document.getElementById('profileMessages').textContent = (currentUser.messages || 0).toLocaleString();
-                        document.getElementById('profileBanStatusContainer').style.display = 'block';
-                        document.getElementById('profileLastLoginContainer').style.display = 'none';
-                        document.getElementById('userActionsCard').style.display = 'block';
-                        document.getElementById('changePasswordCard').style.display = 'none';
-                        
-                        // Update ban status
-                        const banStatusEl = document.getElementById('profileBanStatus');
-                        if (currentUser.is_banned) {
-                            banStatusEl.textContent = '🚫 Banned';
-                            banStatusEl.style.background = 'var(--color-red)';
-                        } else {
-                            banStatusEl.textContent = '✓ Active';
-                            banStatusEl.style.background = 'var(--color-green)';
-                        }
-                    } else {
-                        document.getElementById('profileUserIdContainer').style.display = 'none';
-                        document.getElementById('profileWarningsContainer').style.display = 'none';
-                        document.getElementById('profileMessagesContainer').style.display = 'none';
-                        document.getElementById('profileBanStatusContainer').style.display = 'none';
-                        document.getElementById('profileLastLoginContainer').style.display = 'block';
-                        document.getElementById('userActionsCard').style.display = 'none';
-                        document.getElementById('changePasswordCard').style.display = 'block';
-                    }
-                    
-                    // Show/hide nav links based on role
-                    const role = currentUser.role || 'moderator';
-                    if (role === 'owner') {
-                        document.getElementById('moderatorLink').style.display = 'inline-block';
-                        document.getElementById('adminLink').style.display = 'inline-block';
-                        document.getElementById('ownerLink').style.display = 'inline-block';
-                    } else if (role === 'admin') {
-                        document.getElementById('moderatorLink').style.display = 'inline-block';
-                        document.getElementById('adminLink').style.display = 'inline-block';
-                        document.getElementById('ownerLink').style.display = 'none';
-                    } else if (role === 'moderator') {
-                        document.getElementById('moderatorLink').style.display = 'inline-block';
-                        document.getElementById('adminLink').style.display = 'none';
-                        document.getElementById('ownerLink').style.display = 'none';
-                    }
-                    
-                    loadActivityStats();
-                    loadRecentActivity();
-                } else if (response.status === 401) {
-                    console.log('Unauthorized - redirecting to login');
-                    window.location.href = '/login';
-                } else {
-                    const errorData = await response.json();
-                    console.error('Failed to load profile:', errorData);
-                    showError('Failed to load profile: ' + (errorData.error || 'Unknown error'));
-                }
-            } catch (error) {
-                console.error('Error loading profile:', error);
-                showError('Failed to load profile information');
-            }
-        }
-
-        // Load activity statistics
-        function loadActivityStats() {
-            // Check if viewing a Discord user
-            const urlParams = new URLSearchParams(window.location.search);
-            const viewUserId = urlParams.get('userId');
-            
-            const loginCountEl = document.getElementById('loginCount');
-            if (loginCountEl) {
-                if (viewUserId && currentUser) {
-                    // Show Discord stats instead
-                    loginCountEl.textContent = currentUser.level || '1';
-                    loginCountEl.parentElement.querySelector('.stat-label').textContent = 'Level';
-                    loginCountEl.parentElement.querySelector('.stat-sublabel').textContent = 'Current level';
-                    loginCountEl.parentElement.querySelector('.stat-icon').textContent = '📈';
-                } else {
-                    loginCountEl.textContent = (currentUser && currentUser.loginCount) ? currentUser.loginCount : '-';
-                }
-            }
-            
-            // Update avg session time from profile data
-            const avgSessionEl = document.getElementById('avgSessionTime');
-            if (avgSessionEl) {
-                if (viewUserId && currentUser) {
-                    // Show XP for Discord users
-                    avgSessionEl.textContent = currentUser.xp ? currentUser.xp.toLocaleString() + ' XP' : '0 XP';
-                    avgSessionEl.parentElement.querySelector('.stat-label').textContent = 'Experience';
-                    avgSessionEl.parentElement.querySelector('.stat-sublabel').textContent = 'Total XP earned';
-                    avgSessionEl.parentElement.querySelector('.stat-icon').textContent = '⭐';
-                } else {
-                    avgSessionEl.textContent = (currentUser && currentUser.avgSessionTime) ? currentUser.avgSessionTime : 'N/A';
-                }
-            }
-        }
-
-        // Load recent activity
-        async function loadRecentActivity() {
-            const tbody = document.getElementById('recentActivityTable');
-            tbody.innerHTML = `
-                <tr>
-                    <td>Login</td>
-                    <td>Logged into admin panel</td>
-                    <td>${new Date().toLocaleString()}</td>
-                </tr>
-                <tr>
-                    <td colspan="3" style="text-align: center; padding: 2rem; color: var(--color-text-light);">
-                        Activity tracking coming soon
-                    </td>
-                </tr>
-            `;
-        }
-
-        // Handle password change
-        document.getElementById('changePasswordForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const currentPassword = document.getElementById('currentPassword').value;
-            const newPassword = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-            
-            // Validate passwords match
-            if (newPassword !== confirmPassword) {
-                showError('New passwords do not match');
-                return;
-            }
-            
-            // Validate password strength
-            const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-            if (!passwordRegex.test(newPassword)) {
-                showError('Password must contain at least 8 characters, including uppercase, lowercase, number, and special character');
-                return;
-            }
-            
-            // Show loading
-            document.getElementById('changePasswordBtnText').style.display = 'none';
-            document.getElementById('changePasswordLoading').classList.remove('hidden');
-            
-            try {
-                const response = await fetch('/api/user/change-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        currentPassword,
-                        newPassword
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    showSuccess('Password changed successfully');
-                    document.getElementById('changePasswordForm').reset();
-                } else {
-                    showError(data.error || 'Failed to change password');
-                }
-            } catch (error) {
-                console.error('Error changing password:', error);
-                showError('Failed to change password');
-            } finally {
-                document.getElementById('changePasswordBtnText').style.display = 'inline';
-                document.getElementById('changePasswordLoading').classList.add('hidden');
-            }
-        });
-
-        async function warnUser() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const userId = urlParams.get('userId');
-            if (!userId) return;
-            
-            const reason = prompt('Enter warning reason:');
-            if (!reason || reason.trim() === '') return;
-            
-            try {
-                const response = await fetch('/api/warn', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: userId,
-                        reason: reason.trim()
-                    })
-                });
-                
-                const data = await response.json();
-                if (response.ok) {
-                    showSuccess('User warned successfully');
-                    // Reload profile to update warning count
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showError(data.error || 'Failed to warn user');
-                }
-            } catch (error) {
-                console.error('Error warning user:', error);
-                showError('Failed to warn user');
-            }
-        }
-
-        async function banUser() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const userId = urlParams.get('userId');
-            if (!userId) return;
-            
-            if (!confirm('Are you sure you want to ban this user?')) return;
-            
-            const reason = prompt('Enter ban reason:');
-            if (!reason || reason.trim() === '') return;
-            
-            try {
-                const response = await fetch('/api/ban', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: userId,
-                        reason: reason.trim()
-                    })
-                });
-                
-                const data = await response.json();
-                if (response.ok) {
-                    showSuccess('User banned successfully');
-                    // Reload profile to update ban status
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showError(data.error || 'Failed to ban user');
-                }
-            } catch (error) {
-                console.error('Error banning user:', error);
-                showError('Failed to ban user');
-            }
-        }
-
-        function showError(message) {
-            const errorMsg = document.getElementById('errorMsg');
-            errorMsg.textContent = message;
-            errorMsg.classList.remove('hidden');
-            setTimeout(() => errorMsg.classList.add('hidden'), 5000);
-        }
-
-        function showSuccess(message) {
-            const successMsg = document.getElementById('successMsg');
-            successMsg.textContent = message;
-            successMsg.classList.remove('hidden');
-            setTimeout(() => successMsg.classList.add('hidden'), 5000);
-        }
-
-        function logout() {
-            fetch('/logout', { method: 'POST' })
-                .then(() => window.location.href = '/login')
-                .catch(() => window.location.href = '/login');
-        }
-
-        // Load profile on page load
-        loadProfile();
-
-        function toggleUserDropdown() {
-            const menu = document.getElementById('userDropdownMenu');
-            const trigger = document.querySelector('.user-dropdown-trigger');
-            menu.classList.toggle('show');
-            trigger.classList.toggle('active');
-        }
-
-        document.addEventListener('click', function(event) {
-            const dropdown = document.querySelector('.user-dropdown');
-            if (dropdown && !dropdown.contains(event.target)) {
-                document.getElementById('userDropdownMenu')?.classList.remove('show');
-                document.querySelector('.user-dropdown-trigger')?.classList.remove('active');
-            }
-        });
-
-        function syncDropdownInfo() {
-            const username = document.getElementById('headerUsername')?.textContent;
-            const role = document.getElementById('headerRole')?.textContent;
-            if (username) document.getElementById('dropdownUsername').textContent = username;
-            if (role) document.getElementById('dropdownRole').textContent = role;
-        }
-        setTimeout(syncDropdownInfo, 500);
-    </script>
-
-    <footer class="page-footer">
-        <div class="footer-links">
-            <span>© 2026 <strong>Admin Panel</strong></span>
-            <span class="footer-sep">•</span>
-            <a href="/changelog">Changelog</a>
-            <span class="footer-sep">•</span>
-            <a href="/license">License</a>
-        </div>
-    </footer>
-
-    <script src="/public/version.js"></script>
+    </main>
 </body>
+
 </html>

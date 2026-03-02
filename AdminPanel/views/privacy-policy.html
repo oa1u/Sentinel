@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<!-- Privacy Policy — outlines data handling and privacy commitments for users. -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="websiteNameTitle">Privacy Policy</title>
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">🔒 Privacy Policy</div>
+            <nav class="header-nav">
+                <a href="/dashboard" class="nav-link">Dashboard</a>
+                <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
+                <a href="/admin" class="nav-link" id="adminLink">Admin</a>
+                <a href="/owner" class="nav-link" id="ownerLink">Owner</a>
+            </nav>
+            <div class="user-info">
+                <div class="user-dropdown">
+                    <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
+                        <span class="username" id="headerUsername">Loading...</span>
+                        <span class="role-badge" id="headerRole">user</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="user-dropdown-menu" id="userDropdownMenu">
+                        <div class="user-dropdown-header">
+                            <span class="username" id="dropdownUsername">Loading...</span>
+                            <span class="role-badge" id="dropdownRole">user</span>
+                        </div>
+                        <a href="/profile">👤 My Profile</a>
+                        <a href="/features">✨ Features</a>
+                        <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
+                        <div class="user-dropdown-divider"></div>
+                        <button onclick="logout()">🚪 Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="max-width: 960px; padding: 2rem 1rem 3rem;">
+        <div class="tabs" id="privacyTabs" style="margin-bottom: 2rem;">
+            <button class="tab active" data-tab="overview" style="--tab-color:#5b7fff;"><span class="tab-icon">📌</span>
+                <span>Overview</span></button>
+            <button class="tab" data-tab="data" style="--tab-color:#8e6bff;"><span class="tab-icon">📦</span>
+                <span>Data</span></button>
+            <button class="tab" data-tab="usage" style="--tab-color:#38d39f;"><span class="tab-icon">🎯</span>
+                <span>Usage</span></button>
+            <button class="tab" data-tab="security" style="--tab-color:#ff9f43;"><span class="tab-icon">🧯</span>
+                <span>Security</span></button>
+            <button class="tab" data-tab="rights" style="--tab-color:#5bc0de;"><span class="tab-icon">🗂️</span>
+                <span>Rights</span></button>
+            <button class="tab" data-tab="version" style="--tab-color:#ffd45b;"><span class="tab-icon">📅</span>
+                <span>Version</span></button>
+        </div>
+
+        <style>
+            .tabs {
+                display: flex;
+                gap: 1.25rem;
+                border-bottom: 2px solid var(--border-color);
+                margin: 2rem 0 1.5rem 0;
+                padding-left: 0.5rem;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+
+            .tab {
+                background: none;
+                border: none;
+                outline: none;
+                color: var(--text-secondary);
+                font-size: 1rem;
+                font-weight: 600;
+                padding: 0.65rem 1rem 0.5rem 1rem;
+                border-radius: var(--radius-md) var(--radius-md) 0 0;
+                cursor: pointer;
+                transition: color 0.2s, background 0.2s;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                position: relative;
+            }
+
+            .tab.active {
+                color: var(--tab-color, #5b7fff);
+                background: var(--bg-card);
+                box-shadow: 0 2px 8px rgba(91, 127, 255, 0.08);
+                border-bottom: 2px solid var(--tab-color, #5b7fff);
+                z-index: 2;
+            }
+
+            .tab:not(.active):hover {
+                color: var(--tab-color, #5b7fff);
+                background: var(--bg-card-hover);
+            }
+
+            .tab .tab-icon {
+                font-size: 1.1rem;
+            }
+        </style>
+
+        <div id="overview" class="tab-content active">
+            <section class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">📌</span>
+                    <span>Overview</span>
+                </div>
+                <p style="margin: 0 0 1rem 0; line-height: 1.7;">
+                    This Privacy Policy describes how this Discord bot and its <span class="websiteName"></span>
+                    collect, use, store, and protect data while providing moderation, automation, and
+                    community-management features.
+                </p>
+                <p style="margin: 0 0 1rem 0; line-height: 1.7;">
+                    The policy applies to server owners, administrators, moderators, and members whose data is processed
+                    through bot commands, moderation actions, ticket flows, and audit features.
+                </p>
+                <p style="margin: 0; line-height: 1.7;">
+                    By using this system, administrators acknowledge responsibility for configuring features in line
+                    with their community rules and applicable platform requirements.
+                </p>
+            </section>
+        </div>
+
+        <div id="data" class="tab-content" style="display:none;">
+            <section class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">📦</span>
+                    <span>Data We Process</span>
+                </div>
+                <ul style="margin: 0; padding-left: 1.2rem; line-height: 1.7;">
+                    <li><strong>Platform identifiers:</strong> Discord user IDs, guild/server IDs, role IDs, and channel
+                        IDs needed to map actions and permissions.</li>
+                    <li><strong>Moderation history:</strong> warnings, kicks, bans, unbans, timeouts, moderator notes,
+                        case IDs, and action timestamps.</li>
+                    <li><strong>Operational metadata:</strong> command usage events, automation trigger outcomes, and
+                        limited error diagnostics for reliability.</li>
+                    <li><strong>Ticket and appeal content:</strong> ticket status, participants, moderation context, and
+                        appeal decisions when those modules are enabled.</li>
+                    <li><strong><span class="websiteName"></span> security data:</strong> account role, login/session
+                        timing, and access logs used to protect privileged actions.</li>
+                    <li><strong>Configuration data:</strong> server-specific settings required for automod, logging
+                        channels, verification, levels, and feature toggles.</li>
+                </ul>
+            </section>
+        </div>
+
+        <div id="usage" class="tab-content" style="display:none;">
+            <section class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">🎯</span>
+                    <span>How Data Is Used</span>
+                </div>
+                <ul style="margin: 0; padding-left: 1.2rem; line-height: 1.7;">
+                    <li>To execute requested bot features, including moderation workflows, tickets, utility commands,
+                        and community-management tools.</li>
+                    <li>To maintain safety controls such as automod checks, suspicious-pattern detection, and
+                        repeat-offense tracking.</li>
+                    <li>To provide accountability through case histories, moderation logs, and privileged action
+                        traceability.</li>
+                    <li>To enforce role-based access in the <span class="websiteName"></span> so users only access tools
+                        permitted by their role.</li>
+                    <li>To improve stability and feature quality through diagnostics and aggregate performance
+                        monitoring.</li>
+                    <li>To comply with lawful requests and platform safety obligations when required.</li>
+                </ul>
+            </section>
+        </div>
+
+        <div id="security" class="tab-content" style="display:none;">
+            <section class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">🧯</span>
+                    <span>Security & Retention</span>
+                </div>
+                <ul style="margin: 0; padding-left: 1.2rem; line-height: 1.7;">
+                    <li><strong>Access control:</strong> administrative features are restricted by authentication, role
+                        checks, and protected sessions.</li>
+                    <li><strong>Auditability:</strong> sensitive actions are logged to support incident investigation
+                        and moderation transparency.</li>
+                    <li><strong>Data minimization:</strong> only data necessary for configured features and moderation
+                        operations is processed.</li>
+                    <li><strong>Retention practice:</strong> records are kept only as long as operationally needed,
+                        unless longer retention is required for abuse review, legal obligations, or active disputes.
+                    </li>
+                    <li><strong>Safeguards:</strong> system controls are designed to reduce unauthorized access, misuse,
+                        and accidental disclosure.</li>
+                    <li><strong>Third-party platform dependency:</strong> some data handling occurs through Discord
+                        infrastructure and is subject to Discord platform behavior.</li>
+                </ul>
+            </section>
+        </div>
+
+        <div id="rights" class="tab-content" style="display:none;">
+            <section class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">🗂️</span>
+                    <span>Your Rights</span>
+                </div>
+                <p style="margin: 0 0 1rem 0; line-height: 1.7;">
+                    Depending on your role and local requirements, you may request actions related to data processed by
+                    this system.
+                </p>
+                <ul style="margin: 0 0 1rem 0; padding-left: 1.2rem; line-height: 1.7;">
+                    <li>Review moderation or ticket records related to your account where policy permits.</li>
+                    <li>Request correction of inaccurate records or context notes.</li>
+                    <li>Request deletion of records that are no longer necessary, subject to operational and legal
+                        constraints.</li>
+                    <li>Request explanation of automated moderation outcomes that affected your account.</li>
+                </ul>
+                <p style="margin: 0; line-height: 1.7;">
+                    Requests are handled by server management or designated administrators, and may be limited where
+                    retention is required for security, dispute resolution, or compliance.
+                </p>
+            </section>
+        </div>
+
+        <div id="version" class="tab-content" style="display:none;">
+            <section class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">📅</span>
+                    <span>Policy Version</span>
+                </div>
+                <p style="margin: 0 0 0.75rem 0; line-height: 1.7;"><strong>Last updated:</strong> February 21, 2026.
+                </p>
+                <p style="margin: 0 0 0.75rem 0; line-height: 1.7;">Material policy changes may be announced in the
+                    panel changelog and reflected on this page.</p>
+                <p style="margin: 0; line-height: 1.7;">Continued use after an update indicates acceptance of the
+                    revised policy terms.</p>
+            </section>
+        </div>
+    </main>
+
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
+
+    <script src="/public/shared.js"></script>
+    <script src="/public/version.js"></script>
+    <script>
+        function toggleUserDropdown() {
+            const menu = document.getElementById('userDropdownMenu');
+            const trigger = document.querySelector('.user-dropdown-trigger');
+            if (menu && trigger) {
+                menu.classList.toggle('show');
+                trigger.classList.toggle('active');
+            }
+        }
+
+        document.addEventListener('click', function (event) {
+            const dropdown = document.querySelector('.user-dropdown');
+            if (dropdown && !dropdown.contains(event.target)) {
+                const menu = document.getElementById('userDropdownMenu');
+                const trigger = document.querySelector('.user-dropdown-trigger');
+                if (menu) menu.classList.remove('show');
+                if (trigger) trigger.classList.remove('active');
+            }
+        });
+
+        async function updateAccountInfo() {
+            try {
+                const api = window.AdminPanel?.api || window.api;
+                if (!api || typeof api.getAccountInfo !== 'function') return;
+
+                const accountInfo = await api.getAccountInfo();
+                const username = accountInfo?.username || 'User';
+                const role = String(accountInfo?.role || 'user').toUpperCase();
+
+                const setText = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = value;
+                };
+
+                setText('headerUsername', username);
+                setText('headerRole', role);
+                setText('dropdownUsername', username);
+                setText('dropdownRole', role);
+
+                if (typeof api.applyRoleVisibility === 'function') {
+                    api.applyRoleVisibility(accountInfo, {
+                        moderatorLinkId: 'moderatorLink',
+                        adminLinkId: 'adminLink',
+                        ownerLinkId: 'ownerLink'
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load account info:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            updateAccountInfo();
+
+            const tabs = document.querySelectorAll('#privacyTabs .tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function () {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    const tabName = tab.getAttribute('data-tab');
+                    tabContents.forEach(tc => {
+                        if (tc.id === tabName) {
+                            tc.classList.add('active');
+                            tc.style.display = '';
+                        } else {
+                            tc.classList.remove('active');
+                            tc.style.display = 'none';
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

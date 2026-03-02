@@ -66,9 +66,9 @@ module.exports = {
       };
       return await interaction.reply({ embeds: [embed], flags: 64 });
     }
-    
+
     const subcommand = interaction.options.getSubcommand();
-    
+
     // Figure out what the user wants to do with the giveaway.
     if (subcommand === 'start') {
       await giveawayHandler.handleGiveaway(interaction, interaction.client);

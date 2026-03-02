@@ -8,6 +8,11 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('unban')
     .setDescription('Unban a user by ID or case ID')
+    .addStringOption(option =>
+      option.setName('reason')
+        .setDescription('Reason for unbanning the user')
+        .setRequired(true)
+    )
     .addUserOption(option =>
       option.setName('user')
         .setDescription('User to unban')
@@ -25,36 +30,26 @@ module.exports = {
       .setColor(0xF04747)
       .setTitle(`❌ No Permission`)
       .setDescription(`You need the Administrator role to use this command!`);
-    
-    if(!interaction.member.roles.cache.has(administratorRoleId)) {
+
+    if (!interaction.member.roles.cache.has(administratorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
-    
-    const warnsDB = DatabaseManager.getWarnsDB();
+
     const caseIdOption = interaction.options.getString('caseid');
     const userOption = interaction.options.getUser('user');
 
     // Figure out who to unban—either by case ID or user.
     let targetUserId = userOption ? userOption.id : null;
     let resolvedCaseId = caseIdOption || null;
-    let banEntry = null;
 
     if (caseIdOption) {
-      const allWarns = await warnsDB.all();
-      for (const [userId, data] of Object.entries(allWarns)) {
-        const entry = data?.warns?.[caseIdOption];
-        if (entry && entry.reason && entry.reason.toLowerCase().includes('(banned)')) {
-          targetUserId = userId;
-          banEntry = entry;
-          break;
-        }
-      }
-      // If we can't find the ban in warnsDB, check the user_bans table in MySQL for more info.
-      if (!targetUserId || !banEntry) {
-        const dbManager = require('../../Functions/MySQLDatabaseManager');
-        const banRows = await dbManager.connection.query('SELECT user_id FROM user_bans WHERE ban_case_id = ?', [caseIdOption]);
+      // Look up the ban in MySQL user_bans table
+      const dbManager = require('../../Functions/MySQLDatabaseManager');
+      try {
+        const [banRows] = await dbManager.connection.pool.query('SELECT user_id, ban_case_id FROM user_bans WHERE ban_case_id = ?', [caseIdOption]);
         if (banRows && banRows.length > 0) {
           targetUserId = banRows[0].user_id;
+          resolvedCaseId = banRows[0].ban_case_id;
         } else {
           const notFound = new EmbedBuilder()
             .setColor(0xF04747)
@@ -62,13 +57,24 @@ module.exports = {
             .setDescription('No ban found for that case ID.');
           return interaction.reply({ embeds: [notFound], flags: MessageFlags.Ephemeral });
         }
+      } catch (err) {
+        console.error('[unban] Error looking up case ID:', err);
+        const errorEmbed = new EmbedBuilder()
+          .setColor(0xF04747)
+          .setTitle('❌ Error')
+          .setDescription(`Failed to look up case \`${caseIdOption}\`: ${err.message}`);
+        return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
       }
     } else if (userOption) {
       // If only a user is given, grab their most recent ban case.
       const dbManager = require('../../Functions/MySQLDatabaseManager');
-      const banRows = await dbManager.connection.query('SELECT ban_case_id FROM user_bans WHERE user_id = ? ORDER BY ban_case_id DESC LIMIT 1', [userOption.id]);
-      if (banRows && banRows.length > 0) {
-        resolvedCaseId = banRows[0].ban_case_id;
+      try {
+        const [banRows] = await dbManager.connection.pool.query('SELECT ban_case_id FROM user_bans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userOption.id]);
+        if (banRows && banRows.length > 0) {
+          resolvedCaseId = banRows[0].ban_case_id;
+        }
+      } catch (err) {
+        console.error('[unban] Error looking up user bans:', err);
       }
     }
 
@@ -93,15 +99,26 @@ module.exports = {
     const newUnbanCaseId = generateCaseId('UNBAN');
     const unbanReason = newUnbanCaseId;
 
-    // If we only have a user ID, try to get their latest ban info from the database.
+    // Determine original ban case and reason from the database when possible.
     let originalBanCaseId = resolvedCaseId || null;
-    let originalBanReason = banEntry?.reason || null;
-    if (!originalBanCaseId && targetUserId) {
-      // Try to get the latest ban for the user.
-      const banRows = await dbManager.connection.query('SELECT ban_case_id, reason FROM user_bans WHERE user_id = ? ORDER BY ban_case_id DESC LIMIT 1', [targetUserId]);
-      if (banRows && banRows.length > 0) {
-        originalBanCaseId = banRows[0].ban_case_id;
-        originalBanReason = banRows[0].reason;
+    let originalBanReason = null;
+
+    if (originalBanCaseId) {
+      try {
+        const [rows] = await dbManager.connection.pool.query('SELECT ban_reason AS reason FROM user_bans WHERE ban_case_id = ? LIMIT 1', [originalBanCaseId]);
+        if (rows && rows.length > 0) originalBanReason = rows[0].reason;
+      } catch (e) {
+        console.error('[unban] Failed to fetch original ban reason:', e);
+      }
+    } else if (targetUserId) {
+      try {
+        const [rows] = await dbManager.connection.pool.query('SELECT ban_case_id, ban_reason AS reason FROM user_bans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [targetUserId]);
+        if (rows && rows.length > 0) {
+          originalBanCaseId = rows[0].ban_case_id;
+          originalBanReason = rows[0].reason;
+        }
+      } catch (e) {
+        console.error('[unban] Error looking up latest ban for user:', e);
       }
     }
 
@@ -130,22 +147,22 @@ module.exports = {
       .setTitle("🔓 User Unbanned")
       .setColor(0x43B581)
       .addFields(
-          { name: '👮 Administrator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
-          { name: '👤 User', value: `${targetLabel}`, inline: true },
-          { name: '🔑 Unban Case ID', value: `\t${'```'}${newUnbanCaseId}${'```'}`, inline: false },
-          { name: '🔑 Original Ban Case ID', value: `${'```'}${originalBanCaseId || 'N/A'}${'```'}`, inline: true },
-        )
+        { name: '👮 Administrator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
+        { name: '👤 User', value: `${targetLabel}`, inline: true },
+        { name: '🔑 Unban Case ID', value: `\t${'```'}${newUnbanCaseId}${'```'}`, inline: false },
+        { name: '🔑 Original Ban Case ID', value: `${'```'}${originalBanCaseId || 'N/A'}${'```'}`, inline: true },
+      )
       .setFooter({ text: `Unbanned by ${interaction.user.username}` })
       .setTimestamp();
-    
+
     if (clearedWarnsLog) await clearedWarnsLog.send({ embeds: [em] });
-    
+
     const successEmbed = new EmbedBuilder()
       .setColor(0x43B581)
       .setTitle('✅ Successfully Unbanned')
       .setDescription(`**${targetLabel}** has been unbanned!`)
       .addFields({ name: "🔑 Unban Case ID", value: `\`${newUnbanCaseId}\`` });
-    
+
     return interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
   }
 }

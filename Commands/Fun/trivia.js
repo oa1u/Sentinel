@@ -23,10 +23,10 @@ module.exports = {
   category: 'fun',
   async execute(interaction) {
     await interaction.deferReply();
-    
+
     try {
       const response = await fetch('https://opentdb.com/api.php?amount=1&type=multiple');
-      
+
       if (!response.ok) {
         const errorEmbed = new EmbedBuilder()
           .setColor(0xF04747)
@@ -34,9 +34,9 @@ module.exports = {
           .setDescription('Trivia service is currently unavailable. Please try again later!');
         return interaction.editReply({ embeds: [errorEmbed] });
       }
-      
+
       const data = await response.json();
-      
+
       if (!data.results || data.results.length === 0) {
         const errorEmbed = new EmbedBuilder()
           .setColor(0xF04747)
@@ -44,7 +44,7 @@ module.exports = {
           .setDescription('Could not fetch trivia question. Please try again!');
         return interaction.editReply({ embeds: [errorEmbed] });
       }
-      
+
       const question = data.results[0];
       const correctAnswer = htmlDecode(question.correct_answer);
       // Shuffle the answers so the right one isn't always at the top.
@@ -52,9 +52,9 @@ module.exports = {
         correctAnswer,
         ...question.incorrect_answers.map(ans => htmlDecode(ans))
       ].sort(() => Math.random() - 0.5);
-      
+
       const correctIndex = allAnswers.indexOf(correctAnswer);
-      
+
       const em = new EmbedBuilder()
         .setColor(0xFF6B6B)
         .setTitle('🧠 Trivia Question')
@@ -63,39 +63,39 @@ module.exports = {
           { name: 'Difficulty', value: question.difficulty.toUpperCase(), inline: true },
           { name: 'Question', value: htmlDecode(question.question), inline: false }
         );
-      
+
       const optionsText = allAnswers
         .map((ans, i) => `${emojis[i]} ${ans}`)
         .join('\n');
-      
+
       em.addFields({ name: 'Options', value: optionsText, inline: false });
       em.setFooter({ text: `React with your answer! 30 seconds.` })
         .setTimestamp();
-      
+
       const triviaMessage = await interaction.editReply({ embeds: [em] }).then(response => response || interaction.message);
-      
+
       // Add number emoji reactions so users can vote for their answer.
       for (let i = 0; i < 4; i++) {
         await triviaMessage.react(emojis[i]);
       }
-      
+
       // Wait for the user to pick their answer by reacting.
       const filter = (reaction, user) => {
         return emojis.includes(reaction.emoji.name) && user.id === interaction.user.id;
       };
-      
+
       const collector = triviaMessage.createReactionCollector({ filter, time: 30000, max: 1 });
-      
+
       collector.on('collect', (reaction) => {
         const answerIndex = emojis.indexOf(reaction.emoji.name);
-        
+
         if (answerIndex === correctIndex) {
           const correctEmbed = new EmbedBuilder()
             .setColor(0x43B581)
             .setTitle('✅ Correct!')
             .setDescription(`The answer is **${correctAnswer}**`)
             .setFooter({ text: `${interaction.user.username} got it right!` });
-          
+
           interaction.followUp({ embeds: [correctEmbed] });
         } else {
           const wrongEmbed = new EmbedBuilder()
@@ -103,11 +103,11 @@ module.exports = {
             .setTitle('❌ Wrong!')
             .setDescription(`Correct answer: **${correctAnswer}**\n\nYou answered: **${allAnswers[answerIndex]}**`)
             .setFooter({ text: `Better luck next time!` });
-          
+
           interaction.followUp({ embeds: [wrongEmbed] });
         }
       });
-      
+
       collector.on('end', (collected) => {
         if (collected.size === 0) {
           const timeoutEmbed = new EmbedBuilder()
@@ -115,7 +115,7 @@ module.exports = {
             .setTitle('⏱️ Time\'s Up!')
             .setDescription(`The correct answer was **${correctAnswer}**`)
             .setFooter({ text: `No answer was selected in time.` });
-          
+
           interaction.followUp({ embeds: [timeoutEmbed] });
         }
       });
@@ -125,7 +125,7 @@ module.exports = {
         .setColor(0xF04747)
         .setTitle('❌ Error')
         .setDescription('Could not fetch trivia question. Please try again!');
-      
+
       await interaction.editReply({ embeds: [errorEmbed] });
     }
   }

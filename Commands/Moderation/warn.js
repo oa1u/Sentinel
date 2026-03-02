@@ -1,9 +1,9 @@
 const moment = require("moment");
 require("moment-duration-format");
-const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
+const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
@@ -26,43 +26,97 @@ module.exports = {
   category: 'moderation',
   async execute(interaction) {
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
     }
 
     const targetUser = interaction.options.getUser('user');
     const reasonInput = interaction.options.getString('reason');
-    const caseIdInput = interaction.options.getString('caseid');
 
-    // If caseid is provided, fetch warning details
-    if (caseIdInput) {
-      const warnsDB = DatabaseManager.getWarnsDB();
-      let foundUserId = targetUser ? targetUser.id : interaction.user.id;
-      const userData = await warnsDB.get(foundUserId);
-      const warn = userData?.warns?.[caseIdInput];
-      if (!warn) {
-        await sendErrorReply(
-          interaction,
-          'Case Not Found',
-          `No warning found for Case ID: \`${caseIdInput}\``
-        );
-        return;
-      }
-      // Fetch moderator info
-      let moderatorTag = warn.moderatorId ? (await interaction.client.users.fetch(warn.moderatorId).catch(() => null))?.tag || warn.moderatorId : 'Unknown';
-      let issuedAt = warn.timestamp ? `<t:${Math.floor(warn.timestamp / 1000)}:F>` : 'Unknown';
-      const embed = new EmbedBuilder()
-        .setTitle('⚠️ Warning Details')
-        .setColor(0xFAA61A)
-        .setDescription(`Case ID: \`${caseIdInput}\``)
-        .addFields(
-          { name: 'Reason', value: `\`\`\`${warn.reason}\`\`\``, inline: false },
-          { name: 'Moderator', value: `\`${moderatorTag}\``, inline: true },
-          { name: 'Issued At', value: issuedAt, inline: true }
-        )
-        .setFooter({ text: `${interaction.guild.name} • Moderation System` })
-        .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    // Check permissions and hierarchy
+    if (!await canModerateMember(interaction, targetUser, 'warn')) {
       return;
     }
+
+    // Fetch member to verify they exist in guild
+    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+    if (!targetMember) {
+      await sendErrorReply(
+        interaction,
+        'Invalid User',
+        `**${targetUser.tag}** is not in this server!`
+      );
+      return;
+    }
+
+    // Generate case ID
+    const caseId = generateCaseId('WARN');
+
+    // Create logging embed
+    const logEmbed = createModerationEmbed({
+      action: '⚠️ Warning',
+      target: targetUser,
+      moderator: interaction.user,
+      reason: reasonInput,
+      caseId: caseId,
+      color: 0xFAA61A
+    });
+
+    // Send DM to user
+    const dmEmbed = createModerationDmEmbed({
+      actionTitle: 'Warning Notice',
+      actionEmoji: '⚠️',
+      color: 0xFAA61A,
+      guildName: interaction.guild.name,
+      description: `⚠️ You've received a warning in **${interaction.guild.name}**. Please follow the server rules to avoid further action.`,
+      statusLabel: 'Warning Status',
+      statusValue: '🛡️ **Active**',
+      effectiveDate: moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm'),
+      effectiveLabel: 'Issued At',
+      reason: reasonInput,
+      caseId: caseId,
+      moderatorName: interaction.user.username
+    });
+
+    const dmSent = await sendModerationDM(targetUser, dmEmbed);
+
+    // Log the action
+    await logModerationAction(interaction, logEmbed);
+
+    // Add to database
+    addCase(targetUser.id, caseId, {
+      moderator: interaction.user.id,
+      moderatorTag: interaction.user.username,
+      userTag: targetUser.username,
+      reason: reasonInput,
+      date: moment(Date.now()).format('LL'),
+      type: 'WARN'
+    });
+
+    // Add warning to MySQL database
+    try {
+      const query = `
+        INSERT INTO warns (user_id, case_id, reason, moderator_id, moderator_name, type, timestamp, created_at)
+        VALUES (?, ?, ?, ?, ?, 'WARN', ?, NOW())
+      `;
+      await DatabaseManager.connection.pool.query(query, [
+        targetUser.id,
+        caseId,
+        reasonInput,
+        interaction.user.id,
+        interaction.user.username,
+        Date.now()
+      ]);
+    } catch (err) {
+      console.error('[warn] Failed to add warning to database:', err.message);
+    }
+
+    // Send success response
+    await sendSuccessReply(
+      interaction,
+      '✅ Warning Issued',
+      `**${targetUser.tag}** has been warned\n\n` +
+      `**🔑 Case ID:** \`${caseId}\`\n` +
+      `**📬 DM Status:** ${dmSent ? '✅ Sent' : '❌ Failed'}`
+    );
   }
 };

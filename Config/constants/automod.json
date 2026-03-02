@@ -1,0 +1,82 @@
+{
+    "blockExternalInvites": true,
+    "maxMentionsBeforeFlag": 6,
+    "autoMod": {
+        "spamThreshold": 5,
+        "spamWindow": 5000,
+        "capsThreshold": 0.7,
+        "minLengthForCaps": 10,
+        "spamTimeout": 600000,
+        "spamWarningThreshold": 2
+    },
+    "autoModAdvanced": {
+        "exemptChannelIds": [],
+        "exemptRoleIds": [],
+        "inviteAllowlistGuildIds": [],
+        "blockedRegexPatterns": [],
+        "escalationThreshold24h": 4,
+        "escalationTimeoutMs": 1800000
+    },
+    "autoModProfiles": {
+        "activeProfile": "balanced",
+        "profiles": {
+            "balanced": {
+                "blockExternalInvites": true,
+                "maxMentionsBeforeFlag": 6,
+                "autoMod": {
+                    "spamThreshold": 5,
+                    "spamWindow": 5000,
+                    "capsThreshold": 0.7,
+                    "minLengthForCaps": 10,
+                    "spamTimeout": 600000,
+                    "spamWarningThreshold": 2
+                },
+                "autoModAdvanced": {
+                    "escalationThreshold24h": 4,
+                    "escalationTimeoutMs": 1800000,
+                    "blockedRegexPatterns": [],
+                    "exemptChannelIds": [],
+                    "exemptRoleIds": []
+                }
+            },
+            "strict": {
+                "blockExternalInvites": true,
+                "maxMentionsBeforeFlag": 6,
+                "autoMod": {
+                    "spamThreshold": 5,
+                    "spamWindow": 5000,
+                    "capsThreshold": 0.7,
+                    "minLengthForCaps": 8,
+                    "spamTimeout": 600000,
+                    "spamWarningThreshold": 2
+                },
+                "autoModAdvanced": {
+                    "escalationThreshold24h": 4,
+                    "escalationTimeoutMs": 1800000,
+                    "blockedRegexPatterns": [],
+                    "exemptChannelIds": [],
+                    "exemptRoleIds": []
+                }
+            },
+            "relaxed": {
+                "blockExternalInvites": true,
+                "maxMentionsBeforeFlag": 6,
+                "autoMod": {
+                    "spamThreshold": 5,
+                    "spamWindow": 5000,
+                    "capsThreshold": 0.7,
+                    "minLengthForCaps": 12,
+                    "spamTimeout": 600000,
+                    "spamWarningThreshold": 2
+                },
+                "autoModAdvanced": {
+                    "escalationThreshold24h": 4,
+                    "escalationTimeoutMs": 1800000,
+                    "blockedRegexPatterns": [],
+                    "exemptChannelIds": [],
+                    "exemptRoleIds": []
+                }
+            }
+        }
+    }
+}

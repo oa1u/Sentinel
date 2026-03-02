@@ -1,15 +1,54 @@
-// This is the toast notification system. It gives users real-time feedback and works everywhere.
-// Works on every page and won't break if the DOM isn't there. Super robust!
+async function timeoutUserFromSearch(userId, username, fetchWithCsrf, searchUsers) {
+    // Prompt the admin for a duration and reason, then hit the API to apply the timeout.
+    // Keeps the UX smooth by confirming the action and refreshing search results afterwards.
+    showInputModal(`Enter timeout duration for ${username} (e.g., "10m", "1h", "7d")`, (durationStr) => {
+        if (!durationStr) return;
+        showInputModal(`Enter timeout reason for ${username}:`, async (reason) => {
+            if (!reason) return;
+            try {
+                let confirmed = true;
+                if (typeof modalManager !== 'undefined' && modalManager && modalManager.showConfirm) {
+                    confirmed = await modalManager.showConfirm(`Are you sure you want to timeout ${username}?`);
+                } else {
+                    confirmed = confirm(`Are you sure you want to timeout ${username}?`);
+                }
+                if (!confirmed) return;
+                try {
+                    const response = await fetchWithCsrf('/api/admin/timeout-user', {
+                        method: 'POST',
+                        body: JSON.stringify({ userId, duration: durationStr, reason })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showSuccess(`User timed out successfully. Case ID: ${data.caseId}`);
+                        if (typeof searchUsers === 'function') await searchUsers(); // Refresh the search results
+                    } else {
+                        showError(data.error || 'Failed to timeout user');
+                    }
+                } catch (error) {
+                    showError('Error timing out user');
+                    console.error(error);
+                }
+            } catch (err) {
+                console.error('Timeout confirmation failed', err);
+            }
+        });
+    });
+}
+window.timeoutUserFromSearch = timeoutUserFromSearch;
+// Toast notification system: shows brief, contextual messages to users
+// across the admin panel. It's resilient if parts of the DOM are missing.
 
-// Double check that the document is ready before running any notification code.
+// Make sure `document` exists before running any DOM-related notification code.
 if (typeof document === 'undefined') {
     console.warn('notifications.js: Document not available');
 }
 
-// If the toast container isn't there yet, create it so we can show notifications.
+// Ensure there is a toast container in the document; create one if needed so toasts
+// have a consistent place to appear.
 function ensureToastContainer() {
     if (typeof document === 'undefined') return null;
-    
+
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -20,20 +59,21 @@ function ensureToastContainer() {
     return container;
 }
 
-// Show a toast notification message to the user. Pick the type, title, and message you want.
+// Create and display a toast message. Provide a `type` (success/error/info/warning),
+// a short `title`, and an optional `message`. Returns the toast DOM node.
 function showToast(type, title, message, duration = 5000) {
     const container = ensureToastContainer();
-    
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    
+
     const icons = {
         success: '✅',
         error: '❌',
         warning: '⚠️',
         info: 'ℹ️'
     };
-    
+
     toast.innerHTML = `
         <div class="toast-icon">${icons[type] || icons.info}</div>
         <div class="toast-content">
@@ -42,9 +82,9 @@ function showToast(type, title, message, duration = 5000) {
         </div>
         <button class="toast-close" onclick="this.parentElement.remove()">×</button>
     `;
-    
+
     container.appendChild(toast);
-    
+
     // Auto-remove after duration
     if (duration > 0) {
         setTimeout(() => {
@@ -52,28 +92,34 @@ function showToast(type, title, message, duration = 5000) {
             setTimeout(() => toast.remove(), 300);
         }, duration);
     }
-    
+
     return toast;
 }
 
-// Helper functions for different toast types
+// Convenience wrappers for common toast types.
 function showSuccess(title, message, duration) {
     return showToast('success', title, message, duration);
 }
-
 function showError(title, message, duration) {
     return showToast('error', title, message, duration);
 }
-
 function showWarning(title, message, duration) {
     return showToast('warning', title, message, duration);
 }
-
 function showInfo(title, message, duration) {
     return showToast('info', title, message, duration);
 }
 
-//Session Timeout Warning System & warns users about session expiry
+// Expose convenience functions globally so other scripts can show toasts easily.
+if (typeof window !== 'undefined') {
+    window.showSuccess = showSuccess;
+    window.showError = showError;
+    window.showWarning = showWarning;
+    window.showInfo = showInfo;
+}
+
+// Session timeout warning system: warns users when their admin session is
+// nearing expiration and can help them extend it.
 let sessionWarningTimer = null;
 let sessionExpiryTimer = null;
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
@@ -83,7 +129,7 @@ function initSessionWarning() {
     // Clear existing timers
     if (sessionWarningTimer) clearTimeout(sessionWarningTimer);
     if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
-    
+
     // Create warning banner
     const warningBanner = document.createElement('div');
     warningBanner.id = 'session-warning';
@@ -97,12 +143,12 @@ function initSessionWarning() {
         <button class="btn btn-primary" onclick="refreshSession()">Extend Session</button>
     `;
     document.body.appendChild(warningBanner);
-    
+
     // Show warning 5 minutes before expiry
     sessionWarningTimer = setTimeout(() => {
         showSessionWarning();
     }, SESSION_DURATION - WARNING_TIME);
-    
+
     // Force logout on expiry
     sessionExpiryTimer = setTimeout(() => {
         showError('Session Expired', 'Your session has expired. Please log in again.');
@@ -116,11 +162,11 @@ function showSessionWarning() {
     const banner = document.getElementById('session-warning');
     if (banner) {
         banner.classList.add('show');
-        
+
         // Start countdown timer
         let timeLeft = WARNING_TIME / 1000; // seconds
         const timerEl = document.getElementById('sessionTimer');
-        
+
         const countdown = setInterval(() => {
             timeLeft--;
             const minutes = Math.floor(timeLeft / 60);
@@ -128,7 +174,7 @@ function showSessionWarning() {
             if (timerEl) {
                 timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             }
-            
+
             if (timeLeft <= 0) {
                 clearInterval(countdown);
             }
@@ -138,13 +184,18 @@ function showSessionWarning() {
 
 async function refreshSession() {
     try {
-        const response = await fetch('/api/account/info');
+        if (!window.AdminPanel?.api?.getJson) {
+            showError('Failed to Extend', 'Session API helper is unavailable. Please refresh the page.');
+            return;
+        }
+
+        const response = (await window.AdminPanel.api.getJson('/api/account/info')).response;
         if (response.ok) {
             const banner = document.getElementById('session-warning');
             if (banner) {
                 banner.classList.remove('show');
             }
-            
+
             // Restart timers
             initSessionWarning();
             showSuccess('Session Extended', 'Your session has been extended.');
@@ -159,7 +210,7 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initSessionWarning);
 } else {
     initSessionWarning();
-} 
+}
 class ModalManager {
     applyModalWrapperLayout(modal) {
         if (!modal) return;
@@ -171,12 +222,12 @@ class ModalManager {
         modal.style.setProperty('pointer-events', 'auto', 'important');
     }
 
-        showDetails(title = 'Details', htmlContent = '', onClose = null) {
-            const modalId = `modal-${Date.now()}`;
-            const container = document.getElementById('modal-container');
-            if (!container) return null;
+    showDetails(title = 'Details', htmlContent = '', onClose = null) {
+        const modalId = `modal-${Date.now()}`;
+        const container = document.getElementById('modal-container');
+        if (!container) return null;
 
-            const modalHTML = `
+        const modalHTML = `
                 <div class="modal-overlay" onclick="modalManager.closeModal('${modalId}')"></div>
                 <div class="notification-modal">
                     <div class="modal-header">
@@ -192,20 +243,20 @@ class ModalManager {
                 </div>
             `;
 
-            const modal = document.createElement('div');
-            modal.id = modalId;
-            modal.className = 'modal-wrapper';
-            modal.innerHTML = modalHTML;
-            this.applyModalWrapperLayout(modal);
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal-wrapper';
+        modal.innerHTML = modalHTML;
+        this.applyModalWrapperLayout(modal);
 
-            container.appendChild(modal);
-            setTimeout(() => {
-                modal.classList.add('show');
-            }, 10);
+        container.appendChild(modal);
+        setTimeout(() => {
+            modal.classList.add('show');
+        }, 10);
 
-            this.modals.set(modalId, { modal, onClose });
-            return modal;
-        }
+        this.modals.set(modalId, { modal, onClose });
+        return modal;
+    }
     constructor() {
         this.modals = new Map();
         this.initContainer();
@@ -213,7 +264,7 @@ class ModalManager {
 
     initContainer() {
         if (typeof document === 'undefined') return;
-        
+
         if (!document.getElementById('modal-container')) {
             const container = document.createElement('div');
             container.id = 'modal-container';
@@ -237,11 +288,11 @@ class ModalManager {
 
     ls(options = {}) {
         if (typeof document === 'undefined') return null;
-        
+
         const {
             title = 'Details',
             icon = '📋',
-            items = [], 
+            items = [],
             note = null,
             onClose = null
         } = options;
@@ -253,10 +304,10 @@ class ModalManager {
         // Build items HTML
         let itemsHTML = '';
         items.forEach((item, index) => {
-            const copyBtn = item.copyable ? 
-                `<button class="copy-btn" onclick="navigator.clipboard.writeText('${item.value.replace(/'/g, "\\'")}'); showSuccess('Copied', '${item.label} copied to clipboard!', 2000)" title="Copy">📋</button>` 
+            const copyBtn = item.copyable ?
+                `<button class="copy-btn" onclick="navigator.clipboard.writeText('${item.value.replace(/'/g, "\\'")}'); showSuccess('Copied', '${item.label} copied to clipboard!', 2000)" title="Copy">📋</button>`
                 : '';
-            
+
             itemsHTML += `
                 <div class="detail-item">
                     <div class="detail-label">${item.label}</div>
@@ -302,7 +353,7 @@ class ModalManager {
         this.applyModalWrapperLayout(modal);
 
         container.appendChild(modal);
-        
+
         // Trigger animation
         setTimeout(() => {
             modal.classList.add('show');
@@ -316,20 +367,14 @@ class ModalManager {
     showConfirm(options = {}, legacyMessage, legacyConfirmText, legacyCancelText, legacyType) {
         let resolvedOptions = options;
 
-        // Backward-compatible signature:
-        // showConfirm(title, message, confirmText, cancelText, type)
         if (typeof options === 'string') {
-            return new Promise((resolve) => {
-                this.showConfirm({
-                    title: options,
-                    message: legacyMessage || 'Are you sure?',
-                    confirmText: legacyConfirmText || 'Confirm',
-                    cancelText: legacyCancelText || 'Cancel',
-                    type: legacyType || 'warning',
-                    onConfirm: () => resolve(true),
-                    onCancel: () => resolve(false)
-                });
-            });
+            resolvedOptions = {
+                title: options,
+                message: legacyMessage || 'Are you sure?',
+                confirmText: legacyConfirmText || 'Confirm',
+                cancelText: legacyCancelText || 'Cancel',
+                type: legacyType || 'warning'
+            };
         }
 
         const {
@@ -337,63 +382,78 @@ class ModalManager {
             message: optionMessage = 'Are you sure?',
             confirmText: optionConfirmText = 'Confirm',
             cancelText: optionCancelText = 'Cancel',
-            type = 'warning', // warning, danger, info
+            type = 'warning',
             onConfirm = null,
             onCancel = null
-        } = resolvedOptions;
+        } = resolvedOptions || {};
 
-        const modalId = `modal-${Date.now()}`;
-        const container = document.getElementById('modal-container');
+        return new Promise((resolve) => {
+            const modalId = `modal-${Date.now()}`;
+            const container = document.getElementById('modal-container');
 
-        const icons = {
-            warning: '⚠️',
-            danger: '🚨',
-            info: 'ℹ️'
-        };
+            const icons = {
+                warning: '⚠️',
+                danger: '🚨',
+                info: 'ℹ️'
+            };
 
-        const confirmBtnClass = type === 'danger' ? 'btn-danger' : 'btn-primary';
+            const confirmBtnClass = type === 'danger' ? 'btn-danger' : 'btn-primary';
 
-        const modalHTML = `
-            <div class="modal-overlay" onclick="modalManager.closeModal('${modalId}')"></div>
-            <div class="notification-modal">
-                <div class="modal-header">
-                    <h3><span class="modal-icon">${icons[type]}</span> ${title}</h3>
-                    <button class="modal-close" onclick="modalManager.closeModal('${modalId}')">×</button>
+            const modalHTML = `
+                <div class="modal-overlay" onclick="modalManager.closeModal('${modalId}')"></div>
+                <div class="notification-modal">
+                    <div class="modal-header">
+                        <h3><span class="modal-icon">${icons[type]}</span> ${title}</h3>
+                        <button class="modal-close" onclick="modalManager.closeModal('${modalId}')">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 1.5rem;">${optionMessage}</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="modalManager.closeModal('${modalId}')">
+                            ${optionCancelText}
+                        </button>
+                        <button class="btn ${confirmBtnClass}" onclick="modalManager.confirmAction('${modalId}')">
+                            ${optionConfirmText}
+                        </button>
+                    </div>
                 </div>
-                <div class="modal-body">
-                    <p style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 1.5rem;">${optionMessage}</p>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="modalManager.closeModal('${modalId}')">
-                        ${optionCancelText}
-                    </button>
-                    <button class="btn ${confirmBtnClass}" onclick="modalManager.confirmAction('${modalId}')">
-                        ${optionConfirmText}
-                    </button>
-                </div>
-            </div>
-        `;
+            `;
 
-        const modal = document.createElement('div');
-        modal.id = modalId;
-        modal.className = 'modal-wrapper';
-        modal.innerHTML = modalHTML;
-        this.applyModalWrapperLayout(modal);
+            const modal = document.createElement('div');
+            modal.id = modalId;
+            modal.className = 'modal-wrapper';
+            modal.innerHTML = modalHTML;
+            this.applyModalWrapperLayout(modal);
 
-        container.appendChild(modal);
-        
-        setTimeout(() => {
-            modal.classList.add('show');
-        }, 10);
+            container.appendChild(modal);
 
-        this.modals.set(modalId, { modal, onConfirm, onCancel, isConfirm: true });
+            setTimeout(() => {
+                modal.classList.add('show');
+            }, 10);
 
-        return modal;
+            this.modals.set(modalId, {
+                modal,
+                isConfirm: true,
+                confirmed: false,
+                onConfirm: () => {
+                    if (typeof onConfirm === 'function') onConfirm();
+                    resolve(true);
+                },
+                onCancel: () => {
+                    if (typeof onCancel === 'function') onCancel();
+                    resolve(false);
+                }
+            });
+        });
     }
 
 
     confirmAction(modalId) {
         const data = this.modals.get(modalId);
+        if (data) {
+            data.confirmed = true;
+        }
         if (data && data.onConfirm) {
             data.onConfirm();
         }
@@ -421,7 +481,7 @@ class ModalManager {
         this.applyModalWrapperLayout(modal);
 
         container.appendChild(modal);
-        
+
         setTimeout(() => {
             modal.classList.add('show');
         }, 10);
@@ -442,12 +502,12 @@ class ModalManager {
         setTimeout(() => {
             modal.remove();
             this.modals.delete(modalId);
-            
+
             // Call onCancel if it's a confirmation dialog
-            if (data.isConfirm && data.onCancel) {
+            if (data.isConfirm && !data.confirmed && data.onCancel) {
                 data.onCancel();
             }
-            
+
             // Call onClose if provided
             if (data.onClose) {
                 data.onClose();
@@ -474,10 +534,181 @@ if (typeof document !== 'undefined') {
             showDetails: () => null,
             showConfirm: () => null,
             toast: () => null,
-            showLoading: () => ({ modalId: null, close: () => {} }),
-            closeModal: () => {},
-            closeAll: () => {}
+            showLoading: () => ({ modalId: null, close: () => { } }),
+            closeModal: () => { },
+            closeAll: () => { }
         };
         window.modalManager = modalManager;
     }
+}
+
+/**
+ * Show an input modal for info gathering
+ * @param {string} label - The label to display above the input
+ * @param {function} callback - Callback to receive the input value or null if cancelled
+ */
+function showInputModal(label, callback) {
+    showPromptModal({
+        title: 'Input Required',
+        label,
+        defaultValue: '',
+        placeholder: 'Enter value...'
+    }).then((value) => callback(value));
+}
+window.showInputModal = showInputModal;
+
+function showPromptModal(options = {}) {
+    return new Promise((resolve) => {
+        const {
+            title = 'Input Required',
+            label = 'Enter a value',
+            placeholder = '',
+            defaultValue = '',
+            confirmText = 'OK',
+            cancelText = 'Cancel',
+            inputType = 'text',
+            validate = null
+        } = options;
+
+        const container = document.getElementById('modal-container') || (() => {
+            if (typeof document === 'undefined') return null;
+            const c = document.createElement('div');
+            c.id = 'modal-container';
+            c.className = 'modal-container';
+            document.body.appendChild(c);
+            return c;
+        })();
+
+        if (!container) {
+            resolve(null);
+            return;
+        }
+
+        // allow extra options: confirmClass and optional checkbox
+        const confirmClass = options.confirmClass || 'btn-primary';
+        const includeCheckbox = options.includeCheckbox || null; // { label, required, errorText }
+
+        const modalId = `modal-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal-wrapper';
+
+        // optional checkbox HTML
+        const checkboxId = `${modalId}-confirm-checkbox`;
+        const checkboxHTML = includeCheckbox ? `\
+                <div class="modal-confirm-checkbox">\
+                    <input id="${checkboxId}" type="checkbox" class="modal-confirm-input" />\
+                    <label for="${checkboxId}" class="modal-confirm-label">\
+                        <span class="modal-confirm-icon">⚠️</span>\
+                        <span class="modal-confirm-text">${String(includeCheckbox.label || '')}</span>\
+                    </label>\
+                </div>` : '';
+
+        modal.innerHTML = `
+            <div class="modal-overlay"></div>
+            <div class="notification-modal" role="dialog" aria-modal="true" aria-labelledby="${modalId}-title">
+                <div class="modal-header">
+                    <h3 id="${modalId}-title">✏️ ${title}</h3>
+                    <button class="modal-close" type="button">×</button>
+                </div>
+                <div class="modal-body">
+                    <label for="${modalId}-input" style="display:block; font-weight:600; color:var(--text-primary); margin-bottom:0.45rem;">${label}</label>
+                    <input id="${modalId}-input" type="${inputType}" class="form-input" placeholder="${placeholder}" value="${String(defaultValue).replace(/"/g, '&quot;')}" />
+                    <div id="${modalId}-error" style="display:none; margin-top:0.5rem; color:var(--color-red); font-size:0.85rem;"></div>
+                    ${checkboxHTML}
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-action="cancel">${cancelText}</button>
+                    <button class="btn ${confirmClass}" type="button" data-action="confirm">${confirmText}</button>
+                </div>
+            </div>
+        `;
+
+        if (window.modalManager?.applyModalWrapperLayout) {
+            window.modalManager.applyModalWrapperLayout(modal);
+        } else {
+            modal.style.position = 'fixed';
+            modal.style.inset = '0';
+            modal.style.display = 'grid';
+            modal.style.placeItems = 'center';
+            modal.style.zIndex = '9001';
+        }
+
+        const input = modal.querySelector(`#${modalId}-input`);
+        const errorEl = modal.querySelector(`#${modalId}-error`);
+        const closeBtn = modal.querySelector('.modal-close');
+        const cancelBtn = modal.querySelector('[data-action="cancel"]');
+        const confirmBtn = modal.querySelector('[data-action="confirm"]');
+        const checkbox = includeCheckbox ? modal.querySelector(`#${checkboxId}`) : null;
+
+        const cleanup = (value) => {
+            modal.classList.remove('show');
+            setTimeout(() => {
+                modal.remove();
+                resolve(value);
+            }, 180);
+        };
+
+        const onCancel = () => cleanup(null);
+        const onConfirm = () => {
+            const value = (input?.value ?? '').trim();
+            if (includeCheckbox && includeCheckbox.required) {
+                if (!checkbox || !checkbox.checked) {
+                    errorEl.textContent = includeCheckbox.errorText || 'Please confirm this action.';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+            }
+
+            if (typeof validate === 'function') {
+                const validation = validate(value);
+                if (validation !== true) {
+                    errorEl.textContent = typeof validation === 'string' ? validation : 'Invalid input.';
+                    errorEl.style.display = 'block';
+                    input?.focus();
+                    return;
+                }
+            }
+            cleanup(value);
+        };
+
+        modal.querySelector('.modal-overlay')?.addEventListener('click', onCancel);
+        closeBtn?.addEventListener('click', onCancel);
+        cancelBtn?.addEventListener('click', onCancel);
+        confirmBtn?.addEventListener('click', onConfirm);
+        // manage confirm enable state when checkbox is required
+        const updateConfirmState = () => {
+            if (!confirmBtn) return;
+            if (includeCheckbox && includeCheckbox.required) {
+                confirmBtn.disabled = !(checkbox && checkbox.checked);
+            } else {
+                confirmBtn.disabled = false;
+            }
+        };
+        checkbox?.addEventListener('change', () => {
+            errorEl.style.display = 'none';
+            updateConfirmState();
+        });
+        input?.addEventListener('input', () => {
+            errorEl.style.display = 'none';
+            updateConfirmState();
+        });
+
+        updateConfirmState();
+        input?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') onConfirm();
+            if (event.key === 'Escape') onCancel();
+        });
+
+        container.appendChild(modal);
+        setTimeout(() => {
+            modal.classList.add('show');
+            input?.focus();
+            input?.select?.();
+        }, 10);
+    });
+}
+
+if (typeof window !== 'undefined') {
+    window.showPromptModal = showPromptModal;
 }

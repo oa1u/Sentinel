@@ -34,7 +34,7 @@ module.exports = {
       browser: '🌐',
       desktop: '💻'
     }
-    
+
     const activityType = {
       0: 'Playing',
       1: 'Streaming',
@@ -42,7 +42,7 @@ module.exports = {
       3: 'Watching',
       5: 'Competing in'
     }
-    
+
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     // Example: Fetch custom user data from database
     let customUserData = null;
@@ -53,11 +53,11 @@ module.exports = {
     } catch (err) {
       console.error('Database error in userinfo:', err);
     }
-    
+
     if (member) {
       const accountAge = moment.duration(Date.now() - member.user.createdTimestamp).format('Y [years], M [months], D [days]');
       const serverAge = moment.duration(Date.now() - member.joinedTimestamp).format('Y [years], M [months], D [days]');
-      
+
       const flags = member.user.flags ? member.user.flags.toArray() : [];
       const badgeEmojis = {
         Staff: '👮',
@@ -74,11 +74,11 @@ module.exports = {
         ActiveDeveloper: '⚡'
       };
       const userBadges = flags.map(flag => badgeEmojis[flag] || flag).join(' ');
-      
+
       // Get voice state
       const voiceChannel = member.voice.channel;
       const voiceState = voiceChannel ? `${voiceChannel.toString()} ${member.voice.serverMute ? '🔇' : ''}${member.voice.serverDeaf ? '🔈' : ''}${member.voice.selfMute ? '🎤' : ''}${member.voice.selfDeaf ? '🔊' : ''}${member.voice.streaming ? '📹' : ''}` : 'Not in voice';
-      
+
       // Get roles (excluding @everyone)
       const roles = member.roles.cache
         .filter(role => role.id !== interaction.guild.id)
@@ -86,7 +86,7 @@ module.exports = {
         .map(role => role.toString())
         .slice(0, 20);
       const rolesDisplay = roles.length > 0 ? roles.join(', ') : 'None';
-      
+
       // Get permissions
       const keyPermissions = [];
       if (member.permissions.has('Administrator')) keyPermissions.push('Administrator');
@@ -97,16 +97,16 @@ module.exports = {
       if (member.permissions.has('BanMembers')) keyPermissions.push('Ban Members');
       if (member.permissions.has('ModerateMembers')) keyPermissions.push('Timeout Members');
       const permissionsDisplay = keyPermissions.length > 0 ? keyPermissions.join(', ') : 'None';
-      
+
       // Check if user is timed out
       const isTimedOut = member.communicationDisabledUntil && member.communicationDisabledUntil > Date.now();
       const timeoutEnds = isTimedOut ? moment(member.communicationDisabledUntil).fromNow() : null;
-      
+
       // Check for server boost
       const isBoosting = member.premiumSince !== null;
       const boostingSince = isBoosting ? moment(member.premiumSince).format('LLL') : null;
       const boostDuration = isBoosting ? moment.duration(Date.now() - member.premiumSince).format('Y [years], M [months], D [days]') : null;
-      
+
       const em = new EmbedBuilder()
         .setAuthor({ name: `${member.displayName}'s Profile`, iconURL: member.user.displayAvatarURL() })
         .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
@@ -123,22 +123,22 @@ module.exports = {
           { name: `🎪 Roles [${roles.length}]`, value: rolesDisplay || '`None`' },
           { name: "⚔️ Key Permissions", value: permissionsDisplay || '`None`' }
         );
-      
+
       // Add badges if present
       if (userBadges) {
         em.addFields({ name: "🏆 Badges", value: userBadges || 'None', inline: false });
       }
-      
+
       // Add boost info if boosting
       if (isBoosting) {
         em.addFields({ name: "💎 Server Booster", value: `Boosting since: **${boostingSince}**\n⏱️ Duration: *${boostDuration}*`, inline: false });
       }
-      
+
       // Add timeout info if timed out
       if (isTimedOut) {
         em.addFields({ name: "⏱️ Timeout Status", value: `🚫 Timed out\n⌛ Ends ${timeoutEnds}`, inline: true });
       }
-      
+
       // Add voice state
       em.addFields({ name: "🎤 Voice Channel", value: voiceState, inline: false });
       if (member.presence) {
@@ -158,13 +158,13 @@ module.exports = {
           em.addFields({ name: "🎮 Activity", value: '`No status`', inline: true });
         }
       }
-      
+
       // Add banner if available
       const fetchedUser = await member.user.fetch();
       if (fetchedUser.banner) {
         em.setImage(fetchedUser.bannerURL({ size: 512 }));
       }
-      
+
       if (interaction.user.id !== member.id) {
         em.setFooter({ text: `📊 Requested by ${interaction.user.username}` });
       }

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const { administratorRoleId } = require('../../Config/constants/roles.json');
 
@@ -11,9 +11,9 @@ module.exports = {
             subcommand
                 .setName('approve')
                 .setDescription('Approve a suggestion')
-                .addIntegerOption(option =>
+                .addStringOption(option =>
                     option.setName('id')
-                        .setDescription('Suggestion ID')
+                        .setDescription('Suggestion ID or Case ID')
                         .setRequired(true))
                 .addStringOption(option =>
                     option.setName('response')
@@ -23,9 +23,9 @@ module.exports = {
             subcommand
                 .setName('deny')
                 .setDescription('Deny a suggestion')
-                .addIntegerOption(option =>
+                .addStringOption(option =>
                     option.setName('id')
-                        .setDescription('Suggestion ID')
+                        .setDescription('Suggestion ID or Case ID')
                         .setRequired(true))
                 .addStringOption(option =>
                     option.setName('response')
@@ -35,9 +35,9 @@ module.exports = {
             subcommand
                 .setName('implement')
                 .setDescription('Mark a suggestion as implemented')
-                .addIntegerOption(option =>
+                .addStringOption(option =>
                     option.setName('id')
-                        .setDescription('Suggestion ID')
+                        .setDescription('Suggestion ID or Case ID')
                         .setRequired(true))
                 .addStringOption(option =>
                     option.setName('response')
@@ -47,15 +47,15 @@ module.exports = {
             subcommand
                 .setName('view')
                 .setDescription('View a specific suggestion')
-                .addIntegerOption(option =>
+                .addStringOption(option =>
                     option.setName('id')
-                        .setDescription('Suggestion ID')
+                        .setDescription('Suggestion ID or Case ID')
                         .setRequired(true))),
     execute: async (interaction) => {
         // Only admins are allowed to use this command.
         const member = interaction.member;
-        const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator) || 
-                       member.roles.cache.has(administratorRoleId);
+        const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator) ||
+            member.roles.cache.has(administratorRoleId);
 
         if (!isAdmin) {
             return interaction.reply({
@@ -65,7 +65,18 @@ module.exports = {
         }
 
         const subcommand = interaction.options.getSubcommand();
-        const suggestionId = interaction.options.getInteger('id');
+        let idInput = interaction.options.getString('id');
+        let suggestionId = null;
+        let caseId = null;
+        if (/^\d+$/.test(idInput)) {
+            suggestionId = parseInt(idInput, 10);
+        } else {
+            caseId = idInput;
+            if (caseId) {
+                const suggestionByCase = await MySQLDatabaseManager.getSuggestionByCaseId(caseId);
+                if (suggestionByCase) suggestionId = suggestionByCase.suggestion_id;
+            }
+        }
         const response = interaction.options.getString('response');
 
         try {
@@ -91,13 +102,14 @@ module.exports = {
                 const embed = new EmbedBuilder()
                     .setColor(suggestion.status === 'approved' ? 0x57F287 : suggestion.status === 'denied' ? 0xED4245 : suggestion.status === 'implemented' ? 0xFEE75C : 0x5865F2)
                     .setAuthor({ name: `💡 Suggestion #${suggestion.suggestion_id}` })
-                    .setTitle(suggestion.title)
-                    .setDescription(suggestion.description)
+                    .setTitle(`Suggestion: ${suggestion.title}`)
+                    .setDescription(`**Description:**\n${suggestion.description}`)
                     .addFields(
                         { name: '👤 Submitted by', value: `<@${suggestion.user_id}>`, inline: true },
                         { name: '📊 Status', value: `${statusEmojis[suggestion.status]} **${suggestion.status.charAt(0).toUpperCase() + suggestion.status.slice(1)}**`, inline: true },
                         { name: '📈 Votes', value: `👍 ${suggestion.upvotes} | 👎 ${suggestion.downvotes}`, inline: true }
                     )
+                    .setFooter({ text: `Case ID: ${suggestion.case_id || 'N/A'}` })
                     .setTimestamp(new Date(suggestion.created_at));
 
                 if (suggestion.admin_response) {
@@ -109,7 +121,6 @@ module.exports = {
                 }
 
                 return interaction.reply({ embeds: [embed], ephemeral: true });
-                            return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
 
             // Change the suggestion's status depending on the subcommand.
@@ -151,6 +162,7 @@ module.exports = {
                         embed.addFields({ name: '📝 Admin Response', value: response, inline: false });
                     }
 
+                    embed.setFooter({ text: `Case ID: ${suggestion.case_id || 'N/A'}` });
                     await msg.edit({ embeds: [embed] });
                 } catch (err) {
                     console.error('[Suggestion] Could not update original message:', err);

@@ -1,67 +1,66 @@
-<div align="center">
+# Sentinel Discord Bot
 
-# 🤖 Sential Discord Bot
+Sentinel is a comprehensive, professional-grade solution for Discord server moderation and community management. It features an advanced ticket system, auto-moderation, leveling, a fully-featured Admin Panel web dashboard, and much more.
 
-<b>Enterprise-Grade Moderation & Community Management Suite</b>
+## 🚀 Setup & Installation
 
-[![Discord.js](https://img.shields.io/badge/discord.js-v14-blue.svg?style=for-the-badge&logo=discord)](https://discord.js.org/)
-[![Node.js](https://img.shields.io/badge/node.js-v18+-green.svg?style=for-the-badge&logo=nodedotjs)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/license-Open%20Source-orange.svg?style=for-the-badge)](LICENSE)
+### Important: Enable Privileged Gateway Intents
+Before your bot can function correctly, you **must enable Privileged Gateway Intents** in the Discord Developer Portal. Our bot's features (such as welcoming users, checking statuses, and managing tickets) require these extra intents.
 
-<br>
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Select your application and click on **Bot** on the left menu.
+3. Scroll down to the **Privileged Gateway Intents** section.
+4. Toggle **ON** exactly these three settings:
+   - ✅ **Presence Intent**
+   - ✅ **Server Members Intent**
+   - ✅ **Message Content Intent**
+5. Save your changes!
 
-<b>Moderation</b> • <b>Tickets</b> • <b>XP & Leveling</b> • <b>Auto-Moderation</b> • <b>Logging</b> • <b>Fun & Utility</b> • <b>Web Admin Panel</b>
+### 📥 Inviting the Bot
+To ensure the bot functions seamlessly with its advanced ticket, logging, and moderating features, you should invite it using the following links.
 
-</div>
+**Option 1: Administrator Permissions (Highly Recommended)**
+This ensures the bot can manage channels for tickets, assign roles, kick/ban users, and delete messages without running into generic 'Missing Access' errors.
+**🔗 [Invite Bot (Admin)](https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID_HERE&permissions=8&scope=bot%20applications.commands)**
 
----
+**Option 2: Specific Permissions**
+If you prefer not to grant Administrator, this link requests the specific granular permissions needed by the modules.
+**🔗 [Invite Bot (Specific)](https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID_HERE&permissions=1384074218358&scope=bot%20applications.commands)**
 
-## 🚀 Quick Start
-
-**MySQL is required for the bot and website to function.**
-
-### Prerequisites
-- Node.js v18+
-- MySQL database
-- Discord bot token
-
-
-### Installation
-```bash
-git clone https://github.com/oa1u/Sentinel
-cd Sentinel
-npm install
-```
-
-### Setup
-1. Configure your MySQL database and fill in everything in the Config folder.
-2. Create your first (owner) account:
-   ```bash
-   node scripts/createAccount.js
-   ```
-   Follow the prompts.
-3. Start the bot:
-   ```bash
-   npm start
-   ```
+*(Note: Replace `YOUR_CLIENT_ID_HERE` with your bot's Client ID from the Discord portal before clicking!)*
 
 ---
 
-## ✨ Core Features
+### ⚙️ Getting Started
 
-- Powerful moderation (ban, kick, timeout, warn, etc.)
-- Ticket system for support
-- XP & leveling with leaderboards
-- Smart auto-moderation
-- Detailed logging
-- Fun & utility commands
-- Web-based admin panel
+1. Ensure Node.js (v18+) is installed.
+2. Run `npm install` to download dependencies.
+3. Configure your bot:
+   - Ensure an environment file exists at `Config/credentials.env`. 
+   - Ensure your `TOKEN`, `CLIENT_ID`, and `GUILD_ID` (your server ID) are set.
+   - If using the Admin Panel, set up your OAuth credentials.
+4. Start the bot by typing `node index.js` in the terminal.
 
----
+### 📚 Admin Panel Help Pages
 
-For full documentation and admin panel access, visit the website after setup.
----
+Once you're logged into the Admin Panel, you can use the built-in help pages to get set up faster:
 
-## 🛠 Website Notice
+- **Getting Started**: A guided setup flow for initial bot and panel configuration.
+- **Features**: A complete overview of available bot and dashboard modules.
+- **FAQ**: Quick answers to common setup and usage questions.
 
-The website part of this project has just been released. Please note that it may still be buggy and have some issues. I'm working to improve it, and these problems will be addressed in upcoming updates.
+### 🐛 Troubleshooting
+- **`Error registering commands: Missing Access`**: Make sure you have authorized the bot via an invite link that has the `applications.commands` scope (the ones provided above include it). Additionally, ensure your `GUILD_ID` in `.env` is correct.
+- **Commands Not Responding/Crashing on Startup**: Re-check your **Privileged Gateway Intents** in the Discord Developer Portal.
+
+### 🖼️ Screenshots
+
+![Screenshot 1](githubimages/1.PNG)
+![Screenshot 2](githubimages/2.PNG)
+![Screenshot 3](githubimages/3.PNG)
+![Screenshot 4](githubimages/4.PNG)
+![Screenshot 5](githubimages/5.PNG)
+![Screenshot 6](githubimages/6.PNG)
+![Screenshot 7](githubimages/7.PNG)
+![Screenshot 8](githubimages/8.PNG)
+![Screenshot 9](githubimages/9.PNG)

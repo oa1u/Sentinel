@@ -7,17 +7,17 @@ const { announcementChannelId } = require("../../Config/constants/channel.json")
 // Note to self: Would be cool to add templates for common announcements.
 function formatMessageForEmbed(message) {
   const MAX_DESC_LENGTH = 4096;
-  
+
   // If the message fits in the description, just use that.
   if (message.length <= MAX_DESC_LENGTH) {
     return { type: 'description', content: message };
   }
-  
+
   // Otherwise, split the message into fields (max 1024 chars each).
   const chunks = [];
   const lines = message.split('\n');
   let currentChunk = '';
-  
+
   for (const line of lines) {
     if ((currentChunk + line + '\n').length > 1024) {
       if (currentChunk) chunks.push(currentChunk.trim());
@@ -27,7 +27,7 @@ function formatMessageForEmbed(message) {
     }
   }
   if (currentChunk) chunks.push(currentChunk.trim());
-  
+
   return { type: 'fields', content: chunks };
 }
 
@@ -82,13 +82,13 @@ module.exports = {
       .setColor(0xF04747)
       .setTitle(`❌ No Permission`)
       .setDescription(`You need the Administrator role to use this command!`);
-    
+
     if (!interaction.member.roles.cache.has(administratorRoleId)) {
       return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
     }
-    
+
     const subcommand = interaction.options.getSubcommand();
-    
+
     switch (subcommand) {
       case 'normal':
         return await this.sendAnnouncement(interaction, false);
@@ -96,7 +96,7 @@ module.exports = {
         return await this.sendAnnouncement(interaction, true);
     }
   },
-  
+
   async sendAnnouncement(interaction, pingEveryone) {
     const announceChan = interaction.client.channels.cache.get(announcementChannelId);
     if (!announceChan) {
@@ -177,7 +177,7 @@ module.exports = {
       .setColor(0x43B581)
       .setTitle(pingEveryone ? '✅ Announcement Sent with @everyone' : '✅ Sent!')
       .setDescription(
-        pingEveryone 
+        pingEveryone
           ? `Your announcement has been posted to <#${announcementChannelId}> and @everyone was pinged`
           : `Posted to <#${announcementChannelId}>`
       )
@@ -186,7 +186,7 @@ module.exports = {
         { name: 'Length', value: `${message.length} chars`, inline: true }
       )
       .setTimestamp();
-    
+
     await interaction.editReply({ embeds: [successEmbed] });
   }
 }

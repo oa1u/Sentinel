@@ -1,18 +1,25 @@
 <!DOCTYPE html>
+<!-- Admin Panel — page for server administrators: manage appeals, AutoMod, and policies. -->
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel</title>
+    <title id="websiteNameTitle">Admin Panel</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="/public/admin.js?v=5" defer></script>
+    <script src="/public/shared.js"></script>
+    <script src="/public/security.js"></script>
+    <script src="/public/admin.js?v=9" defer></script>
 </head>
+
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo">🎛️ Admin</div>
+            <div class="logo"><span id="PanelEmoji"></span> Admin</div>
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
@@ -34,228 +41,1527 @@
                         <a href="/profile">👤 My Profile</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
                     </div>
                 </div>
-                            <title>Admin Panel</title>
+            </div>
         </div>
     </header>
 
 
-<div class="container">
+    <div class="container">
+        <section class="admin-hero">
+            <div class="admin-hero-main">
+                <p class="admin-eyebrow">Operations Console</p>
+                <h1>Admin Command Center</h1>
+                <p class="admin-hero-copy">Manage member actions, appeal workflows, and policy controls from one
+                    advanced control surface.</p>
+                <div class="admin-hero-chips">
+                    <span class="admin-chip">Appeals Workflow</span>
+                    <span class="admin-chip">AutoMod Profiles</span>
+                </div>
+            </div>
+            <div class="admin-kpi-grid">
+                <div class="admin-kpi">
+                    <span class="kpi-label">Primary Scope</span>
+                    <span class="kpi-value">Appeals + AutoMod</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Appeal Queues</span>
+                    <span class="kpi-value">Pending + History</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Policy Layer</span>
+                    <span class="kpi-value">AutoMod Profiles</span>
+                </div>
+            </div>
+        </section>
+
         <div class="tabs" id="adminTabs" style="margin-bottom:2.5rem;">
-            <button class="tab active" data-tab="member-management" style="--tab-color:#5b7fff;"><span class="tab-icon">👥</span> <span>Member Management</span></button>
-            <button class="tab" data-tab="appeals" style="--tab-color:#ffd45b;"><span class="tab-icon">📝</span> <span>Appeals</span></button>
-            <button class="tab" data-tab="appeals-history" style="--tab-color:#8b5cf6;"><span class="tab-icon">📚</span> <span>Appeals History</span></button>
+            <button class="tab active" data-tab="appeals" style="--tab-color:#ffd45b;"><span class="tab-icon">📝</span>
+                <span>Appeals</span></button>
+            <button class="tab" data-tab="appeals-history" style="--tab-color:#8b5cf6;"><span class="tab-icon">📚</span>
+                <span>Appeals History</span></button>
+            <button class="tab" data-tab="automod" style="--tab-color:#5bffb8;"><span class="tab-icon">🛡️</span>
+                <span>AutoMod</span></button>
+
         </div>
         <style>
-        .tabs {
-            display: flex;
-            gap: 2.5rem;
-            border-bottom: 2px solid var(--border-color);
-            margin: 2.5rem 0 2rem 0;
-            padding-left: 0.5rem;
-            align-items: center;
-        }
-        .tab {
-            background: none;
-            border: none;
-            outline: none;
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            font-weight: 600;
-            padding: 0.75rem 1.5rem 0.5rem 1.5rem;
-            border-radius: var(--radius-md) var(--radius-md) 0 0;
-            cursor: pointer;
-            transition: color 0.2s, background 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            position: relative;
-        }
-        .tab.active {
-            color: var(--tab-color, #5b7fff);
-            background: var(--bg-card);
-            box-shadow: 0 2px 8px rgba(91,127,255,0.08);
-            border-bottom: 2px solid var(--tab-color, #5b7fff);
-            z-index: 2;
-        }
-        .tab:not(.active):hover {
-            color: var(--tab-color, #5b7fff);
-            background: var(--bg-card-hover);
-        }
-        .tab .tab-icon {
-            font-size: 1.25rem;
-            margin-right: 0.5rem;
-            vertical-align: middle;
-        }
+            .admin-hero {
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-lg);
+                background: linear-gradient(140deg, rgba(91, 127, 255, 0.2) 0%, rgba(91, 255, 184, 0.09) 38%, rgba(20, 20, 20, 0.95) 100%);
+                box-shadow: var(--shadow-lg);
+                padding: 1.25rem 1.3rem;
+                margin-bottom: 1.1rem;
+                display: grid;
+                gap: 0.95rem;
+            }
+
+            .admin-hero-main {
+                display: grid;
+                gap: 0.42rem;
+            }
+
+            .admin-eyebrow {
+                margin: 0;
+                color: var(--text-secondary);
+                font-size: 0.72rem;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                font-weight: 700;
+            }
+
+            .admin-hero h1 {
+                margin: 0;
+                color: var(--text-primary);
+                font-size: 1.95rem;
+                line-height: 1.15;
+                letter-spacing: 0.01em;
+            }
+
+            .admin-hero-copy {
+                margin: 0;
+                color: var(--text-secondary);
+                line-height: 1.6;
+                max-width: 880px;
+                font-size: 0.95rem;
+            }
+
+            .admin-hero-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                margin-top: 0.2rem;
+            }
+
+            .admin-chip {
+                font-size: 0.76rem;
+                color: var(--text-primary);
+                border: 1px solid rgba(91, 127, 255, 0.35);
+                background: rgba(10, 10, 10, 0.35);
+                border-radius: 999px;
+                padding: 0.28rem 0.64rem;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                font-weight: 700;
+            }
+
+            .admin-kpi-grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 0.55rem;
+            }
+
+            .admin-kpi {
+                border: 1px solid rgba(91, 127, 255, 0.28);
+                border-radius: 12px;
+                background: linear-gradient(160deg, rgba(31, 31, 31, 0.95) 0%, rgba(22, 22, 22, 0.97) 100%);
+                padding: 0.7rem 0.8rem;
+                min-height: 78px;
+                display: grid;
+                align-content: center;
+            }
+
+            .admin-kpi .kpi-label {
+                color: var(--text-secondary);
+                font-size: 0.7rem;
+                text-transform: uppercase;
+                letter-spacing: 0.07em;
+                font-weight: 700;
+                margin-bottom: 0.18rem;
+            }
+
+            .admin-kpi .kpi-value {
+                color: var(--text-primary);
+                font-size: 0.94rem;
+                font-weight: 700;
+                line-height: 1.35;
+            }
+
+            .tabs {
+                display: flex;
+                gap: 0.6rem;
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-lg);
+                background: linear-gradient(145deg, rgba(27, 27, 27, 0.96) 0%, rgba(18, 18, 18, 0.98) 100%);
+                box-shadow: var(--shadow-md);
+                margin: 0.35rem 0 1.45rem 0;
+                padding: 0.55rem;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+
+            .tab {
+                background: transparent;
+                border: 1px solid transparent;
+                outline: none;
+                color: var(--text-secondary);
+                font-size: 1rem;
+                font-weight: 600;
+                padding: 0.62rem 0.95rem;
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                transition: color 0.2s, background 0.2s, border-color 0.2s, transform 0.2s;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.55rem;
+                position: relative;
+                min-height: 42px;
+                line-height: 1.2;
+                text-wrap: balance;
+            }
+
+            .tab.active {
+                color: var(--tab-color, #5b7fff);
+                background: var(--bg-card);
+                border-color: var(--border-color);
+                z-index: 2;
+            }
+
+            .tab:not(.active):hover {
+                color: var(--tab-color, #5b7fff);
+                background: var(--bg-card-hover);
+                border-color: var(--border-color);
+                transform: translateY(-1px);
+            }
+
+            .tab.active::after {
+                content: '';
+                position: absolute;
+                left: 0.7rem;
+                right: 0.7rem;
+                bottom: 0.28rem;
+                height: 2px;
+                border-radius: 999px;
+                background: var(--tab-color, var(--color-blue));
+            }
+
+            .tab .tab-icon {
+                font-size: 1.02rem;
+                margin-right: 0;
+                vertical-align: middle;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 1.1rem;
+                height: 1.1rem;
+            }
+
+            .tab-content {
+                margin-top: 0.3rem;
+                display: grid;
+                gap: 1rem;
+            }
+
+            .admin-tab-card {
+                width: 100%;
+                max-width: 1120px;
+                border: 1px solid var(--border-color);
+                background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+                box-shadow: var(--shadow-md);
+                border-radius: var(--radius-lg);
+            }
+
+            .admin-tab-card .card-header {
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 0.9rem;
+                margin-bottom: 1.1rem;
+            }
+
+            .admin-tab-card .table-container {
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+                background: var(--bg-card);
+            }
+
+            .admin-tab-card .table-container table {
+                background: transparent;
+            }
+
+            .admin-tab-card .table-container th {
+                background: var(--bg-secondary);
+                color: var(--text-primary);
+                font-size: 0.88rem;
+                letter-spacing: 0.02em;
+                padding: 0.8rem 0.95rem;
+            }
+
+            .admin-tab-card .table-container td {
+                color: var(--text-secondary);
+                font-size: 0.9rem;
+                padding: 0.78rem 0.95rem;
+            }
+
+            .admin-tab-card .table-container tr:hover {
+                background: var(--bg-card-hover);
+            }
+
+            .automod-inline-actions .btn,
+            .automod-footer-actions .btn {
+                min-height: 40px;
+                font-weight: 700;
+            }
+
+            @media (max-width: 980px) {
+                .admin-kpi-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+
+                .tabs {
+                    gap: 0.5rem;
+                    padding: 0.45rem;
+                }
+
+                .tab {
+                    width: 100%;
+                    justify-content: center;
+                }
+
+                .admin-tab-card .table-container th,
+                .admin-tab-card .table-container td {
+                    padding: 0.72rem 0.78rem;
+                }
+            }
+
+            @media (max-width: 720px) {
+                .admin-hero h1 {
+                    font-size: 1.48rem;
+                }
+
+                .admin-kpi-grid {
+                    grid-template-columns: 1fr;
+                }
+
+            }
+
+            .profile-risk-badge {
+                position: absolute;
+                top: 1.5rem;
+                right: 1.5rem;
+                padding: 0.75rem 1.25rem;
+                border-radius: var(--radius-md);
+                font-weight: 600;
+                font-size: 1rem;
+                backdrop-filter: blur(10px);
+            }
+
+            .profile-risk-badge.minimal {
+                background: rgba(34, 197, 94, 0.2);
+                color: var(--color-green);
+                border: 2px solid var(--color-green);
+            }
+
+            .profile-risk-badge.low {
+                background: rgba(6, 182, 212, 0.2);
+                color: var(--color-cyan);
+                border: 2px solid var(--color-cyan);
+            }
+
+            .profile-risk-badge.medium {
+                background: rgba(255, 170, 0, 0.2);
+                color: var(--color-yellow);
+                border: 2px solid var(--color-yellow);
+            }
+
+            .profile-risk-badge.high {
+                background: rgba(255, 68, 68, 0.2);
+                color: var(--color-red);
+                border: 2px solid var(--color-red);
+            }
+
+            .profile-tabs {
+                display: flex;
+                border-bottom: 2px solid var(--border-color);
+                background: var(--bg-secondary);
+                overflow-x: auto;
+            }
+
+            .profile-tab {
+                padding: 1rem 1.5rem;
+                cursor: pointer;
+                border-bottom: 3px solid transparent;
+                transition: all 0.2s;
+                font-weight: 500;
+                white-space: nowrap;
+            }
+
+            .profile-tab:hover {
+                background: var(--bg-tertiary);
+            }
+
+            .profile-tab.active {
+                border-bottom-color: var(--color-blue);
+                color: var(--color-blue);
+            }
+
+            .profile-tab-content {
+                display: none;
+                padding: 1.5rem;
+            }
+
+            .profile-tab-content.active {
+                display: block;
+                animation: fadeIn 0.3s ease;
+            }
+
+            .overview-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 1.5rem;
+            }
+
+            .overview-section {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 1.25rem;
+            }
+
+            .overview-section-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                margin-bottom: 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            .overview-stat {
+                display: flex;
+                justify-content: space-between;
+                padding: 0.625rem 0;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+            .overview-stat:last-child {
+                border-bottom: none;
+            }
+
+            .overview-stat-label {
+                color: var(--text-muted);
+                font-size: 0.9rem;
+            }
+
+            .overview-stat-value {
+                font-weight: 600;
+            }
+
+            .roles-list {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                margin-top: 0.75rem;
+            }
+
+            .role-badge {
+                padding: 0.375rem 0.75rem;
+                border-radius: var(--radius-md);
+                font-size: 0.85rem;
+                border: 1px solid;
+            }
+
+            .moderation-timeline {
+                position: relative;
+            }
+
+            .timeline-item {
+                position: relative;
+                padding-left: 2rem;
+                padding-bottom: 1.5rem;
+                border-left: 2px solid var(--border-color);
+            }
+
+            .timeline-item:last-child {
+                border-left-color: transparent;
+                padding-bottom: 0;
+            }
+
+            .timeline-dot {
+                position: absolute;
+                left: -8px;
+                top: 0;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                border: 2px solid;
+            }
+
+            .timeline-dot.warn {
+                background: var(--color-yellow);
+                border-color: var(--color-yellow);
+            }
+
+            .timeline-dot.ban {
+                background: var(--color-red);
+                border-color: var(--color-red);
+            }
+
+            .timeline-dot.timeout {
+                background: var(--color-orange);
+                border-color: var(--color-orange);
+            }
+
+            .timeline-content {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 1rem;
+            }
+
+            .timeline-header {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 0.5rem;
+            }
+
+            .timeline-title {
+                font-weight: 600;
+            }
+
+            .timeline-date {
+                color: var(--text-muted);
+                font-size: 0.85rem;
+            }
+
+            .timeline-reason {
+                color: var(--text-muted);
+                font-size: 0.9rem;
+                line-height: 1.5;
+            }
+
+            /* Advanced Timeline Styles */
+            .timeline-header-controls {
+                margin-bottom: 1.5rem;
+            }
+
+            .timeline-stats {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 1rem;
+                margin-bottom: 1rem;
+            }
+
+            .timeline-stat-item {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 1rem;
+                text-align: center;
+            }
+
+            .timeline-stat-value {
+                font-size: 1.75rem;
+                font-weight: 700;
+                margin-bottom: 0.25rem;
+            }
+
+            .timeline-stat-label {
+                font-size: 0.8rem;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .timeline-filters {
+                display: flex;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+            }
+
+            .timeline-filter-btn {
+                padding: 0.625rem 1rem;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                color: var(--text-primary);
+                cursor: pointer;
+                transition: all 0.2s;
+                font-size: 0.9rem;
+                font-weight: 500;
+            }
+
+            .timeline-filter-btn:hover {
+                background: var(--bg-tertiary);
+                border-color: var(--color-blue);
+            }
+
+            .timeline-filter-btn.active {
+                background: var(--color-blue);
+                border-color: var(--color-blue);
+                color: white;
+            }
+
+            .timeline-list {
+                margin-top: 1.5rem;
+            }
+
+            .timeline-group-header {
+                font-weight: 700;
+                color: var(--text-muted);
+                font-size: 0.85rem;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                margin: 1.5rem 0 1rem 0;
+                padding-bottom: 0.5rem;
+                border-bottom: 2px solid var(--border-color);
+            }
+
+            .timeline-item-advanced {
+                display: flex;
+                gap: 1rem;
+                margin-bottom: 1rem;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 1rem;
+                transition: all 0.2s;
+            }
+
+            .timeline-item-advanced:hover {
+                border-color: var(--color-blue);
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            }
+
+            .timeline-item-advanced[data-severity="critical"] {
+                border-left: 4px solid var(--color-red);
+            }
+
+            .timeline-item-advanced[data-severity="high"] {
+                border-left: 4px solid var(--color-orange);
+            }
+
+            .timeline-item-advanced[data-severity="medium"] {
+                border-left: 4px solid var(--color-yellow);
+            }
+
+            .timeline-item-advanced[data-severity="low"] {
+                border-left: 4px solid var(--color-cyan);
+            }
+
+            .timeline-item-icon {
+                display: flex;
+                align-items: flex-start;
+                justify-content: center;
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                font-size: 1.25rem;
+            }
+
+            .timeline-item-icon.warn {
+                background: rgba(255, 170, 0, 0.1);
+            }
+
+            .timeline-item-icon.ban {
+                background: rgba(255, 68, 68, 0.1);
+            }
+
+            .timeline-item-icon.timeout {
+                background: rgba(255, 136, 0, 0.1);
+            }
+
+            .timeline-item-main {
+                flex: 1;
+            }
+
+            .timeline-item-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-bottom: 0.5rem;
+                cursor: pointer;
+            }
+
+            .timeline-item-title-row {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+            }
+
+            .timeline-item-type-badge {
+                padding: 0.25rem 0.75rem;
+                border-radius: var(--radius-md);
+                font-size: 0.85rem;
+                font-weight: 600;
+            }
+
+            .timeline-item-type-badge.warn {
+                background: rgba(255, 170, 0, 0.2);
+                color: var(--color-yellow);
+            }
+
+            .timeline-item-type-badge.ban {
+                background: rgba(255, 68, 68, 0.2);
+                color: var(--color-red);
+            }
+
+            .timeline-item-type-badge.timeout {
+                background: rgba(255, 136, 0, 0.2);
+                color: var(--color-orange);
+            }
+
+            .timeline-active-badge {
+                padding: 0.25rem 0.5rem;
+                background: var(--color-red);
+                color: white;
+                border-radius: var(--radius-sm);
+                font-size: 0.7rem;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+            }
+
+            .timeline-item-date {
+                color: var(--text-muted);
+                font-size: 0.85rem;
+                white-space: nowrap;
+            }
+
+            .timeline-item-preview {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 1rem;
+                color: var(--text-muted);
+                font-size: 0.9rem;
+            }
+
+            .timeline-item-reason-preview {
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .timeline-expand-btn {
+                color: var(--color-blue);
+                cursor: pointer;
+                font-size: 0.85rem;
+                font-weight: 500;
+                white-space: nowrap;
+            }
+
+            .timeline-expand-btn:hover {
+                text-decoration: underline;
+            }
+
+            .timeline-item-details {
+                margin-top: 1rem;
+                padding-top: 1rem;
+                border-top: 1px solid var(--border-color);
+                animation: slideDown 0.3s ease;
+            }
+
+            .timeline-detail-row {
+                display: flex;
+                gap: 0.75rem;
+                margin-bottom: 0.75rem;
+                align-items: flex-start;
+            }
+
+            .timeline-detail-row:last-child {
+                margin-bottom: 0;
+            }
+
+            .timeline-detail-label {
+                font-weight: 600;
+                color: var(--text-muted);
+                font-size: 0.9rem;
+                min-width: 130px;
+                flex-shrink: 0;
+            }
+
+            .timeline-detail-value {
+                color: var(--text-primary);
+                font-size: 0.9rem;
+                line-height: 1.5;
+                word-break: break-word;
+            }
+
+            @media (max-width: 768px) {
+                .timeline-stats {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+
+                .timeline-filters {
+                    flex-direction: column;
+                }
+
+                .timeline-filter-btn {
+                    width: 100%;
+                }
+
+                .timeline-item-advanced {
+                    flex-direction: column;
+                }
+
+                .timeline-item-icon {
+                    align-self: flex-start;
+                }
+
+                .timeline-detail-row {
+                    flex-direction: column;
+                    gap: 0.25rem;
+                }
+
+                .timeline-detail-label {
+                    min-width: unset;
+                }
+            }
+
+            /* Legacy action styles (backwards compatibility) */
+            .actions-panel {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-lg);
+                padding: 1.5rem;
+                margin-top: 1.5rem;
+            }
+
+            .actions-title {
+                font-size: 1.25rem;
+                font-weight: 600;
+                margin-bottom: 1rem;
+            }
+
+            .actions-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 0.75rem;
+            }
+
+            .action-btn {
+                padding: 0.875rem 1rem;
+                border: 1px solid;
+                border-radius: var(--radius-md);
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+                text-align: center;
+            }
+
+            .action-btn.warn {
+                background: rgba(255, 170, 0, 0.1);
+                border-color: var(--color-yellow);
+                color: var(--color-yellow);
+            }
+
+            .action-btn.warn:hover {
+                background: var(--color-yellow);
+                color: var(--bg-primary);
+            }
+
+            .action-btn.timeout {
+                background: rgba(255, 136, 0, 0.1);
+                border-color: var(--color-orange);
+                color: var(--color-orange);
+            }
+
+            .action-btn.timeout:hover {
+                background: var(--color-orange);
+                color: white;
+            }
+
+            .action-btn.ban {
+                background: rgba(255, 68, 68, 0.1);
+                border-color: var(--color-red);
+                color: var(--color-red);
+            }
+
+            .action-btn.ban:hover {
+                background: var(--color-red);
+                color: white;
+            }
+
+            .action-btn.unban,
+            .action-btn.untimeout {
+                background: rgba(34, 197, 94, 0.1);
+                border-color: var(--color-green);
+                color: var(--color-green);
+            }
+
+            .action-btn.unban:hover,
+            .action-btn.untimeout:hover {
+                background: var(--color-green);
+                color: white;
+            }
+
+            .action-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .notes-list {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .note-item {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-left: 4px solid var(--color-blue);
+                border-radius: var(--radius-md);
+                padding: 1rem;
+            }
+
+            .note-header {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 0.5rem;
+            }
+
+            .note-author {
+                font-weight: 600;
+                font-size: 0.9rem;
+            }
+
+            .note-date {
+                color: var(--text-muted);
+                font-size: 0.85rem;
+            }
+
+            .note-content {
+                color: var(--text-muted);
+                line-height: 1.6;
+            }
+
+            .empty-state {
+                text-align: center;
+                padding: 3rem 1rem;
+                color: var(--text-muted);
+            }
+
+            .empty-state-icon {
+                font-size: 3rem;
+                margin-bottom: 1rem;
+            }
+
+            .empty-state-text {
+                font-size: 1.1rem;
+            }
         </style>
-        <script>
-        // Enhanced tab system for admin panel
-        document.addEventListener('DOMContentLoaded', function() {
-            const tabs = document.querySelectorAll('#adminTabs .tab');
-            const tabContents = document.querySelectorAll('.tab-content');
-            tabs.forEach(tab => {
-                tab.addEventListener('click', function() {
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    const tabName = tab.getAttribute('data-tab');
-                    tabContents.forEach(tc => {
-                        if (tc.id === tabName) {
-                            tc.classList.add('active');
-                            tc.style.display = '';
-                        } else {
-                            tc.classList.remove('active');
-                            tc.style.display = 'none';
-                        }
-                    });
-                });
-            });
-            // Hide all but the first tab content on load
-            tabContents.forEach((tc, idx) => {
-                if (idx !== 0) tc.style.display = 'none';
-            });
-        });
-        </script>
+        <div id="appeals" class="tab-content active">
+            <div class="center-flex">
+                <div class="card admin-tab-card appeals-queue-shell">
+                    <div class="card-header">
+                        <span class="card-header-icon">⚖️</span>
+                        <span>Appeals Command Queue</span>
+                    </div>
+                    <p class="appeals-queue-subtitle text-muted">Advanced pending-appeals review with triage
+                        metrics,
+                        precision filters, and focused decision actions.</p>
 
-    <div id="member-management" class="tab-content active">
-        <div class="center-flex">
-            <div class="card">
-            <div class="card-header">
-                <span class="card-header-icon">🔍</span>
-                <span>User Lookup</span>
+                    <div class="appeals-queue-kpi-grid">
+                        <div class="appeals-queue-kpi-card">
+                            <span class="appeals-queue-kpi-label">Pending Appeals</span>
+                            <span id="appealsMetricPending" class="appeals-queue-kpi-value">-</span>
+                        </div>
+                        <div class="appeals-queue-kpi-card">
+                            <span class="appeals-queue-kpi-label">High Priority</span>
+                            <span id="appealsMetricPriority" class="appeals-queue-kpi-value">-</span>
+                        </div>
+                        <div class="appeals-queue-kpi-card">
+                            <span class="appeals-queue-kpi-label">Last 24 Hours</span>
+                            <span id="appealsMetricRecent" class="appeals-queue-kpi-value">-</span>
+                        </div>
+                        <div class="appeals-queue-kpi-card">
+                            <span class="appeals-queue-kpi-label">Unique Users</span>
+                            <span id="appealsMetricUsers" class="appeals-queue-kpi-value">-</span>
+                        </div>
+                    </div>
+
+                    <div class="appeals-queue-toolbar">
+                        <div class="appeals-queue-toolbar-group appeals-queue-toolbar-main">
+                            <input id="appealsSearchInput" class="form-input" placeholder="Search user / case / user ID"
+                                oninput="renderAppealsPage(1)">
+                            <input id="appealsUserFilter" class="form-input" placeholder="User ID contains..."
+                                oninput="renderAppealsPage(1)">
+                        </div>
+                        <div class="appeals-queue-toolbar-group">
+                            <select id="appealsDateFilter" class="form-input" onchange="renderAppealsPage(1)">
+                                <option value="all" selected>Date: All</option>
+                                <option value="1">Last 24h</option>
+                                <option value="7">Last 7d</option>
+                                <option value="30">Last 30d</option>
+                            </select>
+                            <select id="appealsSort" class="form-input" onchange="renderAppealsPage(1)">
+                                <option value="newest" selected>Newest</option>
+                                <option value="oldest">Oldest</option>
+                                <option value="user">By User</option>
+                                <option value="case">By Case ID</option>
+                            </select>
+                            <select id="appealsPageSize" class="form-input" onchange="renderAppealsPage(1)">
+                                <option value="10" selected>10/page</option>
+                                <option value="25">25/page</option>
+                                <option value="50">50/page</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="resetAppealsFilters()">Reset</button>
+                            <button class="btn btn-primary" onclick="loadAppeals()">Reload</button>
+                        </div>
+                    </div>
+
+                    <div class="appeals-queue-layout">
+                        <section class="appeals-queue-feed-panel">
+                            <div class="appeals-queue-pagination-row">
+                                <div id="appealsSummaryText" class="text-muted">No pending appeals loaded
+                                    yet.</div>
+                                <div id="appealsControls" class="appeals-queue-controls"></div>
+                            </div>
+                            <div id="appealsQueueList" class="appeals-queue-list">
+                                <div class="appeals-queue-empty">No pending appeals found.</div>
+                            </div>
+                        </section>
+
+                        <aside class="appeals-queue-detail-panel" id="appealsQueueDetailPanel">
+                            <div class="appeals-queue-detail-header">
+                                <div class="appeals-queue-detail-title">Selected Pending Appeal</div>
+                                <span class="appeals-pending-badge">Pending</span>
+                            </div>
+                            <div class="appeals-queue-detail-grid">
+                                <div><span class="text-muted">User:</span> <strong id="appealsDetailUser">-</strong>
+                                </div>
+                                <div><span class="text-muted">User ID:</span> <strong
+                                        id="appealsDetailUserId">-</strong>
+                                </div>
+                                <div><span class="text-muted">Case ID:</span> <strong
+                                        id="appealsDetailCaseId">-</strong>
+                                </div>
+                                <div><span class="text-muted">Submitted:</span> <strong
+                                        id="appealsDetailSubmitted">-</strong></div>
+                            </div>
+                            <div class="appeals-queue-detail-reason">
+                                <div class="appeals-queue-detail-reason-label">Appeal Submission</div>
+                                <div id="appealsDetailReason" class="appeals-queue-detail-reason-content">
+                                    <div class="placeholder">Select an appeal from the queue to review the full
+                                        submission reason.</div>
+                                </div>
+                            </div>
+                            <div class="appeals-queue-detail-reason">
+                                <div class="appeals-queue-detail-reason-label">Moderator Response</div>
+                                <div id="appealsDetailResponse" class="appeals-queue-detail-reason-content">
+                                    <div class="placeholder">No response has been recorded yet.</div>
+                                </div>
+                            </div>
+                            <div class="appeals-queue-detail-actions">
+                                <button id="appealsDetailAcceptBtn" class="btn btn-success" disabled>Approve
+                                    Appeal</button>
+                                <button id="appealsDetailDenyBtn" class="btn btn-danger" disabled>Deny Appeal</button>
+                            </div>
+                        </aside>
+                    </div>
+
+                    <div class="appeals-queue-footer-note text-muted">Tip: select a queue card to lock
+                        decision context and
+                        act from the right panel.</div>
+                </div>
             </div>
-            <div style="display: grid; gap: 1rem;">
-                <div>
-                    <label for="userLookupInput" class="form-label">Search by Username or Discord User ID</label>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <input type="text" id="userLookupInput" class="form-input" placeholder="Enter Username or Discord User ID" style="flex: 1;">
-                        <button class="btn btn-primary" onclick="lookupUserDetails()">Search</button>
+        </div>
+
+        <div id="appeals-history" class="tab-content">
+            <div class="center-flex">
+                <div class="card admin-tab-card appeal-history-shell">
+                    <div class="card-header">
+                        <span class="card-header-icon">📚</span>
+                        <span>Appeals History Intelligence</span>
+                    </div>
+                    <p class="appeal-history-subtitle text-muted">Decision archive with fast filtering,
+                        trend metrics, and
+                        focused detail review.</p>
+
+                    <div class="appeal-history-kpi-grid">
+                        <div class="appeal-history-kpi-card">
+                            <span class="appeal-history-kpi-label">Visible Records</span>
+                            <span id="appealHistoryMetricTotal" class="appeal-history-kpi-value">-</span>
+                        </div>
+                        <div class="appeal-history-kpi-card">
+                            <span class="appeal-history-kpi-label">Accepted</span>
+                            <span id="appealHistoryMetricAccepted" class="appeal-history-kpi-value">-</span>
+                        </div>
+                        <div class="appeal-history-kpi-card">
+                            <span class="appeal-history-kpi-label">Denied</span>
+                            <span id="appealHistoryMetricDenied" class="appeal-history-kpi-value">-</span>
+                        </div>
+                        <div class="appeal-history-kpi-card">
+                            <span class="appeal-history-kpi-label">Last 7 Days</span>
+                            <span id="appealHistoryMetricRecent7d" class="appeal-history-kpi-value">-</span>
+                        </div>
+                    </div>
+
+                    <div class="appeal-history-toolbar">
+                        <div class="appeal-history-toolbar-group appeal-history-toolbar-main">
+                            <input id="appealHistorySearchInput" class="form-input"
+                                placeholder="Search user / case / user ID / mod" oninput="renderAppealHistoryPage(1)">
+                            <input id="appealHistoryModeratorFilter" class="form-input" placeholder="Mod contains..."
+                                oninput="renderAppealHistoryPage(1)">
+                        </div>
+                        <div class="appeal-history-toolbar-group">
+                            <select id="appealHistoryStatusFilter" class="form-input"
+                                onchange="renderAppealHistoryPage(1)">
+                                <option value="all">Status: All</option>
+                                <option value="accepted">Accepted</option>
+                                <option value="denied">Denied</option>
+                            </select>
+                            <select id="appealHistoryDateFilter" class="form-input"
+                                onchange="renderAppealHistoryPage(1)">
+                                <option value="all" selected>Date: All</option>
+                                <option value="7">Last 7 Days</option>
+                                <option value="30">Last 30 Days</option>
+                                <option value="90">Last 90 Days</option>
+                            </select>
+                            <select id="appealHistorySort" class="form-input" onchange="renderAppealHistoryPage(1)">
+                                <option value="newest" selected>Newest</option>
+                                <option value="oldest">Oldest</option>
+                                <option value="status">By Status</option>
+                                <option value="moderator">By Mod</option>
+                            </select>
+                            <select id="appealHistoryPageSize" class="form-input" onchange="renderAppealHistoryPage(1)">
+                                <option value="10">10/page</option>
+                                <option value="25" selected>25/page</option>
+                                <option value="50">50/page</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="resetAppealHistoryFilters()">Reset</button>
+                            <button class="btn btn-primary" onclick="loadAppealHistory()">Reload</button>
+                        </div>
+                    </div>
+
+                    <div class="appeal-history-layout">
+                        <section class="appeal-history-feed-panel">
+                            <div class="appeal-history-pagination-row">
+                                <div id="appealHistorySummaryText" class="text-muted">No history loaded yet.
+                                </div>
+                                <div id="appealsHistoryControls" class="appeal-history-controls"></div>
+                            </div>
+
+                            <div id="appealsHistoryList" class="appeal-history-list">
+                                <div class="appeal-history-empty">No decided appeals found.</div>
+                            </div>
+                        </section>
+
+                        <aside class="appeal-history-detail-panel" id="appealHistoryDetailPanel">
+                            <div class="appeal-history-detail-header">
+                                <div class="appeal-history-detail-title">Selected Appeal</div>
+                                <span id="appealHistoryDetailStatus" class="appeal-history-status-badge">-</span>
+                            </div>
+                            <div class="appeal-history-detail-grid">
+                                <div><span class="text-muted">User:</span> <strong
+                                        id="appealHistoryDetailUser">-</strong>
+                                </div>
+                                <div><span class="text-muted">Case ID:</span> <strong
+                                        id="appealHistoryDetailCase">-</strong></div>
+                                <div><span class="text-muted">Submitted:</span> <strong
+                                        id="appealHistoryDetailSubmitted">-</strong></div>
+                                <div><span class="text-muted">Moderator:</span> <strong
+                                        id="appealHistoryDetailModerator">-</strong></div>
+                            </div>
+                            <div class="appeal-history-detail-reason">
+                                <div class="appeal-history-detail-reason-label">Reason</div>
+                                <div id="appealHistoryDetailReason" class="appeal-history-detail-reason-content">
+                                    Select a
+                                    record from the feed to inspect full details.</div>
+                            </div>
+                            <div class="appeal-history-detail-reason">
+                                <div class="appeal-history-detail-reason-label">Decision Response</div>
+                                <div id="appealHistoryDetailOutcome" class="appeal-history-detail-reason-content">
+                                    Select a
+                                    record to view decision response.</div>
+                            </div>
+                        </aside>
+                    </div>
+
+                    <div class="appeal-history-footer-note text-muted">
+                        Tip: click any record card to pin it in the detail panel.
                     </div>
                 </div>
-                <div id="userDetailsPanel" style="display: none;">
-                    <div class="user-details-card">
-                        <div class="user-details-grid">
-                            <div class="user-details-section user-info">
-                                <h3><span class="card-header-icon" style="color:var(--color-blue);">👤</span> <span style="color:var(--color-blue);">User Info</span></h3>
-                                <div class="details-row"><span class="details-label">Username:</span> <span id="detailUsername" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Nickname:</span> <span id="detailNickname" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">User ID:</span> <span id="detailUserId" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Joined At:</span> <span id="detailJoinedAt" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Created At:</span> <span id="detailCreatedAt" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Account Age:</span> <span id="detailAccountAge" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Bio:</span> <span id="detailBio" class="details-value">-</span></div>
+            </div>
+        </div>
+
+        <div id="automod" class="tab-content">
+            <div class="center-flex">
+                <div class="card admin-tab-card automod-shell">
+                    <div class="card-header">
+                        <span class="card-header-icon">🛡️</span>
+                        <span>AutoMod Policy Center</span>
+                    </div>
+                    <p class="text-muted">Advanced command center for policy
+                        tuning,
+                        analytics, and incident workflow review.</p>
+
+                    <div class="automod-metrics-grid">
+                        <div class="automod-metric-card">
+                            <span class="automod-metric-label">Total Events</span>
+                            <span id="automodMetricTotal" class="automod-metric-value">-</span>
+                        </div>
+                        <div class="automod-metric-card">
+                            <span class="automod-metric-label">Pending Review</span>
+                            <span id="automodMetricPending" class="automod-metric-value">-</span>
+                        </div>
+                        <div class="automod-metric-card">
+                            <span class="automod-metric-label">High Risk</span>
+                            <span id="automodMetricHighRisk" class="automod-metric-value">-</span>
+                        </div>
+                        <div class="automod-metric-card">
+                            <span class="automod-metric-label">Resolved</span>
+                            <span id="automodMetricResolved" class="automod-metric-value">-</span>
+                        </div>
+                    </div>
+
+                    <div class="automod-top-grid">
+                        <div class="automod-section">
+                            <div class="automod-section-title">🎯 Active Profile</div>
+                            <label for="automodActiveProfile" class="form-label">Select Active
+                                Profile</label>
+                            <select id="automodActiveProfile" class="form-input">
+                                <option value="balanced">Balanced</option>
+                                <option value="strict">Strict</option>
+                                <option value="relaxed">Relaxed</option>
+                            </select>
+                            <div class="automod-inline-actions" style="margin-top: 0.75rem;">
+                                <button class="btn btn-primary" onclick="setActiveAutoModProfile()">✅ Set as
+                                    Active
+                                    Profile</button>
                             </div>
-                            <div class="user-details-section moderation-info">
-                                <h3><span class="card-header-icon" style="color:var(--color-red);">⚡</span> <span style="color:var(--color-red);">Moderation Info</span></h3>
-                                <div class="details-row"><span class="details-label">Level:</span> <span id="detailLevel" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">XP:</span> <span id="detailXP" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Warnings:</span> <span id="detailWarnings" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Ban Status:</span> <span id="detailBanStatus" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Ban Reason:</span> <span id="detailBanReason" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Ban Date:</span> <span id="detailBanDate" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Timed Out:</span> <span id="detailTimedOut" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Timeout Reason:</span> <span id="detailTimeoutReason" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Timeout Expires:</span> <span id="detailTimeoutExpires" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Timeout Status:</span> <span id="detailTimeoutStatus" class="details-value">-</span></div>
+                            <div id="automodProfileState" class="automod-state-box">Active profile state
+                                will appear here.
                             </div>
-                            <div class="user-details-section other-info">
-                                <h3><span class="card-header-icon" style="color:var(--color-yellow);">📋</span> <span style="color:var(--color-yellow);">Other Info</span></h3>
-                                <div class="details-row"><span class="details-label">Status:</span> <span id="detailStatus" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Flags:</span> <span id="detailFlags" class="details-value">-</span></div>
-                                <div class="details-row"><span class="details-label">Messages:</span> <span id="detailMessages" class="details-value">-</span></div>
+                        </div>
+
+                        <div class="automod-section">
+                            <div class="automod-section-title">🧩 Profile Management</div>
+                            <label for="automodNewProfileName" class="form-label">New Profile Name</label>
+                            <input type="text" id="automodNewProfileName" class="form-input"
+                                placeholder="e.g. anti-raid">
+                            <div class="automod-inline-actions">
+                                <button class="btn btn-secondary" onclick="createAutoModProfile()">➕ Create
+                                    Profile</button>
+                                <button class="btn btn-danger" onclick="deleteAutoModProfile()">🗑️ Delete
+                                    Profile</button>
                             </div>
                         </div>
                     </div>
-                        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(75, 85, 99, 0.2);">
-                            <label style="font-weight: 600; color: var(--text-secondary); font-size: 0.875rem; display: block; margin-bottom: 0.5rem;">Actions</label>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <button class="btn btn-warning" onclick="promptWarnUser()">⚠️ Warn</button>
-                                <button id="timeoutButton" class="btn btn-secondary" onclick="promptTimeoutUser()">⏳ Timeout</button>
-                                <button id="untimeoutButton" class="btn btn-success" onclick="promptUntimeoutUser()" style="display:none;">✅ Untimeout</button>
-                                <button id="banButton" class="btn btn-danger" onclick="promptBanUser()">🚫 Ban</button>
-                                <button id="unbanButton" class="btn btn-success" onclick="promptUnbanUser()" style="display:none;">✅ Unban</button>
+
+                    <div class="automod-section">
+                        <div id="automodSelectedProfileTitle" class="automod-section-title">🛠️ Selected
+                            Profile Settings:
+                            Balanced</div>
+                        <p id="automodSelectedProfileHint" class="text-muted" style="margin-bottom: 0.75rem;">Edits
+                            below
+                            apply only to the selected profile.</p>
+                        <div style="max-width: 360px; margin-bottom: 0.9rem;">
+                            <label for="automodSelectedProfile" class="form-label">Selected Profile</label>
+                            <select id="automodSelectedProfile" class="form-input">
+                                <option value="balanced">Balanced</option>
+                                <option value="strict">Strict</option>
+                                <option value="relaxed">Relaxed</option>
+                            </select>
+                        </div>
+
+                        <div class="automod-section-title">⚙️ Core Moderation Rules</div>
+                        <div class="automod-fields-grid">
+                            <div>
+                                <label for="automodBlockInvites" class="form-label">Block External
+                                    Invites</label>
+                                <select id="automodBlockInvites" class="form-input">
+                                    <option value="true">Enabled</option>
+                                    <option value="false">Disabled</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="automodSpamThreshold" class="form-label">Spam Threshold</label>
+                                <input type="number" id="automodSpamThreshold" class="form-input" min="1" max="30"
+                                    placeholder="5">
+                            </div>
+                            <div>
+                                <label for="automodSpamWindowMs" class="form-label">Spam Window (ms)</label>
+                                <input type="number" id="automodSpamWindowMs" class="form-input" min="500" step="500"
+                                    placeholder="5000">
+                            </div>
+                            <div>
+                                <label for="automodSpamWarningThreshold" class="form-label">Spam Warn
+                                    Threshold</label>
+                                <input type="number" id="automodSpamWarningThreshold" class="form-input" min="1"
+                                    max="10" placeholder="2">
+                            </div>
+                            <div>
+                                <label for="automodSpamTimeoutMs" class="form-label">Spam Timeout
+                                    (ms)</label>
+                                <input type="number" id="automodSpamTimeoutMs" class="form-input" min="60000"
+                                    step="60000" placeholder="600000">
+                            </div>
+                            <div>
+                                <label for="automodMaxMentions" class="form-label">Max Mentions Before
+                                    Flag</label>
+                                <input type="number" id="automodMaxMentions" class="form-input" min="1" max="50"
+                                    placeholder="6">
+                            </div>
+                            <div>
+                                <label for="automodCapsThreshold" class="form-label">Caps Threshold
+                                    (0-1)</label>
+                                <input type="number" id="automodCapsThreshold" class="form-input" min="0.1" max="1"
+                                    step="0.05" placeholder="0.70">
+                            </div>
+                            <div>
+                                <label for="automodEscalationThreshold" class="form-label">Escalation
+                                    Threshold
+                                    (24h)</label>
+                                <input type="number" id="automodEscalationThreshold" class="form-input" min="1" max="30"
+                                    placeholder="4">
+                            </div>
+                            <div>
+                                <label for="automodEscalationTimeoutMs" class="form-label">Escalation
+                                    Timeout (ms)</label>
+                                <input type="number" id="automodEscalationTimeoutMs" class="form-input" min="300000"
+                                    step="60000" placeholder="1800000">
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-            </div>
-        </div>
-    </div>
 
-    <div id="appeals" class="tab-content">
-        <div class="center-flex">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">👥</span>
-                    <span>Appeals</span>
-                </div>
-                <div class="table-container" id="appealsContainer">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Ban Case ID</th>
-                                <th>Reason</th>
-                                <th>Appeal Date</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="appealsTable">
-                            <tr><td colspan="6" class="text-center text-muted">No appeals found</td></tr>
-                        </tbody>
-                    </table>
+                    <div class="automod-section">
+                        <div class="automod-section-title">🧠 Advanced Filters</div>
+                        <div class="automod-textareas-grid">
+                            <div>
+                                <label for="automodRegexPatterns" class="form-label">Blocked Regex Patterns
+                                    (one per
+                                    line)</label>
+                                <textarea id="automodRegexPatterns" class="form-input" rows="6"
+                                    placeholder="example\\s+pattern"></textarea>
+                            </div>
+                            <div>
+                                <label for="automodExemptChannels" class="form-label">Exempt Channel IDs
+                                    (one per
+                                    line)</label>
+                                <textarea id="automodExemptChannels" class="form-input" rows="6"
+                                    placeholder="123456789012345678"></textarea>
+                            </div>
+                            <div>
+                                <label for="automodExemptRoles" class="form-label">Exempt Role IDs (one per
+                                    line)</label>
+                                <textarea id="automodExemptRoles" class="form-input" rows="6"
+                                    placeholder="123456789012345678"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="automodSummary" class="automod-summary-box">Effective profile summary will
+                        appear here after
+                        load.</div>
+
+                    <div class="automod-section">
+                        <div class="automod-section-title">📈 Live Analytics</div>
+                        <div class="automod-inline-actions" style="margin-bottom: 0.8rem;">
+                            <label for="automodAnalyticsWindow" class="form-label" style="margin-bottom: 0;">Time
+                                Window</label>
+                            <select id="automodAnalyticsWindow" class="form-input" style="max-width: 190px;">
+                                <option value="24">Last 24h</option>
+                                <option value="72">Last 3 days</option>
+                                <option value="168" selected>Last 7 days</option>
+                                <option value="336">Last 14 days</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="loadAutoModAdvancedData(1)">🔄
+                                Refresh
+                                Analytics</button>
+                        </div>
+                        <div class="automod-top-grid" style="margin-bottom: 0;">
+                            <div class="automod-section" style="margin-bottom: 0;">
+                                <div class="automod-section-title">Daily Trend</div>
+                                <div class="table-container">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Day</th>
+                                                <th>Total</th>
+                                                <th>Pending</th>
+                                                <th>Resolved</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="automodTrendRows">
+                                            <tr>
+                                                <td colspan="4" class="text-center text-muted">No trend data
+                                                    yet.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="automod-section" style="margin-bottom: 0;">
+                                <div class="automod-section-title">Top Types</div>
+                                <div class="table-container">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>Count</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="automodTypeRows">
+                                            <tr>
+                                                <td colspan="2" class="text-center text-muted">No type data
+                                                    yet.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="automod-section-title" style="margin-top: 0.9rem;">Top Users
+                                </div>
+                                <div class="table-container">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>User ID</th>
+                                                <th>Events</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="automodTopUsersRows">
+                                            <tr>
+                                                <td colspan="2" class="text-center text-muted">No user data
+                                                    yet.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="automod-section">
+                        <div class="automod-section-title">🧪 Test Message Simulator</div>
+                        <div class="automod-fields-grid" style="margin-bottom: 0.75rem;">
+                            <div style="grid-column: 1 / -1;">
+                                <label for="automodSimMessage" class="form-label">Message Content</label>
+                                <textarea id="automodSimMessage" class="form-input" rows="4"
+                                    placeholder="Paste a sample message here to test against current AutoMod settings..."></textarea>
+                            </div>
+                            <div>
+                                <label for="automodSimRecentCount" class="form-label">Recent Messages
+                                    (within spam
+                                    window)</label>
+                                <input type="number" id="automodSimRecentCount" class="form-input" min="1" max="100"
+                                    value="1">
+                            </div>
+                            <div>
+                                <label for="automodSimPriorViolations" class="form-label">Prior Violations
+                                    (last
+                                    24h)</label>
+                                <input type="number" id="automodSimPriorViolations" class="form-input" min="0" max="100"
+                                    value="0">
+                            </div>
+                        </div>
+                        <div class="automod-inline-actions" style="margin-bottom: 0.75rem;">
+                            <button class="btn btn-secondary" onclick="runAutoModSimulation()">▶️ Run
+                                Simulation</button>
+                            <label class="automod-checkbox-label">
+                                <input type="checkbox" id="automodSimUseSavedOnly">
+                                Use saved profile only (ignore unsaved form edits)
+                            </label>
+                        </div>
+                        <div id="automodSimResult" class="automod-result-box">Enter a message and run
+                            simulation to see
+                            predicted AutoMod outcomes.</div>
+                    </div>
+
+                    <div class="automod-section">
+                        <div class="automod-section-title">🗂️ Incident Workflow Queue</div>
+                        <div class="automod-inline-actions" style="margin-bottom: 0.8rem;">
+                            <select id="automodQueueStatusFilter" class="form-input" style="max-width: 170px;"
+                                onchange="loadAutoModAdvancedData(1)">
+                                <option value="all">All Statuses</option>
+                                <option value="pending" selected>Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="dismissed">Dismissed</option>
+                            </select>
+                            <select id="automodQueueSeverityFilter" class="form-input" style="max-width: 170px;"
+                                onchange="loadAutoModAdvancedData(1)">
+                                <option value="all" selected>All Severities</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="loadAutoModAdvancedData(1)">Refresh
+                                Queue</button>
+                            <div id="automodQueuePaginationInfo" class="text-muted" style="margin-left:auto;">Page 1
+                                / 1
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>User</th>
+                                        <th>Type</th>
+                                        <th>Action</th>
+                                        <th>Severity</th>
+                                        <th>Status</th>
+                                        <th>Time</th>
+                                        <th>Workflow</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="automodQueueTable">
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted">No incidents loaded
+                                            yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="automod-inline-actions" style="margin-top: 0.8rem;">
+                            <button class="btn btn-secondary" onclick="changeAutoModQueuePage(-1)">⬅️
+                                Prev</button>
+                            <button class="btn btn-secondary" onclick="changeAutoModQueuePage(1)">Next
+                                ➡️</button>
+                        </div>
+                        <div class="automod-section" style="margin-top: 0.9rem; margin-bottom: 0;">
+                            <div class="automod-section-title">📝 Reviewer Notes</div>
+                            <div class="automod-inline-actions" style="margin-bottom: 0.6rem;">
+                                <label for="automodWorkflowSelectedId" class="form-label"
+                                    style="margin-bottom:0;">Selected
+                                    Incident ID</label>
+                                <input type="number" id="automodWorkflowSelectedId" class="form-input" min="1"
+                                    placeholder="Select from queue" style="max-width: 180px;">
+                            </div>
+                            <textarea id="automodWorkflowNote" class="form-input" rows="3"
+                                placeholder="Add review note for selected incident..."></textarea>
+                            <div class="automod-inline-actions" style="margin-top: 0.7rem;">
+                                <button class="btn btn-primary" onclick="saveAutoModWorkflowNote()">💾 Save
+                                    Note</button>
+                                <button class="btn btn-success" onclick="bulkResolveAutoModPending()">✅
+                                    Resolve Visible
+                                    Pending</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="automod-footer-actions">
+                        <button class="btn btn-primary" onclick="saveSelectedAutoModProfileSettings()">💾
+                            Save Selected
+                            Profile Settings</button>
+                        <button class="btn btn-secondary" onclick="loadAutoModConfig()">🔄 Reload
+                            Policies</button>
+                    </div>
+
+                    <p id="automodStatusMessage" class="text-muted" style="margin-top: 1rem; min-height: 1.25rem;">
+                    </p>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div id="appeals-history" class="tab-content">
-        <div class="center-flex">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📚</span>
-                    <span>Appeals History (Accepted / Denied)</span>
-                </div>
-                <div style="margin-bottom: 1rem; display: flex; justify-content: flex-end;">
-                    <select id="appealHistoryStatusFilter" class="form-input" style="max-width: 220px;" onchange="loadAppealHistory()">
-                        <option value="all">All Statuses</option>
-                        <option value="accepted">Accepted</option>
-                        <option value="denied">Denied</option>
-                    </select>
-                </div>
-                <div class="table-container" id="appealsHistoryContainer">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Ban Case ID</th>
-                                <th>Reason</th>
-                                <th>Status</th>
-                                <th>Submitted</th>
-                                <th>Decided</th>
-                            </tr>
-                        </thead>
-                        <tbody id="appealHistoryTable">
-                            <tr><td colspan="6" class="text-center text-muted">No decided appeals found</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     </div>
-
-</div>
 
     <footer class="page-footer">
         <div class="footer-links">
-            <span>© 2026 <strong>Admin Panel</strong></span>
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
             <span class="footer-sep">•</span>
             <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
             <span class="footer-sep">•</span>
             <a href="/license">License</a>
         </div>
@@ -263,17 +1569,18 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/notifications.js" defer></script>
-    <script src="/public/shared.js"></script>
     <script src="/public/version.js"></script>
     <script>
         function toggleUserDropdown() {
             const menu = document.getElementById('userDropdownMenu');
             const trigger = document.querySelector('.user-dropdown-trigger');
-            menu.classList.toggle('show');
-            trigger.classList.toggle('active');
+            if (menu && trigger) {
+                menu.classList.toggle('show');
+                trigger.classList.toggle('active');
+            }
         }
 
-        document.addEventListener('click', function(event) {
+        document.addEventListener('click', function (event) {
             const dropdown = document.querySelector('.user-dropdown');
             if (dropdown && !dropdown.contains(event.target)) {
                 document.getElementById('userDropdownMenu')?.classList.remove('show');
@@ -281,485 +1588,13 @@
             }
         });
 
-        function syncDropdownInfo() {
-            const username = document.getElementById('userDisplay')?.textContent;
-            const role = document.getElementById('roleBadge')?.textContent;
-            if (username) document.getElementById('dropdownUsername').textContent = username;
-            if (role) document.getElementById('dropdownRole').textContent = role;
-        }
-        setTimeout(syncDropdownInfo, 500);
-
-        // Here are the variables we'll use to keep track of all the users and any filters we apply.
-        let allUsers = [];
-        let filteredUsers = [];
-
-        // When you click the users tab, we'll fetch the latest user list.
-        document.addEventListener('DOMContentLoaded', function() {
-            const usersTab = document.getElementById('users');
-            if (usersTab) {
-                const tabButtons = document.querySelectorAll('.tab');
-                tabButtons.forEach(btn => {
-                    if (btn.getAttribute('data-tab') === 'users') {
-                        btn.addEventListener('click', loadUsers);
-                    }
-                });
-            }
-        });
-
-        // Grab every user from the server so we can show them in the table.
-        async function loadUsers() {
-            try {
-                const response = await fetch('/api/users', {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (!response.ok) throw new Error(`Failed to load users: ${response.status}`);
-                
-                const data = await response.json();
-                allUsers = data.users || [];
-                filteredUsers = [...allUsers];
-                
-                updateMemberStats();
-                displayUsers();
-            } catch (error) {
-                console.error('Error loading users:', error);
-                document.getElementById('usersTable').innerHTML = 
-                    '<tr><td colspan="7" class="text-center text-danger">Failed to load users: ' + escapeHtml(error.message) + '</td></tr>';
-            }
-        }
-
-        // Let people search for users by their username or ID. Makes finding someone way easier.
-        function searchUsers() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            
-            filteredUsers = allUsers.filter(user => {
-                const username = (user.username || '').toLowerCase();
-                const userId = (user.user_id || '').toString();
-                return username.includes(searchTerm) || userId.includes(searchTerm);
+        document.addEventListener('DOMContentLoaded', function () {
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach((tc, idx) => {
+                tc.style.display = idx === 0 ? '' : 'none';
             });
-            
-            applyAllFilters();
-        }
-
-        // Filter users based on how many warnings they have or their level. Helps admins sort things out.
-        function filterUsers() {
-            applyAllFilters();
-        }
-
-        // Apply all the filters and sorting options so the user list is just how you want it.
-        function applyAllFilters() {
-            const warningFilter = document.getElementById('warningFilter')?.value;
-            const levelFilter = document.getElementById('levelFilter')?.value;
-            
-            filteredUsers = allUsers.filter(user => {
-                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-                const username = (user.username || '').toLowerCase();
-                const userId = (user.user_id || '').toString();
-                
-                // Search filter
-                const matchesSearch = username.includes(searchTerm) || userId.includes(searchTerm);
-                
-                // Warning filter
-                let matchesWarnings = true;
-                if (warningFilter) {
-                    const warnings = user.warnings || 0;
-                    if (warningFilter === '0') matchesWarnings = warnings === 0;
-                    else if (warningFilter === '1-2') matchesWarnings = warnings >= 1 && warnings <= 2;
-                    else if (warningFilter === '3-5') matchesWarnings = warnings >= 3 && warnings <= 5;
-                    else if (warningFilter === '6+') matchesWarnings = warnings >= 6;
-                }
-                
-                // Level filter
-                let matchesLevel = true;
-                if (levelFilter) {
-                    const level = user.level || 0;
-                    if (levelFilter === '1-10') matchesLevel = level >= 1 && level <= 10;
-                    else if (levelFilter === '11-25') matchesLevel = level >= 11 && level <= 25;
-                    else if (levelFilter === '26-50') matchesLevel = level >= 26 && level <= 50;
-                    else if (levelFilter === '51+') matchesLevel = level >= 51;
-                }
-                
-                return matchesSearch && matchesWarnings && matchesLevel;
-            });
-            
-            sortUsers();
-        }
-
-        // Sort users
-        function sortUsers() {
-            const sortBy = document.getElementById('sortBy')?.value || 'username';
-            
-            filteredUsers.sort((a, b) => {
-                if (sortBy === 'username') {
-                    return (a.username || '').localeCompare(b.username || '');
-                } else if (sortBy === 'warnings-desc') {
-                    return (b.warnings || 0) - (a.warnings || 0);
-                } else if (sortBy === 'level-desc') {
-                    return (b.level || 0) - (a.level || 0);
-                } else if (sortBy === 'xp-desc') {
-                    return (b.xp || 0) - (a.xp || 0);
-                }
-                return 0;
-            });
-            
-            displayUsers();
-        }
-
-        // Display filtered users in table
-        function displayUsers() {
-            const tbody = document.getElementById('usersTable');
-            
-            if (filteredUsers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No users found</td></tr>';
-                return;
-            }
-            
-            tbody.innerHTML = filteredUsers.map(user => {
-                const warnings = user.warnings || 0;
-                const warningStatus = warnings === 0 ? '✅ Clean' : 
-                                     warnings <= 2 ? '⚠️ Low' :
-                                     warnings <= 5 ? '🟡 Medium' : '🔴 High';
-                
-                return `
-                    <tr>
-                        <td><code>${user.user_id}</code></td>
-                        <td>${escapeHtml(user.username || 'Unknown')}</td>
-                        <td>${warningStatus}</td>
-                        <td><span class="badge">${warnings}</span></td>
-                        <td><strong>Level ${user.level || 0}</strong></td>
-                        <td>${formatNumber(user.xp || 0)} XP</td>
-                        <td>
-                            <div class="btn-group-small">
-                                <button class="btn btn-sm btn-primary" onclick="viewUserDetails('${user.user_id}')">View</button>
-                                <button class="btn btn-sm btn-warning" onclick="warnUser('${user.user_id}')">Warn</button>
-                                ${user.is_banned ? `<button class="btn btn-sm btn-success" onclick="unbanUser('${user.user_id}')">Unban</button>` : `<button class="btn btn-sm btn-danger" onclick="banUser('${user.user_id}')">Ban</button>`}
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Update member statistics
-        function updateMemberStats() {
-            const totalMembers = allUsers.length;
-            const warnedMembers = allUsers.filter(u => (u.warnings || 0) > 0).length;
-            const avgLevel = totalMembers > 0 ? 
-                (allUsers.reduce((sum, u) => sum + (u.level || 0), 0) / totalMembers).toFixed(1) : 0;
-            const topLevel = Math.max(...allUsers.map(u => u.level || 0), 0);
-            
-            document.getElementById('totalMembers').textContent = formatNumber(totalMembers);
-            document.getElementById('warnedMembers').textContent = warnedMembers;
-            document.getElementById('avgLevel').textContent = avgLevel;
-            document.getElementById('topLevel').textContent = topLevel;
-        }
-
-        // View user details
-        async function viewUserDetails(userId) {
-            try {
-                const response = await fetch(`/api/users/${userId}`, {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (!response.ok) throw new Error('Failed to load user details');
-                
-                const user = await response.json();
-                
-                showModal(`
-                    <div class="user-detail-modal">
-                        <h3>${escapeHtml(user.username || 'Unknown User')}</h3>
-                        <div class="detail-grid">
-                            <div><strong>User ID:</strong> ${user.user_id}</div>
-                            <div><strong>Username:</strong> ${escapeHtml(user.username || '-')}</div>
-                            <div><strong>Level:</strong> ${user.level || 0}</div>
-                            <div><strong>XP:</strong> ${formatNumber(user.xp || 0)}</div>
-                            <div><strong>Warnings:</strong> <span class="badge">${user.warnings || 0}</span></div>
-                            <div><strong>Joined:</strong> ${new Date(user.joined_at).toLocaleDateString()}</div>
-                            <div><strong>Ban Status:</strong> ${user.is_banned ? '🔴 BANNED' : '✅ Active'}</div>
-                            <div><strong>Messages:</strong> ${formatNumber(user.message_count || 0)}</div>
-                        </div>
-                        <div style="margin-top: 1.5rem;">
-                            <button class="btn btn-warning" onclick="warnUser('${user.user_id}'); closeModal();">Warn User</button>
-                            ${user.is_banned ? `<button class="btn btn-success" onclick="unbanUser('${user.user_id}'); closeModal();">Unban User</button>` : `<button class="btn btn-danger" onclick="banUser('${user.user_id}'); closeModal();">Ban User</button>`}
-                        </div>
-                    </div>
-                `, 'User Details');
-            } catch (error) {
-                console.error('Error loading user details:', error);
-                showNotification('Failed to load user details', 'error');
-            }
-        }
-
-        // Warn user
-        async function warnUser(userId) {
-            const reason = prompt('Enter warning reason:');
-            if (!reason) return;
-            
-            try {
-                const response = await fetch('/api/warn', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, reason })
-                });
-                
-                if (!response.ok) throw new Error('Failed to warn user');
-                
-                showNotification('User warned successfully', 'success');
-                loadUsers(); // Refresh user list
-            } catch (error) {
-                console.error('Error warning user:', error);
-                showNotification('Failed to warn user', 'error');
-            }
-        }
-
-        // Ban user
-        async function banUser(userId) {
-            const reason = prompt('Enter ban reason:');
-            if (!reason) return;
-            
-            if (!confirm('Are you sure you want to ban this user?')) return;
-            
-            try {
-                const response = await fetch('/api/ban', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, reason })
-                });
-                
-                if (!response.ok) throw new Error('Failed to ban user');
-                
-                showNotification('User banned successfully', 'success');
-                loadUsers(); // Refresh user list
-            } catch (error) {
-                console.error('Error banning user:', error);
-                showNotification('Failed to ban user', 'error');
-            }
-        }
-
-        // Unban user
-        async function unbanUser(userId) {
-            if (!confirm('Are you sure you want to unban this user?')) return;
-            
-            try {
-                const response = await fetch(`/api/banned/${userId}`, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (!response.ok) throw new Error('Failed to unban user');
-                
-                showNotification('User unbanned successfully', 'success');
-                loadUsers(); // Refresh user list
-            } catch (error) {
-                console.error('Error unbanning user:', error);
-                showNotification('Failed to unban user', 'error');
-            }
-        }
-
-        // Helper functions
-        function formatNumber(num) {
-            return new Intl.NumberFormat().format(num);
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function showModal(content, title) {
-            let modal = document.getElementById('customModal');
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'customModal';
-                modal.className = 'modal';
-                modal.innerHTML = `
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h2 id="modalTitle"></h2>
-                            <button onclick="closeModal()" class="btn-close">&times;</button>
-                        </div>
-                        <div id="modalBody"></div>
-                    </div>
-                `;
-                document.body.appendChild(modal);
-            }
-            
-            document.getElementById('modalTitle').textContent = title;
-            document.getElementById('modalBody').innerHTML = content;
-            modal.style.display = 'block';
-            
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) closeModal();
-            });
-        }
-
-        function closeModal() {
-            const modal = document.getElementById('customModal');
-            if (modal) modal.style.display = 'none';
-        }
-
-        function showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.className = `notification notification-${type}`;
-            notification.textContent = message;
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 1rem 1.5rem;
-                background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
-                color: white;
-                border-radius: 4px;
-                z-index: 10000;
-                animation: slideIn 0.3s ease;
-            `;
-            document.body.appendChild(notification);
-            
-            setTimeout(() => notification.remove(), 3000);
-        }
-        
-        // Ensure loadUsers is globally accessible
-        window.loadUsers = loadUsers;
-
-        // User Lookup Function
-        async function lookupUserDetails() {
-            const userId = document.getElementById('userLookupInput').value.trim();
-            
-            if (!userId) {
-                showNotification('Please enter a Discord User ID', 'error');
-                return;
-            }
-            
-            if (!/^\d{17,19}$/.test(userId)) {
-                showNotification('Invalid Discord User ID format', 'error');
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/users/${userId}`, {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        showNotification('User not found in database', 'error');
-                        document.getElementById('userDetailsPanel').style.display = 'none';
-                    } else {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-                    return;
-                }
-                
-                const user = await response.json();
-                displayUserDetails(user);
-                document.getElementById('userDetailsPanel').style.display = 'block';
-                showNotification('User found', 'success');
-            } catch (error) {
-                console.error('Error looking up user:', error);
-                showNotification('Failed to lookup user: ' + error.message, 'error');
-                document.getElementById('userDetailsPanel').style.display = 'none';
-            }
-        }
-
-        function displayUserDetails(user) {
-            const warnings = user.warnings || 0;
-            
-            // Calculate account age from discord id
-            const discordEpoch = 1420070400000; 
-            const timestamp = (BigInt(user.user_id) >> 22n) + BigInt(discordEpoch);
-            const accountCreated = new Date(Number(timestamp));
-            const daysSinceCreation = Math.floor((Date.now() - accountCreated.getTime()) / (1000 * 60 * 60 * 24));
-            const accountAge = daysSinceCreation >= 365 
-                ? `${Math.floor(daysSinceCreation / 365)} year${Math.floor(daysSinceCreation / 365) !== 1 ? 's' : ''}`
-                : `${daysSinceCreation} day${daysSinceCreation !== 1 ? 's' : ''}`;
-            
-            document.getElementById('detailUsername').textContent = escapeHtml(user.username || 'Unknown');
-            document.getElementById('detailUserId').textContent = user.user_id;
-            document.getElementById('detailLevel').innerHTML = `<span style="background: var(--accent-primary); color: white; padding: 0.25rem 0.75rem; border-radius: 0.25rem;">${user.level || 0}</span>`;
-            document.getElementById('detailXP').innerHTML = `<strong>${formatNumber(user.xp || 0)}</strong> XP`;
-            
-            const warningBg = warnings === 0 ? '#4CAF50' : warnings <= 2 ? '#FFC107' : warnings <= 5 ? '#FF9800' : '#f44336';
-            document.getElementById('detailWarnings').innerHTML = `<span style="background: ${warningBg}; color: white; padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-weight: 600;">${warnings} Warning${warnings !== 1 ? 's' : ''}</span>`;
-            
-            const banStatus = user.is_banned ? '🔴 Banned' : '✅ Not Banned';
-            const banBg = user.is_banned ? '#f44336' : '#4CAF50';
-            document.getElementById('detailBanStatus').innerHTML = `<span style="background: ${banBg}; color: white; padding: 0.25rem 0.75rem; border-radius: 0.25rem;">${banStatus}</span>`;
-            
-            document.getElementById('detailAccountAge').innerHTML = `<strong>${accountAge}</strong> old (${accountCreated.toLocaleDateString()})`;
-            document.getElementById('detailMessages').innerHTML = `<strong>${formatNumber(user.messages || 0)}</strong> messages`;
-            
-            // Store current user ID for action buttons
-            window.currentLookupUserId = user.user_id;
-        }
-
-        function promptWarnUser() {
-            if (!window.currentLookupUserId) return;
-            const reason = prompt('Enter warning reason:');
-            if (!reason) return;
-            warnUserAction(window.currentLookupUserId, reason);
-        }
-
-        function promptBanUser() {
-            if (!window.currentLookupUserId) return;
-            const reason = prompt('Enter ban reason:');
-            if (!reason) return;
-            if (!confirm('Are you sure you want to ban this user?')) return;
-            banUserAction(window.currentLookupUserId, reason);
-        }
-
-        async function warnUserAction(userId, reason) {
-            try {
-                const response = await fetch('/api/warn', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, reason })
-                });
-                
-                if (!response.ok) throw new Error('Failed to warn user');
-                
-                showNotification('User warned successfully', 'success');
-                // Refresh the lookup
-                lookupUserDetails();
-            } catch (error) {
-                console.error('Error warning user:', error);
-                showNotification('Failed to warn user: ' + error.message, 'error');
-            }
-        }
-
-        async function banUserAction(userId, reason) {
-            try {
-                const response = await fetch('/api/ban', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, reason })
-                });
-                
-                if (!response.ok) throw new Error('Failed to ban user');
-                
-                showNotification('User banned successfully', 'success');
-                // Refresh the lookup
-                lookupUserDetails();
-            } catch (error) {
-                console.error('Error banning user:', error);
-                showNotification('Failed to ban user: ' + error.message, 'error');
-            }
-        }
-
-        // Allow Enter key to trigger search
-        document.addEventListener('DOMContentLoaded', function() {
-            const input = document.getElementById('userLookupInput');
-            if (input) {
-                input.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        lookupUserDetails();
-                    }
-                });
-            }
         });
     </script>
 </body>
+
 </html>

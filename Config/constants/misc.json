@@ -1,14 +1,4 @@
 {
-	"blockExternalInvites": true,
-	"maxMentionsBeforeFlag": 6,
-	"autoMod": {
-		"spamThreshold": 5,
-		"spamWindow": 5000,
-		"capsThreshold": 0.70,
-		"minLengthForCaps": 10,
-		"spamTimeout": 600000,
-		"spamWarningThreshold": 2
-	},
 	"timeouts": {
 		"ticketChannelDelete": 5000,
 		"verificationMessageDelete": 60000,
@@ -42,6 +32,16 @@
 	"reminders": {
 		"maxDeliveryAttempts": 5,
 		"retryDelayMinutes": 5,
-		"notificationChannelId": "NOTIFICATION_CHANNEL_ID_HERE"
+		"notificationChannelId": "DISCORD_NOTIFICATION_CHANNEL_ID_HERE"
+	},
+	"alerts": {
+		"discordRoutingEnabled": true,
+		"discordChannelId": "DISCORD_ALERT_CHANNEL_ID_HERE"
+	},
+	"securitySettings": {
+		"singleSessionMode": true,
+		"idleTimeoutMs": 1800000,
+		"absoluteTimeoutMs": 28800000,
+		"singleSessionCheckIntervalMs": 80000
 	}
 }

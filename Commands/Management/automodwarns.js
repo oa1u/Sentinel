@@ -3,41 +3,41 @@ const { EmbedBuilder } = require('discord.js');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
 module.exports = {
-        data: new SlashCommandBuilder()
-            .setName('automodwarns')
-            .setDescription('Manage AutoMod warnings for a user.')
-            .addSubcommand(sub =>
-                sub.setName('list')
-                    .setDescription('List all AutoMod warnings for a user')
-                    .addUserOption(option =>
-                        option.setName('user')
-                            .setDescription('User to list warnings for')
-                            .setRequired(false)
-                    )
-            )
-            .addSubcommand(sub =>
-                sub.setName('clearall')
-                    .setDescription('Clear all AutoMod warnings for a user')
-                    .addUserOption(option =>
-                        option.setName('user')
-                            .setDescription('User to clear warnings for')
-                            .setRequired(true)
-                    )
-            )
-            .addSubcommand(sub =>
-                sub.setName('clearone')
-                    .setDescription('Clear a specific AutoMod warning by case ID')
-                    .addUserOption(option =>
-                        option.setName('user')
-                            .setDescription('User to clear warning for')
-                            .setRequired(true)
-                    )
-                    .addStringOption(option =>
-                        option.setName('caseid')
-                            .setDescription('Case ID of the warning to clear')
-                            .setRequired(true)
-                    )
-            ),
+    data: new SlashCommandBuilder()
+        .setName('automodwarns')
+        .setDescription('Manage AutoMod warnings for a user.')
+        .addSubcommand(sub =>
+            sub.setName('list')
+                .setDescription('List all AutoMod warnings for a user')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('User to list warnings for')
+                        .setRequired(false)
+                )
+        )
+        .addSubcommand(sub =>
+            sub.setName('clearall')
+                .setDescription('Clear all AutoMod warnings for a user')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('User to clear warnings for')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(sub =>
+            sub.setName('clearone')
+                .setDescription('Clear a specific AutoMod warning by case ID')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('User to clear warning for')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('caseid')
+                        .setDescription('Case ID of the warning to clear')
+                        .setRequired(true)
+                )
+        ),
     category: 'management',
     async execute(interaction) {
         // Require administrator role or permissions
