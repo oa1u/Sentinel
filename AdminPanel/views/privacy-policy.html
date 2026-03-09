@@ -34,6 +34,7 @@
                             <span class="role-badge" id="dropdownRole">user</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -115,8 +116,8 @@
                     <span>Overview</span>
                 </div>
                 <p style="margin: 0 0 1rem 0; line-height: 1.7;">
-                    This Privacy Policy describes how this Discord bot and its <span class="websiteName"></span>
-                    collect, use, store, and protect data while providing moderation, automation, and
+                    This Privacy Policy describes how this Discord bot and how <span class="websiteName"></span>
+                    collects, uses, stores, and protects data while providing moderation, automation, and
                     community-management features.
                 </p>
                 <p style="margin: 0 0 1rem 0; line-height: 1.7;">
@@ -138,17 +139,23 @@
                 </div>
                 <ul style="margin: 0; padding-left: 1.2rem; line-height: 1.7;">
                     <li><strong>Platform identifiers:</strong> Discord user IDs, guild/server IDs, role IDs, and channel
-                        IDs needed to map actions and permissions.</li>
-                    <li><strong>Moderation history:</strong> warnings, kicks, bans, unbans, timeouts, moderator notes,
-                        case IDs, and action timestamps.</li>
-                    <li><strong>Operational metadata:</strong> command usage events, automation trigger outcomes, and
-                        limited error diagnostics for reliability.</li>
-                    <li><strong>Ticket and appeal content:</strong> ticket status, participants, moderation context, and
-                        appeal decisions when those modules are enabled.</li>
-                    <li><strong><span class="websiteName"></span> security data:</strong> account role, login/session
-                        timing, and access logs used to protect privileged actions.</li>
-                    <li><strong>Configuration data:</strong> server-specific settings required for automod, logging
-                        channels, verification, levels, and feature toggles.</li>
+                        IDs used to map actions and permissions.</li>
+                    <li><strong>Moderation history:</strong> warnings, kicks, bans, unbans, timeouts, case IDs, reasons,
+                        moderator identifiers, and timestamps.</li>
+                    <li><strong>Audit logs:</strong> event metadata and, when enabled, message content snapshots (before
+                        and after) for edits/deletions.</li>
+                    <li><strong>Tickets and appeals:</strong> ticket status, participants, appeal statements, decisions,
+                        and contact email provided by the submitter.</li>
+                    <li><strong>Admin panel accounts:</strong> usernames, roles, email addresses, password hashes,
+                        encrypted 2FA secrets, recovery code hashes, trusted device metadata, and optional linked
+                        Discord IDs.</li>
+                    <li><strong>Authentication events:</strong> login/logout activity, IP address, user agent, session
+                        data, and security-related events.</li>
+                    <li><strong>Operational metrics:</strong> command usage, verification analytics, activity tracking,
+                        and automation outcomes for reliability and safety.</li>
+                    <li><strong>Configuration data:</strong> server-specific settings for automod, logging channels,
+                        verification, leveling, backups, and feature toggles.</li>
+                    <li><strong>Backups:</strong> database exports stored on the server when backups are enabled.</li>
                 </ul>
             </section>
         </div>
@@ -188,13 +195,15 @@
                         and moderation transparency.</li>
                     <li><strong>Data minimization:</strong> only data necessary for configured features and moderation
                         operations is processed.</li>
-                    <li><strong>Retention practice:</strong> records are kept only as long as operationally needed,
-                        unless longer retention is required for abuse review, legal obligations, or active disputes.
-                    </li>
-                    <li><strong>Safeguards:</strong> system controls are designed to reduce unauthorized access, misuse,
-                        and accidental disclosure.</li>
+                    <li><strong>Retention practice:</strong> records are retained until deleted by administrators or
+                        rotated by configured backup retention settings. There is no automatic global expiration
+                        unless configured.</li>
+                    <li><strong>Safeguards:</strong> credentials are stored as hashes, and 2FA secrets are stored
+                        encrypted. Additional controls reduce unauthorized access and misuse.</li>
                     <li><strong>Third-party platform dependency:</strong> some data handling occurs through Discord
                         infrastructure and is subject to Discord platform behavior.</li>
+                    <li><strong>Email delivery:</strong> if SMTP is enabled, email delivery logs may include recipient
+                        address, template name, and delivery status.</li>
                 </ul>
             </section>
         </div>
@@ -229,7 +238,7 @@
                     <span class="card-header-icon">📅</span>
                     <span>Policy Version</span>
                 </div>
-                <p style="margin: 0 0 0.75rem 0; line-height: 1.7;"><strong>Last updated:</strong> February 21, 2026.
+                <p style="margin: 0 0 0.75rem 0; line-height: 1.7;"><strong>Last updated:</strong> March 8, 2026.
                 </p>
                 <p style="margin: 0 0 0.75rem 0; line-height: 1.7;">Material policy changes may be announced in the
                     panel changelog and reflected on this page.</p>

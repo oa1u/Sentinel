@@ -1,6 +1,7 @@
 // General helper utilities used throughout the bot.
 // Small, focused helpers for common tasks like resolving channels/roles/members,
 // safely performing channel/role operations, and formatting values for display.
+const { MISC: misc } = require('../Config/constants');
 
 // Return the channel object if it exists and is accessible, otherwise null.
 function getChannel(guild, channelId) {
@@ -37,12 +38,7 @@ async function getMember(guild, userId) {
 
     // If not cached, fetch from API with a timeout so we don't hang forever.
     const fetchTimeout = (() => {
-        try {
-            const misc = require('../Config/constants/misc.json');
-            return misc.timeouts?.memberFetchTimeout || 5000;
-        } catch {
-            return 5000; // fallback to 5 seconds
-        }
+        return misc.timeouts?.memberFetchTimeout || 5000;
     })();
 
     try {

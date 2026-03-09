@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const { sendErrorReply, sendSuccessReply } = require('../../Functions/EmbedBuilders');
+const { sendErrorReply, sendSuccessReply, sendWarningReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
 
 const MONTH_NAMES = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -76,7 +76,7 @@ module.exports = {
                 const day = interaction.options.getInteger('day', true);
 
                 if (!DatabaseManager.isValidBirthday(month, day)) {
-                    return sendErrorReply(interaction, 'Invalid Date', 'That birthday is not a valid calendar date.');
+                    return sendWarningReply(interaction, 'Invalid Date', 'That birthday is not a valid calendar date.');
                 }
 
                 const saved = await DatabaseManager.setBirthday(interaction.guildId, interaction.user.id, month, day);
@@ -92,7 +92,7 @@ module.exports = {
                 const birthday = await DatabaseManager.getBirthday(interaction.guildId, targetUser.id);
 
                 if (!birthday) {
-                    return sendErrorReply(interaction, 'No Birthday Saved', `${targetUser.id === interaction.user.id ? 'You have' : `${targetUser} has`} not set a birthday yet.`);
+                    return sendInfoReply(interaction, 'No Birthday Saved', `${targetUser.id === interaction.user.id ? 'You have' : `${targetUser} has`} not set a birthday yet.`);
                 }
 
                 const embed = new EmbedBuilder()
@@ -118,7 +118,7 @@ module.exports = {
             if (subcommand === 'remove') {
                 const removed = await DatabaseManager.removeBirthday(interaction.guildId, interaction.user.id);
                 if (!removed) {
-                    return sendErrorReply(interaction, 'Nothing To Remove', 'You do not have a saved birthday in this server.');
+                    return sendInfoReply(interaction, 'Nothing To Remove', 'You do not have a saved birthday in this server.');
                 }
 
                 return sendSuccessReply(interaction, 'Birthday Removed', 'Your saved birthday has been removed.');
@@ -128,7 +128,7 @@ module.exports = {
                 const upcoming = await DatabaseManager.getUpcomingBirthdays(interaction.guildId, 7);
 
                 if (!upcoming.length) {
-                    return sendErrorReply(interaction, 'No Upcoming Birthdays', 'No birthdays are scheduled in the next 7 days.');
+                    return sendInfoReply(interaction, 'No Upcoming Birthdays', 'No birthdays are scheduled in the next 7 days.');
                 }
 
                 const lines = upcoming.slice(0, 20).map(item => {
@@ -154,7 +154,7 @@ module.exports = {
                 return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
 
-            return sendErrorReply(interaction, 'Unknown Action', 'That birthday action is not supported.');
+            return sendWarningReply(interaction, 'Unknown Action', 'That birthday action is not supported.');
         } catch (error) {
             console.error('[birthday] Error:', error.message);
             return sendErrorReply(interaction, 'Birthday Command Failed', `Could not complete this action.\nError: ${error.message}`);

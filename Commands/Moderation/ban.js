@@ -3,7 +3,7 @@ const { MessageFlags } = require('discord.js');
 const moment = require("moment");
 require("moment-duration-format");
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const { AppealLink } = require("../../Config/main.json");
 const { formatErrorMessage } = require("../../Functions/ErrorFormatter");
@@ -35,7 +35,7 @@ module.exports = {
 
       // Double check that someone was actually specified for the ban.
       if (!targetUser) {
-        return await sendErrorReply(interaction, 'Invalid User', 'Please specify a valid user to ban');
+        return await sendWarningReply(interaction, 'Invalid User', 'Please specify a valid user to ban');
       }
 
       // Make sure the person running the command is allowed to ban this user (role hierarchy and all).
@@ -100,6 +100,14 @@ module.exports = {
           `Case ID: \`${caseID}\`\n` +
           `DM: ${dmSent ? '✅' : '❌'}`
         );
+
+        await interaction.followUp({
+          content:
+            `🧾 **Incident proof reminder**\n` +
+            `Use this (ephemeral) command to attach evidence for this action:\n` +
+            `\`/incident create caseid:${caseID} user:@${targetUser.username} action:BAN reason:<reason> proof:<proof details>\``,
+          flags: MessageFlags.Ephemeral
+        }).catch(() => { });
       } catch (err) {
         console.error(`[ban] Couldn't ban ${targetUser.tag}:`, err.message);
         await sendErrorReply(

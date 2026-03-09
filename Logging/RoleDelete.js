@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { serverLogChannelId } = require("../Config/constants/channel.json");
+const { CHANNELS: { serverLogChannelId } } = require("../Config/constants");
 
 // Log when roles are deleted — capture previous role settings for audit purposes.
 module.exports = (client) => {

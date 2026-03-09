@@ -117,7 +117,7 @@ async function createAccountNonInteractive(username, password, role, email) {
             process.exit(1);
         }
 
-        if (!isValidEmail(email)) {
+        if (!(await isValidEmail(email))) {
             console.error('❌ Please provide a valid email address');
             process.exit(1);
         }

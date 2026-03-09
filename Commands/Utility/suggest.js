@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
+const { CHANNELS: { suggestionChannelId } } = require('../../Config/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -20,10 +21,6 @@ module.exports = {
         const description = interaction.options.getString('description');
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
-
-        // Load suggestionChannelId from config
-        const channelConfig = require('../../Config/constants/channel.json');
-        const suggestionChannelId = channelConfig.suggestionChannelId;
 
         // Import caseId generator
         const { generateCaseId } = require('../../Events/caseId');

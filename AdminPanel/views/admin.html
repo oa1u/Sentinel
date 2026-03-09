@@ -39,6 +39,7 @@
                             <span class="role-badge" id="dropdownRole">Admin</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -85,6 +86,8 @@
                 <span>Appeals</span></button>
             <button class="tab" data-tab="appeals-history" style="--tab-color:#8b5cf6;"><span class="tab-icon">📚</span>
                 <span>Appeals History</span></button>
+            <button class="tab" data-tab="xp-leaderboard" style="--tab-color:#5b7fff;"><span class="tab-icon">🏆</span>
+                <span>Leaderboard</span></button>
             <button class="tab" data-tab="automod" style="--tab-color:#5bffb8;"><span class="tab-icon">🛡️</span>
                 <span>AutoMod</span></button>
 
@@ -308,9 +311,161 @@
                 font-weight: 700;
             }
 
+            .automod-shell {
+                display: grid;
+                gap: 1rem;
+            }
+
+            .automod-shell>.text-muted {
+                margin: 0;
+                line-height: 1.45;
+            }
+
+            .automod-metrics-grid {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 0.75rem;
+            }
+
+            .automod-metric-card {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 0.75rem 0.9rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.3rem;
+            }
+
+            .automod-metric-label {
+                font-size: 0.8rem;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+
+            .automod-metric-value {
+                font-size: 1.25rem;
+                font-weight: 800;
+                color: var(--text-primary);
+            }
+
+            .automod-top-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.9rem;
+            }
+
+            .automod-section {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 0.95rem;
+                margin-bottom: 0;
+            }
+
+            .automod-section-title {
+                font-size: 1rem;
+                font-weight: 700;
+                color: var(--text-primary);
+                margin-bottom: 0.7rem;
+            }
+
+            .automod-fields-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 0.75rem;
+            }
+
+            .automod-fields-grid>div,
+            .automod-textareas-grid>div {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 0.7rem;
+            }
+
+            .automod-grid-divider {
+                grid-column: 1 / -1;
+                font-size: 0.82rem;
+                font-weight: 700;
+                color: var(--text-primary);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                padding-top: 0.2rem;
+            }
+
+            .automod-textareas-grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 0.75rem;
+            }
+
+            .automod-summary-box,
+            .automod-state-box,
+            .automod-result-box {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 0.75rem 0.85rem;
+                line-height: 1.45;
+                color: var(--text-secondary);
+            }
+
+            .automod-inline-actions,
+            .automod-footer-actions {
+                display: flex;
+                gap: 0.6rem;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+
+            .automod-footer-actions {
+                justify-content: flex-end;
+                padding-top: 0.2rem;
+            }
+
+            .automod-checkbox-label {
+                display: inline-flex;
+                gap: 0.45rem;
+                align-items: center;
+                color: var(--text-secondary);
+            }
+
+            .automod-guide {
+                background: var(--bg-card);
+                border: 1px dashed var(--border-color);
+                border-radius: var(--radius-md);
+                padding: 0.8rem 0.9rem;
+            }
+
+            .automod-guide-title {
+                font-size: 0.88rem;
+                font-weight: 700;
+                color: var(--text-primary);
+                margin-bottom: 0.35rem;
+            }
+
+            .automod-guide-list {
+                margin: 0;
+                padding-left: 1rem;
+                color: var(--text-secondary);
+                line-height: 1.45;
+                font-size: 0.88rem;
+            }
+
             @media (max-width: 980px) {
                 .admin-kpi-grid {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+
+                .automod-metrics-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+
+                .automod-top-grid,
+                .automod-textareas-grid {
+                    grid-template-columns: 1fr;
                 }
 
                 .tabs {
@@ -1183,6 +1338,22 @@
             </div>
         </div>
 
+        <div id="xp-leaderboard" class="tab-content">
+            <div class="center-flex">
+                <div class="card admin-tab-card">
+                    <div class="card-header"
+                        style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem;">
+                        <span><span style="margin-right:0.4rem;">🏆</span>XP Leaderboard</span>
+                        <button class="btn btn-secondary" onclick="loadAdminXpLeaderboard()">🔄 Refresh</button>
+                    </div>
+                    <p class="text-muted" style="margin:0 0 0.75rem 0;">Top users by level and XP.</p>
+                    <div class="table-container" id="adminXpLeaderboardContainer">
+                        <div class="loading show">Loading leaderboard...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="automod" class="tab-content">
             <div class="center-flex">
                 <div class="card admin-tab-card automod-shell">
@@ -1193,6 +1364,15 @@
                     <p class="text-muted">Advanced command center for policy
                         tuning,
                         analytics, and incident workflow review.</p>
+
+                    <div class="automod-guide">
+                        <div class="automod-guide-title">Quick Workflow</div>
+                        <ul class="automod-guide-list">
+                            <li>Set the active profile, then edit a selected profile safely.</li>
+                            <li>Save profile settings before relying on simulation or queue decisions.</li>
+                            <li>Use Live Analytics and Incident Queue together for faster triage.</li>
+                        </ul>
+                    </div>
 
                     <div class="automod-metrics-grid">
                         <div class="automod-metric-card">
@@ -1265,6 +1445,7 @@
 
                         <div class="automod-section-title">⚙️ Core Moderation Rules</div>
                         <div class="automod-fields-grid">
+                            <div class="automod-grid-divider">Spam & Message Controls</div>
                             <div>
                                 <label for="automodBlockInvites" class="form-label">Block External
                                     Invites</label>
@@ -1307,6 +1488,7 @@
                                 <input type="number" id="automodCapsThreshold" class="form-input" min="0.1" max="1"
                                     step="0.05" placeholder="0.70">
                             </div>
+                            <div class="automod-grid-divider">Escalation & Similarity Controls</div>
                             <div>
                                 <label for="automodEscalationThreshold" class="form-label">Escalation
                                     Threshold
@@ -1319,6 +1501,111 @@
                                     Timeout (ms)</label>
                                 <input type="number" id="automodEscalationTimeoutMs" class="form-input" min="300000"
                                     step="60000" placeholder="1800000">
+                            </div>
+                            <div>
+                                <label for="automodSimilarityWindowMs" class="form-label">Similarity Window (ms)</label>
+                                <input type="number" id="automodSimilarityWindowMs" class="form-input" min="10000"
+                                    step="1000" placeholder="120000">
+                            </div>
+                            <div>
+                                <label for="automodSimilarityThreshold" class="form-label">Similarity Threshold
+                                    (0-1)</label>
+                                <input type="number" id="automodSimilarityThreshold" class="form-input" min="0.5"
+                                    max="0.99" step="0.01" placeholder="0.88">
+                            </div>
+                            <div>
+                                <label for="automodSimilarityMinLength" class="form-label">Similarity Min Length</label>
+                                <input type="number" id="automodSimilarityMinLength" class="form-input" min="4"
+                                    max="2000" step="1" placeholder="12">
+                            </div>
+                            <div>
+                                <label for="automodSimilarityRepeatThreshold" class="form-label">Similarity Repeat
+                                    Threshold</label>
+                                <input type="number" id="automodSimilarityRepeatThreshold" class="form-input" min="2"
+                                    max="30" step="1" placeholder="3">
+                            </div>
+                            <div>
+                                <label for="automodRiskWarnThreshold" class="form-label">Risk Warn Threshold</label>
+                                <input type="number" id="automodRiskWarnThreshold" class="form-input" min="1" max="1000"
+                                    step="1" placeholder="20">
+                            </div>
+                            <div>
+                                <label for="automodRiskDeleteThreshold" class="form-label">Risk Delete Threshold</label>
+                                <input type="number" id="automodRiskDeleteThreshold" class="form-input" min="1"
+                                    max="1000" step="1" placeholder="35">
+                            </div>
+                            <div>
+                                <label for="automodRiskTimeoutThreshold" class="form-label">Risk Timeout
+                                    Threshold</label>
+                                <input type="number" id="automodRiskTimeoutThreshold" class="form-input" min="1"
+                                    max="1000" step="1" placeholder="60">
+                            </div>
+                            <div class="automod-grid-divider">Timeout & Enforcement Limits</div>
+                            <div>
+                                <label for="automodBaseTimeoutMs" class="form-label">Base Timeout (ms)</label>
+                                <input type="number" id="automodBaseTimeoutMs" class="form-input" min="60000"
+                                    step="60000" placeholder="600000">
+                            </div>
+                            <div>
+                                <label for="automodMaxTimeoutMs" class="form-label">Max Timeout (ms)</label>
+                                <input type="number" id="automodMaxTimeoutMs" class="form-input" min="60000"
+                                    step="60000" placeholder="21600000">
+                            </div>
+                            <div>
+                                <label for="automodProgressiveTimeoutMultiplier" class="form-label">Progressive Timeout
+                                    Multiplier</label>
+                                <input type="number" id="automodProgressiveTimeoutMultiplier" class="form-input" min="1"
+                                    max="5" step="0.1" placeholder="1.4">
+                            </div>
+                            <div>
+                                <label for="automodKickThreshold24h" class="form-label">Kick Threshold (24h)</label>
+                                <input type="number" id="automodKickThreshold24h" class="form-input" min="1" max="5000"
+                                    step="1" placeholder="14">
+                            </div>
+                            <div>
+                                <label for="automodRegexMaxPatternLength" class="form-label">Regex Max Pattern
+                                    Length</label>
+                                <input type="number" id="automodRegexMaxPatternLength" class="form-input" min="20"
+                                    max="1000" step="1" placeholder="180">
+                            </div>
+                        </div>
+
+                        <div class="automod-section-title" style="margin-top: 0.9rem;">⚖️ Risk Weights</div>
+                        <div class="automod-fields-grid">
+                            <div>
+                                <label for="automodRiskWeightSpam" class="form-label">Weight: Spam</label>
+                                <input type="number" id="automodRiskWeightSpam" class="form-input" min="1" max="200"
+                                    step="1" placeholder="28">
+                            </div>
+                            <div>
+                                <label for="automodRiskWeightSimilarity" class="form-label">Weight: Similarity</label>
+                                <input type="number" id="automodRiskWeightSimilarity" class="form-input" min="1"
+                                    max="200" step="1" placeholder="30">
+                            </div>
+                            <div>
+                                <label for="automodRiskWeightCaps" class="form-label">Weight: Caps</label>
+                                <input type="number" id="automodRiskWeightCaps" class="form-input" min="1" max="200"
+                                    step="1" placeholder="14">
+                            </div>
+                            <div>
+                                <label for="automodRiskWeightProfanity" class="form-label">Weight: Profanity</label>
+                                <input type="number" id="automodRiskWeightProfanity" class="form-input" min="1"
+                                    max="200" step="1" placeholder="26">
+                            </div>
+                            <div>
+                                <label for="automodRiskWeightRegex" class="form-label">Weight: Regex</label>
+                                <input type="number" id="automodRiskWeightRegex" class="form-input" min="1" max="200"
+                                    step="1" placeholder="34">
+                            </div>
+                            <div>
+                                <label for="automodRiskWeightInvites" class="form-label">Weight: Invites</label>
+                                <input type="number" id="automodRiskWeightInvites" class="form-input" min="1" max="200"
+                                    step="1" placeholder="30">
+                            </div>
+                            <div>
+                                <label for="automodRiskWeightMentions" class="form-label">Weight: Mentions</label>
+                                <input type="number" id="automodRiskWeightMentions" class="form-input" min="1" max="200"
+                                    step="1" placeholder="18">
                             </div>
                         </div>
                     </div>

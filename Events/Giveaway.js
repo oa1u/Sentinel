@@ -1,13 +1,10 @@
 const { Collection } = require('discord.js');
 const DatabaseManager = require('../Functions/MySQLDatabaseManager');
 const { generateCaseId } = require('./caseId');
-
-// Giveaway handler: starts giveaways, tracks entries, and picks winners.
-// Each giveaway uses a unique case ID to make tracing and logs easy.
+const { ROLES: { administratorRoleId }, CHANNELS: { giveawayChannelId } } = require('../Config/constants');
 
 const activeGiveaways = new Collection();
 
-// This function turns seconds into a friendly time string, like "2 hours, 5 minutes".
 function toTime(seconds) {
     seconds = Number(seconds);
     const d = Math.floor(seconds / (3600 * 24));
@@ -24,113 +21,135 @@ function toTime(seconds) {
     return result || '0 seconds';
 }
 
-// Small utility to pause execution for a bit between updates.
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// This runs the countdown for a giveaway, updating the message as time ticks down.
-async function runGiveawayCountdown(message, giveawayId, client, duration, prize, host) {
-    let timeRemaining = duration;
-    const updateInterval = Math.min(30, Math.max(5, Math.floor(duration / 10)));
+function parseDuration(durationStr) {
+    const regex = /^(\d+)([mhd])$/i;
+    const match = String(durationStr || '').toLowerCase().match(regex);
 
-    while (timeRemaining > 0) {
-        await sleep(updateInterval * 1000);
-        timeRemaining -= updateInterval;
+    if (!match) return null;
 
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+
+    if (!Number.isFinite(value) || value <= 0) return null;
+
+    switch (unit) {
+        case 'm': return value * 60;
+        case 'h': return value * 3600;
+        case 'd': return value * 86400;
+        default: return null;
+    }
+}
+
+function pickUniqueRandomEntries(entries, count) {
+    const cloned = [...entries];
+    for (let i = cloned.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cloned[i], cloned[j]] = [cloned[j], cloned[i]];
+    }
+    return cloned.slice(0, Math.max(0, Math.min(count, cloned.length)));
+}
+
+async function findGiveawayByCaseId(caseId) {
+    const giveawayDB = DatabaseManager.getGiveawaysDB();
+    const allGiveawaysMap = await giveawayDB.all();
+    const allGiveaways = Object.values(allGiveawaysMap || {});
+    return allGiveaways.find((g) => g?.caseId === caseId) || null;
+}
+
+async function getEligibleParticipantIds(giveaway, guild) {
+    const entries = Array.isArray(giveaway?.entries) ? giveaway.entries : [];
+    const uniqueEntries = [...new Set(entries)];
+    const requiredRoleId = giveaway?.requiredRoleId || null;
+
+    if (!requiredRoleId) {
+        return uniqueEntries;
+    }
+
+    const eligible = [];
+    for (const userId of uniqueEntries) {
         try {
-            // Let's grab the case ID from the database so we can show it in the embed.
-            const giveawayDB = DatabaseManager.getGiveawaysDB();
-            const giveaway = await giveawayDB.get(giveawayId);
-            const caseId = giveaway?.caseId || 'N/A';
-
-            const reaction = message.reactions.cache.get('🎉');
-            const participantCount = reaction ? reaction.count - 1 : 0;
-
-            const countdownEmbed = {
-                color: 16766680,
-                title: '🎉 Giveaway in Progress!',
-                description: '⏳ **Giveaway is still running!**',
-                fields: [
-                    { name: '🎁 Prize', value: `**${prize || '-'}**`, inline: true },
-                    { name: '⏱️ Time Left', value: `**${toTime(timeRemaining) || '-'}**`, inline: true },
-                    { name: '🎪 Participants', value: `**${participantCount != null ? participantCount : '-'}** 🎯`, inline: true },
-                    { name: '👤 Host', value: host || '-', inline: true },
-                    { name: '🆔 Case ID', value: `\`${caseId || '-'}\``, inline: true }
-                ],
-                footer: { text: `⚡ Keep reacting to participate! | Case ID: ${caseId || '-'}` },
-                timestamp: new Date()
-            };
-
-            await message.edit({ embeds: [countdownEmbed] }).catch((err) => {
-                console.error(`[Giveaway] Failed to update countdown: ${err.message}`);
-            });
-        } catch (error) {
-            console.error('Error updating giveaway:', error);
+            const member = await guild.members.fetch(userId);
+            if (member?.roles?.cache?.has(requiredRoleId)) {
+                eligible.push(userId);
+            }
+        } catch (_) {
+            // Ignore users that cannot be fetched.
         }
     }
 
-    // Giveaway ended
-    await finalizeGiveaway(message, giveawayId, client, prize, host);
+    return eligible;
 }
 
-// Pick winner and update giveaway message
-async function finalizeGiveaway(message, giveawayId, client, prize, host) {
+async function buildWinnerLines(message, winnerIds) {
+    const lines = [];
+    for (let i = 0; i < winnerIds.length; i++) {
+        const winnerId = winnerIds[i];
+        let winnerUsername = 'Unknown User';
+        try {
+            const winnerUser = await message.guild.members.fetch(winnerId);
+            winnerUsername = winnerUser.user.username;
+        } catch (_) {
+            winnerUsername = `<@${winnerId}>`;
+        }
+        lines.push(`${i + 1}. **${winnerUsername}** (<@${winnerId}>)`);
+    }
+    return lines;
+}
+
+async function finalizeGiveaway(message, giveawayId, forcedByUserTag = null) {
     try {
-        // Let's grab the case ID from the database so we can show it in the embed.
         const giveawayDB = DatabaseManager.getGiveawaysDB();
         const giveaway = await giveawayDB.get(giveawayId);
-        const caseId = giveaway?.caseId || 'N/A';
+        if (!giveaway) return { success: false, reason: 'MISSING' };
 
-        // Get participants from database (more reliable than reactions)
-        const participants = giveaway?.entries || [];
+        if (giveaway.ended) {
+            return { success: false, reason: 'ALREADY_ENDED', giveaway };
+        }
 
-        // Also get usernames from reactions as fallback
-        const reaction = await message.reactions.cache.get('🎉');
-        const users = reaction ? await reaction.users.fetch() : new Map();
-        const reactionUsernames = users.filter(user => !user.bot).map(user => user.username);
+        const caseId = giveaway.caseId || 'N/A';
+        const winnerCount = Math.max(1, Number(giveaway.winnerCount || 1));
+        const eligibleParticipants = await getEligibleParticipantIds(giveaway, message.guild);
 
         let endEmbed;
+        let selectedWinnerIds = [];
 
-        if (participants.length === 0) {
+        if (eligibleParticipants.length === 0) {
             endEmbed = {
                 color: 16744171,
                 title: '❌ No Winners',
-                description: `No one entered the **${prize || '-'}** giveaway. Better luck next time! 🍀`,
+                description: `No eligible entries were found for the **${giveaway.prize || '-'}** giveaway.`,
                 fields: [
-                    { name: '🎁 Prize', value: `**${prize || '-'}**`, inline: true },
-                    { name: '👥 Total Reactions', value: '0', inline: true },
-                    { name: '🆔 Case ID', value: `\`${caseId || '-'}\``, inline: true }
+                    { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                    { name: '👥 Eligible Entries', value: '0', inline: true },
+                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
                 ],
-                footer: { text: `Giveaway Ended - No participants | Case ID: ${caseId || '-'}` },
+                footer: { text: `Giveaway Ended - No eligible participants | Case ID: ${caseId}` },
                 timestamp: new Date()
             };
         } else {
-            // Pick random winner from participants
-            const winnerId = participants[Math.floor(Math.random() * participants.length)];
-
-            // Try to get winner's username
-            let winnerUsername = 'Unknown User';
-            try {
-                const winnerUser = await message.guild.members.fetch(winnerId);
-                winnerUsername = winnerUser.user.username;
-            } catch (error) {
-                // Fallback to ID if user not found
-                winnerUsername = `<@${winnerId}>`;
-            }
+            selectedWinnerIds = pickUniqueRandomEntries(eligibleParticipants, winnerCount);
+            const winnerLines = await buildWinnerLines(message, selectedWinnerIds);
 
             endEmbed = {
                 color: 65280,
-                title: '🏆 Giveaway Winner!',
-                description: `🎉 **Congratulations ${winnerUsername || '-'}!** You won the **${prize || '-'}** giveaway!`,
+                title: selectedWinnerIds.length > 1 ? '🏆 Giveaway Winners!' : '🏆 Giveaway Winner!',
+                description: `🎉 Congratulations to the winner${selectedWinnerIds.length > 1 ? 's' : ''} of **${giveaway.prize || '-'}**!`,
                 fields: [
-                    { name: '🎁 Prize', value: `**${prize || '-'}**`, inline: true },
-                    { name: '🥇 Winner', value: `**${winnerUsername || '-'}**\n<@${winnerId || '-'}>`, inline: true },
-                    { name: '👥 Participants', value: `**${participants.length || '-'}**`, inline: true },
-                    { name: '📊 Chance', value: `**${participants.length ? ((1 / participants.length) * 100).toFixed(2) : '-'}%**`, inline: true },
-                    { name: '🆔 Case ID', value: `\`${caseId || '-'}\``, inline: true }
+                    { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                    { name: '🥇 Winner Count', value: `**${selectedWinnerIds.length}**`, inline: true },
+                    { name: '👥 Eligible Entries', value: `**${eligibleParticipants.length}**`, inline: true },
+                    { name: '🏅 Winners', value: winnerLines.join('\n').slice(0, 1024) || '-', inline: false },
+                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
                 ],
-                footer: { text: `🎊 Giveaway Ended | Case ID: ${caseId || '-'}` },
+                footer: {
+                    text: forcedByUserTag
+                        ? `Ended early by ${forcedByUserTag} | Case ID: ${caseId}`
+                        : `🎊 Giveaway Ended | Case ID: ${caseId}`
+                },
                 timestamp: new Date()
             };
         }
@@ -139,16 +158,64 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
             console.error(`[Giveaway] Failed to update end embed: ${err.message}`);
         });
 
-        // Mark as ended in database
-        if (giveaway) {
-            giveaway.completed = true;
-            giveaway.ended = true; // Mark as ended for MySQL database
-            await giveawayDB.set(giveawayId, giveaway);
-            console.log(`[Giveaway] Marked giveaway ${caseId} as ended in database`);
+        giveaway.completed = true;
+        giveaway.ended = true;
+        giveaway.winnerIds = selectedWinnerIds;
+        await giveawayDB.set(giveawayId, giveaway);
+        activeGiveaways.delete(giveawayId);
+
+        console.log(`[Giveaway] Finalized giveaway ${caseId} (${giveawayId}) with ${selectedWinnerIds.length} winner(s)`);
+        return { success: true, giveaway, winnerIds: selectedWinnerIds };
+    } catch (error) {
+        console.error('[Giveaway] Error finalizing giveaway:', error);
+        return { success: false, reason: 'ERROR', error };
+    }
+}
+
+async function runGiveawayCountdown(message, giveawayId) {
+    const giveawayDB = DatabaseManager.getGiveawaysDB();
+
+    while (true) {
+        const giveaway = await giveawayDB.get(giveawayId);
+        if (!giveaway || giveaway.ended || giveaway.completed) {
+            activeGiveaways.delete(giveawayId);
+            return;
         }
 
-    } catch (error) {
-        console.error('Error finalizing giveaway:', error);
+        const timeRemainingMs = Math.max(0, Number(giveaway.endTime || 0) - Date.now());
+        const timeRemainingSeconds = Math.ceil(timeRemainingMs / 1000);
+        const caseId = giveaway.caseId || 'N/A';
+        const participantCount = Array.isArray(giveaway.entries) ? giveaway.entries.length : 0;
+        const winnerCount = Math.max(1, Number(giveaway.winnerCount || 1));
+        const requiredRoleText = giveaway.requiredRoleId ? `<@&${giveaway.requiredRoleId}>` : 'None';
+
+        if (timeRemainingSeconds <= 0) {
+            await finalizeGiveaway(message, giveawayId);
+            return;
+        }
+
+        const countdownEmbed = {
+            color: 16766680,
+            title: '🎉 Giveaway in Progress!',
+            description: '⏳ **Giveaway is still running!**',
+            fields: [
+                { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                { name: '⏱️ Time Left', value: `**${toTime(timeRemainingSeconds)}**`, inline: true },
+                { name: '🎪 Entries', value: `**${participantCount}**`, inline: true },
+                { name: '🏆 Winners', value: `**${winnerCount}**`, inline: true },
+                { name: '✅ Required Role', value: requiredRoleText, inline: true },
+                { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
+            ],
+            footer: { text: `⚡ React with 🎉 to enter! | Case ID: ${caseId}` },
+            timestamp: new Date()
+        };
+
+        await message.edit({ embeds: [countdownEmbed] }).catch((err) => {
+            console.error(`[Giveaway] Failed to update countdown: ${err.message}`);
+        });
+
+        const updateInterval = Math.min(30, Math.max(5, Math.floor(timeRemainingSeconds / 10)));
+        await sleep(updateInterval * 1000);
     }
 }
 
@@ -156,486 +223,386 @@ module.exports = {
     name: 'giveaway',
     description: 'Manage giveaways in your server',
 
+    async execute(...args) {
+        // Default to handleGiveaway for compatibility
+        return this.handleGiveaway(...args);
+    },
+
     async handleGiveaway(interaction, client) {
-        const { administratorRoleId } = require('../Config/constants/roles.json');
-        const { giveawayChannelId } = require('../Config/constants/channel.json');
-
-        // Parse duration string (e.g., "10m", "1h", "2d")
-        function parseDuration(durationStr) {
-            const regex = /^(\d+)([mhd])$/i;
-            const match = durationStr.toLowerCase().match(regex);
-
-            if (!match) return null;
-
-            const value = parseInt(match[1]);
-            const unit = match[2];
-
-            let seconds = 0;
-            switch (unit) {
-                case 'm': seconds = value * 60; break;
-                case 'h': seconds = value * 3600; break;
-                case 'd': seconds = value * 86400; break;
-                default: return null;
-            }
-
-            return seconds;
-        }
-
-        // Find the giveaway channel from config
         const channel = interaction.guild.channels.cache.get(giveawayChannelId);
         if (!channel) {
-            const embed = {
-                color: 16711680,
-                title: '⚠️ Config Error',
-                description: 'Giveaway channel isn\'t set up properly.',
-                footer: { text: 'Setup Required' },
-                timestamp: new Date()
-            };
-            return await interaction.reply({ embeds: [embed], flags: 64 });
+            return await interaction.reply({
+                embeds: [{
+                    color: 16711680,
+                    title: '⚠️ Config Error',
+                    description: 'Giveaway channel isn\'t set up properly.',
+                    footer: { text: 'Setup Required' },
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
         }
 
-        // Make sure they have permission to start giveaways
         if (!interaction.member.roles.cache.has(administratorRoleId)) {
-            const embed = {
-                color: 16711680,
-                title: '🚫 No Permission',
-                description: `You need the <@&${administratorRoleId}> role to start giveaways.`,
-                footer: { text: 'Permission Required' },
-                timestamp: new Date()
-            };
-            return await interaction.reply({ embeds: [embed], flags: 64 });
+            return await interaction.reply({
+                embeds: [{
+                    color: 16711680,
+                    title: '🚫 No Permission',
+                    description: `You need the <@&${administratorRoleId}> role to start giveaways.`,
+                    footer: { text: 'Permission Required' },
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
         }
 
         const durationInput = interaction.options.getString('duration');
         const duration = parseDuration(durationInput);
         const prize = interaction.options.getString('prize');
+        const winners = interaction.options.getInteger('winners') || 1;
+        const requiredRole = interaction.options.getRole('required-role');
 
-        if (!duration) {
-            const embed = {
-                color: 16744171,
-                title: '⏳ Invalid Duration',
-                description: 'Duration format is wrong.\n\n**Valid:**\n• Minutes: `10m`, `30m`\n• Hours: `1h`, `2h`\n• Days: `1d`, `2d`\n\n**Examples:**\n• `/giveaway 10m Nitro`\n• `/giveaway 1h Discord Boost`',
-                footer: { text: 'Use correct format' },
-                timestamp: new Date()
-            };
-            return await interaction.reply({ embeds: [embed], flags: 64 });
-        }
-
-        const maxDuration = 7 * 86400; // 7 days max
-        if (duration < 60 || duration > maxDuration) {
-            const embed = {
-                color: 16744171,
-                title: '⏳ Invalid Duration',
-                description: 'Duration must be 1 minute to 7 days.\n\n• Min: `1m`\n• Max: `7d`',
-                footer: { text: 'Check duration' },
-                timestamp: new Date()
-            };
-            return await interaction.reply({ embeds: [embed], flags: 64 });
+        if (!duration || duration < 60 || duration > (7 * 86400)) {
+            return await interaction.reply({
+                embeds: [{
+                    color: 16744171,
+                    title: '⏳ Invalid Duration',
+                    description: 'Duration must be between **1m** and **7d** (examples: `10m`, `2h`, `1d`).',
+                    footer: { text: 'Use correct format' },
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
         }
 
         if (!prize || prize.length < 2 || prize.length > 100) {
-            const embed = {
-                color: 16744171,
-                title: '🎁 Invalid Prize',
-                description: 'Prize must be 2-100 characters.',
-                footer: { text: 'Check prize name' },
-                timestamp: new Date()
-            };
-            return await interaction.reply({ embeds: [embed], flags: 64 });
+            return await interaction.reply({
+                embeds: [{
+                    color: 16744171,
+                    title: '🎁 Invalid Prize',
+                    description: 'Prize must be 2-100 characters.',
+                    footer: { text: 'Check prize name' },
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
         }
 
         await interaction.deferReply();
 
-        // Create giveaway embed
-        const startEmbed = {
-            color: 16766680,
-            title: '🎉 Giveaway Started!',
-            description: `React with 🎉 to enter!`,
-            fields: [
-                { name: '🎁 Prize', value: `**${prize}**`, inline: true },
-                { name: '⏱️ Duration', value: `**${toTime(duration)}**`, inline: true },
-                { name: '👤 Host', value: `${interaction.user}`, inline: true },
-                { name: 'How to Enter', value: 'React with 🎉\nStay in the server\nWait for winner', inline: false },
-                { name: 'Participants', value: '**0**', inline: true },
-                { name: 'Status', value: '**Active** 🟢', inline: true }
-            ],
-            footer: { text: '🎊 Good luck! Only one winner will be selected.' },
-            timestamp: new Date()
-        };
-
         try {
-            // Generate unique case ID for this giveaway (longer format)
             const caseId = generateCaseId('GIVE', 10);
 
-            // Send giveaway message
+            const startEmbed = {
+                color: 16766680,
+                title: '🎉 Giveaway Started!',
+                description: 'React with 🎉 to enter!',
+                fields: [
+                    { name: '🎁 Prize', value: `**${prize}**`, inline: true },
+                    { name: '⏱️ Duration', value: `**${toTime(duration)}**`, inline: true },
+                    { name: '🏆 Winners', value: `**${winners}**`, inline: true },
+                    { name: '✅ Required Role', value: requiredRole ? `<@&${requiredRole.id}>` : 'None', inline: true },
+                    { name: '👤 Host', value: `${interaction.user}`, inline: true },
+                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
+                ],
+                footer: { text: `🎊 Good luck! | Case ID: ${caseId}` },
+                timestamp: new Date()
+            };
+
             const giveawayMessage = await channel.send({ embeds: [startEmbed] });
             await giveawayMessage.react('🎉');
 
-            // Store giveaway data (both in-memory and persistent database)
             const giveawayId = giveawayMessage.id;
-            const giveawayData = {
-                caseId: caseId,
+            const endTime = Date.now() + (duration * 1000);
+
+            activeGiveaways.set(giveawayId, {
+                caseId,
                 messageId: giveawayMessage.id,
                 channelId: channel.id,
                 guildId: interaction.guildId,
                 hostId: interaction.user.id,
                 hostName: interaction.user.username,
-                prize: prize,
-                title: prize, // Use prize as title
-                endTime: Date.now() + (duration * 1000),
-                participants: new Set(),
-                duration: duration
-            };
+                prize,
+                endTime,
+                winnerCount: winners,
+                requiredRoleId: requiredRole?.id || null,
+                duration
+            });
 
-            activeGiveaways.set(giveawayId, giveawayData);
-
-            // Save to database using proper MySQL fields
-            const dbData = {
-                caseId: caseId,
-                prize: prize,
-                title: prize, // Use prize as title for the giveaway
+            const giveawayDB = DatabaseManager.getGiveawaysDB();
+            await giveawayDB.set(giveawayId, {
+                caseId,
+                prize,
+                title: prize,
                 channelId: channel.id,
                 messageId: giveawayMessage.id,
                 hostId: interaction.user.id,
                 guildId: interaction.guildId,
-                endTime: Date.now() + (duration * 1000),
-                winnerCount: 1,
+                endTime,
+                winnerCount: winners,
+                requiredRoleId: requiredRole?.id || null,
                 ended: false
-            };
+            });
 
-            // Validate before storing
-            if (!dbData.messageId || !dbData.channelId || !dbData.endTime || !dbData.prize || !dbData.caseId) {
-                console.error('[Giveaway] Cannot save giveaway - missing required fields:', dbData);
-                throw new Error('Failed to create giveaway - missing required data');
-            }
+            await interaction.editReply({
+                embeds: [{
+                    color: 65280,
+                    title: '✅ Giveaway Created!',
+                    description: `Giveaway posted in ${channel} and is now live.`,
+                    fields: [
+                        { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true },
+                        { name: '🏆 Winners', value: `**${winners}**`, inline: true },
+                        { name: '✅ Required Role', value: requiredRole ? `<@&${requiredRole.id}>` : 'None', inline: true }
+                    ],
+                    footer: { text: 'Use /giveaway end, /giveaway extend, or /giveaway reroll for management.' },
+                    timestamp: new Date()
+                }]
+            });
 
-            // Save to MySQL database
-            const giveawayDB = DatabaseManager.getGiveawaysDB();
-            await giveawayDB.set(giveawayId, dbData);
-
-            console.log(`[Giveaway] Created giveaway with Case ID: ${caseId}, Message ID: ${giveawayId}`);
-
-            // Update the embed to include the case ID
-            const updatedEmbed = {
-                ...startEmbed,
-                footer: { text: `🎊 Good luck! Only one winner will be selected. | Case ID: ${caseId}` },
-                fields: [
-                    ...startEmbed.fields,
-                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
-                ]
-            };
-            await giveawayMessage.edit({ embeds: [updatedEmbed] });
-
-            // Confirm to user
-            const successEmbed = {
-                color: 65280,
-                title: '✅ Giveaway Created!',
-                description: `Giveaway posted in ${channel} and is now live! React with 🎉 to enter.`,
-                fields: [
-                    { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true },
-                    { name: '🎁 Prize', value: `**${prize}**`, inline: true },
-                    { name: '⏱️ Duration', value: `**${toTime(duration)}**`, inline: true },
-                    { name: 'Status', value: '**ACTIVE** 🟢', inline: true }
-                ],
-                footer: { text: 'Monitor the giveaway for live participant updates!' },
-                timestamp: new Date()
-            };
-            await interaction.editReply({ embeds: [successEmbed] });
-
-            // Run countdown
-            await runGiveawayCountdown(giveawayMessage, giveawayId, client, duration, prize, interaction.user.username);
-
+            runGiveawayCountdown(giveawayMessage, giveawayId).catch((error) => {
+                console.error(`[Giveaway] Countdown crashed for ${giveawayId}: ${error.message}`);
+            });
         } catch (error) {
             console.error('Error starting giveaway:', error);
-            const errorEmbed = {
-                color: 16711680,
-                title: '❌ Error Creating Giveaway',
-                description: 'An error occurred while trying to start the giveaway.\n\n**Please try again later or contact an administrator if the problem persists.**',
-                fields: [
-                    { name: '🔍 Error Details', value: `\`${error.message}\``, inline: false }
-                ],
-                footer: { text: 'If this issue continues, check your configuration' },
-                timestamp: new Date()
-            };
-            return await interaction.editReply({ embeds: [errorEmbed] });
+            await interaction.editReply({
+                embeds: [{
+                    color: 16711680,
+                    title: '❌ Error Creating Giveaway',
+                    description: `An error occurred while trying to start the giveaway.\n\n\`${error.message}\``,
+                    timestamp: new Date()
+                }]
+            });
         }
     },
 
-    // Handle extending an active giveaway
-    async handleExtendGiveaway(interaction, client) {
-        const { giveawayChannelId } = require('../Config/constants/channel.json');
-        const identifier = interaction.options.getString('message-id'); // Case ID only
+    async handleExtendGiveaway(interaction) {
+        const caseId = interaction.options.getString('message-id');
         const durationInput = interaction.options.getString('duration');
+        const seconds = parseDuration(durationInput);
 
-        // Parse duration
-        const regex = /^(\d+)([mhd])$/i;
-        const match = durationInput.toLowerCase().match(regex);
-
-        if (!match) {
-            const embed = {
-                color: 16744171,
-                title: '⏳ Invalid Duration Format',
-                description: 'Duration format is invalid.\n\n**Valid Formats:**\n• **Minutes:** `10m`, `30m`\n• **Hours:** `1h`, `2h`\n• **Days:** `1d`',
-                footer: { text: 'Use the correct format and try again' },
-                timestamp: new Date()
-            };
-            return await interaction.reply({ embeds: [embed], flags: 64 });
+        if (!seconds) {
+            return await interaction.reply({
+                embeds: [{
+                    color: 16744171,
+                    title: '⏳ Invalid Duration Format',
+                    description: 'Use format like `10m`, `2h`, or `1d`.',
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
         }
 
-        const value = parseInt(match[1], 10);
-        const unit = match[2];
-
-        let seconds = 0;
-        switch (unit) {
-            case 'm': seconds = value * 60; break;
-            case 'h': seconds = value * 3600; break;
-            case 'd': seconds = value * 86400; break;
+        if (!String(caseId || '').startsWith('GIVE-')) {
+            return await interaction.reply({
+                embeds: [{
+                    color: 16711680,
+                    title: '❌ Invalid Case ID',
+                    description: 'Please provide a valid giveaway Case ID (`GIVE-...`).',
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
         }
+
+        await interaction.deferReply();
 
         try {
-            await interaction.deferReply();
-
-            const channel = interaction.guild.channels.cache.get(giveawayChannelId);
-            if (!channel) {
-                const embed = {
-                    color: 16711680,
-                    title: '⚠️ Configuration Error',
-                    description: 'The giveaway channel is not properly configured.',
-                    footer: { text: 'Setup Required' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
-            // Get giveaway data using case ID only
-            const giveawayDB = DatabaseManager.getGiveawaysDB();
-
-            // Verify identifier is a case ID (format: GIVE-XXXXXXXXXX)
-            if (!identifier.startsWith('GIVE-')) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Invalid Format',
-                    description: `Please use the Case ID format: \`GIVE-XXXXXXXXXX\`\n\nExample: \`/giveaway extend GIVE-kX7mP9qL2n 30m\``,
-                    footer: { text: 'Case IDs only - no message IDs' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
-            const allGiveaways = await giveawayDB.all();
-            const foundGiveaway = allGiveaways.find(g => g.value.caseId === identifier);
-
-            if (!foundGiveaway) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Giveaway Not Found',
-                    description: `No giveaway found with Case ID \`${identifier}\`.`,
-                    footer: { text: 'Check the Case ID and try again' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
-            const giveaway = foundGiveaway.value;
-            const messageId = giveaway.messageId;
-
-            const message = await channel.messages.fetch(messageId).catch(() => null);
-            if (!message) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Message Not Found',
-                    description: `The giveaway message no longer exists.`,
-                    footer: { text: 'The message may have been deleted' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
+            const giveaway = await findGiveawayByCaseId(caseId);
             if (!giveaway) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Giveaway Data Not Found',
-                    description: `This message is not associated with an active giveaway.`,
-                    footer: { text: 'Try again with a valid giveaway message' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
+                return await interaction.editReply({
+                    embeds: [{ color: 16711680, title: '❌ Giveaway Not Found', description: `No giveaway found with Case ID \`${caseId}\`.`, timestamp: new Date() }]
+                });
             }
 
-            if (giveaway.completed) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Giveaway Already Ended',
-                    description: `This giveaway has already been completed.`,
-                    footer: { text: 'You can use /giveaway reroll to pick a new winner instead' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
+            if (giveaway.ended || giveaway.completed) {
+                return await interaction.editReply({
+                    embeds: [{ color: 16711680, title: '❌ Giveaway Already Ended', description: 'This giveaway is already ended.', timestamp: new Date() }]
+                });
             }
 
-            // Extend the giveaway
-            const oldEndTime = giveaway.endTime;
-            giveaway.endTime += seconds * 1000;
-            await giveawayDB.set(messageId, giveaway);
+            const giveawayDB = DatabaseManager.getGiveawaysDB();
+            const oldEndTime = Number(giveaway.endTime || Date.now());
+            giveaway.endTime = oldEndTime + (seconds * 1000);
+            await giveawayDB.set(giveaway.messageId, giveaway);
 
-            const successEmbed = {
-                color: 65280,
-                title: '✅ Giveaway Extended!',
-                description: `🎉 The giveaway has been extended by **${toTime(seconds)}**.`,
-                fields: [
-                    { name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true },
-                    { name: '🎁 Prize', value: giveaway.prize, inline: true },
-                    { name: '⏱️ New End Time', value: `<t:${Math.floor(giveaway.endTime / 1000)}:F>`, inline: true }
-                ],
-                footer: { text: 'The countdown will update automatically' },
-                timestamp: new Date()
-            };
-
-            await interaction.editReply({ embeds: [successEmbed] });
-            console.log(`[Giveaway] Extended giveaway ${giveaway.caseId || messageId} by ${seconds}s`);
+            await interaction.editReply({
+                embeds: [{
+                    color: 65280,
+                    title: '✅ Giveaway Extended!',
+                    fields: [
+                        { name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true },
+                        { name: '➕ Added Time', value: `**${toTime(seconds)}**`, inline: true },
+                        { name: '⏱️ New End Time', value: `<t:${Math.floor(giveaway.endTime / 1000)}:F>`, inline: true }
+                    ],
+                    timestamp: new Date()
+                }]
+            });
         } catch (error) {
             console.error('[Giveaway] Error extending giveaway:', error);
-            const embed = {
-                color: 16711680,
-                title: '❌ Error',
-                description: `An error occurred while extending the giveaway.\n\n\`${error.message}\``,
-                timestamp: new Date()
-            };
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({
+                embeds: [{ color: 16711680, title: '❌ Error', description: `\`${error.message}\``, timestamp: new Date() }]
+            });
         }
     },
 
-    // Handle rerolling a giveaway winner
-    async handleRerollGiveaway(interaction, client) {
-        const { giveawayChannelId } = require('../Config/constants/channel.json');
-        const identifier = interaction.options.getString('message-id'); // Case ID only now
+    async handleRerollGiveaway(interaction) {
+        const caseId = interaction.options.getString('message-id');
+        const overrideWinners = interaction.options.getInteger('winners');
+
+        if (!String(caseId || '').startsWith('GIVE-')) {
+            return await interaction.reply({
+                embeds: [{
+                    color: 16711680,
+                    title: '❌ Invalid Case ID',
+                    description: 'Please provide a valid giveaway Case ID (`GIVE-...`).',
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
+        }
+
+        await interaction.deferReply();
 
         try {
-            await interaction.deferReply();
-
-            const channel = interaction.guild.channels.cache.get(giveawayChannelId);
-            if (!channel) {
-                const embed = {
-                    color: 16711680,
-                    title: '⚠️ Configuration Error',
-                    description: 'The giveaway channel is not properly configured.',
-                    footer: { text: 'Setup Required' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
+            const giveaway = await findGiveawayByCaseId(caseId);
+            if (!giveaway) {
+                return await interaction.editReply({
+                    embeds: [{ color: 16711680, title: '❌ Giveaway Not Found', description: `No giveaway found with Case ID \`${caseId}\`.`, timestamp: new Date() }]
+                });
             }
 
-            // Verify identifier is a case ID (format: GIVE-XXXXXXXXXX)
-            if (!identifier.startsWith('GIVE-')) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Invalid Format',
-                    description: `Please use the Case ID format: \`GIVE-XXXXXXXXXX\`\n\nExample: \`/giveaway reroll GIVE-kX7mP9qL2n\``,
-                    footer: { text: 'Case IDs only - no message IDs' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
-            // Get giveaway data using case ID only
-            const giveawayDB = DatabaseManager.getGiveawaysDB();
-            const allGiveaways = await giveawayDB.all();
-            const foundGiveaway = allGiveaways.find(g => g.value.caseId === identifier);
-
-            if (!foundGiveaway) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Giveaway Not Found',
-                    description: `No giveaway found with Case ID \`${identifier}\`.`,
-                    footer: { text: 'Check the Case ID and try again' },
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
-            const giveaway = foundGiveaway.value;
-            const messageId = giveaway.messageId;
-
-            const message = await channel.messages.fetch(messageId).catch(() => null);
+            const channel = interaction.guild.channels.cache.get(giveaway.channelId);
+            const message = channel ? await channel.messages.fetch(giveaway.messageId).catch(() => null) : null;
             if (!message) {
-                const embed = {
-                    color: 16711680,
-                    title: '❌ Message Not Found',
-                    description: `The giveaway message no longer exists.`,
-                    footer: { text: 'The message may have been deleted' },
+                return await interaction.editReply({
+                    embeds: [{ color: 16711680, title: '❌ Message Not Found', description: 'The giveaway message was not found.', timestamp: new Date() }]
+                });
+            }
+
+            const eligibleParticipants = await getEligibleParticipantIds(giveaway, message.guild);
+            if (eligibleParticipants.length === 0) {
+                return await interaction.editReply({
+                    embeds: [{ color: 16744171, title: '❌ No Eligible Participants', description: 'No eligible participants are available for a reroll.', timestamp: new Date() }]
+                });
+            }
+
+            const winnersToPick = Math.max(1, Number(overrideWinners || giveaway.winnerCount || 1));
+            const selectedWinnerIds = pickUniqueRandomEntries(eligibleParticipants, winnersToPick);
+            const winnerLines = await buildWinnerLines(message, selectedWinnerIds);
+
+            await message.edit({
+                embeds: [{
+                    color: 65280,
+                    title: selectedWinnerIds.length > 1 ? '🎊 New Winners!' : '🎊 New Winner!',
+                    description: `A reroll has been completed for **${giveaway.prize || '-'}**.`,
+                    fields: [
+                        { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                        { name: '🏆 Winners Picked', value: `**${selectedWinnerIds.length}**`, inline: true },
+                        { name: '👥 Eligible Entries', value: `**${eligibleParticipants.length}**`, inline: true },
+                        { name: '🏅 Winners', value: winnerLines.join('\n').slice(0, 1024) || '-', inline: false },
+                        { name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true }
+                    ],
+                    footer: { text: `Giveaway Rerolled | Case ID: ${giveaway.caseId || 'N/A'}` },
                     timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
-            // Get participants from database
-            const participants = giveaway.entries || [];
-
-            if (participants.length === 0) {
-                const embed = {
-                    color: 16744171,
-                    title: '❌ No Participants',
-                    description: 'There are no participants in this giveaway to select a winner from.',
-                    timestamp: new Date()
-                };
-                return await interaction.editReply({ embeds: [embed] });
-            }
-
-            // Pick random winner from participant IDs
-            const winnerId = participants[Math.floor(Math.random() * participants.length)];
-
-            // Try to get winner's username
-            let winnerUsername = 'Unknown User';
-            try {
-                const winnerUser = await message.guild.members.fetch(winnerId);
-                winnerUsername = winnerUser.user.username;
-            } catch (error) {
-                // Fallback to ID if user not found
-                winnerUsername = `<@${winnerId}>`;
-            }
-
-            const rerollEmbed = {
-                color: 65280,
-                title: '🎊 New Winner!',
-                description: `🎉 **Congratulations ${winnerUsername}!** You won the **${giveaway.prize}** giveaway!`,
-                fields: [
-                    { name: '🎁 Prize', value: `**${giveaway.prize}**`, inline: true },
-                    { name: '🥇 Winner', value: `**${winnerUsername}**\n<@${winnerId}>`, inline: true },
-                    { name: '👥 Participants', value: `**${participants.length}**`, inline: true },
-                    { name: '📊 Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true },
-                    { name: '🔄 Note', value: 'This is a reroll - a new winner was selected from all previous participants', inline: false },
-                    { name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true }
-                ],
-                footer: { text: 'Giveaway Rerolled | Case ID: ' + (giveaway.caseId || 'N/A') },
-                timestamp: new Date()
-            };
-
-            await message.edit({ embeds: [rerollEmbed] }).catch((err) => {
+                }]
+            }).catch((err) => {
                 console.error(`[Giveaway] Failed to update reroll embed: ${err.message}`);
             });
 
-            const confirmEmbed = {
-                color: 65280,
-                title: '✅ Winner Rerolled',
-                description: `A new winner was selected: **${winner}**`,
-                fields: [
-                    { name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true }
-                ],
-                footer: { text: 'The message has been updated' },
-                timestamp: new Date()
-            };
+            const giveawayDB = DatabaseManager.getGiveawaysDB();
+            giveaway.winnerIds = selectedWinnerIds;
+            giveaway.winnerCount = winnersToPick;
+            await giveawayDB.set(giveaway.messageId, giveaway);
 
-            await interaction.editReply({ embeds: [confirmEmbed] });
-            console.log(`[Giveaway] Rerolled giveaway ${giveaway.caseId}, new winner: ${winner}`);
+            await interaction.editReply({
+                embeds: [{
+                    color: 65280,
+                    title: '✅ Giveaway Rerolled',
+                    description: `Selected **${selectedWinnerIds.length}** new winner(s).`,
+                    fields: [{ name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true }],
+                    timestamp: new Date()
+                }]
+            });
         } catch (error) {
             console.error('[Giveaway] Error rerolling giveaway:', error);
-            const embed = {
-                color: 16711680,
-                title: '❌ Error',
-                description: `An error occurred while rerolling the giveaway.\n\n\`${error.message}\``,
-                timestamp: new Date()
-            };
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({
+                embeds: [{ color: 16711680, title: '❌ Error', description: `\`${error.message}\``, timestamp: new Date() }]
+            });
+        }
+    },
+
+    async handleEndGiveaway(interaction) {
+        const caseId = interaction.options.getString('message-id');
+
+        if (!String(caseId || '').startsWith('GIVE-')) {
+            return await interaction.reply({
+                embeds: [{
+                    color: 16711680,
+                    title: '❌ Invalid Case ID',
+                    description: 'Please provide a valid giveaway Case ID (`GIVE-...`).',
+                    timestamp: new Date()
+                }],
+                flags: 64
+            });
+        }
+
+        await interaction.deferReply();
+
+        try {
+            const giveaway = await findGiveawayByCaseId(caseId);
+            if (!giveaway) {
+                return await interaction.editReply({
+                    embeds: [{ color: 16711680, title: '❌ Giveaway Not Found', description: `No giveaway found with Case ID \`${caseId}\`.`, timestamp: new Date() }]
+                });
+            }
+
+            if (giveaway.ended || giveaway.completed) {
+                return await interaction.editReply({
+                    embeds: [{ color: 16744171, title: 'ℹ️ Giveaway Already Ended', description: 'This giveaway has already ended.', timestamp: new Date() }]
+                });
+            }
+
+            const channel = interaction.guild.channels.cache.get(giveaway.channelId);
+            const message = channel ? await channel.messages.fetch(giveaway.messageId).catch(() => null) : null;
+
+            if (!message) {
+                const giveawayDB = DatabaseManager.getGiveawaysDB();
+                giveaway.ended = true;
+                giveaway.completed = true;
+                await giveawayDB.set(giveaway.messageId, giveaway);
+
+                return await interaction.editReply({
+                    embeds: [{
+                        color: 16744171,
+                        title: '⚠️ Giveaway Marked Ended',
+                        description: 'The giveaway message is missing, but the giveaway was marked as ended in the database.',
+                        fields: [{ name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }],
+                        timestamp: new Date()
+                    }]
+                });
+            }
+
+            const result = await finalizeGiveaway(message, giveaway.messageId, interaction.user.tag);
+            if (!result.success && result.reason === 'ALREADY_ENDED') {
+                return await interaction.editReply({
+                    embeds: [{ color: 16744171, title: 'ℹ️ Giveaway Already Ended', description: 'This giveaway has already ended.', timestamp: new Date() }]
+                });
+            }
+
+            return await interaction.editReply({
+                embeds: [{
+                    color: 65280,
+                    title: '✅ Giveaway Ended',
+                    description: 'The giveaway was ended immediately and winners were finalized.',
+                    fields: [{ name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }],
+                    timestamp: new Date()
+                }]
+            });
+        } catch (error) {
+            console.error('[Giveaway] Error ending giveaway:', error);
+            await interaction.editReply({
+                embeds: [{ color: 16711680, title: '❌ Error', description: `\`${error.message}\``, timestamp: new Date() }]
+            });
         }
     }
 };

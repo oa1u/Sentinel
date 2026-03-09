@@ -1,8 +1,9 @@
-const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
-const { MessageFlags } = require('discord.js');
-const { administratorRoleId } = require("../../Config/constants/roles.json");
-const { serverLogChannelId } = require("../../Config/constants/channel.json")
+const { MessageFlags, PermissionFlagsBits } = require('discord.js');
+const {
+  ROLES: { moderatorRoleId, administratorRoleId },
+  CHANNELS: { serverLogChannelId }
+} = require("../../Config/constants");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -23,28 +24,27 @@ module.exports = {
         .setDescription('Case ID of the ban')
         .setRequired(false)
     )
-    .setDefaultMemberPermissions(0x8),
-  category: 'management',
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+  category: 'moderation',
   async execute(interaction) {
-    const Prohibited = new EmbedBuilder()
+    const prohibited = new EmbedBuilder()
       .setColor(0xF04747)
-      .setTitle(`❌ No Permission`)
-      .setDescription(`You need the Administrator role to use this command!`);
+      .setTitle('❌ No Permission')
+      .setDescription('You need the Moderator or Administrator role to use this command!');
 
-    if (!interaction.member.roles.cache.has(administratorRoleId)) {
-      return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+    if (!interaction.member.roles.cache.has(moderatorRoleId) && !interaction.member.roles.cache.has(administratorRoleId)) {
+      return interaction.reply({ embeds: [prohibited], flags: MessageFlags.Ephemeral });
     }
 
     const caseIdOption = interaction.options.getString('caseid');
     const userOption = interaction.options.getUser('user');
 
-    // Figure out who to unban—either by case ID or user.
     let targetUserId = userOption ? userOption.id : null;
     let resolvedCaseId = caseIdOption || null;
 
+    const dbManager = require('../../Functions/MySQLDatabaseManager');
+
     if (caseIdOption) {
-      // Look up the ban in MySQL user_bans table
-      const dbManager = require('../../Functions/MySQLDatabaseManager');
       try {
         const [banRows] = await dbManager.connection.pool.query('SELECT user_id, ban_case_id FROM user_bans WHERE ban_case_id = ?', [caseIdOption]);
         if (banRows && banRows.length > 0) {
@@ -66,8 +66,6 @@ module.exports = {
         return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
       }
     } else if (userOption) {
-      // If only a user is given, grab their most recent ban case.
-      const dbManager = require('../../Functions/MySQLDatabaseManager');
       try {
         const [banRows] = await dbManager.connection.pool.query('SELECT ban_case_id FROM user_bans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userOption.id]);
         if (banRows && banRows.length > 0) {
@@ -89,17 +87,14 @@ module.exports = {
     const targetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
     const targetLabel = targetUser ? `${targetUser.tag} (${targetUser.id})` : targetUserId;
 
-    // Make a new case number for this unban event.
-    const dbManager = require('../../Functions/MySQLDatabaseManager');
-    // Generate a unique case ID for unban
     function generateCaseId(type) {
       const random = Math.random().toString(36).substring(2, 8).toUpperCase();
       return `${type}-${random}`;
     }
-    const newUnbanCaseId = generateCaseId('UNBAN');
-    const unbanReason = newUnbanCaseId;
 
-    // Determine original ban case and reason from the database when possible.
+    const newUnbanCaseId = generateCaseId('UNBAN');
+    const providedReason = interaction.options.getString('reason', true);
+
     let originalBanCaseId = resolvedCaseId || null;
     let originalBanReason = null;
 
@@ -122,7 +117,6 @@ module.exports = {
       }
     }
 
-    // Save the unban event in the database for tracking.
     await dbManager.connection.query(
       `INSERT INTO unbans (user_id, unban_case_id, unbanned_at, unbanned_by, unbanned_by_name, unbanned_by_source, user_name, original_ban_case_id, original_ban_reason, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -135,34 +129,47 @@ module.exports = {
         targetUser ? targetUser.username : null,
         originalBanCaseId,
         originalBanReason,
-        unbanReason
+        providedReason
       ]
     );
 
-    await interaction.guild.members.unban(targetUserId, unbanReason).catch(err => {
+    const unbanResult = await interaction.guild.members.unban(targetUserId, providedReason).catch(err => {
       console.error('Error unbanning user:', err);
+      return null;
     });
-    const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
+
+    if (!unbanResult) {
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle('❌ Unban Failed')
+        .setDescription('Discord did not confirm the unban. Please check the user ID or try again.');
+      return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+
+    await dbManager.unbanUser(targetUserId);
+
+    const logChannel = interaction.client.channels.cache.get(serverLogChannelId);
     const em = new EmbedBuilder()
-      .setTitle("🔓 User Unbanned")
+      .setTitle('🔓 User Unbanned')
       .setColor(0x43B581)
       .addFields(
-        { name: '👮 Administrator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
+        { name: '👮 Moderator', value: `${'```'}${interaction.user.username}${'```'}`, inline: true },
         { name: '👤 User', value: `${targetLabel}`, inline: true },
-        { name: '🔑 Unban Case ID', value: `\t${'```'}${newUnbanCaseId}${'```'}`, inline: false },
-        { name: '🔑 Original Ban Case ID', value: `${'```'}${originalBanCaseId || 'N/A'}${'```'}`, inline: true },
+        { name: '📝 Reason', value: `${'```'}${providedReason}${'```'}`, inline: false },
+        { name: '🔑 Unban Case ID', value: `${'```'}${newUnbanCaseId}${'```'}`, inline: false },
+        { name: '🔑 Original Ban Case ID', value: `${'```'}${originalBanCaseId || 'N/A'}${'```'}`, inline: true }
       )
       .setFooter({ text: `Unbanned by ${interaction.user.username}` })
       .setTimestamp();
 
-    if (clearedWarnsLog) await clearedWarnsLog.send({ embeds: [em] });
+    if (logChannel) await logChannel.send({ embeds: [em] });
 
     const successEmbed = new EmbedBuilder()
       .setColor(0x43B581)
       .setTitle('✅ Successfully Unbanned')
       .setDescription(`**${targetLabel}** has been unbanned!`)
-      .addFields({ name: "🔑 Unban Case ID", value: `\`${newUnbanCaseId}\`` });
+      .addFields({ name: '🔑 Unban Case ID', value: `\`${newUnbanCaseId}\`` });
 
     return interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
   }
-}
+};

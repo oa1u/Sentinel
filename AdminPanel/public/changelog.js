@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } catch (err) { }
 
-    const tabs = document.querySelectorAll('#changelogTabs .tab');
+    const tabs = document.querySelectorAll('#changelogTabs .changelog-tab');
     const tabContents = document.querySelectorAll('.tab-content');
 
     tabs.forEach((tab) => {

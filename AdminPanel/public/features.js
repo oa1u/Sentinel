@@ -19,28 +19,76 @@ document.addEventListener('DOMContentLoaded', async () => {
 	} catch (err) { }
 
 	// Tab system logic
-	const tabs = document.querySelectorAll('.tab');
-	const tabContents = document.querySelectorAll('.tab-content');
-	tabs.forEach(tab => {
-		tab.addEventListener('click', function () {
-			tabs.forEach(t => t.classList.remove('active'));
-			tab.classList.add('active');
-			const tabName = tab.getAttribute('data-tab');
-			tabContents.forEach(tc => {
-				if (tc.id === 'tab-' + tabName) {
-					tc.classList.add('active');
-					tc.style.display = '';
-				} else {
-					tc.classList.remove('active');
-					tc.style.display = 'none';
-				}
-			});
+	const tabsContainer = document.getElementById('featuresTabs');
+	const tabs = Array.from(document.querySelectorAll('.tab'));
+	const tabContents = Array.from(document.querySelectorAll('.tab-content'));
+
+	if (tabsContainer) {
+		tabsContainer.setAttribute('role', 'tablist');
+	}
+
+	const activateTab = (tab) => {
+		if (!tab) return;
+		const tabName = tab.getAttribute('data-tab');
+		if (!tabName) return;
+
+		tabs.forEach((t) => {
+			const isActive = t === tab;
+			t.classList.toggle('active', isActive);
+			t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+			t.tabIndex = isActive ? 0 : -1;
 		});
-	});
+
+		tabContents.forEach((panel) => {
+			const isActive = panel.id === `tab-${tabName}`;
+			panel.classList.toggle('active', isActive);
+			panel.style.display = isActive ? '' : 'none';
+		});
+
+		if (typeof tab.scrollIntoView === 'function') {
+			tab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+		}
+	};
+
+	const wireTab = (tab, index) => {
+		const tabName = tab.getAttribute('data-tab');
+		const panel = tabName ? document.getElementById(`tab-${tabName}`) : null;
+
+		tab.setAttribute('role', 'tab');
+		if (panel) {
+			panel.setAttribute('role', 'tabpanel');
+			const tabId = `features-tab-${tabName}`;
+			tab.id = tabId;
+			panel.setAttribute('aria-labelledby', tabId);
+		}
+
+		tab.addEventListener('click', () => activateTab(tab));
+		tab.addEventListener('keydown', (event) => {
+			if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+			event.preventDefault();
+			const dir = event.key === 'ArrowLeft' ? -1 : 1;
+			let nextIndex = index;
+			if (event.key === 'Home') nextIndex = 0;
+			else if (event.key === 'End') nextIndex = tabs.length - 1;
+			else nextIndex = (index + dir + tabs.length) % tabs.length;
+
+			const nextTab = tabs[nextIndex];
+			if (nextTab) {
+				nextTab.focus();
+				activateTab(nextTab);
+			}
+		});
+	};
+
+	tabs.forEach((tab, index) => wireTab(tab, index));
+
 	// Hide all but the first tab content on load
-	tabContents.forEach((tc, idx) => {
-		if (idx !== 0) tc.style.display = 'none';
+	tabContents.forEach((panel, idx) => {
+		panel.style.display = idx === 0 ? '' : 'none';
 	});
+	if (tabs[0]) {
+		activateTab(tabs[0]);
+	}
 });
 
 function toggleUserDropdown() {

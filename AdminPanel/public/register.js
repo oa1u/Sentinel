@@ -11,7 +11,16 @@ const loginLink = document.getElementById('loginLink');
 const passwordStrengthFill = document.getElementById('passwordStrengthFill');
 const passwordStrengthLabel = document.getElementById('passwordStrengthLabel');
 const passwordMatchStatus = document.getElementById('passwordMatchStatus');
+const captchaQuestionEl = document.getElementById('captchaQuestion');
+const captchaAnswerInput = document.getElementById('captchaAnswer');
+const refreshCaptchaBtn = document.getElementById('refreshCaptchaBtn');
+const captchaGroup = document.getElementById('registerCaptchaGroup');
 const { ui, api } = window.AdminPanel || {};
+const captchaState = {
+    challengeId: '',
+    loaded: false,
+    enabled: true
+};
 
 // Set up event listeners for registration form
 registerBtn.addEventListener('click', handleRegister);
@@ -20,6 +29,11 @@ if (registerForm) registerForm.addEventListener('submit', handleRegister);
 if (loginLink) {
     loginLink.addEventListener('click', goToLogin);
 }
+if (refreshCaptchaBtn) {
+    refreshCaptchaBtn.addEventListener('click', () => {
+        loadCaptchaChallenge(true);
+    });
+}
 passwordInput.addEventListener('input', validatePassword);
 passwordInput.addEventListener('focus', showPasswordRequirements);
 passwordInput.addEventListener('blur', hidePasswordRequirementsIfEmpty);
@@ -27,6 +41,7 @@ confirmPasswordInput.addEventListener('input', validateForm);
 document.getElementById('username').addEventListener('input', validateForm);
 document.getElementById('email').addEventListener('input', validateForm);
 document.getElementById('inviteCode').addEventListener('input', validateForm);
+if (captchaAnswerInput) captchaAnswerInput.addEventListener('input', validateForm);
 document.querySelectorAll('.password-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
         const targetId = btn.getAttribute('data-target');
@@ -134,6 +149,7 @@ function validateForm() {
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
     const inviteCode = document.getElementById('inviteCode').value.trim();
+    const captchaAnswer = (captchaAnswerInput?.value || '').trim();
 
     const passwordValid = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/.test(password);
     const usernameValid = /^[a-zA-Z0-9_]{3,30}$/.test(username);
@@ -143,7 +159,51 @@ function validateForm() {
 
     updateConfirmPasswordStatus(password, confirmPassword);
 
-    registerBtn.disabled = !(passwordValid && usernameValid && emailValid && passwordMatch && inviteCodeValid);
+    const captchaValid = !captchaState.enabled || (captchaState.loaded && captchaState.challengeId.length > 0 && captchaAnswer.length > 0);
+
+    registerBtn.disabled = !(passwordValid && usernameValid && emailValid && passwordMatch && inviteCodeValid && captchaValid);
+}
+
+async function loadCaptchaChallenge(force = false) {
+    if (!api?.getJson) return false;
+    if (captchaQuestionEl) captchaQuestionEl.textContent = 'Loading captcha challenge...';
+
+    try {
+        const suffix = force ? `&_=${Date.now()}` : '';
+        const { response, data } = await api.getJson(`/api/captcha/challenge?scope=register${suffix}`);
+        if (!response?.ok) {
+            throw new Error(data?.error || 'Failed to load captcha');
+        }
+
+        if (data?.enabled === false) {
+            captchaState.enabled = false;
+            captchaState.challengeId = '';
+            captchaState.loaded = true;
+            if (captchaGroup) captchaGroup.style.display = 'none';
+            validateForm();
+            return true;
+        }
+
+        if (!data?.challengeId || !data?.question) {
+            throw new Error(data?.error || 'Failed to load captcha');
+        }
+
+        captchaState.challengeId = String(data.challengeId);
+        captchaState.loaded = true;
+        captchaState.enabled = true;
+        if (captchaGroup) captchaGroup.style.display = '';
+        if (captchaQuestionEl) captchaQuestionEl.textContent = String(data.question);
+        if (captchaAnswerInput) captchaAnswerInput.value = '';
+        validateForm();
+        return true;
+    } catch {
+        captchaState.challengeId = '';
+        captchaState.loaded = false;
+        captchaState.enabled = true;
+        if (captchaQuestionEl) captchaQuestionEl.textContent = 'Captcha unavailable. Refresh to retry.';
+        validateForm();
+        return false;
+    }
 }
 
 async function handleRegister(e) {
@@ -155,9 +215,16 @@ async function handleRegister(e) {
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
     const inviteCode = document.getElementById('inviteCode').value.trim();
+    const captchaAnswer = (captchaAnswerInput?.value || '').trim();
 
     if (!username || !email || !password || !confirmPassword || !inviteCode) {
         ui?.showMessage(errorMsg, 'Please fill in all fields', 'error');
+        return;
+    }
+
+    if (captchaState.enabled && (!captchaState.challengeId || !captchaAnswer)) {
+        ui?.showMessage(errorMsg, 'Please complete captcha verification', 'error');
+        await loadCaptchaChallenge(true);
         return;
     }
 
@@ -236,7 +303,14 @@ async function handleRegister(e) {
 
     try {
         // console.log removed for production
-        const { response, data } = await api.postJson('/api/register', { username, email, password, inviteCode });
+        const { response, data } = await api.postJson('/api/register', {
+            username,
+            email,
+            password,
+            inviteCode,
+            captchaChallengeId: captchaState.enabled ? captchaState.challengeId : null,
+            captchaAnswer: captchaState.enabled ? captchaAnswer : null
+        });
 
         if (response.ok && data?.success) {
             // console.log removed for production
@@ -246,14 +320,17 @@ async function handleRegister(e) {
             }, 2000);
         } else {
             // console.log removed for production
+            await loadCaptchaChallenge(true);
             ui?.showMessage(errorMsg, data?.error || 'Registration failed', 'error');
         }
     } catch (error) {
         console.error('🔴 Registration error:', error);
+        await loadCaptchaChallenge(true);
         ui?.showMessage(errorMsg, 'Connection error. Please try again.', 'error');
     } finally {
         registerBtn.disabled = false;
         ui?.setLoading(loading, false);
+        validateForm();
     }
 }
 
@@ -263,3 +340,4 @@ function goToLogin(e) {
 }
 
 validateForm();
+loadCaptchaChallenge(false);

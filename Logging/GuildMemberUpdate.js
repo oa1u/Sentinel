@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { serverLogChannelId } = require("../Config/constants/channel.json");
+const { CHANNELS: { serverLogChannelId } } = require("../Config/constants");
 
 // Log member updates (nickname, username changes) with old and new values for auditing.
 module.exports = (client) => {

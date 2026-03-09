@@ -4,6 +4,7 @@ const { EmbedBuilder } = require('discord.js');
 // Handle upvote/downvote reactions on suggestion messages and persist votes to the DB.
 module.exports = {
     name: 'messageReactionAdd',
+    disabled: true,
     runOnce: false,
     call: async (client, args) => {
         const [reaction, user] = args;

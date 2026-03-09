@@ -1,8 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const { administratorRoleId } = require("../../Config/constants/roles.json");
-const { serverLogChannelId } = require("../../Config/constants/channel.json");
+const { ROLES: { administratorRoleId }, CHANNELS: { serverLogChannelId } } = require("../../Config/constants");
 
 module.exports = {
   data: new SlashCommandBuilder()

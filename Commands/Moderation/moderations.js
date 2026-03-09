@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const AdminPanelHelper = require('../../Functions/AdminPanelHelper');
-const { sendErrorReply } = require('../../Functions/EmbedBuilders');
-const { administratorRoleId, moderatorRoleId } = require('../../Config/constants/roles.json');
+const { sendErrorReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
+const { ROLES: { administratorRoleId, moderatorRoleId } } = require('../../Config/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -33,7 +33,7 @@ module.exports = {
             const activeTimeouts = await AdminPanelHelper.getActiveTimeouts();
 
             if (!activeTimeouts.length) {
-                return sendErrorReply(interaction, 'No Active Timeouts', 'There are no users currently timed out.');
+                return sendInfoReply(interaction, 'No Active Timeouts', 'There are no users currently timed out.');
             }
 
             const lines = activeTimeouts.slice(0, 25).map((entry, index) => {

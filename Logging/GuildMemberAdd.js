@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { serverLogChannelId } = require("../Config/constants/channel.json");
+const { CHANNELS: { serverLogChannelId } } = require("../Config/constants");
 
 // Log when members join the server — posts account age and basic info for easy review.
 module.exports = (client) => {

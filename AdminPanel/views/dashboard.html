@@ -12,7 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="/public/shared.js"></script>
-    <script src="/public/dashboard.js?v=5" defer></script>
+    <script src="/public/dashboard.js?v=6" defer></script>
 
 <body>
     <header class="header">
@@ -37,6 +37,7 @@
                             <span class="role-badge" id="dropdownRole">user</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -101,6 +102,12 @@
                 <div class="stat-value" id="commandsToday">0</div>
                 <div class="stat-label">Commands Used Today</div>
             </div>
+
+            <div class="stat-card">
+                <div class="stat-icon green">🗄️</div>
+                <div class="stat-value" id="statDbStatus">Checking...</div>
+                <div class="stat-label">Database</div>
+            </div>
         </div>
 
         <div class="card" style="margin-top: 2rem;">
@@ -164,8 +171,6 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/version.js"></script>
     <script src="/public/notifications.js" defer></script>
-
-    </script>
 </body>
 
 </html>

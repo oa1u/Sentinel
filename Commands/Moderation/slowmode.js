@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ChannelType, PermissionFlagsBits, MessageFlags, EmbedBuilder } = require('discord.js');
-const { sendErrorReply, sendSuccessReply } = require('../../Functions/EmbedBuilders');
-const { moderatorRoleId, administratorRoleId } = require('../../Config/constants/roles.json');
+const { sendErrorReply, sendWarningReply } = require('../../Functions/EmbedBuilders');
+const { ROLES: { moderatorRoleId, administratorRoleId } } = require('../../Config/constants');
 const { logModerationAction } = require('../../Functions/ModerationHelper');
 
 function formatSlowmodeDuration(seconds) {
@@ -120,7 +120,7 @@ module.exports = {
                     details: 'Missing required role/permission (Moderator role or Manage Channels).',
                     input: interaction.options.getString('seconds') || 'N/A'
                 });
-                return sendErrorReply(
+                return sendWarningReply(
                     interaction,
                     'No Permission',
                     'You need the **Moderator role** or **Manage Channels** permission to use this command.'
@@ -140,7 +140,7 @@ module.exports = {
                     input: secondsInput
                 });
 
-                return sendErrorReply(
+                return sendWarningReply(
                     interaction,
                     'Invalid Duration',
                     `${parsed.error}\n\nExamples: \`45s\`, \`5m\`, \`2h\`, \`0\`.`
@@ -161,7 +161,7 @@ module.exports = {
                     input: secondsInput
                 });
 
-                return sendErrorReply(
+                return sendWarningReply(
                     interaction,
                     'Duration Too High',
                     'Maximum slowmode is **6 hours** (`21600` seconds).'
@@ -177,7 +177,7 @@ module.exports = {
                     details: 'Invalid channel provided (not in this guild).',
                     input: secondsInput
                 });
-                return sendErrorReply(interaction, 'Invalid Channel', 'Please select a channel in this server.');
+                return sendWarningReply(interaction, 'Invalid Channel', 'Please select a channel in this server.');
             }
 
             if (typeof channel.setRateLimitPerUser !== 'function') {
@@ -189,7 +189,7 @@ module.exports = {
                     details: 'Selected channel type does not support slowmode.',
                     input: secondsInput
                 });
-                return sendErrorReply(interaction, 'Unsupported Channel', 'Slowmode can only be set on text channels that support per-user rate limits.');
+                return sendWarningReply(interaction, 'Unsupported Channel', 'Slowmode can only be set on text channels that support per-user rate limits.');
             }
 
             await channel.setRateLimitPerUser(seconds, `${interaction.user.tag}: ${reason}`);
@@ -204,15 +204,21 @@ module.exports = {
             });
 
             const durationText = formatSlowmodeDuration(seconds);
+            const successEmbed = new EmbedBuilder()
+                .setColor(0x43B581)
+                .setTitle('⏱️ Slowmode Updated')
+                .setDescription('━━━━━━━━━━━━━━━━━━━━━')
+                .addFields(
+                    { name: '⌛ Slowmode', value: `**${durationText}**`, inline: true },
+                    { name: '📍 Channel', value: `${channel}`, inline: true },
+                    { name: '🧾 Input', value: `\`${secondsInput}\``, inline: true },
+                    { name: '👤 Moderator', value: `${interaction.user}`, inline: true },
+                    { name: '💬 Reason', value: `\`\`\`${reason}\`\`\``, inline: false }
+                )
+                .setFooter({ text: `Action performed by ${interaction.user.username}` })
+                .setTimestamp();
 
-            await sendSuccessReply(
-                interaction,
-                'Slowmode Updated',
-                `Channel: ${channel}\n` +
-                `Input: **${secondsInput}**\n` +
-                `Slowmode: **${durationText}**\n` +
-                `Reason: ${reason}`
-            );
+            await interaction.editReply({ embeds: [successEmbed] });
         } catch (error) {
             console.error('[slowmode] Error:', error.message);
 

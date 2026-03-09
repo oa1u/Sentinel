@@ -9,6 +9,7 @@
     "start:all": "node --max-old-space-size=12288 startAll.js",
     "migrate": "node migrate-to-mysql.js",
     "safety:check": "node scripts/safetyCheck.js",
+    "email:send-all-templates": "node scripts/sendAllEmailTemplates.js",
     "test": "npm run safety:check"
   },
   "keywords": [
@@ -43,6 +44,7 @@
     "nodemailer": "^8.0.1",
     "opusscript": "^0.0.8",
     "play-dl": "^1.9.7",
+    "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
     "uuid": "^13.0.0",
     "yt-dlp-exec": "^1.0.2",

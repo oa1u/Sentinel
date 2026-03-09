@@ -37,6 +37,7 @@
                             <span class="role-badge" id="dropdownRole">user</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -56,17 +57,17 @@
                     <div>
                         <p class="features-eyebrow">Capabilities</p>
                         <h2>All-in-One Discord Bot</h2>
-                        <p class="features-subtitle">Moderation, automation, engagement, and management features built
-                            for daily server operations.</p>
+                        <p class="features-subtitle">Moderation, automation, analytics, and community tooling designed
+                            for real-world server operations and staff workflows.</p>
                     </div>
                     <div class="features-hero-meta">
                         <div class="features-meta-item">
                             <span class="meta-label">Coverage</span>
-                            <span class="meta-value">8 Core Domains</span>
+                            <span class="meta-value">9 Core Domains</span>
                         </div>
                         <div class="features-meta-item">
                             <span class="meta-label">Best For</span>
-                            <span class="meta-value">Moderators + Admins</span>
+                            <span class="meta-value">Mods, Admins, Owners</span>
                         </div>
                     </div>
                 </div>
@@ -74,6 +75,7 @@
         </section>
         <div class="tabs features-tabs" id="featuresTabs">
             <button class="tab active" data-tab="moderation"><span class="tab-icon">🛡️</span>Moderation</button>
+            <button class="tab" data-tab="security"><span class="tab-icon">🔐</span>Security & Admin Panel</button>
             <button class="tab" data-tab="fun"><span class="tab-icon">🎲</span>Fun</button>
             <button class="tab" data-tab="utility"><span class="tab-icon">🛠️</span>Utility</button>
             <button class="tab" data-tab="management"><span class="tab-icon">📋</span>Management</button>
@@ -87,23 +89,50 @@
                 <div class="feature-header">
                     <div>
                         <h3>Moderation Features</h3>
-                        <div class="feature-desc">Keep your community safe and organized with advanced moderation tools.
-                        </div>
+                        <div class="feature-desc">Keep your community safe with enforcement tools, case tracking, and
+                            audit visibility.</div>
                     </div>
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🔨</span> <b>Core
                             actions:</b> /ban, /kick, /timeout, /untimeout, /clear, /deletemsg, /slowmode</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">⚠️</span> <b>Warnings
-                            & notes:</b> /warn, /warns, /warning, /note</div>
+                            & notes:</b> /warn, /warns, /warning, /note with case logging</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">📋</span> <b>Logs &
-                            review:</b> /audit, /modlogs, /moderations (audit logging, case history)</div>
+                            review:</b> /audit, /modlogs, /moderations for case history</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🧾</span> <b>Ban
-                            details & unban:</b> Polished ban details modal with direct unban action and clear case info
+                            details:</b> ban detail modal with direct unban action and clear case info</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🚨</span>
+                        <b>Anti-raid:</b> adaptive thresholds, risk scoring, and owner-level controls
                     </div>
-                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🔒</span>
-                        <b>Security:</b> CSRF-hardened mutating requests in the admin UI (automatic token refresh and
-                        safe API wrappers)</div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-security">
+            <div class="card feature-card security-card">
+                <div class="feature-header">
+                    <div>
+                        <h3>Security & Admin Panel</h3>
+                        <div class="feature-desc">Account protection, audit visibility, and admin-grade tooling built
+                            into the panel.</div>
+                    </div>
+                </div>
+                <div class="feature-list">
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🧭</span>
+                        <b>Security center:</b> session tracking, login events, geo insights, and risk snapshots
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🔐</span>
+                        <b>2FA support:</b> TOTP enrollment, verification, and recovery-ready flows
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🛡️</span>
+                        <b>CSRF protection:</b> hardened mutating requests with auto-refresh tokens
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🔗</span>
+                        <b>Discord linking:</b> OAuth-based account linking with verification checks
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">📡</span>
+                        <b>Internal webhooks:</b> site-to-bot events for audits and notifications
+                    </div>
                 </div>
             </div>
         </div>
@@ -114,17 +143,22 @@
                 <div class="feature-header">
                     <div>
                         <h3>Fun Features</h3>
-                        <div class="feature-desc">Boost engagement and make your server lively with interactive games
-                            and jokes.</div>
+                        <div class="feature-desc">Lightweight engagement tools for casual server interaction.</div>
                     </div>
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🎱</span>
-                        <b>Games:</b> /8ball, /coinflip, /trivia</div>
+                        <b>Games:</b> /8ball, /coinflip, /trivia, <b>/riddle</b>
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🧩</span>
+                        <b>Riddle:</b> Solve a riddle for XP (API/local fallback)
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">😂</span>
-                        <b>Content:</b> /joke, /fact, /pickup</div>
+                        <b>Content:</b> /joke, /fact, /pickup
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🔥</span>
-                        <b>Social:</b> /roast</div>
+                        <b>Social:</b> /roast
+                    </div>
                 </div>
             </div>
         </div>
@@ -133,16 +167,25 @@
                 <div class="feature-header">
                     <div>
                         <h3>Utility Features</h3>
-                        <div class="feature-desc">Handy tools to make server management and daily tasks easier.</div>
+                        <div class="feature-desc">Quick commands for lookups, utilities, and daily admin tasks.</div>
                     </div>
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">ℹ️</span> <b>Info
-                            tools:</b> /serverinfo, /userinfo, /inviteinfo, /avatar, /banner</div>
+                            tools:</b> /serverinfo, /userinfo, /inviteinfo, /avatar, /banner, <b>/weather</b></div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🌦️</span>
+                        <b>Weather:</b> Get real-time weather for any city
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">⏰</span>
-                        <b>Productivity:</b> /poll, /remind, /birthday</div>
+                        <b>Productivity:</b> /poll, /remind, /birthday
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">💸</span>
-                        <b>Helpers:</b> /help, /ping, /define, /crypto, /suggest</div>
+                        <b>Helpers:</b> /help, /ping, /define, /crypto, /suggest
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🏦</span>
+                        <b>Economy:</b> Daily/weekly rewards, quests, shop, bounties, anti-abuse, banking, leaderboards,
+                        admin tools
+                    </div>
                 </div>
             </div>
         </div>
@@ -151,19 +194,27 @@
                 <div class="feature-header">
                     <div>
                         <h3>Management Features</h3>
-                        <div class="feature-desc">Streamline your server’s growth and feedback with management tools.
-                        </div>
+                        <div class="feature-desc">Announcements, staff controls, and feedback workflows.</div>
                     </div>
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">📢</span>
-                        <b>Announcements & rules:</b> /announce, /rules</div>
+                        <b>Announcements & rules:</b> /announce, /rules
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🎁</span>
-                        <b>Operations:</b> /manage, /setlevel, /giveaway</div>
+                        <b>Operations:</b> /manage, /setlevel, /giveaway
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🧰</span> <b>Safety
                             controls:</b> /checkban, /unban, /automodwarns, /clearwarns</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">💡</span>
-                        <b>Feedback:</b> /suggestion</div>
+                        <b>Feedback:</b> /suggestion
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">📣</span>
+                        <b>Staff visibility:</b> incident, notification, and status channels
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">⏰</span>
+                        <b>Job Scheduler:</b> Automated recurring jobs (interest, reports, etc.)
+                    </div>
                 </div>
             </div>
         </div>
@@ -177,9 +228,14 @@
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">📈</span>
-                        <b>Leveling:</b> /levels</div>
+                        <b>Leveling:</b> /levels
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🏅</span>
-                        <b>Leaderboard:</b> /leaderboard</div>
+                        <b>Leaderboard:</b> /leaderboard
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🧩</span>
+                        <b>XP Quests & Streaks:</b> Daily/weekly streaks, quests, and riddle XP
+                    </div>
                 </div>
             </div>
         </div>
@@ -188,12 +244,13 @@
                 <div class="feature-header">
                     <div>
                         <h3>Verification</h3>
-                        <div class="feature-desc">Protect your server with robust verification options.</div>
+                        <div class="feature-desc">Reduce spam with verification and risk-based checks.</div>
                     </div>
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">✅</span>
-                        <b>Verification:</b> /verify</div>
+                        <b>Verification:</b> /verify with risk-aware enforcement
+                    </div>
                 </div>
             </div>
         </div>
@@ -202,8 +259,8 @@
                 <div class="feature-header">
                     <div>
                         <h3>Ticketing</h3>
-                        <div class="feature-desc">Manage support queues and resolve requests with structured ticket
-                            workflows.</div>
+                        <div class="feature-desc">Structured support workflows with staff ownership and audit trails.
+                        </div>
                     </div>
                 </div>
                 <div class="feature-list">
@@ -211,6 +268,9 @@
                             flow:</b> /ticket, /claim, /close, /markhandled</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#7bd3ff;">👥</span> <b>Access
                             control:</b> /adduser, /removeuser</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#7bd3ff;">🧭</span>
+                        <b>Visibility:</b> ticket logs and history for staff review
+                    </div>
                 </div>
             </div>
         </div>
@@ -219,14 +279,14 @@
                 <div class="feature-header">
                     <div>
                         <h3>Voice & Music</h3>
-                        <div class="feature-desc">Enhance voice sessions with music controls and voice utilities.</div>
+                        <div class="feature-desc">Voice utilities with reliability-focused music playback.</div>
                     </div>
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#9fd1ff;">🎧</span> <b>Voice
-                            tools:</b> /voice</div>
+                            tools:</b> /voice (room controls and moderation)</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#9fd1ff;">🎵</span> <b>Music
-                            controls:</b> /music</div>
+                            controls:</b> /music with queueing, now playing, and lyrics</div>
                 </div>
             </div>
         </div>
@@ -299,6 +359,36 @@
             border-radius: 14px;
             background: linear-gradient(145deg, rgba(30, 30, 30, 0.94) 0%, rgba(20, 20, 20, 0.96) 100%);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            padding: 0.45rem;
+            align-items: center;
+            overflow-x: auto;
+            scroll-snap-type: x proximity;
+        }
+
+        .features-tabs .tab {
+            border-radius: 12px;
+            padding: 0.55rem 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+            scroll-snap-align: center;
+            transition: transform 140ms ease, box-shadow 140ms ease;
+        }
+
+        .features-tabs .tab:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+        }
+
+        .features-tabs .tab.active {
+            box-shadow: 0 0 0 1px rgba(91, 127, 255, 0.45), 0 10px 20px rgba(91, 127, 255, 0.18);
+        }
+
+        .features-tabs .tab-icon {
+            margin-right: 0.35rem;
         }
 
         .feature-card {

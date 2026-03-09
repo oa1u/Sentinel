@@ -14,18 +14,59 @@
     <script>
         // Hide sign in/register and show dashboard if already authenticated
         document.addEventListener('DOMContentLoaded', () => {
-            window.AdminPanel.api.getJson('/api/csrf')
-                .then(({ data }) => {
-                    if (data && data.authenticated) {
+            const authState = document.getElementById('authStateValue');
+            const routeValue = document.getElementById('routeValue');
+            const checkedAtValue = document.getElementById('checkedAtValue');
+            const retryBtn = document.getElementById('retryAuthCheckBtn');
+
+            if (routeValue) {
+                routeValue.textContent = window.location.pathname || '/';
+            }
+
+            const updateCheckedAt = () => {
+                if (checkedAtValue) {
+                    checkedAtValue.textContent = new Date().toLocaleString();
+                }
+            };
+
+            const runAuthCheck = () => {
+                updateCheckedAt();
+                if (authState) {
+                    authState.textContent = 'Checking...';
+                }
+
+                window.AdminPanel.api.getJson('/api/csrf')
+                    .then(({ data }) => {
+                        const authenticated = Boolean(data && data.authenticated);
+                        if (authState) {
+                            authState.textContent = authenticated ? 'Authenticated' : 'Not authenticated';
+                        }
+
                         const loginBtn = document.getElementById('loginBtn');
                         const registerBtn = document.getElementById('registerBtn');
                         const dashboardBtn = document.getElementById('dashboardBtn');
-                        if (loginBtn) loginBtn.style.display = 'none';
-                        if (registerBtn) registerBtn.style.display = 'none';
-                        if (dashboardBtn) dashboardBtn.style.display = 'inline-block';
-                    }
-                })
-                .catch(() => { });
+                        if (loginBtn) loginBtn.style.display = authenticated ? 'none' : 'inline-flex';
+                        if (registerBtn) registerBtn.style.display = authenticated ? 'none' : 'inline-flex';
+                        if (dashboardBtn) dashboardBtn.style.display = authenticated ? 'inline-flex' : 'none';
+                    })
+                    .catch(() => {
+                        if (authState) {
+                            authState.textContent = 'Check failed';
+                        }
+                    });
+            };
+
+            if (retryBtn) {
+                retryBtn.addEventListener('click', runAuthCheck);
+            }
+
+            runAuthCheck();
+
+            const backBtn = document.getElementById('goBackBtn');
+            if (backBtn) {
+                backBtn.addEventListener('click', () => window.history.back());
+            }
+
         });
     </script>
     <style>
@@ -36,6 +77,7 @@
             align-items: center;
             min-height: 100vh;
             position: relative;
+            background: var(--bg-primary);
         }
 
         .error-container {
@@ -44,46 +86,189 @@
             justify-content: center;
             align-items: center;
             width: 100%;
-            padding: 2rem 1rem;
+            padding: 2.5rem 1rem;
+            position: relative;
+        }
+
+        .error-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            opacity: 0.35;
         }
 
         .error-card {
+            position: relative;
+            z-index: 1;
             background: var(--bg-card);
             border-radius: var(--radius-lg);
-            padding: 3rem 2rem;
-            max-width: 500px;
+            border: 1px solid var(--border-color);
+            padding: 2.25rem;
+            max-width: 560px;
             width: 100%;
             text-align: center;
             box-shadow: var(--shadow-lg);
         }
 
+        .error-head {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .error-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: var(--radius-xl);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
         .error-icon {
-            font-size: 4rem;
-            margin-bottom: 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 4.5rem;
+            height: 4.5rem;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            font-size: 2.2rem;
+            line-height: 1;
         }
 
         .error-title {
             font-size: 2rem;
-            margin-bottom: 1rem;
+            margin: 0;
             color: var(--color-red);
         }
 
         .error-message {
             color: var(--text-secondary);
-            margin-bottom: 2rem;
+            margin: 0 auto 1.5rem;
             line-height: 1.6;
+            max-width: 44ch;
+        }
+
+        .error-panel {
+            text-align: left;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1rem 1rem 0.95rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .error-panel h2 {
+            margin: 0 0 0.65rem;
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .error-panel ul {
+            margin: 0;
+            padding-left: 1.1rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .error-panel li+li {
+            margin-top: 0.35rem;
         }
 
         .error-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
         }
 
-        .page-footer {
-            margin-top: 0;
+        .error-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .error-meta-item {
+            text-align: left;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 0.75rem;
+        }
+
+        .error-meta-label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 0.35rem;
+        }
+
+        .error-meta-value {
+            color: var(--text-primary);
+            font-size: 0.92rem;
+            word-break: break-word;
+        }
+
+        .error-actions .btn {
+            min-width: 0;
             width: 100%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            white-space: nowrap;
+            box-sizing: border-box;
+            min-height: 44px;
+            line-height: 1.2;
+            padding: 0.65rem 0.95rem;
+            margin: 0;
+            border-width: 1px;
+            vertical-align: middle;
+        }
+
+        .error-actions a.btn {
+            text-decoration: none;
+        }
+
+        .error-actions button.btn {
+            font: inherit;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        @media (max-width: 640px) {
+            .error-card {
+                padding: 1.5rem;
+            }
+
+            .error-title {
+                font-size: 1.65rem;
+            }
+
+            .error-message {
+                margin-bottom: 1.15rem;
+            }
+
+            .error-meta-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .error-actions {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -91,31 +276,47 @@
 <body>
     <div class="error-container">
         <div class="error-card">
-            <div class="error-icon">🔒</div>
-            <h1 class="error-title">Access Denied</h1>
+            <div class="error-head">
+                <div class="error-badge">Security Check</div>
+                <div class="error-icon">🔒</div>
+                <h1 class="error-title">Access Denied</h1>
+            </div>
             <p class="error-message">
                 You don't have permission to access this page. Please log in with an authorized account to continue.
             </p>
+            <div class="error-panel">
+                <h2>Why this appears</h2>
+                <ul>
+                    <li>Your account is not signed in, or your session expired.</li>
+                    <li>Your role does not include permission for this page.</li>
+                    <li>The page is restricted to a higher privilege tier.</li>
+                </ul>
+            </div>
+            <div class="error-meta-grid">
+                <div class="error-meta-item">
+                    <span class="error-meta-label">Session State</span>
+                    <span class="error-meta-value" id="authStateValue">Checking...</span>
+                </div>
+                <div class="error-meta-item">
+                    <span class="error-meta-label">Requested Route</span>
+                    <span class="error-meta-value" id="routeValue">-</span>
+                </div>
+                <div class="error-meta-item">
+                    <span class="error-meta-label">Checked At</span>
+                    <span class="error-meta-value" id="checkedAtValue">-</span>
+                </div>
+            </div>
             <div class="error-actions">
                 <a href="/login" class="btn btn-primary" id="loginBtn">Sign In</a>
                 <a href="/register" class="btn btn-primary" id="registerBtn">Register</a>
                 <a href="/dashboard" class="btn btn-secondary" id="dashboardBtn" style="display:none">Go to
                     Dashboard</a>
+                <button class="btn btn-secondary" type="button" id="retryAuthCheckBtn">Recheck Access</button>
+                <button class="btn btn-secondary" type="button" id="goBackBtn">Go Back</button>
             </div>
         </div>
     </div>
 
-    <footer class="page-footer">
-        <div class="footer-links">
-            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
-            <span class="footer-sep">•</span>
-            <a href="/changelog">Changelog</a>
-            <span class="footer-sep">•</span>
-            <a href="/privacy-policy">Privacy Policy</a>
-            <span class="footer-sep">•</span>
-            <a href="/license">License</a>
-        </div>
-    </footer>
     <script src="/public/notifications.js" defer></script>
     <script src="/public/version.js"></script>
 </body>

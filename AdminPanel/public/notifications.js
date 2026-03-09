@@ -54,18 +54,369 @@ function ensureToastContainer() {
         container = document.createElement('div');
         container.id = 'toast-container';
         container.className = 'toast-container';
+        container.setAttribute('role', 'status');
+        container.setAttribute('aria-live', 'polite');
         document.body.appendChild(container);
     }
+    let badge = container.querySelector('.toast-queue-indicator');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'toast-queue-indicator';
+        badge.setAttribute('aria-hidden', 'true');
+        badge.setAttribute('role', 'button');
+        badge.tabIndex = 0;
+        badge.addEventListener('click', () => expandQueuedToasts());
+        badge.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                expandQueuedToasts();
+            }
+        });
+        container.appendChild(badge);
+    }
+    applyToastContainerPosition(container);
     return container;
 }
 
-// Create and display a toast message. Provide a `type` (success/error/info/warning),
-// a short `title`, and an optional `message`. Returns the toast DOM node.
-function showToast(type, title, message, duration = 5000) {
+const toastSystemState = {
+    config: {
+        maxVisible: 5,
+        dedupeWindowMs: 2500,
+        historyLimit: 100,
+        position: 'top-right',
+        closeOnClick: true,
+        swipeToDismiss: true,
+        swipeThreshold: 60,
+        compactMode: true,
+        compactThreshold: 4,
+        severityDurations: {
+            success: 4000,
+            info: 4000,
+            warning: 6000,
+            error: 9000
+        },
+        stickyTypes: ['error']
+    },
+    active: [],
+    queue: [],
+    dedupeIndex: new Map(),
+    history: []
+};
+
+function applyToastContainerPosition(container) {
+    if (!container) return;
+    const allowed = new Set([
+        'top-right',
+        'top-left',
+        'bottom-right',
+        'bottom-left',
+        'top-center',
+        'bottom-center'
+    ]);
+    const next = allowed.has(toastSystemState.config.position)
+        ? toastSystemState.config.position
+        : 'top-right';
+    container.className = `toast-container position-${next}`;
+    updateToastContainerState(container);
+}
+
+function updateToastContainerState(container) {
+    if (!container) return;
+    const compactEnabled = Boolean(toastSystemState.config.compactMode);
+    const threshold = Math.max(2, Number(toastSystemState.config.compactThreshold) || 4);
+    const total = toastSystemState.active.length + toastSystemState.queue.length;
+    const isCompact = compactEnabled && total >= threshold;
+
+    if (isCompact) {
+        container.classList.add('compact');
+    } else {
+        container.classList.remove('compact');
+    }
+
+    updateToastQueueIndicator(container);
+}
+
+function updateToastQueueIndicator(container) {
+    if (!container) return;
+    const badge = container.querySelector('.toast-queue-indicator');
+    if (!badge) return;
+    const queuedCount = toastSystemState.queue.length;
+
+    if (queuedCount > 0) {
+        badge.textContent = `+${queuedCount} more`;
+        badge.classList.add('show');
+    } else {
+        badge.textContent = '';
+        badge.classList.remove('show');
+    }
+}
+
+function expandQueuedToasts() {
+    while (toastSystemState.queue.length > 0 && toastSystemState.active.length < toastSystemState.config.maxVisible) {
+        const next = toastSystemState.queue.shift();
+        if (next) createAndMountToast(next);
+    }
+    updateToastContainerState(document.getElementById('toast-container'));
+}
+
+function normalizeToastPayload(type, title, message, durationOrOptions) {
+    let durationExplicit = false;
+    const payload = {
+        type: ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info',
+        title: '',
+        message: '',
+        duration: 5000,
+        persist: false,
+        allowDuplicate: false,
+        actions: []
+    };
+
+    if (title && typeof title === 'object') {
+        const opts = title;
+        payload.title = String(opts.title || '');
+        payload.message = String(opts.message || '');
+        if (Number.isFinite(Number(opts.duration))) {
+            payload.duration = Number(opts.duration);
+            durationExplicit = true;
+        }
+        payload.persist = Boolean(opts.persist);
+        payload.allowDuplicate = Boolean(opts.allowDuplicate);
+        if (Array.isArray(opts.actions)) {
+            payload.actions = opts.actions;
+        }
+        if (!durationExplicit) {
+            const routed = toastSystemState.config.severityDurations?.[payload.type];
+            if (Number.isFinite(Number(routed))) payload.duration = Number(routed);
+        }
+        if (!payload.persist && Array.isArray(toastSystemState.config.stickyTypes)) {
+            if (toastSystemState.config.stickyTypes.includes(payload.type)) {
+                payload.persist = true;
+                payload.duration = 0;
+            }
+        }
+        return payload;
+    }
+
+    payload.title = String(title || '');
+    payload.message = typeof message === 'string' ? message : '';
+
+    if (typeof durationOrOptions === 'object' && durationOrOptions !== null) {
+        if (Number.isFinite(Number(durationOrOptions.duration))) {
+            payload.duration = Number(durationOrOptions.duration);
+            durationExplicit = true;
+        }
+        payload.persist = Boolean(durationOrOptions.persist);
+        payload.allowDuplicate = Boolean(durationOrOptions.allowDuplicate);
+        if (Array.isArray(durationOrOptions.actions)) {
+            payload.actions = durationOrOptions.actions;
+        }
+    } else {
+        if (Number.isFinite(Number(durationOrOptions))) {
+            payload.duration = Number(durationOrOptions);
+            durationExplicit = true;
+        }
+    }
+
+    if (!durationExplicit) {
+        const routed = toastSystemState.config.severityDurations?.[payload.type];
+        if (Number.isFinite(Number(routed))) payload.duration = Number(routed);
+    }
+
+    if (!payload.persist && Array.isArray(toastSystemState.config.stickyTypes)) {
+        if (toastSystemState.config.stickyTypes.includes(payload.type)) {
+            payload.persist = true;
+            payload.duration = 0;
+        }
+    }
+
+    return payload;
+}
+
+function flushToastQueue() {
+    while (toastSystemState.queue.length > 0 && toastSystemState.active.length < toastSystemState.config.maxVisible) {
+        const next = toastSystemState.queue.shift();
+        if (next) createAndMountToast(next);
+    }
+    updateToastContainerState(document.getElementById('toast-container'));
+}
+
+function closeToast(toast, immediate = false) {
+    if (!toast || toast.dataset.closed === '1') return;
+    toast.dataset.closed = '1';
+
+    const key = toast.dataset.toastKey;
+    if (key) toastSystemState.dedupeIndex.delete(key);
+
+    const remove = () => {
+        toast.remove();
+        toastSystemState.active = toastSystemState.active.filter(node => node !== toast);
+        flushToastQueue();
+        updateToastContainerState(document.getElementById('toast-container'));
+    };
+
+    if (immediate) {
+        remove();
+        return;
+    }
+
+    toast.classList.add('removing');
+    setTimeout(remove, 260);
+}
+
+function attachToastTimer(toast, duration) {
+    if (!Number.isFinite(duration) || duration <= 0) return;
+
+    const progressBar = toast.querySelector('.toast-progress-inner');
+    let remaining = duration;
+    let startedAt = Date.now();
+    let timeoutId = null;
+
+    const updateProgress = () => {
+        if (!progressBar) return;
+        const pct = Math.max(0, Math.min(100, (remaining / duration) * 100));
+        progressBar.style.width = `${pct}%`;
+    };
+
+    const startTimer = () => {
+        startedAt = Date.now();
+        timeoutId = setTimeout(() => closeToast(toast), remaining);
+    };
+
+    const pauseTimer = () => {
+        if (!timeoutId) return;
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        const elapsed = Date.now() - startedAt;
+        remaining = Math.max(0, remaining - elapsed);
+        updateProgress();
+    };
+
+    toast.addEventListener('mouseenter', pauseTimer);
+    toast.addEventListener('mouseleave', () => {
+        if (remaining <= 0) {
+            closeToast(toast);
+            return;
+        }
+        startTimer();
+    });
+    toast.addEventListener('focusin', pauseTimer);
+    toast.addEventListener('focusout', () => {
+        if (remaining <= 0) {
+            closeToast(toast);
+            return;
+        }
+        startTimer();
+    });
+    toast.addEventListener('touchstart', pauseTimer, { passive: true });
+    toast.addEventListener('touchend', () => {
+        if (remaining <= 0) {
+            closeToast(toast);
+            return;
+        }
+        startTimer();
+    }, { passive: true });
+
+    const tickInterval = setInterval(() => {
+        if (!document.body.contains(toast)) {
+            clearInterval(tickInterval);
+            return;
+        }
+        if (!timeoutId) return;
+        const elapsed = Date.now() - startedAt;
+        const liveRemaining = Math.max(0, remaining - elapsed);
+        if (progressBar) {
+            const pct = Math.max(0, Math.min(100, (liveRemaining / duration) * 100));
+            progressBar.style.width = `${pct}%`;
+        }
+    }, 80);
+
+    updateProgress();
+    startTimer();
+}
+
+function attachToastInteractions(toast) {
+    if (!toast || typeof window === 'undefined') return;
+
+    if (toastSystemState.config.closeOnClick) {
+        toast.addEventListener('click', (event) => {
+            if (event.target?.closest?.('.toast-close')) return;
+            if (event.target?.closest?.('a, button')) return;
+            const selection = window.getSelection?.();
+            if (selection && String(selection).trim()) return;
+            closeToast(toast);
+        });
+    }
+
+    if (!toastSystemState.config.swipeToDismiss || !('PointerEvent' in window)) return;
+
+    let startX = 0;
+    let startY = 0;
+    let isPointerDown = false;
+    let isSwiping = false;
+
+    const onPointerDown = (event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (event.target?.closest?.('.toast-close')) return;
+
+        startX = event.clientX;
+        startY = event.clientY;
+        isPointerDown = true;
+        isSwiping = false;
+
+        toast.setPointerCapture?.(event.pointerId);
+    };
+
+    const onPointerMove = (event) => {
+        if (!isPointerDown) return;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+
+        if (!isSwiping) {
+            if (Math.abs(dx) < 6 || Math.abs(dx) <= Math.abs(dy)) return;
+            isSwiping = true;
+        }
+
+        event.preventDefault();
+        toast.style.transition = 'none';
+        toast.style.transform = `translateX(${dx}px)`;
+        toast.style.opacity = `${Math.max(0.3, 1 - Math.abs(dx) / 220)}`;
+    };
+
+    const onPointerUp = (event) => {
+        if (!isPointerDown) return;
+        const dx = event.clientX - startX;
+        const threshold = Math.max(30, Number(toastSystemState.config.swipeThreshold) || 60);
+
+        toast.releasePointerCapture?.(event.pointerId);
+        isPointerDown = false;
+
+        if (isSwiping && Math.abs(dx) >= threshold) {
+            toast.style.transition = '';
+            toast.style.transform = '';
+            toast.style.opacity = '';
+            closeToast(toast);
+            return;
+        }
+
+        toast.style.transition = '';
+        toast.style.transform = '';
+        toast.style.opacity = '';
+        isSwiping = false;
+    };
+
+    toast.addEventListener('pointerdown', onPointerDown);
+    toast.addEventListener('pointermove', onPointerMove);
+    toast.addEventListener('pointerup', onPointerUp);
+    toast.addEventListener('pointercancel', onPointerUp);
+    toast.addEventListener('lostpointercapture', onPointerUp);
+}
+
+function createAndMountToast(payload) {
     const container = ensureToastContainer();
+    if (!container) return null;
 
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
+    toast.className = `toast ${payload.type}`;
 
     const icons = {
         success: '✅',
@@ -74,24 +425,107 @@ function showToast(type, title, message, duration = 5000) {
         info: 'ℹ️'
     };
 
+    const actions = Array.isArray(payload.actions) ? payload.actions : [];
+    const actionsHtml = actions.length
+        ? `<div class="toast-actions">${actions.map((action, index) => {
+            const label = typeof action === 'string' ? action : String(action?.label || 'Action');
+            const primary = Boolean(action?.primary);
+            return `<button type="button" class="toast-action ${primary ? 'primary' : ''}" data-action-index="${index}">${label}</button>`;
+        }).join('')}</div>`
+        : '';
+
     toast.innerHTML = `
-        <div class="toast-icon">${icons[type] || icons.info}</div>
+        <div class="toast-icon">${icons[payload.type] || icons.info}</div>
         <div class="toast-content">
-            <div class="toast-title">${title}</div>
-            ${message ? `<div class="toast-message">${message}</div>` : ''}
+            <div class="toast-title">${payload.title}</div>
+            ${payload.message ? `<div class="toast-message">${payload.message}</div>` : ''}
+            ${actionsHtml}
+            <div class="toast-progress" aria-hidden="true"><div class="toast-progress-inner"></div></div>
         </div>
-        <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+        <button class="toast-close" type="button" aria-label="Close notification">×</button>
     `;
 
-    container.appendChild(toast);
+    toast.querySelector('.toast-close')?.addEventListener('click', () => closeToast(toast));
+    toast.querySelectorAll('.toast-action').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const index = Number(button.dataset.actionIndex);
+            const action = actions[index];
+            if (!action) return;
+            const dismiss = action.dismiss !== false;
 
-    // Auto-remove after duration
-    if (duration > 0) {
-        setTimeout(() => {
-            toast.classList.add('removing');
-            setTimeout(() => toast.remove(), 300);
-        }, duration);
+            if (typeof action === 'function') {
+                action({ toast, payload, close: () => closeToast(toast) });
+            } else if (typeof action?.action === 'function') {
+                action.action({ toast, payload, close: () => closeToast(toast) });
+            } else if (typeof action?.action === 'string') {
+                window.dispatchEvent(new CustomEvent(action.action, { detail: { toast, payload } }));
+            }
+
+            if (dismiss) closeToast(toast);
+        });
+    });
+    container.appendChild(toast);
+    toastSystemState.active.push(toast);
+    attachToastInteractions(toast);
+    updateToastContainerState(container);
+
+    if (!payload.persist) {
+        attachToastTimer(toast, payload.duration);
     }
+
+    return toast;
+}
+
+// Create and display a toast message. Provide a `type` (success/error/info/warning),
+// a short `title`, and an optional `message`. Returns the toast DOM node.
+function showToast(type, title, message, duration = 5000) {
+    const payload = normalizeToastPayload(type, title, message, duration);
+    const dedupeKey = `${payload.type}|${payload.title}|${payload.message}`;
+    const now = Date.now();
+
+    toastSystemState.history.unshift({
+        ...payload,
+        timestamp: now
+    });
+    if (toastSystemState.history.length > toastSystemState.config.historyLimit) {
+        toastSystemState.history.length = toastSystemState.config.historyLimit;
+    }
+
+    if (!payload.allowDuplicate) {
+        const existing = toastSystemState.dedupeIndex.get(dedupeKey);
+        if (existing && (now - existing.createdAt) <= toastSystemState.config.dedupeWindowMs) {
+            const badge = existing.toast.querySelector('.toast-duplicate-count');
+            if (badge) {
+                const nextCount = Number(badge.dataset.count || 1) + 1;
+                badge.dataset.count = String(nextCount);
+                badge.textContent = `×${nextCount}`;
+            } else {
+                const titleEl = existing.toast.querySelector('.toast-title');
+                if (titleEl) {
+                    const counter = document.createElement('span');
+                    counter.className = 'toast-duplicate-count';
+                    counter.dataset.count = '2';
+                    counter.textContent = '×2';
+                    counter.style.marginLeft = '0.5rem';
+                    counter.style.opacity = '0.8';
+                    titleEl.appendChild(counter);
+                }
+            }
+            return existing.toast;
+        }
+    }
+
+    if (toastSystemState.active.length >= toastSystemState.config.maxVisible) {
+        toastSystemState.queue.push(payload);
+        return null;
+    }
+
+    const toast = createAndMountToast(payload);
+    if (!toast) return null;
+
+    toast.dataset.toastKey = dedupeKey;
+    toastSystemState.dedupeIndex.set(dedupeKey, { toast, createdAt: now });
 
     return toast;
 }
@@ -116,6 +550,70 @@ if (typeof window !== 'undefined') {
     window.showError = showError;
     window.showWarning = showWarning;
     window.showInfo = showInfo;
+    window.configureNotifications = function configureNotifications(options = {}) {
+        if (typeof options !== 'object' || !options) return toastSystemState.config;
+
+        const next = { ...toastSystemState.config };
+        if (Number.isFinite(Number(options.maxVisible))) {
+            next.maxVisible = Math.max(1, Math.min(8, Number(options.maxVisible)));
+        }
+        if (Number.isFinite(Number(options.dedupeWindowMs))) {
+            next.dedupeWindowMs = Math.max(250, Math.min(10000, Number(options.dedupeWindowMs)));
+        }
+        if (Number.isFinite(Number(options.historyLimit))) {
+            next.historyLimit = Math.max(20, Math.min(300, Number(options.historyLimit)));
+        }
+        if (typeof options.position === 'string') {
+            next.position = options.position;
+        }
+        if (typeof options.closeOnClick === 'boolean') {
+            next.closeOnClick = options.closeOnClick;
+        }
+        if (typeof options.swipeToDismiss === 'boolean') {
+            next.swipeToDismiss = options.swipeToDismiss;
+        }
+        if (Number.isFinite(Number(options.swipeThreshold))) {
+            next.swipeThreshold = Math.max(30, Math.min(200, Number(options.swipeThreshold)));
+        }
+        if (options.severityDurations && typeof options.severityDurations === 'object') {
+            next.severityDurations = {
+                ...next.severityDurations,
+                ...options.severityDurations
+            };
+        }
+        if (Array.isArray(options.stickyTypes)) {
+            next.stickyTypes = options.stickyTypes.slice();
+        }
+        if (typeof options.compactMode === 'boolean') {
+            next.compactMode = options.compactMode;
+        }
+        if (Number.isFinite(Number(options.compactThreshold))) {
+            next.compactThreshold = Math.max(2, Math.min(10, Number(options.compactThreshold)));
+        }
+
+        toastSystemState.config = next;
+        const container = document.getElementById('toast-container');
+        applyToastContainerPosition(container);
+        flushToastQueue();
+        return toastSystemState.config;
+    };
+    window.getNotificationHistory = function getNotificationHistory(limit = 25) {
+        const safeLimit = Math.max(1, Math.min(100, Number(limit) || 25));
+        return toastSystemState.history.slice(0, safeLimit);
+    };
+    window.clearNotificationHistory = function clearNotificationHistory(options = {}) {
+        const clearActive = Boolean(options?.clearActive);
+        toastSystemState.history = [];
+        toastSystemState.queue = [];
+        toastSystemState.dedupeIndex.clear();
+
+        if (clearActive) {
+            const activeCopy = [...toastSystemState.active];
+            activeCopy.forEach((toast) => closeToast(toast, true));
+        }
+
+        return true;
+    };
 }
 
 // Session timeout warning system: warns users when their admin session is
@@ -260,6 +758,27 @@ class ModalManager {
     constructor() {
         this.modals = new Map();
         this.initContainer();
+        this.bindGlobalHandlers();
+    }
+
+    getTopModalId() {
+        const ids = Array.from(this.modals.keys());
+        if (!ids.length) return null;
+        return ids[ids.length - 1];
+    }
+
+    bindGlobalHandlers() {
+        if (typeof document === 'undefined') return;
+        if (this._boundEscapeHandler) return;
+
+        this._boundEscapeHandler = (event) => {
+            if (event.key !== 'Escape') return;
+            const topId = this.getTopModalId();
+            if (!topId) return;
+            this.closeModal(topId);
+        };
+
+        document.addEventListener('keydown', this._boundEscapeHandler);
     }
 
     initContainer() {
@@ -542,11 +1061,6 @@ if (typeof document !== 'undefined') {
     }
 }
 
-/**
- * Show an input modal for info gathering
- * @param {string} label - The label to display above the input
- * @param {function} callback - Callback to receive the input value or null if cancelled
- */
 function showInputModal(label, callback) {
     showPromptModal({
         title: 'Input Required',
@@ -592,6 +1106,7 @@ function showPromptModal(options = {}) {
         const modal = document.createElement('div');
         modal.id = modalId;
         modal.className = 'modal-wrapper';
+        const inputModeAttr = inputType === 'number' ? 'inputmode="decimal"' : '';
 
         // optional checkbox HTML
         const checkboxId = `${modalId}-confirm-checkbox`;
@@ -613,7 +1128,7 @@ function showPromptModal(options = {}) {
                 </div>
                 <div class="modal-body">
                     <label for="${modalId}-input" style="display:block; font-weight:600; color:var(--text-primary); margin-bottom:0.45rem;">${label}</label>
-                    <input id="${modalId}-input" type="${inputType}" class="form-input" placeholder="${placeholder}" value="${String(defaultValue).replace(/"/g, '&quot;')}" />
+                    <input id="${modalId}-input" type="${inputType}" ${inputModeAttr} class="form-input" placeholder="${placeholder}" value="${String(defaultValue).replace(/"/g, '&quot;')}" autocomplete="off" />
                     <div id="${modalId}-error" style="display:none; margin-top:0.5rem; color:var(--color-red); font-size:0.85rem;"></div>
                     ${checkboxHTML}
                 </div>

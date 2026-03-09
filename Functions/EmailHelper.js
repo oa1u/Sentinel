@@ -6,11 +6,35 @@ const path = require('path');
 const { promises: dns } = require('dns');
 const crypto = require('crypto');
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
+const { MISC: miscConfig } = require('../Config/constants');
+
+function loadEmailConfig() {
+    try {
+        const fromMisc = miscConfig?.Email || miscConfig?.email;
+        if (fromMisc && typeof fromMisc === 'object') {
+            return fromMisc;
+        }
+    } catch (_) {
+        // ignore missing config
+    }
+
+    try {
+        const mainConfig = require('../Config/main.json');
+        const fromMain = mainConfig?.Email || mainConfig?.email;
+        if (fromMain && typeof fromMain === 'object') {
+            return fromMain;
+        }
+    } catch (_) {
+        // ignore missing config
+    }
+
+    return {};
+}
 
 class EmailHelper {
     async isValidEmail(email) {
         if (!email || typeof email !== 'string') return false;
-        const normalized = email.trim().toLowerCase();
+        const normalized = this.normalizeEmail(email);
         // RFC 5322 basic regex
         const rfcRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
         if (!rfcRegex.test(normalized) || normalized.length > 254) return false;
@@ -20,11 +44,9 @@ class EmailHelper {
         ];
         const domain = this.extractDomain(normalized);
         if (!domain || disposableDomains.includes(domain)) return false;
-        // MX record check
-        try {
-            const mxRecords = await require('dns').promises.resolveMx(domain);
-            if (!mxRecords || mxRecords.length === 0) return false;
-        } catch (err) {
+        // MX record check (cached)
+        const hasMx = await this.hasValidMx(domain);
+        if (!hasMx) {
             return false;
         }
         return true;
@@ -42,6 +64,108 @@ class EmailHelper {
         this.maxGlobalEmailsPerMinute = 80;
         this.minSecondsBetweenSameRecipient = 10;
         this.emailLogTableEnsured = false;
+        this.maxSendRetries = 2;
+        this.retryBaseDelayMs = 500;
+        this.retryMaxDelayMs = 5000;
+        this.sendTimeoutMs = 15000;
+        this.maxHtmlLength = 500000;
+        this.maxTextLength = 200000;
+        this.maxSubjectLength = 255;
+        this.mxCache = new Map();
+        this.mxCacheTtlMs = 10 * 60 * 1000;
+        this.maxMxCacheEntries = 500;
+    }
+
+    normalizeEmail(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    sanitizeSubject(value) {
+        return String(value || '')
+            .replace(/[\r\n]+/g, ' ')
+            .trim()
+            .slice(0, this.maxSubjectLength);
+    }
+
+    stripHtmlToText(html) {
+        return String(html || '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, this.maxTextLength);
+    }
+
+    getCachedMx(domain) {
+        const cacheItem = this.mxCache.get(domain);
+        if (!cacheItem) return null;
+        if (Date.now() - cacheItem.at > this.mxCacheTtlMs) {
+            this.mxCache.delete(domain);
+            return null;
+        }
+        return cacheItem.value;
+    }
+
+    setCachedMx(domain, value) {
+        if (!domain) return;
+        if (this.mxCache.size >= this.maxMxCacheEntries) {
+            const oldestKey = this.mxCache.keys().next().value;
+            if (oldestKey) this.mxCache.delete(oldestKey);
+        }
+        this.mxCache.set(domain, { value, at: Date.now() });
+    }
+
+    async hasValidMx(domain) {
+        if (!domain) return false;
+        const cached = this.getCachedMx(domain);
+        if (cached !== null) return Boolean(cached);
+
+        try {
+            const mxRecords = await dns.resolveMx(domain);
+            const hasMx = Array.isArray(mxRecords) && mxRecords.length > 0;
+            this.setCachedMx(domain, hasMx);
+            return hasMx;
+        } catch (_) {
+            this.setCachedMx(domain, false);
+            return false;
+        }
+    }
+
+    sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    isRetryableEmailError(error) {
+        const code = String(error?.code || '').toUpperCase();
+        const responseCode = Number(error?.responseCode || 0);
+        const message = String(error?.message || '').toLowerCase();
+
+        if (['ETIMEDOUT', 'ECONNECTION', 'ECONNRESET', 'EAI_AGAIN', 'ENOTFOUND', 'ESOCKET'].includes(code)) {
+            return true;
+        }
+        if ([421, 450, 451, 452].includes(responseCode)) {
+            return true;
+        }
+        if (message.includes('timeout') || message.includes('temporarily') || message.includes('try again')) {
+            return true;
+        }
+        return false;
+    }
+
+    buildDeliveryContext(metadata = {}) {
+        const correlationId = String(metadata?.correlationId || metadata?.requestId || '').trim();
+        const source = String(metadata?.source || '').trim();
+        const providerResponse = metadata?.providerResponse ? String(metadata.providerResponse) : null;
+        return {
+            correlationId: correlationId || null,
+            source: source || null,
+            providerResponse
+        };
     }
 
     loadAppealLink() {
@@ -62,6 +186,26 @@ class EmailHelper {
                 return false;
             }
 
+            try {
+                const emailCfg = loadEmailConfig();
+                if (emailCfg) {
+                    if (Number.isFinite(Number(emailCfg.sendTimeoutMs))) {
+                        this.sendTimeoutMs = Number(emailCfg.sendTimeoutMs);
+                    }
+                    if (Number.isFinite(Number(emailCfg.maxSendRetries))) {
+                        this.maxSendRetries = Number(emailCfg.maxSendRetries);
+                    }
+                    if (Number.isFinite(Number(emailCfg.retryBaseDelayMs))) {
+                        this.retryBaseDelayMs = Number(emailCfg.retryBaseDelayMs);
+                    }
+                    if (Number.isFinite(Number(emailCfg.retryMaxDelayMs))) {
+                        this.retryMaxDelayMs = Number(emailCfg.retryMaxDelayMs);
+                    }
+                }
+            } catch (_) {
+                // ignore missing config
+            }
+
             this.fromAddress = String(
                 smtpConfig.from || process.env.ADMIN_EMAIL || smtpConfig.user || ''
             ).trim();
@@ -76,6 +220,9 @@ class EmailHelper {
                 host: smtpConfig.host,
                 port: smtpConfig.port || 587,
                 secure: smtpConfig.secure || false,
+                connectionTimeout: this.sendTimeoutMs,
+                greetingTimeout: this.sendTimeoutMs,
+                socketTimeout: this.sendTimeoutMs,
                 auth: {
                     user: smtpConfig.user,
                     pass: smtpConfig.pass
@@ -87,8 +234,7 @@ class EmailHelper {
             await this.checkDomainAuthSignals();
             // Load optional email-related overrides from config
             try {
-                const mainCfg = require('../Config/main.json');
-                const emailCfg = mainCfg?.Email || mainCfg?.email || {};
+                const emailCfg = loadEmailConfig();
                 if (emailCfg) {
                     if (Number.isFinite(Number(emailCfg.emailAbuseWindowSeconds))) {
                         this.emailAbuseWindowMs = Number(emailCfg.emailAbuseWindowSeconds) * 1000;
@@ -101,6 +247,18 @@ class EmailHelper {
                     }
                     if (Number.isFinite(Number(emailCfg.minSecondsBetweenSameRecipient))) {
                         this.minSecondsBetweenSameRecipient = Number(emailCfg.minSecondsBetweenSameRecipient);
+                    }
+                    if (Number.isFinite(Number(emailCfg.maxSendRetries))) {
+                        this.maxSendRetries = Number(emailCfg.maxSendRetries);
+                    }
+                    if (Number.isFinite(Number(emailCfg.retryBaseDelayMs))) {
+                        this.retryBaseDelayMs = Number(emailCfg.retryBaseDelayMs);
+                    }
+                    if (Number.isFinite(Number(emailCfg.retryMaxDelayMs))) {
+                        this.retryMaxDelayMs = Number(emailCfg.retryMaxDelayMs);
+                    }
+                    if (Number.isFinite(Number(emailCfg.sendTimeoutMs))) {
+                        this.sendTimeoutMs = Number(emailCfg.sendTimeoutMs);
                     }
                 }
             } catch (e) {
@@ -120,40 +278,111 @@ class EmailHelper {
      * Send a generic email
      */
     async sendEmail(to, subject, html, text = '', metadata = {}) {
-        const templateName = String(metadata?.templateName || 'generic').trim() || 'generic';
+        const normalizedPayload = (to && typeof to === 'object' && !Array.isArray(to))
+            ? {
+                to: to.to,
+                subject: to.subject,
+                html: to.html,
+                text: to.text || '',
+                metadata: (to.metadata && typeof to.metadata === 'object') ? to.metadata : {}
+            }
+            : { to, subject, html, text, metadata };
+
+        const extraMetadata = (normalizedPayload.metadata && typeof normalizedPayload.metadata === 'object')
+            ? normalizedPayload.metadata
+            : {};
+        const templateName = String(extraMetadata?.templateName || 'generic').trim() || 'generic';
+        const deliveryContext = this.buildDeliveryContext(extraMetadata);
+        const recipientEmail = this.normalizeEmail(normalizedPayload.to);
+        const sanitizedSubject = this.sanitizeSubject(normalizedPayload.subject);
+        const htmlBody = String(normalizedPayload.html || '').slice(0, this.maxHtmlLength);
+        const textBody = normalizedPayload.text
+            ? String(normalizedPayload.text).slice(0, this.maxTextLength)
+            : this.stripHtmlToText(htmlBody);
+
+        if (!recipientEmail || !this.extractDomain(recipientEmail)) {
+            await this.logEmailDelivery({ to: recipientEmail, subject: sanitizedSubject, templateName, status: 'blocked', errorMessage: 'Invalid recipient email', context: deliveryContext });
+            return { success: false, error: 'Invalid recipient email' };
+        }
+
+        if (!htmlBody && !textBody) {
+            await this.logEmailDelivery({ to: recipientEmail, subject: sanitizedSubject, templateName, status: 'blocked', errorMessage: 'Email content is empty', context: deliveryContext });
+            return { success: false, error: 'Email content is empty' };
+        }
 
         if (!this.isConfigured || !this.transporter) {
             console.warn('⚠️  Email system not configured. Skipping email send.');
-            await this.logEmailDelivery({ to, subject, templateName, status: 'blocked', errorMessage: 'Email system not configured' });
+            await this.logEmailDelivery({ to: recipientEmail, subject: sanitizedSubject, templateName, status: 'blocked', errorMessage: 'Email system not configured', context: deliveryContext });
             return { success: false, error: 'Email system not configured' };
         }
 
-        // perform abuse/throttle checks (DB-backed when possible)
-        const throttleCheck = await this.canSendToRecipient(to);
+        const throttleCheck = await this.canSendToRecipient(recipientEmail);
         if (!throttleCheck.allowed) {
             console.warn(`⚠️  Email blocked by anti-abuse policy: ${throttleCheck.reason}`);
-            await this.logEmailDelivery({ to, subject, templateName, status: 'blocked', errorMessage: throttleCheck.reason });
+            await this.logEmailDelivery({ to: recipientEmail, subject: sanitizedSubject, templateName, status: 'blocked', errorMessage: throttleCheck.reason, context: deliveryContext });
             return { success: false, error: throttleCheck.reason };
         }
 
-        try {
-            const result = await this.transporter.sendMail({
-                from: this.fromAddress,
-                to,
-                subject,
-                text: text || html.replace(/<[^>]*>/g, ''), // Strip HTML for plain text
-                html
-            });
+        const attemptsAllowed = Math.max(0, Number(this.maxSendRetries)) + 1;
 
-            console.log('✅ Email sent successfully');
-            this.markRecipientSend(to);
-            await this.logEmailDelivery({ to, subject, templateName, status: 'sent', messageId: result.messageId });
-            return { success: true, messageId: result.messageId };
-        } catch (error) {
-            console.error('❌ Failed to send email:', error.message);
-            await this.logEmailDelivery({ to, subject, templateName, status: 'failed', errorMessage: error.message });
-            return { success: false, error: error.message };
+        for (let attempt = 1; attempt <= attemptsAllowed; attempt += 1) {
+            const startedAt = Date.now();
+            try {
+                const result = await this.transporter.sendMail({
+                    from: this.fromAddress,
+                    to: recipientEmail,
+                    subject: sanitizedSubject,
+                    text: textBody,
+                    html: htmlBody || undefined
+                });
+
+                this.markRecipientSend(recipientEmail);
+                await this.logEmailDelivery({
+                    to: recipientEmail,
+                    subject: sanitizedSubject,
+                    templateName,
+                    status: 'sent',
+                    messageId: result.messageId,
+                    context: {
+                        ...deliveryContext,
+                        providerResponse: result?.response ? String(result.response) : deliveryContext.providerResponse,
+                        attempt,
+                        latencyMs: Date.now() - startedAt
+                    }
+                });
+                console.log(`✅ Email sent successfully (attempt ${attempt}/${attemptsAllowed})`);
+                return { success: true, messageId: result.messageId };
+            } catch (error) {
+                const retryable = this.isRetryableEmailError(error);
+                const canRetry = retryable && attempt < attemptsAllowed;
+
+                if (!canRetry) {
+                    await this.logEmailDelivery({
+                        to: recipientEmail,
+                        subject: sanitizedSubject,
+                        templateName,
+                        status: 'failed',
+                        errorMessage: error.message,
+                        context: {
+                            ...deliveryContext,
+                            providerResponse: error?.response ? String(error.response) : deliveryContext.providerResponse,
+                            attempt,
+                            latencyMs: Date.now() - startedAt
+                        }
+                    });
+                    console.error(`❌ Failed to send email (attempt ${attempt}/${attemptsAllowed}):`, error.message);
+                    return { success: false, error: error.message };
+                }
+
+                const delayMs = Math.min(
+                    this.retryMaxDelayMs,
+                    this.retryBaseDelayMs * (2 ** (attempt - 1))
+                );
+                await this.sleep(delayMs);
+            }
         }
+
+        return { success: false, error: 'Unknown email delivery failure' };
     }
 
     async ensureEmailLogTable() {
@@ -170,11 +399,17 @@ class EmailHelper {
                     status ENUM('sent', 'failed', 'blocked') NOT NULL,
                     error_message TEXT NULL,
                     message_id VARCHAR(255) NULL,
+                    correlation_id VARCHAR(128) NULL,
+                    source VARCHAR(100) NULL,
+                    provider_response TEXT NULL,
+                    attempt_count INT DEFAULT 1,
+                    latency_ms INT DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     INDEX idx_created (created_at),
                     INDEX idx_status (status),
                     INDEX idx_template (template_name),
-                    INDEX idx_recipient_domain (recipient_domain)
+                    INDEX idx_recipient_domain (recipient_domain),
+                    INDEX idx_correlation_id (correlation_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
             this.emailLogTableEnsured = true;
@@ -184,35 +419,70 @@ class EmailHelper {
     }
 
     extractDomain(email) {
-        const normalized = String(email || '').trim().toLowerCase();
+        const normalized = this.normalizeEmail(email);
         const atIndex = normalized.lastIndexOf('@');
         if (atIndex <= 0) return null;
         const domain = normalized.slice(atIndex + 1);
         return domain || null;
     }
 
-    async logEmailDelivery({ to, subject, templateName, status, errorMessage = null, messageId = null }) {
+    async logEmailDelivery({ to, subject, templateName, status, errorMessage = null, messageId = null, context = {} }) {
         try {
             if (!MySQLDatabaseManager?.connection?.pool) return;
             await this.ensureEmailLogTable();
 
-            const recipientEmail = String(to || '').trim().toLowerCase();
+            const recipientEmail = this.normalizeEmail(to);
             if (!recipientEmail) return;
 
-            await MySQLDatabaseManager.connection.pool.execute(
-                `INSERT INTO email_delivery_logs
-                    (recipient_email, recipient_domain, template_name, subject, status, error_message, message_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    recipientEmail,
-                    this.extractDomain(recipientEmail),
-                    String(templateName || 'generic').slice(0, 100),
-                    String(subject || '').slice(0, 255) || null,
-                    status,
-                    errorMessage ? String(errorMessage) : null,
-                    messageId ? String(messageId).slice(0, 255) : null
-                ]
-            );
+            const correlationId = context?.correlationId ? String(context.correlationId).slice(0, 128) : null;
+            const source = context?.source ? String(context.source).slice(0, 100) : null;
+            const providerResponse = context?.providerResponse ? String(context.providerResponse) : null;
+            const attemptCount = Number.isFinite(Number(context?.attempt))
+                ? Math.max(1, Math.round(Number(context.attempt)))
+                : 1;
+            const latencyMs = Number.isFinite(Number(context?.latencyMs))
+                ? Math.max(0, Math.round(Number(context.latencyMs)))
+                : null;
+
+            try {
+                await MySQLDatabaseManager.connection.pool.execute(
+                    `INSERT INTO email_delivery_logs
+                        (recipient_email, recipient_domain, template_name, subject, status, error_message, message_id, correlation_id, source, provider_response, attempt_count, latency_ms)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        recipientEmail,
+                        this.extractDomain(recipientEmail),
+                        String(templateName || 'generic').slice(0, 100),
+                        this.sanitizeSubject(subject) || null,
+                        status,
+                        errorMessage ? String(errorMessage) : null,
+                        messageId ? String(messageId).slice(0, 255) : null,
+                        correlationId,
+                        source,
+                        providerResponse,
+                        attemptCount,
+                        latencyMs
+                    ]
+                );
+            } catch (insertErr) {
+                if (insertErr?.code !== 'ER_BAD_FIELD_ERROR') {
+                    throw insertErr;
+                }
+                await MySQLDatabaseManager.connection.pool.execute(
+                    `INSERT INTO email_delivery_logs
+                        (recipient_email, recipient_domain, template_name, subject, status, error_message, message_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        recipientEmail,
+                        this.extractDomain(recipientEmail),
+                        String(templateName || 'generic').slice(0, 100),
+                        this.sanitizeSubject(subject) || null,
+                        status,
+                        errorMessage ? String(errorMessage) : null,
+                        messageId ? String(messageId).slice(0, 255) : null
+                    ]
+                );
+            }
         } catch (error) {
             console.warn('⚠️  Failed to write email analytics log:', error.message);
         }
@@ -223,6 +493,13 @@ class EmailHelper {
         if (explicit) return explicit.replace(/\/$/, '');
         const host = String(process.env.ADMIN_ORIGIN || '').trim();
         if (host) return host.replace(/\/$/, '');
+        try {
+            const mainConfig = require('../Config/main.json');
+            const websiteLink = String(mainConfig?.WebsiteLink || '').trim();
+            if (websiteLink) return websiteLink.replace(/\/$/, '');
+        } catch (_) {
+            // ignore config read errors
+        }
         const port = String(process.env.ADMIN_PORT || '3000').trim();
         return `http://localhost:${port}`;
     }
@@ -267,7 +544,7 @@ class EmailHelper {
     }
 
     async canSendToRecipient(to) {
-        const recipient = String(to || '').trim().toLowerCase();
+        const recipient = this.normalizeEmail(to);
         if (!recipient) {
             return { allowed: false, reason: 'Missing recipient' };
         }
@@ -382,7 +659,7 @@ class EmailHelper {
     }
 
     markRecipientSend(to) {
-        const recipient = String(to || '').trim().toLowerCase();
+        const recipient = this.normalizeEmail(to);
         if (!recipient) return;
 
         const now = Date.now();
@@ -417,11 +694,6 @@ class EmailHelper {
         const EmailTemplates = require('./EmailTemplates');
         const html = EmailTemplates.appealReceived({ userName, caseId });
         return this.sendEmail(userEmail, 'Your Ban Appeal Was Received', html, '', { templateName: 'appeal_received' });
-    }
-
-    async sendBanNotificationEmail(userEmail, userName, reason) {
-        // This function is now deprecated. No email will be sent.
-        return { success: false, error: 'Ban notification email template removed.' };
     }
 
     async sendRegistrationWelcomeEmail(userEmail, userName, role = 'moderator') {

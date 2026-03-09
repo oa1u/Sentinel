@@ -9,28 +9,15 @@
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
     <style>
-        :root {
-            --login-bg: #0f0f13;
-            --login-accent: #5b7fff;
-            --login-card-bg: rgba(30, 30, 35, 0.6);
-            --login-border: rgba(255, 255, 255, 0.1);
-        }
-
         body {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-color: var(--login-bg);
-            background-image:
-                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
-                radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%),
-                radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
-            background-size: cover;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            color: #fff;
-            overflow: hidden;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
             margin: 0;
         }
 
@@ -48,7 +35,7 @@
             position: absolute;
             border-radius: 50%;
             filter: blur(80px);
-            opacity: 0.4;
+            opacity: 0.24;
             animation: float 20s infinite ease-in-out alternate;
         }
 
@@ -57,7 +44,7 @@
             left: -10%;
             width: 500px;
             height: 500px;
-            background: #5b7fff;
+            background: var(--color-blue);
             animation-delay: 0s;
         }
 
@@ -66,7 +53,7 @@
             right: -10%;
             width: 600px;
             height: 600px;
-            background: #7f5bff;
+            background: var(--color-purple);
             animation-delay: -5s;
         }
 
@@ -82,50 +69,60 @@
 
         .form-container {
             width: 100%;
-            max-width: 480px;
-            padding: 2rem;
+            max-width: 560px;
+            padding: 1.4rem;
             z-index: 10;
         }
 
         .auth-card {
-            background: var(--login-card-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--login-border);
-            border-radius: 24px;
-            padding: 2.5rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            transition: transform 0.3s ease;
-        }
-
-        .auth-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.6);
+            background: var(--bg-card);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.35rem;
+            box-shadow: var(--shadow-lg);
         }
 
         .brand-header {
-            text-align: center;
-            margin-bottom: 2rem;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            grid-template-areas:
+                "logo title"
+                "logo subtitle";
+            column-gap: 0.9rem;
+            align-items: center;
+            margin-bottom: 1rem;
+            text-align: left;
         }
 
         .brand-logo {
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
-            display: inline-block;
-            filter: drop-shadow(0 0 20px rgba(91, 127, 255, 0.3));
+            grid-area: logo;
+            font-size: 2.2rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            filter: drop-shadow(0 8px 28px rgba(91, 127, 255, 0.14));
         }
 
         .form-title {
-            font-size: 1.5rem;
+            grid-area: title;
+            font-size: 1.35rem;
             font-weight: 700;
-            color: #fff;
-            margin-bottom: 0.5rem;
-            letter-spacing: -0.025em;
+            color: var(--text-primary);
+            margin-bottom: 0.1rem;
         }
 
         .form-subtitle {
-            color: #a0a0b0;
+            grid-area: subtitle;
+            color: var(--text-secondary);
             font-size: 0.9rem;
+            margin: 0;
         }
 
         /* Recovery Switches as Tabs */
@@ -133,33 +130,34 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 0.5rem;
-            margin-bottom: 1.5rem;
-            background: rgba(0, 0, 0, 0.2);
+            margin-bottom: 1rem;
+            background: var(--bg-secondary);
             padding: 0.25rem;
             border-radius: 12px;
+            border: 1px solid var(--border-color);
         }
 
         .recovery-switches button {
             background: transparent;
             border: none;
-            color: #a0a0b0;
+            color: var(--text-secondary);
             padding: 0.6rem;
             font-size: 0.8rem;
-            font-weight: 500;
+            font-weight: 600;
             border-radius: 10px;
             cursor: pointer;
             transition: all 0.2s;
         }
 
         .recovery-switches button:hover {
-            color: #fff;
-            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            background: var(--bg-card-hover);
         }
 
         .recovery-switches button.active {
-            background: var(--login-accent);
+            background: var(--color-blue);
             color: #fff;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
         }
 
         .form-group {
@@ -170,8 +168,8 @@
         .form-label {
             display: block;
             font-size: 0.85rem;
-            font-weight: 500;
-            color: #d1d1e0;
+            font-weight: 600;
+            color: var(--text-primary);
             margin-bottom: 0.4rem;
             margin-left: 0.25rem;
         }
@@ -185,17 +183,21 @@
         .form-input {
             width: 100%;
             padding: 0.75rem 1rem 0.75rem 2.5rem;
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid var(--login-border);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
             border-radius: 12px;
-            color: #fff;
+            color: var(--text-primary);
             font-size: 0.95rem;
             transition: all 0.2s;
         }
 
+        .form-input::placeholder {
+            color: var(--text-secondary);
+        }
+
         .form-input:focus {
-            background: rgba(0, 0, 0, 0.3);
-            border-color: var(--login-accent);
+            background: var(--bg-secondary);
+            border-color: var(--color-blue);
             box-shadow: 0 0 0 4px rgba(91, 127, 255, 0.15);
             outline: none;
         }
@@ -203,7 +205,7 @@
         .input-icon {
             position: absolute;
             left: 0.8rem;
-            color: #71717a;
+            color: var(--text-secondary);
             pointer-events: none;
             transition: color 0.2s;
             font-size: 1rem;
@@ -211,7 +213,7 @@
 
         .form-input:focus+.input-icon,
         .form-input:not(:placeholder-shown)+.input-icon {
-            color: var(--login-accent);
+            color: var(--color-blue);
         }
 
         .btn-full {
@@ -226,10 +228,10 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #5b7fff 0%, #4f6be0 100%);
+            background: linear-gradient(135deg, var(--color-blue) 0%, #4f6be0 100%);
             border: none;
             color: white;
-            box-shadow: 0 4px 12px rgba(91, 127, 255, 0.3);
+            box-shadow: 0 8px 28px rgba(91, 127, 255, 0.16);
         }
 
         .btn-primary:hover {
@@ -265,19 +267,19 @@
             margin-top: 1.5rem;
             text-align: center;
             font-size: 0.9rem;
-            border-top: 1px solid var(--login-border);
+            border-top: 1px solid var(--border-color);
             padding-top: 1.5rem;
         }
 
         .links-container a {
-            color: #a0a0b0;
+            color: #cfe0ff;
             text-decoration: none;
             transition: color 0.2s;
-            font-weight: 500;
+            font-weight: 600;
         }
 
         .links-container a:hover {
-            color: var(--login-accent);
+            color: #ffffff;
         }
 
 
@@ -288,13 +290,12 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(15, 15, 19, 0.8);
+            background: rgba(15, 15, 19, 0.72);
             backdrop-filter: blur(5px);
             z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
+            display: grid;
+            place-items: center;
+            text-align: center;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s;
@@ -312,12 +313,43 @@
             border-radius: 50%;
             border-top-color: #5b7fff;
             animation: spin 1s ease-in-out infinite;
-            margin-bottom: 1rem;
+            margin: 0 auto 1rem;
         }
 
         @keyframes spin {
             to {
                 transform: rotate(360deg);
+            }
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        @media (max-width: 640px) {
+            .form-container {
+                padding: 1rem;
+            }
+
+            .brand-header {
+                grid-template-columns: 1fr;
+                grid-template-areas:
+                    "logo"
+                    "title"
+                    "subtitle";
+                text-align: center;
+            }
+
+            .brand-logo {
+                margin: 0 auto;
             }
         }
     </style>
@@ -341,14 +373,14 @@
             <div id="successMsg" class="message success hidden"></div>
 
             <div class="recovery-switches">
-                <button type="button" id="showRecoveryLoginPanel">Code Login</button>
+                <button type="button" id="showRecoveryLoginPanel" class="active">Code Login</button>
                 <button type="button" id="showEmailResetRequestPanel">Email Reset</button>
                 <button type="button" id="showTokenResetPanel">Token Reset</button>
                 <button type="button" id="showRecoveryResetPanel">Code Reset</button>
             </div>
 
             <form id="recoveryForm">
-                <h3 style="display:none">Recovery Code Login</h3>
+                <h3 class="sr-only">Recovery Code Login</h3>
                 <div class="form-group">
                     <label for="username" class="form-label">Username</label>
                     <div class="input-wrapper">
@@ -372,7 +404,7 @@
 
             <!-- Panel 2: Request Password Reset -->
             <form id="passwordResetRequestForm" style="display:none;">
-                <h3 style="display:none">Email Reset Request</h3>
+                <h3 class="sr-only">Email Reset Request</h3>
                 <div class="form-group">
                     <label for="resetIdentifier" class="form-label">Username or Email</label>
                     <div class="input-wrapper">
@@ -386,7 +418,7 @@
 
             <!-- Panel 3: Reset with Token -->
             <form id="passwordResetTokenForm" style="display:none;">
-                <h3 style="display:none">Reset With Email Token</h3>
+                <h3 class="sr-only">Reset With Email Token</h3>
                 <div class="form-group">
                     <label for="resetToken" class="form-label">Reset Token</label>
                     <div class="input-wrapper">
@@ -416,7 +448,7 @@
 
             <!-- Panel 4: Reset with Recovery Code -->
             <form id="passwordResetRecoveryForm" style="display:none;">
-                <h3 style="display:none">Reset With Recovery Code</h3>
+                <h3 class="sr-only">Reset With Recovery Code</h3>
                 <div class="form-group">
                     <label for="resetRecoveryUsername" class="form-label">Username</label>
                     <div class="input-wrapper">
@@ -460,7 +492,7 @@
 
     <div class="loading-overlay" id="loading">
         <div class="spinner"></div>
-        <p style="color:#fff">Processing...</p>
+        <p>Processing...</p>
     </div>
 
     <script src="/public/notifications.js" defer></script>

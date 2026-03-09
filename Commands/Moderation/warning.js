@@ -1,7 +1,7 @@
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
-const { moderatorRoleId } = require("../../Config/constants/roles.json");
+const { ROLES: { moderatorRoleId } } = require("../../Config/constants");
 
 module.exports = {
   data: new SlashCommandBuilder()

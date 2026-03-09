@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="/css/style.css">
 
     <script src="/public/shared.js"></script>
-    <script src="/public/admin.js" defer></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/notifications.js" defer></script>
     <style>
@@ -755,7 +754,6 @@
             }
         }
 
-        /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -920,21 +918,21 @@
 
         <!-- Action Tabs -->
         <div class="action-tabs">
-            <div class="action-tab active" onclick="switchPanel('submit')">
+            <div class="action-tab active" onclick="switchPanel('submit', event)">
                 <div class="action-tab-icon">📝</div>
                 <div class="action-tab-content">
                     <div class="action-tab-title">Submit Appeal</div>
                     <div class="action-tab-desc">File a new ban appeal</div>
                 </div>
             </div>
-            <div class="action-tab" onclick="switchPanel('status')">
+            <div class="action-tab" onclick="switchPanel('status', event)">
                 <div class="action-tab-icon">🔍</div>
                 <div class="action-tab-content">
                     <div class="action-tab-title">Check Status</div>
                     <div class="action-tab-desc">Look up appeal progress</div>
                 </div>
             </div>
-            <div class="action-tab" onclick="switchPanel('history')">
+            <div class="action-tab" onclick="switchPanel('history', event)">
                 <div class="action-tab-icon">📚</div>
                 <div class="action-tab-content">
                     <div class="action-tab-title">My History</div>
@@ -1051,7 +1049,8 @@
                                 <span class="required">*</span>
                             </label>
                             <input type="text" id="caseId" class="form-input" placeholder="e.g., BAN-kX7mP9qL2n"
-                                oninput="validateStep(2)">
+                                maxlength="54" autocomplete="off" spellcheck="false" pattern="^BAN-[A-Za-z0-9]{1,50}$"
+                                oninput="normalizeCaseIdInput(); validateStep(2); queueCaseIdDatabaseValidation()">
                             <p class="form-help">💡 Find this in your ban notification DM (format: BAN-XXXXXXXXXX)</p>
                             <div id="caseIdValidation" class="form-validation"></div>
                         </div>
@@ -1511,29 +1510,23 @@
     <script>
         let appealCsrfToken = '';
         let currentStep = 1;
+        const caseIdDbValidationState = {
+            pending: false,
+            lastChecked: '',
+            isValid: false,
+            debounceTimer: null,
+            requestSeq: 0
+        };
 
         // Get CSRF Token
         async function getAppealCsrfToken(forceRefresh = false) {
             if (appealCsrfToken && !forceRefresh) return appealCsrfToken;
-
-            const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            if (metaToken) {
-                appealCsrfToken = metaToken;
-                return appealCsrfToken;
-            }
-
-            const cookieMatch = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
-            if (!forceRefresh && cookieMatch && cookieMatch[1]) {
-                appealCsrfToken = decodeURIComponent(cookieMatch[1]);
-                return appealCsrfToken;
-            }
+            if (!window.AdminPanel?.api?.getCsrfToken) return '';
 
             try {
-                const { response, data } = await window.AdminPanel.api.getJson('/api/csrf');
-                if (response.ok && data?.csrfToken) {
-                    appealCsrfToken = data.csrfToken;
-                    return appealCsrfToken;
-                }
+                const token = await window.AdminPanel.api.getCsrfToken(forceRefresh);
+                appealCsrfToken = token || '';
+                return appealCsrfToken;
             } catch (error) {
                 console.error('Failed to fetch CSRF token:', error);
             }
@@ -1542,10 +1535,10 @@
         }
 
         // Panel Switching
-        function switchPanel(panel) {
+        function switchPanel(panel, event) {
             // Update tabs
             document.querySelectorAll('.action-tab').forEach(tab => tab.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+            event?.currentTarget?.classList.add('active');
 
             // Update panels
             document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
@@ -1588,6 +1581,79 @@
 
             // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function isValidBanCaseIdFormat(caseId) {
+            return /^BAN-[A-Za-z0-9]{1,50}$/.test(String(caseId || '').trim());
+        }
+
+        function normalizeCaseIdInput() {
+            const caseIdInput = document.getElementById('caseId');
+            if (!caseIdInput) return;
+
+            let value = String(caseIdInput.value || '').trim().replace(/\s+/g, '');
+            value = value.replace(/^ban-/i, 'BAN-');
+
+            if (value.length > 4) {
+                const suffix = value.slice(4).replace(/[^A-Za-z0-9]/g, '');
+                value = `BAN-${suffix}`;
+            }
+
+            if (value.length > 54) {
+                value = value.slice(0, 54);
+            }
+
+            caseIdInput.value = value;
+        }
+
+        async function checkBanCaseIdInDatabase(caseId) {
+            try {
+                const { response, data } = await window.AdminPanel.api.requestJson(`/api/appeals/validate-case-id?caseId=${encodeURIComponent(caseId)}`, {
+                    method: 'GET'
+                });
+
+                if (!response?.ok) {
+                    return { valid: false, unavailable: true };
+                }
+
+                return { valid: Boolean(data?.valid) };
+            } catch (error) {
+                console.error('Case ID DB validation failed:', error);
+                return { valid: false, unavailable: true };
+            }
+        }
+
+        function queueCaseIdDatabaseValidation() {
+            const caseId = document.getElementById('caseId')?.value?.trim() || '';
+
+            if (!isValidBanCaseIdFormat(caseId)) {
+                caseIdDbValidationState.pending = false;
+                caseIdDbValidationState.lastChecked = '';
+                caseIdDbValidationState.isValid = false;
+                if (caseIdDbValidationState.debounceTimer) {
+                    clearTimeout(caseIdDbValidationState.debounceTimer);
+                    caseIdDbValidationState.debounceTimer = null;
+                }
+                return;
+            }
+
+            if (caseIdDbValidationState.debounceTimer) {
+                clearTimeout(caseIdDbValidationState.debounceTimer);
+            }
+
+            caseIdDbValidationState.pending = true;
+            validateStep(2);
+
+            const currentSeq = ++caseIdDbValidationState.requestSeq;
+            caseIdDbValidationState.debounceTimer = setTimeout(async () => {
+                const result = await checkBanCaseIdInDatabase(caseId);
+                if (currentSeq !== caseIdDbValidationState.requestSeq) return;
+
+                caseIdDbValidationState.pending = false;
+                caseIdDbValidationState.lastChecked = caseId;
+                caseIdDbValidationState.isValid = Boolean(result.valid);
+                validateStep(2);
+            }, 300);
         }
 
         // Validation Functions
@@ -1643,12 +1709,24 @@
                     setValidation('caseId', null);
                     document.getElementById('step2Next').disabled = true;
                     return false;
-                } else if (!caseId.startsWith('BAN-') || caseId.length < 5 || caseId.length > 54) {
-                    setValidation('caseId', false, 'Invalid format (must be BAN- followed by 1-50 characters)');
+                } else if (!isValidBanCaseIdFormat(caseId)) {
+                    setValidation('caseId', false, 'Invalid format (use BAN- followed by 1-50 letters/numbers)');
+                    document.getElementById('step2Next').disabled = true;
+                    return false;
+                } else if (caseIdDbValidationState.pending) {
+                    setValidation('caseId', false, 'Checking case ID in database...');
+                    document.getElementById('step2Next').disabled = true;
+                    return false;
+                } else if (caseIdDbValidationState.lastChecked === caseId && !caseIdDbValidationState.isValid) {
+                    setValidation('caseId', false, 'This Ban Case ID was not found as an active ban.');
+                    document.getElementById('step2Next').disabled = true;
+                    return false;
+                } else if (caseIdDbValidationState.lastChecked !== caseId) {
+                    setValidation('caseId', false, 'Checking case ID in database...');
                     document.getElementById('step2Next').disabled = true;
                     return false;
                 } else {
-                    setValidation('caseId', true, 'Valid Case ID');
+                    setValidation('caseId', true, 'Valid Case ID (verified in database)');
                     document.getElementById('step2Next').disabled = false;
                     return true;
                 }
@@ -1703,73 +1781,98 @@
 
         // Appeal Quality Analyzer
         function analyzeAppealQuality() {
-            const reason = document.getElementById('reason').value.trim();
+            const reasonInput = document.getElementById('reason');
+            const reason = String(reasonInput?.value || '').trim();
             const charCount = document.getElementById('charCount');
-            charCount.textContent = reason.length;
+            if (charCount) charCount.textContent = reason.length;
 
+            const analyzerEl = document.getElementById('qualityAnalyzer');
             if (reason.length < 20) {
-                document.getElementById('qualityAnalyzer').style.display = 'none';
+                if (analyzerEl) analyzerEl.style.display = 'none';
                 validateStep(3);
                 return;
             }
 
-            document.getElementById('qualityAnalyzer').style.display = 'block';
+            if (analyzerEl) analyzerEl.style.display = 'block';
 
-            // Calculate metrics
-            const words = reason.split(/\s+/).filter(w => w.length > 0);
-            const sentences = reason.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            const words = reason
+                .replace(/[^\p{L}\p{N}'-]+/gu, ' ')
+                .split(/\s+/)
+                .filter(Boolean);
+            const sentences = reason
+                .split(/[.!?]+/)
+                .map((sentence) => sentence.trim())
+                .filter(Boolean);
+
             const wordCount = words.length;
             const sentenceCount = sentences.length;
-            const avgWordLength = Math.round(words.reduce((sum, w) => sum + w.length, 0) / wordCount);
+            const avgWordLength = wordCount > 0
+                ? Math.round(words.reduce((sum, word) => sum + word.length, 0) / wordCount)
+                : 0;
 
-            // Calculate quality score
             let score = 0;
+
+            const lengthScore = Math.min(30, Math.round((Math.min(wordCount, 120) / 120) * 30));
+            score += lengthScore;
+
+            const structureScore = Math.min(20, Math.round((Math.min(sentenceCount, 6) / 6) * 20));
+            score += structureScore;
+
+            const clarityScore = avgWordLength >= 4 ? Math.min(15, (avgWordLength - 3) * 3) : 0;
+            score += clarityScore;
+
+            const lowerReason = reason.toLowerCase();
+            const accountabilityPhrases = [
+                'i understand',
+                'i apologize',
+                'i was wrong',
+                'my mistake',
+                'responsibility',
+                'i will',
+                'i learned',
+                'sorry'
+            ];
+            const accountabilityHits = accountabilityPhrases.filter((phrase) => lowerReason.includes(phrase)).length;
+            score += Math.min(20, accountabilityHits * 4);
+
+            const planPhrases = ['in the future', 'from now on', 'i will not', 'i will avoid', 'i will follow'];
+            const planHits = planPhrases.filter((phrase) => lowerReason.includes(phrase)).length;
+            score += Math.min(15, planHits * 4);
+
+            const cappedScore = Math.max(0, Math.min(100, Math.round(score)));
+
             let scoreLabel = 'Poor';
             let scoreClass = 'poor';
-            let estimate = 'Priority';
+            let estimate = '48h+';
 
-            if (wordCount >= 100) score += 30;
-            else if (wordCount >= 50) score += 20;
-            else if (wordCount >= 30) score += 10;
-
-            if (sentenceCount >= 5) score += 20;
-            else if (sentenceCount >= 3) score += 10;
-
-            if (avgWordLength >= 5) score += 20;
-            else if (avgWordLength >= 4) score += 10;
-
-            // Check for key phrases
-            const keyPhrases = ['i understand', 'i apologize', 'i was wrong', 'i will', 'i learned', 'mistake', 'responsibility', 'sorry'];
-            const lowerReason = reason.toLowerCase();
-            const foundPhrases = keyPhrases.filter(phrase => lowerReason.includes(phrase)).length;
-            score += foundPhrases * 5;
-
-            // Determine label
-            if (score >= 70) {
+            if (cappedScore >= 75) {
                 scoreLabel = 'Excellent';
                 scoreClass = 'excellent';
-                estimate = '4-8h';
-            } else if (score >= 50) {
+                estimate = '4-12h';
+            } else if (cappedScore >= 55) {
                 scoreLabel = 'Good';
                 scoreClass = 'good';
                 estimate = '12-24h';
-            } else if (score >= 30) {
+            } else if (cappedScore >= 35) {
                 scoreLabel = 'Fair';
                 scoreClass = 'fair';
                 estimate = '24-48h';
-            } else {
-                scoreLabel = 'Poor';
-                scoreClass = 'poor';
-                estimate = '48h+';
             }
 
-            // Update UI
-            document.getElementById('qualityScore').textContent = scoreLabel;
-            document.getElementById('qualityScore').className = 'quality-score ' + scoreClass;
-            document.getElementById('metricWords').textContent = wordCount;
-            document.getElementById('metricSentences').textContent = sentenceCount;
-            document.getElementById('metricAvgLength').textContent = avgWordLength;
-            document.getElementById('metricEstimate').textContent = estimate;
+            const qualityScoreEl = document.getElementById('qualityScore');
+            const metricWordsEl = document.getElementById('metricWords');
+            const metricSentencesEl = document.getElementById('metricSentences');
+            const metricAvgLengthEl = document.getElementById('metricAvgLength');
+            const metricEstimateEl = document.getElementById('metricEstimate');
+
+            if (qualityScoreEl) {
+                qualityScoreEl.textContent = `${scoreLabel} (${cappedScore}/100)`;
+                qualityScoreEl.className = 'quality-score ' + scoreClass;
+            }
+            if (metricWordsEl) metricWordsEl.textContent = String(wordCount);
+            if (metricSentencesEl) metricSentencesEl.textContent = String(sentenceCount);
+            if (metricAvgLengthEl) metricAvgLengthEl.textContent = String(avgWordLength);
+            if (metricEstimateEl) metricEstimateEl.textContent = estimate;
 
             validateStep(3);
         }
@@ -1792,6 +1895,24 @@
             const email = document.getElementById('email').value.trim();
             const reason = document.getElementById('reason').value.trim();
             const rulesCheckbox = document.getElementById('rulesCheckbox').checked;
+
+            if (!isValidBanCaseIdFormat(caseId)) {
+                showMessage('error', 'Please enter a valid Ban Case ID (BAN- followed by 1-50 letters/numbers).');
+                return;
+            }
+
+            if (!(caseIdDbValidationState.lastChecked === caseId && caseIdDbValidationState.isValid && !caseIdDbValidationState.pending)) {
+                const caseDbCheck = await checkBanCaseIdInDatabase(caseId);
+                caseIdDbValidationState.lastChecked = caseId;
+                caseIdDbValidationState.isValid = Boolean(caseDbCheck.valid);
+                caseIdDbValidationState.pending = false;
+
+                if (!caseDbCheck.valid) {
+                    showMessage('error', 'This Ban Case ID is not valid in our database. Please check and try again.');
+                    validateStep(2);
+                    return;
+                }
+            }
 
             if (!rulesCheckbox) {
                 showMessage('error', 'You must agree to the server rules');

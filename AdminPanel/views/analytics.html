@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="websiteNameTitle">Analytics</title>
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/public/notifications.js" defer></script>
+    <script src="/public/shared.js"></script>
+    <script src="/public/version.js"></script>
+    <script src="/public/owner.js" defer></script>
+</head>
+
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo"><span id="PanelEmoji"></span> Analytics</div>
+            <nav class="header-nav">
+                <a href="/dashboard" class="nav-link">Dashboard</a>
+                <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
+                <a href="/admin" class="nav-link">Admin</a>
+                <a href="/owner" class="nav-link">Owner</a>
+            </nav>
+            <div class="user-info">
+                <div class="user-dropdown">
+                    <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
+                        <span class="username" id="userDisplay">Loading...</span>
+                        <span class="role-badge" id="roleDisplay">OWNER</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="user-dropdown-menu" id="userDropdownMenu">
+                        <div class="user-dropdown-header">
+                            <span class="username" id="dropdownUsername">Loading...</span>
+                            <span class="role-badge" id="dropdownRole">OWNER</span>
+                        </div>
+                        <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
+                        <a href="/features">✨ Features</a>
+                        <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
+                        <div class="user-dropdown-divider"></div>
+                        <button onclick="logout()">🚪 Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="message error hidden" id="errorMsg"></div>
+        <div class="message success hidden" id="successMsg"></div>
+
+        <div class="tabs" id="ownerTabs" style="margin-bottom:2.5rem;">
+            <button class="tab active" data-tab="notifications" style="--tab-color:#a78bfa;"><span
+                    class="tab-icon">🔔</span>
+                <span>Notification Center</span></button>
+            <button class="tab" data-tab="email-analytics" style="--tab-color:#5b7fff;"><span class="tab-icon">📧</span>
+                <span>Email Analytics</span></button>
+            <button class="tab" data-tab="verification-analytics" style="--tab-color:#5bffb8;"><span
+                    class="tab-icon">✅</span>
+                <span>Verification Analytics</span></button>
+            <button class="tab" data-tab="alert-analytics" style="--tab-color:#ff5b5b;"><span class="tab-icon">🚨</span>
+                <span>Alert Analytics</span></button>
+        </div>
+
+        <style>
+            .tabs {
+                display: flex;
+                gap: 0.6rem;
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-lg);
+                background: var(--bg-secondary);
+                margin: 2rem 0 1.35rem 0;
+                padding: 0.55rem;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+
+            .tab {
+                background: transparent;
+                border: 1px solid transparent;
+                outline: none;
+                color: var(--text-secondary);
+                font-size: 1rem;
+                font-weight: 600;
+                padding: 0.62rem 0.95rem;
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                transition: color 0.2s, background 0.2s, border-color 0.2s, transform 0.2s;
+                display: flex;
+                align-items: center;
+                gap: 0.55rem;
+                position: relative;
+                min-height: 42px;
+            }
+
+            .tab.active {
+                color: var(--tab-color, #5b7fff);
+                background: var(--bg-card);
+                border-color: var(--border-color);
+                z-index: 2;
+            }
+
+            .tab:not(.active):hover {
+                color: var(--tab-color, #5b7fff);
+                background: var(--bg-card-hover);
+                border-color: var(--border-color);
+                transform: translateY(-1px);
+            }
+
+            .tab.active::after {
+                content: '';
+                position: absolute;
+                left: 0.7rem;
+                right: 0.7rem;
+                bottom: 0.28rem;
+                height: 2px;
+                border-radius: 999px;
+                background: var(--tab-color, var(--color-blue));
+            }
+
+            .tab .tab-icon {
+                font-size: 1.06rem;
+                margin-right: 0;
+                vertical-align: middle;
+            }
+
+            .tab-content {
+                display: none;
+                margin-top: 0.3rem;
+            }
+
+            .tab-content.active {
+                display: block;
+            }
+
+            .tab-content>.card {
+                border: 1px solid var(--border-color);
+                background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+                box-shadow: var(--shadow-md);
+            }
+
+            .tab-content>.card .card-header {
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 0.9rem;
+                margin-bottom: 1.1rem;
+            }
+
+            .tab-content>.card .table-container {
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+                background: var(--bg-card);
+            }
+
+            .tab-content>.card .table-container table {
+                background: transparent;
+            }
+
+            .tab-content>.card .table-container th {
+                background: var(--bg-secondary);
+                color: var(--text-primary);
+            }
+
+            .tab-content>.card .table-container td {
+                color: var(--text-secondary);
+            }
+
+            .tab-content>.card .table-container tr:hover {
+                background: var(--bg-card-hover);
+            }
+
+            .security-sessions-note {
+                margin: 0 0 0.9rem;
+                color: var(--text-secondary);
+                font-size: 0.93rem;
+            }
+
+            .alert-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .alert-stat-card {
+                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+                border: 1px solid var(--border-color);
+                border-radius: 12px;
+                padding: 1.25rem;
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .alert-stat-card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+                border-color: rgba(91, 127, 255, 0.3);
+            }
+
+            .alert-stat-icon {
+                width: 52px;
+                height: 52px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.6rem;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                flex-shrink: 0;
+            }
+
+            .alert-stat-content {
+                flex: 1;
+            }
+
+            .alert-stat-value {
+                font-size: 1.8rem;
+                font-weight: 800;
+                color: var(--text-primary);
+                line-height: 1;
+                margin-bottom: 0.25rem;
+            }
+
+            .alert-stat-label {
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .alert-filters-bar {
+                background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+                border: 1px solid var(--border-color);
+                border-radius: 12px;
+                padding: 1.25rem;
+                margin-bottom: 1.5rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 1rem;
+            }
+
+            .alert-filter-group {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .alert-filter-label {
+                font-size: 0.8rem;
+                font-weight: 700;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .alert-filter-select {
+                padding: 0.75rem 1rem;
+                border: 2px solid var(--border-color);
+                border-radius: 8px;
+                background: var(--bg-card);
+                color: var(--text-primary);
+                font-size: 0.9rem;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                font-weight: 600;
+            }
+
+            .alert-filter-select:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            }
+
+            .alert-filter-actions {
+                display: flex;
+                gap: 0.75rem;
+            }
+
+            .btn-alert-refresh {
+                padding: 0.75rem 1.25rem;
+                border: 2px solid var(--color-blue);
+                border-radius: 8px;
+                background: linear-gradient(135deg, var(--color-blue) 0%, #5568d3 100%);
+                color: white;
+                font-size: 0.85rem;
+                font-weight: 700;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                white-space: nowrap;
+            }
+
+            .btn-alert-refresh:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(91, 127, 255, 0.4);
+            }
+
+            .btn-alert-export {
+                padding: 0.75rem 1.25rem;
+                border: 2px solid var(--border-color);
+                border-radius: 8px;
+                background: var(--bg-card);
+                color: var(--text-primary);
+                font-size: 0.85rem;
+                font-weight: 700;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                white-space: nowrap;
+            }
+
+            .btn-alert-export:hover {
+                background: var(--bg-secondary);
+                border-color: var(--color-blue);
+                color: var(--color-blue);
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            }
+
+            .alert-settings-list {
+                display: grid;
+                gap: 1rem;
+            }
+
+            .alert-setting-card {
+                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+                border: 2px solid var(--border-color);
+                border-radius: 12px;
+                padding: 1.5rem;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .alert-setting-card:hover {
+                border-color: rgba(102, 126, 234, 0.5);
+                transform: translateY(-2px);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            }
+
+            .alert-setting-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 1rem;
+            }
+
+            .alert-setting-title {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+            }
+
+            .alert-type-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.5rem 1rem;
+                border-radius: 8px;
+                font-size: 0.9rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .alert-type-badge.cpu {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+
+            .alert-type-badge.memory {
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                color: white;
+            }
+
+            .alert-type-badge.error_rate {
+                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+                color: white;
+            }
+
+            .alert-type-badge.rate_limit {
+                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+                color: white;
+            }
+
+            .alert-type-badge.database {
+                background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+                color: white;
+            }
+
+            .alert-enabled-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.4rem 0.85rem;
+                border-radius: 6px;
+                font-size: 0.75rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .alert-enabled-badge.enabled {
+                background: rgba(40, 167, 69, 0.15);
+                color: #28a745;
+                border: 1px solid rgba(40, 167, 69, 0.3);
+            }
+
+            .alert-enabled-badge.disabled {
+                background: rgba(108, 117, 125, 0.15);
+                color: #6c757d;
+                border: 1px solid rgba(108, 117, 125, 0.3);
+            }
+
+            .alert-setting-body {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 1rem;
+                padding: 1rem;
+                background: var(--bg-secondary);
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+                margin-bottom: 1rem;
+            }
+
+            .alert-info-item {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            .alert-info-label {
+                font-size: 0.75rem;
+                font-weight: 700;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .alert-info-value {
+                font-size: 0.9rem;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .alert-setting-footer {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+            }
+
+            .btn-alert-edit {
+                flex: 1;
+                padding: 0.65rem 1rem;
+                border: 2px solid var(--color-blue);
+                border-radius: 8px;
+                background: linear-gradient(135deg, var(--color-blue) 0%, #5568d3 100%);
+                color: white;
+                font-size: 0.85rem;
+                font-weight: 700;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+
+            .btn-alert-edit:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(91, 127, 255, 0.4);
+            }
+
+            .btn-alert-toggle {
+                padding: 0.65rem 1rem;
+                border: 2px solid var(--border-color);
+                border-radius: 8px;
+                background: var(--bg-card);
+                color: var(--text-primary);
+                font-size: 0.85rem;
+                font-weight: 700;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+
+            .btn-alert-toggle:hover {
+                background: var(--bg-secondary);
+                transform: translateY(-2px);
+            }
+
+            .active-alerts-list {
+                display: grid;
+                gap: 1rem;
+            }
+
+            .active-alert-card {
+                background: linear-gradient(135deg, rgba(220, 53, 69, 0.08) 0%, rgba(220, 53, 69, 0.04) 100%);
+                border: 2px solid rgba(220, 53, 69, 0.3);
+                border-radius: 12px;
+                padding: 1.25rem;
+                position: relative;
+            }
+
+            .active-alert-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: linear-gradient(90deg, #dc3545, #c82333);
+            }
+
+            .active-alert-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 0.75rem;
+            }
+
+            .active-alert-type {
+                font-size: 1rem;
+                font-weight: 700;
+                color: var(--text-primary);
+            }
+
+            .active-alert-severity {
+                padding: 0.35rem 0.75rem;
+                border-radius: 6px;
+                font-size: 0.75rem;
+                font-weight: 700;
+                text-transform: uppercase;
+            }
+
+            .active-alert-severity.critical {
+                background: #dc3545;
+                color: white;
+            }
+
+            .active-alert-severity.warning {
+                background: #ffc107;
+                color: #222;
+            }
+
+            .active-alert-message {
+                color: var(--text-secondary);
+                margin-bottom: 0.75rem;
+            }
+
+            .active-alert-footer {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                font-size: 0.85rem;
+                color: var(--text-secondary);
+            }
+
+            .btn-resolve-alert {
+                padding: 0.5rem 1rem;
+                border: 2px solid #28a745;
+                border-radius: 8px;
+                background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                color: white;
+                font-size: 0.8rem;
+                font-weight: 700;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+
+            .btn-resolve-alert:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+            }
+
+            .email-analytics-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.75rem;
+                margin-bottom: 1rem;
+                padding: 0.9rem 1rem;
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+                flex-wrap: wrap;
+            }
+
+            .email-analytics-toolbar-title {
+                color: var(--text-secondary);
+                font-size: 0.92rem;
+                font-weight: 600;
+            }
+
+            .email-analytics-toolbar-actions {
+                display: flex;
+                gap: 0.6rem;
+                align-items: center;
+            }
+
+            .email-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 0.85rem;
+                margin-bottom: 1rem;
+            }
+
+            .email-stat-card {
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+                padding: 0.95rem 1rem;
+                display: grid;
+                gap: 0.3rem;
+            }
+
+            .email-stat-label {
+                color: var(--text-secondary);
+                font-size: 0.78rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .email-stat-value {
+                color: var(--text-primary);
+                font-size: 1.5rem;
+                font-weight: 800;
+                line-height: 1;
+            }
+
+            .email-chart-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 1rem;
+                margin-bottom: 1rem;
+            }
+
+            .email-chart-card {
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                background: var(--bg-card);
+                padding: 0.8rem 0.9rem 0.9rem;
+            }
+
+            .email-chart-title {
+                color: var(--text-primary);
+                font-weight: 700;
+                font-size: 0.95rem;
+                margin-bottom: 0.35rem;
+            }
+
+            .email-template-legend {
+                margin-top: 0.6rem;
+                color: var(--text-secondary);
+                font-size: 0.88rem;
+                line-height: 1.65;
+            }
+
+            @media (max-width: 1200px) {
+                .email-chart-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+        </style>
+
+        <div id="notifications" class="tab-content active">
+            <div class="card">
+                <div class="card-header"
+                    style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                    <span><span class="card-header-icon">🔔</span>Notification Center</span>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <button class="btn btn-secondary btn-sm" type="button"
+                            onclick="loadOwnerNotificationHistory()">Refresh</button>
+                        <button class="btn btn-danger btn-sm" type="button"
+                            onclick="clearOwnerNotificationHistory()">Clear</button>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1.5fr 0.9fr 0.9fr;gap:0.6rem;margin-bottom:0.75rem;">
+                    <input id="ownerNotificationSearch" class="form-input" type="text"
+                        placeholder="Search title or message...">
+                    <select id="ownerNotificationTypeFilter" class="form-input">
+                        <option value="all">All Types</option>
+                        <option value="info">Info</option>
+                        <option value="success">Success</option>
+                        <option value="warning">Warning</option>
+                        <option value="error">Error</option>
+                    </select>
+                    <select id="ownerNotificationSourceFilter" class="form-input">
+                        <option value="all">All Sources</option>
+                        <option value="toast">Toast</option>
+                        <option value="system">System</option>
+                        <option value="action">Action</option>
+                    </select>
+                </div>
+                <div style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:0.6rem;"
+                    id="ownerNotificationHistoryUpdated">Last updated: --</div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Source</th>
+                                <th>Title</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ownerNotificationHistoryTable">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">No notification history yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="email-analytics" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">📧</span>
+                    Email Analytics (30d Delivery Intelligence)
+                </div>
+
+                <div class="email-analytics-toolbar">
+                    <div class="email-analytics-toolbar-title">Advanced delivery performance and template engagement
+                        metrics</div>
+                    <div class="email-analytics-toolbar-actions">
+                        <button class="btn-alert-refresh" onclick="loadEmailAnalyticsPie()"
+                            title="Refresh email analytics">🔄 Refresh</button>
+                        <button class="btn-alert-export" onclick="exportEmailRecentCsv()"
+                            title="Export recent deliveries">📄 Export Recent</button>
+                    </div>
+                </div>
+
+                <div class="email-stats-grid">
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Total Sent (30d)</div>
+                        <div class="email-stat-value" id="emailSummaryTotal">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Success Rate</div>
+                        <div class="email-stat-value" id="emailSummarySuccessRate">0%</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Last 24h</div>
+                        <div class="email-stat-value" id="emailSummaryLast24h">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Failures + Blocks</div>
+                        <div class="email-stat-value" id="emailSummaryFailures">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Transient Fails</div>
+                        <div class="email-stat-value" id="emailSummaryTransientFails">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Permanent Fails</div>
+                        <div class="email-stat-value" id="emailSummaryPermanentFails">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Avg Latency (ms)</div>
+                        <div class="email-stat-value" id="emailSummaryAvgLatency">0</div>
+                    </div>
+                </div>
+
+                <div class="email-chart-grid">
+                    <div class="email-chart-card">
+                        <div class="email-chart-title">Template Distribution (30d)</div>
+                        <div style="margin: 1rem auto; max-width: 460px;">
+                            <canvas id="emailAnalyticsPieChart" style="max-height: 330px;"></canvas>
+                        </div>
+                        <div id="emailAnalyticsPieLegend" class="email-template-legend"></div>
+                    </div>
+
+                    <div class="email-chart-card">
+                        <div class="email-chart-title">Delivery Trend (14d)</div>
+                        <div style="margin: 1rem auto; max-width: 100%;">
+                            <canvas id="emailAnalyticsTrendChart" style="max-height: 330px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-header">
+                        <span class="card-header-icon">📊</span>
+                        Template Performance Breakdown
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Template</th>
+                                    <th>Total</th>
+                                    <th>Sent</th>
+                                    <th>Failed</th>
+                                    <th>Blocked</th>
+                                    <th>Success %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="emailTemplateBreakdownBody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">Loading template breakdown...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="email-chart-grid" style="margin-top: 1rem;">
+                    <div class="email-chart-card">
+                        <div class="email-chart-title">Failure Category Breakdown (30d)</div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th>Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="emailFailureCategoryBody">
+                                    <tr>
+                                        <td colspan="2" class="text-center text-muted">Loading failure categories...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="email-chart-card">
+                        <div class="email-chart-title">Top Failing Recipient Domains (30d)</div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Domain</th>
+                                        <th>Total</th>
+                                        <th>Failed+Blocked</th>
+                                        <th>Failure %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="emailFailingDomainBody">
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted">Loading failing domains...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-header">
+                        <span class="card-header-icon">🕒</span>
+                        Recent Email Deliveries
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Recipient</th>
+                                    <th>Template</th>
+                                    <th>Status</th>
+                                    <th>Subject</th>
+                                    <th>Error</th>
+                                </tr>
+                            </thead>
+                            <tbody id="emailRecentTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">Loading recent deliveries...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="emailAnalyticsPieLastUpdated" class="text-secondary"
+                    style="margin-top: 0.75rem; margin-bottom: 0.1rem; text-align: center;">Last updated: --</div>
+            </div>
+        </div>
+
+        <div id="verification-analytics" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">✅</span>
+                    Verification Analytics
+                </div>
+
+                <div class="email-analytics-toolbar">
+                    <div class="email-analytics-toolbar-title">Track verification performance, fallback usage, and
+                        challenge distribution.</div>
+                    <div class="email-analytics-toolbar-actions">
+                        <button class="btn-alert-refresh" onclick="loadVerificationAnalytics()"
+                            title="Refresh verification analytics">🔄 Refresh</button>
+                        <button class="btn-alert-export" onclick="exportVerificationEventsCsv()"
+                            title="Export verification events">📄 Export Recent</button>
+                    </div>
+                </div>
+
+                <div class="email-stats-grid">
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Sessions Started</div>
+                        <div class="email-stat-value" id="verificationSummarySessions">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Success Rate</div>
+                        <div class="email-stat-value" id="verificationSummarySuccessRate">0%</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Fallback Used</div>
+                        <div class="email-stat-value" id="verificationSummaryFallback">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Timeouts</div>
+                        <div class="email-stat-value" id="verificationSummaryTimeouts">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Penalties Applied</div>
+                        <div class="email-stat-value" id="verificationSummaryPenalties">0</div>
+                    </div>
+                    <div class="email-stat-card">
+                        <div class="email-stat-label">Staff Overrides</div>
+                        <div class="email-stat-value" id="verificationSummaryOverrides">0</div>
+                    </div>
+                </div>
+
+                <div class="email-chart-grid">
+                    <div class="email-chart-card">
+                        <div class="email-chart-title">Challenge Type Distribution</div>
+                        <div style="margin: 1rem auto; max-width: 460px;">
+                            <canvas id="verificationChallengePieChart" style="max-height: 330px;"></canvas>
+                        </div>
+                        <div id="verificationChallengeLegend" class="email-template-legend"></div>
+                    </div>
+
+                    <div class="email-chart-card">
+                        <div class="email-chart-title">Mode Breakdown</div>
+                        <div id="verificationModeBreakdown" class="email-template-legend" style="padding: 1rem;">Loading
+                            mode breakdown...</div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-header">
+                        <span class="card-header-icon">🕒</span>
+                        Recent Verification Events
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>User</th>
+                                    <th>Type</th>
+                                    <th>Mode</th>
+                                    <th>Challenge</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="verificationRecentTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">Loading recent verification events...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-secondary" style="padding: 0.75rem 0.25rem 0; font-size: 0.9rem;">
+                        Export includes the currently loaded recent events (up to 25 rows).
+                    </div>
+                </div>
+
+                <div id="verificationAnalyticsLastUpdated" class="text-secondary"
+                    style="margin-top: 0.75rem; margin-bottom: 0.1rem; text-align: center;">Last updated: --</div>
+            </div>
+        </div>
+
+        <div id="alert-analytics" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-header-icon">&#128680;</span>
+                    Alert Settings Management & Analytics
+                </div>
+                <p class="security-sessions-note">Monitor and configure system alert settings with real-time analytics
+                    and active alert tracking.</p>
+
+                <div class="alert-stats-grid">
+                    <div class="alert-stat-card">
+                        <div class="alert-stat-icon"
+                            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">&#9881;</div>
+                        <div class="alert-stat-content">
+                            <div class="alert-stat-value" id="totalAlertSettings">0</div>
+                            <div class="alert-stat-label">Total Settings</div>
+                        </div>
+                    </div>
+                    <div class="alert-stat-card">
+                        <div class="alert-stat-icon"
+                            style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">&#9989;</div>
+                        <div class="alert-stat-content">
+                            <div class="alert-stat-value" id="enabledAlertSettings">0</div>
+                            <div class="alert-stat-label">Enabled</div>
+                        </div>
+                    </div>
+                    <div class="alert-stat-card">
+                        <div class="alert-stat-icon"
+                            style="background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);">&#128683;</div>
+                        <div class="alert-stat-content">
+                            <div class="alert-stat-value" id="activeAlertsCount">0</div>
+                            <div class="alert-stat-label">Active Alerts</div>
+                        </div>
+                    </div>
+                    <div class="alert-stat-card">
+                        <div class="alert-stat-icon"
+                            style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">&#128200;</div>
+                        <div class="alert-stat-content">
+                            <div class="alert-stat-value" id="recentAlertsCount">0</div>
+                            <div class="alert-stat-label">Recent (30d)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert-filters-bar">
+                    <div class="alert-filter-group">
+                        <label for="alertStatusFilter" class="alert-filter-label">&#128269; Filter</label>
+                        <select id="alertStatusFilter" class="alert-filter-select" onchange="filterAlertSettings()">
+                            <option value="all">All Settings</option>
+                            <option value="enabled">Enabled Only</option>
+                            <option value="disabled">Disabled Only</option>
+                        </select>
+                    </div>
+                    <div class="alert-filter-actions">
+                        <button class="btn-alert-refresh" onclick="loadAlertAnalytics()"
+                            title="Refresh alert data">&#128472; Refresh</button>
+                        <button class="btn-alert-export" onclick="exportAlertSettings()"
+                            title="Export settings">&#128196; Export</button>
+                    </div>
+                </div>
+                <p class="security-sessions-note" id="alertMonitorStatusText">Alert monitor status: checking...</p>
+
+                <div class="alert-settings-list" id="alertSettingsContainer">
+                    <div class="loading show">Loading alert settings...</div>
+                </div>
+
+                <div class="card" style="margin-top: 2rem; border: 2px solid rgba(220, 53, 69, 0.3);">
+                    <div class="card-header"
+                        style="background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%);">
+                        <span class="card-header-icon">&#128165;</span>
+                        Active Alerts Requiring Attention
+                    </div>
+                    <div class="active-alerts-list" id="activeAlertsContainer">
+                        <div class="loading show">Loading active alerts...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
+
+    <script src="/public/analytics.js"></script>
+</body>
+
+</html>

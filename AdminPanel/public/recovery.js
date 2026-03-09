@@ -75,13 +75,13 @@ document.addEventListener('DOMContentLoaded', () => {
             .toUpperCase()
             .replace(/[^A-Z0-9]/g, '')
             .slice(0, 12);
-        
+
         if (cleaned.length > 8) {
             recoveryCodeInput.value = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}-${cleaned.slice(8)}`;
         } else if (cleaned.length > 4) {
-             recoveryCodeInput.value = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+            recoveryCodeInput.value = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
         } else {
-             recoveryCodeInput.value = cleaned;
+            recoveryCodeInput.value = cleaned;
         }
     });
 
@@ -90,13 +90,13 @@ document.addEventListener('DOMContentLoaded', () => {
             .toUpperCase()
             .replace(/[^A-Z0-9]/g, '')
             .slice(0, 12);
-        
+
         if (cleaned.length > 8) {
             resetRecoveryCodeInput.value = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}-${cleaned.slice(8)}`;
         } else if (cleaned.length > 4) {
-             resetRecoveryCodeInput.value = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+            resetRecoveryCodeInput.value = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
         } else {
-             resetRecoveryCodeInput.value = cleaned;
+            resetRecoveryCodeInput.value = cleaned;
         }
     });
 
@@ -111,6 +111,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (passwordResetRequestForm) passwordResetRequestForm.style.display = panel === 'email-request' ? 'block' : 'none';
         if (passwordResetTokenForm) passwordResetTokenForm.style.display = panel === 'token-reset' ? 'block' : 'none';
         if (passwordResetRecoveryForm) passwordResetRecoveryForm.style.display = panel === 'recovery-reset' ? 'block' : 'none';
+
+        showRecoveryLoginPanelBtn?.classList.toggle('active', panel === 'recovery-login');
+        showEmailResetRequestPanelBtn?.classList.toggle('active', panel === 'email-request');
+        showTokenResetPanelBtn?.classList.toggle('active', panel === 'token-reset');
+        showRecoveryResetPanelBtn?.classList.toggle('active', panel === 'recovery-reset');
     }
 
     async function runWithLoading(button, action) {

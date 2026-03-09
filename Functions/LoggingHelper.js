@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { serverLogChannelId } = require('../Config/constants/channel.json');
+const { CHANNELS: { serverLogChannelId } } = require('../Config/constants');
 
 // Logging helpers
 // Small helpers to build and send nicely formatted log embeds to the

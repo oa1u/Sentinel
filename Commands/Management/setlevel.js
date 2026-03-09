@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { setUserXP, resetUser, getUserData, calculateRequiredXP } = require('../../Events/Leveling');
-const { sendErrorReply, sendSuccessReply } = require('../../Functions/EmbedBuilders');
+const { sendErrorReply, sendSuccessReply, sendWarningReply } = require('../../Functions/EmbedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -55,7 +55,7 @@ module.exports = {
     async execute(interaction) {
         // Only admins are allowed to use this command.
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            await sendErrorReply(
+            await sendWarningReply(
                 interaction,
                 'No Permission',
                 'You need **Administrator** permission!'
@@ -67,7 +67,7 @@ module.exports = {
         const targetUser = interaction.options.getUser('user');
 
         if (targetUser.bot) {
-            await sendErrorReply(
+            await sendWarningReply(
                 interaction,
                 'Invalid User',
                 'You cannot modify bot levels!'

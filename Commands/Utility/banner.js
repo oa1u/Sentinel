@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
-const { sendErrorReply } = require('../../Functions/EmbedBuilders');
+const { sendErrorReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -22,7 +22,7 @@ module.exports = {
             const bannerURL = fetchedUser.bannerURL({ size: 4096, forceStatic: false });
 
             if (!bannerURL) {
-                return sendErrorReply(interaction, 'No Banner', `**${targetUser.tag}** does not have a profile banner.`);
+                return sendInfoReply(interaction, 'No Banner', `**${targetUser.tag}** does not have a profile banner.`);
             }
 
             const bannerPng = fetchedUser.bannerURL({ extension: 'png', size: 4096, forceStatic: true });

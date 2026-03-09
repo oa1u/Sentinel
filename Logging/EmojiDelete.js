@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { serverLogChannelId } = require("../Config/constants/channel.json");
+const { CHANNELS: { serverLogChannelId } } = require("../Config/constants");
 
 // Log when custom emojis are removed from the server and include relevant details.
 module.exports = (client) => {

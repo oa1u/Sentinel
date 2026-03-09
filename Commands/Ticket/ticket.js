@@ -6,10 +6,18 @@ const {
   PermissionFlagsBits,
   MessageFlags
 } = require('discord.js');
-const { ticketCategoryId, ticketLogChannelId } = require("../../Config/constants/channel.json");
-const { administratorRoleId, supportTeamRoleId } = require("../../Config/constants/roles.json");
-const { createErrorEmbed, createWarningEmbed, createSuccessEmbed, sendErrorReply } = require("../../Functions/EmbedBuilders");
+const { CHANNELS: { ticketCategoryId, ticketLogChannelId }, ROLES: { administratorRoleId, supportTeamRoleId } } = require("../../Config/constants");
+const { createErrorEmbed, createWarningEmbed, createSuccessEmbed, sendWarningReply, sendInfoReply } = require("../../Functions/EmbedBuilders");
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
+
+const ticketOpenAttempts = new Map();
+const lastSuccessfulTicketOpen = new Map();
+const lastTicketReasonFingerprint = new Map();
+
+const TICKET_OPEN_WINDOW_MS = 10 * 60 * 1000;
+const TICKET_OPEN_MAX_ATTEMPTS = 4;
+const TICKET_CREATION_COOLDOWN_MS = 2 * 60 * 1000;
+const DUPLICATE_REASON_WINDOW_MS = 15 * 60 * 1000;
 
 // This is the ticket system for user support—create tickets, get help, and track everything.
 // Creates private channels, logs transcripts, and keeps track of ticket status.
@@ -48,6 +56,37 @@ function hasSupportOrAdmin(member) {
   return member.roles.cache.has(supportTeamRoleId) || member.permissions.has(PermissionFlagsBits.Administrator);
 }
 
+function normalizeReasonFingerprint(reason) {
+  return String(reason || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function registerTicketOpenAttempt(userId) {
+  const key = String(userId || '');
+  const now = Date.now();
+  const attempts = (ticketOpenAttempts.get(key) || []).filter((ts) => now - ts < TICKET_OPEN_WINDOW_MS);
+  attempts.push(now);
+  ticketOpenAttempts.set(key, attempts);
+  return attempts.length;
+}
+
+function getTicketChannelBaseName(name) {
+  return String(name || '')
+    .replace(/\s+-\s+👤\s+[^-]+$/u, '')
+    .replace(/\s+-\s+🚩\s+-\s+[^-]+$/u, '')
+    .trim();
+}
+
+async function updateTicketChannelAssigneeName(channel, user) {
+  if (!channel || !user) return;
+  const baseName = getTicketChannelBaseName(channel.name);
+  const nextName = `${baseName} - 👤 ${user.username}`.slice(0, 95);
+  await channel.setName(nextName).catch(() => { });
+}
+
 async function openTicket(interaction) {
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -58,6 +97,46 @@ async function openTicket(interaction) {
     // Double check that the user actually wrote something before submitting.
     if (!reason || reason.trim().length === 0) {
       return await interaction.editReply({ embeds: [createErrorEmbed('Invalid Input', 'Please provide a reason for your ticket.')] });
+    }
+
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 8) {
+      return await interaction.editReply({
+        embeds: [createWarningEmbed('More Detail Needed', 'Please provide a bit more detail (at least 8 characters).')]
+      });
+    }
+
+    const attemptCount = registerTicketOpenAttempt(interaction.user.id);
+    if (attemptCount > TICKET_OPEN_MAX_ATTEMPTS) {
+      return await interaction.editReply({
+        embeds: [
+          createWarningEmbed(
+            'Too Many Ticket Attempts',
+            'Please slow down. Too many ticket requests were submitted in a short period.'
+          ).addFields({ name: 'Try Again In', value: `${Math.ceil(TICKET_OPEN_WINDOW_MS / 60000)} minutes`, inline: true })
+        ]
+      });
+    }
+
+    const lastOpenedAt = Number(lastSuccessfulTicketOpen.get(interaction.user.id) || 0);
+    if (lastOpenedAt && Date.now() - lastOpenedAt < TICKET_CREATION_COOLDOWN_MS) {
+      const secondsLeft = Math.ceil((TICKET_CREATION_COOLDOWN_MS - (Date.now() - lastOpenedAt)) / 1000);
+      return await interaction.editReply({
+        embeds: [createWarningEmbed('Ticket Cooldown Active', `Please wait ${secondsLeft}s before opening another ticket.`)]
+      });
+    }
+
+    const reasonFingerprint = normalizeReasonFingerprint(cleanReason);
+    const previousReason = lastTicketReasonFingerprint.get(interaction.user.id);
+    if (previousReason && previousReason.fingerprint === reasonFingerprint && Date.now() - previousReason.createdAt < DUPLICATE_REASON_WINDOW_MS) {
+      return await interaction.editReply({
+        embeds: [
+          createWarningEmbed(
+            'Duplicate Ticket Detected',
+            'This looks like the same request as your recent ticket attempt. Please continue in your existing ticket or wait before retrying.'
+          )
+        ]
+      });
     }
 
     const priorityEmoji = priority === 'high' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
@@ -74,8 +153,8 @@ async function openTicket(interaction) {
 
     // Check if the user already has a ticket open—only one at a time!
     try {
-      const allTickets = await MySQLDatabaseManager.getAllTickets('open').catch(() => []);
-      const existingTicket = allTickets.find(t => t.userId === interaction.user.id);
+      const allTickets = await MySQLDatabaseManager.getAllTickets().catch(() => []);
+      const existingTicket = allTickets.find(t => t.userId === interaction.user.id && t.status !== 'closed');
 
       if (existingTicket) {
         const ticketChannel = interaction.guild.channels.cache.get(existingTicket.channelId);
@@ -90,6 +169,8 @@ async function openTicket(interaction) {
 
           return await interaction.editReply({ embeds: [errorEmbed] });
         }
+
+        await MySQLDatabaseManager.deleteTicket(existingTicket.channelId).catch(() => { });
       }
     } catch (err) {
       console.warn('[Ticket] Could not check existing tickets:', err.message);
@@ -124,13 +205,15 @@ async function openTicket(interaction) {
       ]
     });
 
-    const supportRole = interaction.guild.roles.cache.find(role => role.name === "Support");
+    const supportRole = interaction.guild.roles.cache.get(supportTeamRoleId);
     if (supportRole) {
       await ticketChannel.permissionOverwrites.create(supportRole, {
         ViewChannel: true,
         SendMessages: true,
         ReadMessageHistory: true
       });
+    } else {
+      console.warn(`[Ticket] Support role not found by ID: ${supportTeamRoleId}`);
     }
 
     const welcomeEmbed = new EmbedBuilder()
@@ -159,11 +242,17 @@ async function openTicket(interaction) {
     await MySQLDatabaseManager.createTicket(ticketChannel.id, {
       userId: interaction.user.id,
       userName: interaction.user.tag,
-      reason: reason,
+      reason: cleanReason,
       priority: priority,
       createdAt: Date.now(),
       claimedBy: null,
       status: 'open'
+    });
+
+    lastSuccessfulTicketOpen.set(interaction.user.id, Date.now());
+    lastTicketReasonFingerprint.set(interaction.user.id, {
+      fingerprint: reasonFingerprint,
+      createdAt: Date.now()
     });
 
     const logChannel = interaction.guild.channels.cache.get(ticketLogChannelId);
@@ -176,7 +265,7 @@ async function openTicket(interaction) {
           { name: 'Ticket Creator', value: `${interaction.user.tag}\n\`ID: ${interaction.user.id}\``, inline: true },
           { name: 'Priority Level', value: `${priorityEmoji} **${priorityLabel}**`, inline: true },
           { name: 'Ticket Channel', value: `${ticketChannel}`, inline: false },
-          { name: 'Issue Description', value: `\`\`\`${reason || 'No reason provided'}\`\`\``, inline: false },
+          { name: 'Issue Description', value: `\`\`\`${cleanReason || 'No reason provided'}\`\`\``, inline: false },
           { name: 'Next Steps', value: '📌 Assign support staff\n💬 Provide initial response\n⚡ Resolve issue', inline: false }
         )
         .setFooter({ text: `Ticket ID: ${ticketChannel.id}` })
@@ -193,7 +282,7 @@ async function openTicket(interaction) {
         { name: 'Status', value: '🟢 Open', inline: true },
         { name: 'Priority', value: `${priorityEmoji} ${priorityLabel}`, inline: true },
         { name: 'Channel', value: `${ticketChannel}`, inline: true },
-        { name: 'Your Issue', value: reason ? `\`\`\`${reason}\`\`\`` : 'No reason provided', inline: false },
+        { name: 'Your Issue', value: cleanReason ? `\`\`\`${cleanReason}\`\`\`` : 'No reason provided', inline: false },
         { name: 'What You Can Do', value: '✅ Add details\n📎 Share files\n💬 Ask questions\n⏳ Wait for support', inline: true },
         { name: 'When Done', value: 'Use `/ticket close` or click ❌\nTranscript will be saved.', inline: true }
       )
@@ -332,14 +421,16 @@ async function closeTicket(interaction) {
     status: 'closed',
     closedAt: Date.now(),
     closedBy: interaction.user.id,
-    closeReason: closeReason
+    closeReason: closeReason,
+    transcript,
+    transcriptCreatedAt: Date.now()
   });
 
   const channelId = interaction.channel.id;
   setTimeout(async () => {
     try {
       await interaction.channel.delete();
-      await MySQLDatabaseManager.deleteTicket(channelId);
+      // Keep ticket record for transcript viewer.
     } catch (err) {
       console.error(`Failed to delete ticket channel: ${err.message}`);
     }
@@ -348,7 +439,7 @@ async function closeTicket(interaction) {
 
 async function addUserToTicket(interaction) {
   if (!isTicketChannel(interaction)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'Invalid Channel',
       'This command can only be used in a ticket channel!'
@@ -360,7 +451,7 @@ async function addUserToTicket(interaction) {
   const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
   if (!targetMember) {
-    return sendErrorReply(
+    return sendInfoReply(
       interaction,
       'User Not Found',
       'Could not find that user in this server!'
@@ -368,7 +459,7 @@ async function addUserToTicket(interaction) {
   }
 
   if (!hasSupportOrAdmin(member)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'No Permission',
       'Only support staff can add users to tickets!'
@@ -405,7 +496,7 @@ async function addUserToTicket(interaction) {
 
 async function removeUserFromTicket(interaction) {
   if (!isTicketChannel(interaction)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'Invalid Channel',
       'This command can only be used in a ticket channel!'
@@ -417,7 +508,7 @@ async function removeUserFromTicket(interaction) {
   const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
   if (!targetMember) {
-    return sendErrorReply(
+    return sendInfoReply(
       interaction,
       'User Not Found',
       'Could not find that user in this server!'
@@ -425,7 +516,7 @@ async function removeUserFromTicket(interaction) {
   }
 
   if (!hasSupportOrAdmin(member)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'No Permission',
       'Only support staff can remove users from tickets!'
@@ -434,7 +525,7 @@ async function removeUserFromTicket(interaction) {
 
   const ticketData = await MySQLDatabaseManager.getTicket(interaction.channel.id).catch(() => null);
   if (ticketData?.userId && ticketData.userId === targetUser.id) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'Cannot Remove Owner',
       'You cannot remove the ticket owner from their own ticket!'
@@ -457,7 +548,7 @@ async function removeUserFromTicket(interaction) {
 
 async function claimTicket(interaction) {
   if (!isTicketChannel(interaction)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'Invalid Channel',
       'This command can only be used in a ticket channel!'
@@ -465,7 +556,7 @@ async function claimTicket(interaction) {
   }
 
   if (!hasSupportOrAdmin(interaction.member)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'No Permission',
       'Only support staff can claim tickets!'
@@ -477,7 +568,7 @@ async function claimTicket(interaction) {
 
   if (ticketData.claimedBy && ticketData.claimedBy !== interaction.user.id) {
     const claimer = await interaction.client.users.fetch(ticketData.claimedBy).catch(() => null);
-    return sendErrorReply(
+    return sendInfoReply(
       interaction,
       'Already Claimed',
       `This ticket has already been claimed by ${claimer ? claimer.tag : 'another support member'}!`
@@ -489,8 +580,7 @@ async function claimTicket(interaction) {
     status: 'claimed'
   });
 
-  const channelName = interaction.channel.name.split(' - ')[0];
-  await interaction.channel.setName(`${channelName} - 👤 ${interaction.user.username}`);
+  await updateTicketChannelAssigneeName(interaction.channel, interaction.user);
 
   const successEmbed = createSuccessEmbed(
     'Ticket Claimed Successfully',
@@ -513,9 +603,101 @@ async function claimTicket(interaction) {
   await interaction.channel.send({ embeds: [notifyEmbed] });
 }
 
+async function transferTicket(interaction) {
+  if (!isTicketChannel(interaction)) {
+    return sendWarningReply(
+      interaction,
+      'Invalid Channel',
+      'This command can only be used in a ticket channel!'
+    );
+  }
+
+  if (!hasSupportOrAdmin(interaction.member)) {
+    return sendWarningReply(
+      interaction,
+      'No Permission',
+      'Only support staff can transfer tickets!'
+    );
+  }
+
+  const targetUser = interaction.options.getUser('user');
+  const transferReason = interaction.options.getString('reason') || 'No reason provided';
+  const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+
+  if (!targetMember) {
+    return sendInfoReply(
+      interaction,
+      'User Not Found',
+      'Could not find that user in this server!'
+    );
+  }
+
+  if (!hasSupportOrAdmin(targetMember)) {
+    return sendWarningReply(
+      interaction,
+      'Invalid Assignee',
+      'Tickets can only be transferred to support staff or admins.'
+    );
+  }
+
+  const ticketData = await MySQLDatabaseManager.getTicket(interaction.channel.id).catch(() => null);
+  if (!ticketData) {
+    return sendInfoReply(
+      interaction,
+      'Ticket Not Found',
+      'Could not load ticket data for this channel.'
+    );
+  }
+
+  if (ticketData.claimedBy === targetUser.id) {
+    return sendInfoReply(
+      interaction,
+      'Already Assigned',
+      `${targetUser} is already assigned to this ticket.`
+    );
+  }
+
+  await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
+    claimedBy: targetUser.id,
+    status: 'claimed'
+  });
+
+  await updateTicketChannelAssigneeName(interaction.channel, targetUser);
+
+  let previousAssigneeText = 'Unassigned';
+  if (ticketData.claimedBy) {
+    const previousUser = await interaction.client.users.fetch(ticketData.claimedBy).catch(() => null);
+    previousAssigneeText = previousUser ? previousUser.tag : `ID: ${ticketData.claimedBy}`;
+  }
+
+  const successEmbed = createSuccessEmbed(
+    'Ticket Transferred',
+    `This ticket has been reassigned to ${targetUser}.`
+  ).addFields(
+    { name: 'From', value: previousAssigneeText, inline: true },
+    { name: 'To', value: `${targetUser.tag}\n\`${targetUser.id}\``, inline: true },
+    { name: 'By', value: `${interaction.user.tag}\n\`${interaction.user.id}\``, inline: true },
+    { name: 'Reason', value: `\`\`\`${transferReason}\`\`\``, inline: false }
+  ).setTimestamp();
+
+  await interaction.reply({ embeds: [successEmbed] });
+
+  const notifyEmbed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('🔄 Ticket Reassigned')
+    .setDescription(`${targetUser} is now responsible for this ticket.`)
+    .addFields(
+      { name: 'Previous Assignee', value: previousAssigneeText, inline: true },
+      { name: 'Reason', value: transferReason, inline: false }
+    )
+    .setTimestamp();
+
+  await interaction.channel.send({ embeds: [notifyEmbed] }).catch(() => { });
+}
+
 async function markHandled(interaction) {
   if (!interaction.member.roles.cache.has(supportTeamRoleId) && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'No Permission',
       `You need the <@&${supportTeamRoleId}> role to mark tickets as handled!`
@@ -523,7 +705,7 @@ async function markHandled(interaction) {
   }
 
   if (!isTicketChannel(interaction)) {
-    return sendErrorReply(
+    return sendWarningReply(
       interaction,
       'Invalid Channel',
       'This command can only be used in ticket channels!'
@@ -551,5 +733,6 @@ module.exports.handlers = {
   addUserToTicket,
   removeUserFromTicket,
   claimTicket,
+  transferTicket,
   markHandled
 };

@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const moment = require("moment");
 require("moment-duration-format");
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const AdminPanelHelper = require("../../Functions/AdminPanelHelper");
 
@@ -57,7 +57,7 @@ module.exports = {
     // See if the duration they gave us is valid
     const duration = parseDuration(durationInput);
     if (!duration) {
-      return sendErrorReply(
+      return sendWarningReply(
         interaction,
         'Invalid Duration',
         'Use valid format:\n' +
@@ -71,7 +71,7 @@ module.exports = {
 
     // Discord won't let you timeout for less than a minute
     if (duration < 1) {
-      return sendErrorReply(
+      return sendWarningReply(
         interaction,
         'Invalid Duration',
         'Duration must be at least **1 minute**'
@@ -81,7 +81,7 @@ module.exports = {
     // Discord's hard limit is 28 days (40320 minutes)
     if (duration > 40320) {
       const days = Math.floor(duration / 1440);
-      return sendErrorReply(
+      return sendWarningReply(
         interaction,
         'Too Long',
         `You entered **${durationInput}** (${days} days), but max is **28 days**.\n\n` +
@@ -97,7 +97,7 @@ module.exports = {
     // Make sure they're actually in the server (can't timeout someone who left)
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
-      await sendErrorReply(
+      await sendWarningReply(
         interaction,
         'Invalid User',
         `**${targetUser.tag}** is not in this server!`
@@ -107,7 +107,7 @@ module.exports = {
 
     // Check if member is already timed out
     if (targetMember.isCommunicationDisabled()) {
-      await sendErrorReply(
+      await sendWarningReply(
         interaction,
         'Already Timed Out',
         `**${targetUser.tag}** is already timed out!`
@@ -206,6 +206,14 @@ module.exports = {
         `**🔑 Case ID:** \`${caseID}\`\n` +
         `**📬 DM Status:** ${dmSent ? '✅ Sent' : '❌ Failed'}`
       );
+
+      await interaction.followUp({
+        content:
+          `🧾 **Incident proof reminder**\n` +
+          `Use this (ephemeral) command to attach evidence for this action:\n` +
+          `\`/incident create caseid:${caseID} user:@${targetUser.username} action:TIMEOUT reason:<reason> proof:<proof details>\``,
+        flags: MessageFlags.Ephemeral
+      }).catch(() => { });
     } catch (err) {
       console.error(`Error timing out ${targetUser.tag}:`, err.message);
       await sendErrorReply(

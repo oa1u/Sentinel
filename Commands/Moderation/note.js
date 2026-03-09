@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const { sendErrorReply, sendSuccessReply } = require('../../Functions/EmbedBuilders');
+const { sendErrorReply, sendSuccessReply, sendWarningReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -72,7 +72,7 @@ module.exports = {
                     : entry;
 
                 if (merged.length > 6000) {
-                    return sendErrorReply(
+                    return sendWarningReply(
                         interaction,
                         'Notes Too Long',
                         'This user\'s notes are too long to append another entry. Delete or shorten existing notes first.'
@@ -90,7 +90,7 @@ module.exports = {
             if (subcommand === 'view') {
                 const notes = await DatabaseManager.getMemberNotes(targetUser.id);
                 if (!notes || !notes.trim()) {
-                    return sendErrorReply(interaction, 'No Notes Found', `No moderation notes found for ${targetUser}.`);
+                    return sendInfoReply(interaction, 'No Notes Found', `No moderation notes found for ${targetUser}.`);
                 }
 
                 const safeNotes = notes.length > 3900 ? `${notes.slice(0, 3900)}\n\n... (truncated)` : notes;
@@ -106,7 +106,7 @@ module.exports = {
             if (subcommand === 'delete') {
                 const notes = await DatabaseManager.getMemberNotes(targetUser.id);
                 if (!notes || !notes.trim()) {
-                    return sendErrorReply(interaction, 'No Notes Found', `No moderation notes found for ${targetUser}.`);
+                    return sendInfoReply(interaction, 'No Notes Found', `No moderation notes found for ${targetUser}.`);
                 }
 
                 const cleared = await DatabaseManager.updateMemberNotes(targetUser.id, '');
@@ -117,7 +117,7 @@ module.exports = {
                 return sendSuccessReply(interaction, 'Notes Deleted', `Cleared all moderation notes for ${targetUser}.`);
             }
 
-            return sendErrorReply(interaction, 'Unknown Action', 'That note action is not supported.');
+            return sendWarningReply(interaction, 'Unknown Action', 'That note action is not supported.');
         } catch (error) {
             console.error('[note] Error:', error.message);
             return sendErrorReply(interaction, 'Note Command Failed', `Could not complete this action.\nError: ${error.message}`);

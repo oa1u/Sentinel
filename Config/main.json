@@ -1,19 +1,12 @@
 {
   "serverID": "SERVER_ID_HERE",
-  "ServerInvite": "https://discord.gg/YOUR_INVITE_CODE",
-  "AppealLink": "WEBSITE_LINK_HERE/appeal",
+  "ServerInvite": "SERVER_INVITE_LINK_HERE",
+  "AppealLink": "APPEAL_LINK_HERE",
   "WebsiteLink": "WEBSITE_LINK_HERE",
   "githublink": "https://github.com/oa1u/Sentinel",
-  "websiteName": "Sentinel Panel",
-  "serverName": "DISCORD_SERVER_NAME_HERE",
+  "websiteName": "WEBSITE_NAME_HERE",
+  "serverName": "SERVER_NAME_HERE",
   "PanelEmoji": "🛡️",
   "botName": "Sentinel",
-  "Version": "6.0.0"
-  ,
-  "Email": {
-    "minSecondsBetweenSameRecipient": 10,
-    "maxRecipientEmailsPerWindow": 12,
-    "emailAbuseWindowSeconds": 3600,
-    "maxGlobalEmailsPerMinute": 80
-  }
+  "Version": "7.0.0"
 }

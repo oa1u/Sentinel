@@ -13,6 +13,56 @@
     <script src="/public/shared.js"></script>
     <script src="/public/notifications.js" defer></script>
     <script src="/public/profile.js" defer></script>
+    <style>
+        .discord-link-banner {
+            background: linear-gradient(135deg, rgba(91, 127, 255, 0.18), rgba(64, 120, 255, 0.08));
+            border: 1px solid rgba(91, 127, 255, 0.45);
+            border-radius: 12px;
+            padding: 0.85rem 1rem;
+            margin: 0 0 1.2rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            color: var(--text-primary);
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+        }
+
+        .discord-link-banner__text {
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .discord-link-banner__actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .discord-link-banner__close {
+            background: rgba(15, 23, 42, 0.12);
+            border: 1px solid rgba(15, 23, 42, 0.2);
+            color: var(--text-primary);
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .discord-link-banner__close:hover {
+            background: rgba(15, 23, 42, 0.2);
+        }
+
+        @media (max-width: 720px) {
+            .discord-link-banner {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
 </head>
 
 <body>
@@ -38,6 +88,7 @@
                             <span class="role-badge" id="dropdownRole">user</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -50,7 +101,18 @@
         </div>
     </header>
 
-    <main class="container">
+    <main class="container profile-page">
+        <div class="discord-link-banner" id="discordLinkBanner" style="display: none;">
+            <div class="discord-link-banner__text">
+                You can only use this page until you link your Discord account for safety reasons.
+            </div>
+            <div class="discord-link-banner__actions">
+                <button class="btn btn-sm btn-secondary" id="discordLinkBannerAction" type="button">Link
+                    Discord</button>
+                <button class="discord-link-banner__close" id="discordLinkBannerClose" type="button"
+                    aria-label="Dismiss">✕</button>
+            </div>
+        </div>
         <div class="message error hidden" id="errorMsg"></div>
         <div class="message success hidden" id="successMsg"></div>
 
@@ -378,7 +440,8 @@
                                 </div>
                             </div>
 
-                            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+                            <div class="security-event-controls"
+                                style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
                                 <select id="securityEventToneFilter" class="form-input" style="max-width: 180px;">
                                     <option value="all">All tones</option>
                                     <option value="positive">Positive</option>
@@ -404,7 +467,8 @@
                                     data-event-filter="RECOVERY_CODE_USED" aria-pressed="false">Recovery</button>
                             </div>
 
-                            <div style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size: 0.85rem;">
+                            <div class="security-event-summary"
+                                style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size: 0.85rem;">
                                 Showing <strong id="securityEventVisibleCount"
                                     style="color: var(--text-primary);">0</strong>
                                 of <strong id="securityEventTotalCount" style="color: var(--text-primary);">0</strong>
@@ -490,6 +554,112 @@
                                     </div>
                                 </form>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="card" id="changePasswordCard" style="margin-bottom: 1.5rem; display: none;">
+                        <div class="card-header">
+                            <span class="card-header-icon">🔐</span>
+                            Change Password
+                        </div>
+                        <div class="profile-card-body" style="padding: 1.5rem;">
+                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">
+                                Update your password to keep your account secure.
+                            </div>
+
+                            <form id="changePasswordForm" style="display:grid; gap:0.9rem;">
+                                <div>
+                                    <label class="form-label" for="currentPassword">Current Password</label>
+                                    <div style="display:flex; gap:0.5rem;">
+                                        <input id="currentPassword" class="form-input" type="password"
+                                            placeholder="Enter current password" required
+                                            autocomplete="current-password" style="flex:1;"
+                                            onkeyup="handleCapsLock(event)" onkeydown="handleCapsLock(event)">
+                                        <button type="button" class="btn btn-secondary"
+                                            onclick="togglePasswordVisibility('currentPassword')">Show</button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="form-label" for="newPassword">New Password</label>
+                                    <div style="display:flex; gap:0.5rem;">
+                                        <input id="newPassword" class="form-input" type="password"
+                                            placeholder="Enter new password" required autocomplete="new-password"
+                                            style="flex:1;"
+                                            oninput="updatePasswordStrength(this.value); validatePasswordMatch();"
+                                            onkeyup="handleCapsLock(event)" onkeydown="handleCapsLock(event)">
+                                        <button type="button" class="btn btn-secondary"
+                                            onclick="togglePasswordVisibility('newPassword')">Show</button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="form-label" for="confirmPassword">Confirm New Password</label>
+                                    <div style="display:flex; gap:0.5rem;">
+                                        <input id="confirmPassword" class="form-input" type="password"
+                                            placeholder="Confirm new password" required autocomplete="new-password"
+                                            style="flex:1;" oninput="validatePasswordMatch();"
+                                            onkeyup="handleCapsLock(event)" onkeydown="handleCapsLock(event)">
+                                        <button type="button" class="btn btn-secondary"
+                                            onclick="togglePasswordVisibility('confirmPassword')">Show</button>
+                                    </div>
+                                    <div id="matchIndicator" class="password-match-indicator"></div>
+                                </div>
+
+                                <div id="capsLockWarning" class="caps-lock-warning" style="display:none;">
+                                    ⚠️ Caps Lock is on
+                                </div>
+
+                                <div id="newPasswordRequirements" class="password-requirements">
+                                    <strong style="color:var(--text-primary);">Password requirements</strong>
+                                    <span
+                                        title="Allowed special characters: ! @ # $ % ^ &amp; * ( ) _ + - = [ ] { } ; ' : &quot; \ | , . &lt; &gt; / ?"
+                                        style="margin-left:0.35rem; color:var(--text-secondary); font-size:0.85rem; cursor:help;">ⓘ</span>
+                                    <div class="requirement"><span id="check-length"
+                                            class="requirement-check">✓</span><span>At least 8 characters</span></div>
+                                    <div class="requirement"><span id="check-upper"
+                                            class="requirement-check">✓</span><span>One uppercase letter</span></div>
+                                    <div class="requirement"><span id="check-lower"
+                                            class="requirement-check">✓</span><span>One lowercase letter</span></div>
+                                    <div class="requirement"><span id="check-number"
+                                            class="requirement-check">✓</span><span>One number</span></div>
+                                    <div class="requirement"><span id="check-special"
+                                            class="requirement-check">✓</span><span>One special character (e.g., ! @ # $
+                                            % ^ &amp; * ( ) _ + - = [ ] { } ; ' : " \ | , . &lt; &gt; / ?)</span></div>
+                                </div>
+
+                                <div>
+                                    <div class="password-strength-meter">
+                                        <div id="strengthBar" class="strength-bar"></div>
+                                    </div>
+                                    <div id="strengthText" class="password-strength-text"></div>
+                                </div>
+
+                                <div class="password-quick-actions">
+                                    <button type="button" class="btn btn-secondary"
+                                        onclick="generateStrongPassword()">Generate
+                                        Strong Password</button>
+                                    <button type="button" class="btn btn-secondary"
+                                        onclick="copyGeneratedPassword()">Copy
+                                        Generated Password</button>
+                                    <label class="show-all-passwords-toggle">
+                                        <input id="showAllPasswordsToggle" type="checkbox"
+                                            onchange="toggleAllPasswords(this.checked)">
+                                        <span class="toggle-switch"><span class="toggle-thumb"></span></span>
+                                        <span class="toggle-text">Show all passwords</span>
+                                    </label>
+                                </div>
+
+                                <div style="display:flex; gap:0.5rem; align-items:center;">
+                                    <button id="changePasswordSubmitBtn" class="btn btn-primary" type="submit" disabled>
+                                        <span id="changePasswordBtnText">Change Password</span>
+                                        <span id="changePasswordLoading" class="hidden"
+                                            style="margin-left:0.5rem;">⏳</span>
+                                    </button>
+                                    <div style="color:var(--text-secondary); font-size:0.9rem;">You'll stay signed in on
+                                        this session after a successful update.</div>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -664,6 +834,19 @@
                 </div>
             </div>
     </main>
+
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
+    <script src="/public/version.js"></script>
 </body>
 
 </html>

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const AdminPanelHelper = require('../../Functions/AdminPanelHelper');
-const { sendErrorReply } = require('../../Functions/EmbedBuilders');
+const { sendErrorReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
 
 function formatTime(value) {
     const timestamp = Number(value);
@@ -15,6 +15,42 @@ function formatTime(value) {
     }
 
     return 'Unknown time';
+}
+
+function trimForField(value, maxLength) {
+    const text = String(value || '').trim();
+    if (!text) return 'Unknown';
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function getFirstNonEmpty(...values) {
+    for (const value of values) {
+        if (value === null || value === undefined) continue;
+        const text = String(value).trim();
+        if (text) return text;
+    }
+    return '';
+}
+
+function normalizeLogEntry(raw) {
+    const action = getFirstNonEmpty(raw?.action, 'ACTION').toUpperCase();
+    const userId = getFirstNonEmpty(raw?.user_id, raw?.userId);
+    const userName = getFirstNonEmpty(raw?.user_name, raw?.username);
+    const moderatorId = getFirstNonEmpty(raw?.moderator_id, raw?.moderatorId);
+    const moderatorName = getFirstNonEmpty(raw?.moderator_name, raw?.moderatorName);
+    const reason = getFirstNonEmpty(raw?.reason, 'No reason provided');
+    const timestamp = raw?.timestamp_ms ?? raw?.timestamp ?? null;
+
+    return {
+        action,
+        userId,
+        userName,
+        moderatorId,
+        moderatorName,
+        reason,
+        timestamp
+    };
 }
 
 module.exports = {
@@ -38,51 +74,115 @@ module.exports = {
         try {
             const limit = interaction.options.getInteger('limit') || 10;
             const logs = await AdminPanelHelper.getRecentModerationActions(limit);
+            const userLabelCache = new Map();
 
             if (!logs.length) {
-                return sendErrorReply(interaction, 'No Moderation Logs', 'No recent moderation actions were found.');
+                return sendInfoReply(interaction, 'No Moderation Logs', 'No recent moderation actions were found.');
             }
 
             // Attempt to resolve usernames/ moderators in real-time via the bot client for more accurate labels
-            const resolvedLines = await Promise.all(logs.slice(0, 25).map(async (entry, index) => {
-                const action = String(entry.action || 'ACTION').toUpperCase();
+            const resolvedEntries = await Promise.all(logs.slice(0, 25).map(async (rawEntry) => {
+                const entry = normalizeLogEntry(rawEntry);
 
-                const userNameRaw = (entry.user_name || '').toString().trim();
-                const userIdRaw = (entry.user_id || '').toString().trim();
+                // Helper to resolve labels with optional guild-aware mention behavior.
+                async function resolveUserLabel(id, storedName, options = {}) {
+                    const { mentionOnlyIfInGuild = false } = options;
+                    const cacheKey = `${id || 'none'}|${storedName || 'none'}|${mentionOnlyIfInGuild ? 'guild-only' : 'allow-mention'}`;
 
-                // Helper to try fetching a Discord user by id and return a readable label
-                async function resolveUserLabel(id, storedName) {
-                    if (!id && !storedName) return null;
-                    // Try stored name first if it's meaningful
-                    if (storedName && !/^unknown/i.test(storedName) && storedName !== id) {
-                        return id ? `${storedName} (<@${id}>)` : storedName;
+                    if (userLabelCache.has(cacheKey)) {
+                        return userLabelCache.get(cacheKey);
                     }
-                    if (id && interaction?.client?.users) {
+
+                    if (!id && !storedName) return null;
+
+                    const meaningfulStoredName = storedName && !/^unknown/i.test(storedName) && storedName !== id;
+
+                    // Try stored name first if it's meaningful
+                    if (meaningfulStoredName && !id) {
+                        userLabelCache.set(cacheKey, storedName);
+                        return storedName;
+                    }
+
+                    if (id && mentionOnlyIfInGuild && interaction?.guild?.members) {
                         try {
-                            const user = await interaction.client.users.fetch(id).catch(() => null);
-                            if (user) return `${user.tag} (<@${id}>)`;
+                            const member = await interaction.guild.members.fetch(id).catch(() => null);
+                            if (member?.user) {
+                                const value = `${member.user.tag} (<@${id}>)`;
+                                userLabelCache.set(cacheKey, value);
+                                return value;
+                            }
                         } catch (e) {
                             // ignore
                         }
-                        return `<@${id}>`;
+
+                        if (interaction?.client?.users) {
+                            try {
+                                const user = await interaction.client.users.fetch(id).catch(() => null);
+                                if (user) {
+                                    const value = user.tag;
+                                    userLabelCache.set(cacheKey, value);
+                                    return value;
+                                }
+                            } catch (e) {
+                                // ignore
+                            }
+                        }
+
+                        const fallback = meaningfulStoredName ? storedName : (id || 'Unknown');
+                        userLabelCache.set(cacheKey, fallback);
+                        return fallback;
                     }
-                    return storedName || (id ? `<@${id}>` : 'Unknown');
+
+                    if (meaningfulStoredName) {
+                        const value = id ? `${storedName} (<@${id}>)` : storedName;
+                        userLabelCache.set(cacheKey, value);
+                        return value;
+                    }
+
+                    if (id && interaction?.client?.users) {
+                        try {
+                            const user = await interaction.client.users.fetch(id).catch(() => null);
+                            if (user) {
+                                const value = `${user.tag} (<@${id}>)`;
+                                userLabelCache.set(cacheKey, value);
+                                return value;
+                            }
+                        } catch (e) {
+                            // ignore
+                        }
+                        const value = `<@${id}>`;
+                        userLabelCache.set(cacheKey, value);
+                        return value;
+                    }
+
+                    const fallback = storedName || (id ? `<@${id}>` : 'Unknown');
+                    userLabelCache.set(cacheKey, fallback);
+                    return fallback;
                 }
 
-                const targetLabel = await resolveUserLabel(userIdRaw, userNameRaw) || 'Unknown';
+                const targetLabel = await resolveUserLabel(entry.userId, entry.userName, { mentionOnlyIfInGuild: true }) || 'Unknown';
+                const moderatorLabel = await resolveUserLabel(entry.moderatorId, entry.moderatorName, { mentionOnlyIfInGuild: true }) || 'System';
 
-                const modNameRaw = (entry.moderator_name || '').toString().trim();
-                const modIdRaw = (entry.moderator_id || '').toString().trim();
-                const moderatorLabel = await resolveUserLabel(modIdRaw, modNameRaw) || 'System';
+                const normalizedReason = entry.reason ? String(entry.reason).trim() : 'No reason provided';
+                return {
+                    action: trimForField(entry.action, 180),
+                    targetLabel: trimForField(targetLabel, 160),
+                    moderatorLabel: trimForField(moderatorLabel, 160),
+                    reason: trimForField(normalizedReason, 260),
+                    when: formatTime(entry.timestamp)
+                };
+            }));
 
-                const reason = entry.reason ? String(entry.reason).slice(0, 80) : 'No reason provided';
-                return `**${index + 1}.** ${action} • ${targetLabel} by ${moderatorLabel}\n└ ${reason} • ${formatTime(entry.timestamp)}`;
+            const fields = resolvedEntries.map((entry, index) => ({
+                name: `${index + 1}. ${entry.action}`,
+                value: `**Target:** ${entry.targetLabel}\n**Moderator:** ${entry.moderatorLabel}\n**Reason:** ${entry.reason}\n**When:** ${entry.when}`
             }));
 
             const embed = new EmbedBuilder()
                 .setColor(0x5865F2)
                 .setTitle('📚 Recent Moderation Logs')
-                .setDescription(lines.join('\n'))
+                .setDescription('Recent moderation actions in this server.')
+                .addFields(fields)
                 .setFooter({ text: `Showing ${Math.min(limit, logs.length)} of ${logs.length}` })
                 .setTimestamp();
 

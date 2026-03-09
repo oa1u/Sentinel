@@ -1,11 +1,14 @@
 require("dotenv").config({ path: "./Config/credentials.env", override: false, debug: false, quiet: true });
 const { Client, Collection, GatewayIntentBits, MessageFlags, Partials, PermissionFlagsBits } = require("discord.js");
 const { REST } = require('@discordjs/rest');
+const express = require('express');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { updateStats } = require('./Functions/botStats');
 const eventLoader = require('./Events/_loader');
 const JobScheduler = require('./Functions/JobScheduler');
+const { ROLES, MISC, CHANNELS } = require('./Config/constants');
 
 
 const { EmbedBuilder: DiscordEmbedBuilder } = require('discord.js');
@@ -19,6 +22,15 @@ try {
 const appName = require('./package.json')?.name || 'Bot';
 const DEFAULT_EMBED_COLOR = 0x5865F2;
 const DEFAULT_EMBED_FOOTER = `${appName} • System`;
+const resilienceConfig = MISC?.resilience || {};
+const LOGIN_MAX_ATTEMPTS = Math.max(1, Math.min(20, Number(resilienceConfig.loginMaxAttempts) || 5));
+const LOGIN_BASE_RETRY_DELAY_MS = Math.max(500, Math.min(60_000, Number(resilienceConfig.loginBaseRetryDelayMs) || 2500));
+const LOGIN_MAX_RETRY_DELAY_MS = Math.max(LOGIN_BASE_RETRY_DELAY_MS, Math.min(300_000, Number(resilienceConfig.loginMaxRetryDelayMs) || 30_000));
+const HEALTH_CHECK_INTERVAL_MS = Math.max(15_000, Math.min(10 * 60 * 1000, Number(resilienceConfig.healthCheckIntervalMs) || 60_000));
+const DB_FAILURE_THRESHOLD = Math.max(1, Math.min(10, Number(resilienceConfig.dbFailureThreshold) || 3));
+const SHUTDOWN_TIMEOUT_MS = Math.max(2_000, Math.min(120_000, Number(resilienceConfig.shutdownTimeoutMs) || 15_000));
+const EXIT_ON_UNHANDLED_REJECTION = resilienceConfig.exitOnUnhandledRejection !== false;
+const EXIT_ON_UNCAUGHT_EXCEPTION = resilienceConfig.exitOnUncaughtException !== false;
 
 function applyEmbedDefaults(embed) {
   if (!embed?.data) return;
@@ -59,16 +71,127 @@ const client = new Client({
   presence: require("./Config/presence.json"),
 });
 
+const BOT_WEBHOOK_PORT = Number(process.env.BOT_WEBHOOK_PORT || 3050);
+const BOT_WEBHOOK_SECRET = String(process.env.BOT_WEBHOOK_SECRET || '').trim();
+const BOT_WEBHOOK_MAX_DRIFT_MS = Math.max(30_000, Math.min(15 * 60 * 1000, Number(process.env.BOT_WEBHOOK_MAX_DRIFT_MS) || 5 * 60 * 1000));
+
+function verifyWebhookSignature(req, secret) {
+  if (!secret) return false;
+  const timestamp = String(req.headers['x-webhook-timestamp'] || '').trim();
+  const signature = String(req.headers['x-webhook-signature'] || '').trim();
+  if (!timestamp || !signature) return false;
+
+  const tsNumber = Number(timestamp);
+  if (!Number.isFinite(tsNumber)) return false;
+  if (Math.abs(Date.now() - tsNumber) > BOT_WEBHOOK_MAX_DRIFT_MS) return false;
+
+  const rawBody = typeof req.rawBody === 'string' ? req.rawBody : JSON.stringify(req.body || {});
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex');
+
+  if (expected.length !== signature.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
+async function dispatchWebsiteWebhook(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  const channelId = CHANNELS?.webhookChannelId || CHANNELS?.notificationChannelId || CHANNELS?.serverLogChannelId;
+  if (!channelId) return;
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel || !channel.isTextBased?.()) return;
+
+  const eventName = String(payload.event || 'website.event');
+  const actor = payload.actor || 'system';
+  const when = payload.timestamp || new Date().toISOString();
+  let dataBlock = '';
+  try {
+    const json = JSON.stringify(payload.data || {}, null, 2);
+    dataBlock = json.length > 900 ? `${json.slice(0, 900)}\n...` : json;
+  } catch {
+    dataBlock = String(payload.data || '');
+  }
+
+  const payloadField = dataBlock ? `\`\`\`json\n${dataBlock}\n\`\`\`` : 'None';
+
+  const embed = new DiscordEmbedBuilder()
+    .setTitle(`Website Webhook: ${eventName}`)
+    .setDescription(`Actor: **${actor}**`)
+    .addFields(
+      { name: 'Timestamp', value: String(when), inline: false },
+      { name: 'Source IP', value: String(payload.ipAddress || 'unknown'), inline: true },
+      { name: 'User Agent', value: String(payload.userAgent || 'unknown').slice(0, 200), inline: false },
+      { name: 'Payload', value: payloadField, inline: false }
+    );
+
+  channel.send({ embeds: [embed] }).catch(() => null);
+}
+
+const webhookApp = express();
+webhookApp.use(express.json({
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  }
+}));
+
+webhookApp.post('/webhooks/website', (req, res) => {
+  if (!BOT_WEBHOOK_SECRET) {
+    return res.status(503).json({ error: 'Webhook secret not configured' });
+  }
+  if (!verifyWebhookSignature(req, BOT_WEBHOOK_SECRET)) {
+    return res.status(401).json({ error: 'Invalid webhook signature' });
+  }
+
+  const payload = req.body || {};
+  dispatchWebsiteWebhook(payload).catch(() => null);
+  return res.json({ success: true });
+});
+
+webhookApp.listen(BOT_WEBHOOK_PORT, () => {
+  if (!BOT_WEBHOOK_SECRET) {
+    console.warn('⚠️ Bot webhook server started without BOT_WEBHOOK_SECRET. Requests will be rejected.');
+  }
+  console.log(`🔗 Bot webhook listener running on port ${BOT_WEBHOOK_PORT}`);
+});
+
 // Collections for commands, slash commands, and events — handy globals
 client.commands = new Collection();
 client.slashCommands = new Collection();
 client.events = new Collection();
+client.runtimeHealth = {
+  healthCheckIntervalMs: HEALTH_CHECK_INTERVAL_MS,
+  consecutiveDatabaseHealthFailures: 0,
+  lastDatabaseHealthCheckAt: null,
+  lastDatabaseHealth: null,
+  lastDatabaseHealthError: null
+};
+client.jobScheduler = null;
 let jobScheduler = null;
+let reminderTimer = null;
+let botStatsTimer = null;
+let runtimeHealthTimer = null;
+let runtimeHealthCheckInProgress = false;
+let consecutiveDatabaseHealthFailures = 0;
+let shutdownInProgress = false;
+let stopCommandWatcher = null;
+let pendingWatchRegistrationTimer = null;
+let lastRegisteredCommandSignature = null;
+
+function sleep(ms) {
+  const safeDelay = Math.max(0, Number(ms) || 0);
+  return new Promise((resolve) => setTimeout(resolve, safeDelay));
+}
 
 // Recursively yield command file paths (.js) from a directory.
 // Files or folders that start with '_' are skipped (they're helpers/private).
 function* getCommandFiles(dir) {
-  const files = fs.readdirSync(dir);
+  const files = fs.readdirSync(dir).sort((a, b) => a.localeCompare(b));
   for (const file of files) {
     const filePath = path.join(dir, file);
     const stat = fs.statSync(filePath);
@@ -80,8 +203,37 @@ function* getCommandFiles(dir) {
   }
 }
 
+function buildSlashCommandPayloadsFromCollection(collection) {
+  const commands = [];
+  const entries = Array.from(collection?.entries?.() || []).sort(([a], [b]) => String(a).localeCompare(String(b)));
+
+  for (const [, command] of entries) {
+    if (!command?.data || typeof command.data.toJSON !== 'function') continue;
+
+    const json = command.data.toJSON();
+    const category = command.category || 'uncategorized';
+
+    if (!json.default_member_permissions) {
+      if (category === 'moderation') {
+        json.default_member_permissions = PermissionFlagsBits.ModerateMembers.toString();
+      }
+      if (category === 'management') {
+        json.default_member_permissions = PermissionFlagsBits.Administrator.toString();
+      }
+    }
+
+    commands.push(json);
+  }
+
+  return commands;
+}
+
+function createSlashCommandSignature(commands = []) {
+  return JSON.stringify(Array.isArray(commands) ? commands : []);
+}
+
 // Load and register slash commands with Discord (guild-scoped when possible).
-async function registerCommands() {
+async function registerCommands({ commandsOverride = null, skipIfUnchanged = false, reason = 'manual' } = {}) {
   const TOKEN = process.env.TOKEN;
   const CLIENT_ID = process.env.CLIENT_ID;
   const GUILD_ID = process.env.GUILD_ID;
@@ -91,37 +243,14 @@ async function registerCommands() {
     return false;
   }
 
-  const commands = [];
-  const commandsPath = path.join(__dirname, 'Commands');
+  const commands = Array.isArray(commandsOverride)
+    ? commandsOverride
+    : buildSlashCommandPayloadsFromCollection(client.slashCommands);
 
-  try {
-    // Load each command module, apply reasonable default permissions for
-    // moderation/management categories, and collect the JSON payloads.
-    for (const filePath of getCommandFiles(commandsPath)) {
-      try {
-        const command = require(filePath);
-        if (command.data) {
-          const json = command.data.toJSON();
-          const category = command.category || 'uncategorized';
-
-          if (!json.default_member_permissions) {
-            if (category === 'moderation') {
-              json.default_member_permissions = PermissionFlagsBits.ModerateMembers.toString();
-            }
-            if (category === 'management') {
-              json.default_member_permissions = PermissionFlagsBits.Administrator.toString();
-            }
-          }
-
-          commands.push(json);
-        }
-      } catch (err) {
-        console.error(`  ❌ Error loading command ${filePath}: ${err.message}`);
-      }
-    }
-  } catch (err) {
-    console.error('❌ Error scanning command directory:', err.message);
-    return false;
+  const signature = createSlashCommandSignature(commands);
+  if (skipIfUnchanged && signature === lastRegisteredCommandSignature) {
+    console.log(`↩️  Slash command schema unchanged, skipping registration (${reason}).`);
+    return true;
   }
 
   const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -137,6 +266,7 @@ async function registerCommands() {
 
     const data = await rest.put(route, { body: commands });
     console.log(`✅ ${data.length} commands registered\n`);
+    lastRegisteredCommandSignature = signature;
     return true;
   } catch (error) {
     console.error('❌ Error registering commands:', error.message);
@@ -172,14 +302,65 @@ async function initializeBot() {
 
     await eventLoader(client);
 
-    await require("./Commands/_slashLoader")(client.slashCommands).catch((err) => {
+    const slashLoader = require('./Commands/_slashLoader');
+
+    await slashLoader(client.slashCommands).catch((err) => {
       console.error("❌ Couldn't load commands:", err.message);
       process.exit(1);
     });
 
-    const registered = await registerCommands();
+    const initialCommandsPayload = buildSlashCommandPayloadsFromCollection(client.slashCommands);
+    const registered = await registerCommands({ commandsOverride: initialCommandsPayload, reason: 'startup' });
     if (!registered) {
       console.warn('⚠️  Command registration failed but continuing anyway...');
+    }
+
+    const commandWatchMode = String(process.env.COMMANDS_WATCH_MODE || '').toLowerCase() === 'true';
+    if (commandWatchMode && typeof slashLoader.createCommandWatcher === 'function') {
+      const watchRegisterCooldownMs = Math.max(250, Number(process.env.COMMANDS_REGISTER_COOLDOWN_MS) || 2000);
+      let lastWatchRegisterAt = 0;
+
+      const runWatchRegistration = async (event) => {
+        const commandsPayload = buildSlashCommandPayloadsFromCollection(client.slashCommands);
+        const syncOk = await registerCommands({ commandsOverride: commandsPayload, skipIfUnchanged: true, reason: event });
+        if (!syncOk) {
+          console.warn(`⚠️  Slash command re-registration failed after reload (${event}).`);
+          return;
+        }
+        lastWatchRegisterAt = Date.now();
+      };
+
+      stopCommandWatcher = slashLoader.createCommandWatcher({
+        collection: client.slashCommands,
+        watchDir: './Commands',
+        debounceMs: Number(process.env.COMMANDS_WATCH_DEBOUNCE_MS) || 500,
+        onReload: async ({ event, result }) => {
+          console.log(`🔄 Reloaded slash commands (${event}) -> loaded=${result.loaded}, errors=${result.errors}`);
+          if (result?.errors > 0) {
+            console.warn('⚠️  Skipping slash command registration because loader reported errors.');
+            return;
+          }
+
+          const elapsed = Date.now() - lastWatchRegisterAt;
+          if (elapsed < watchRegisterCooldownMs) {
+            const waitMs = watchRegisterCooldownMs - elapsed;
+            console.log(`⏳ Slash registration cooldown active (${waitMs}ms remaining) after ${event}; scheduling deferred sync.`);
+            if (pendingWatchRegistrationTimer) {
+              clearTimeout(pendingWatchRegistrationTimer);
+            }
+            pendingWatchRegistrationTimer = setTimeout(() => {
+              pendingWatchRegistrationTimer = null;
+              console.log(`🕒 Running deferred slash registration sync (trigger: ${event}).`);
+              runWatchRegistration(`cooldown:${event}`).catch((error) => {
+                console.warn('⚠️  Deferred slash registration failed:', error?.message || error);
+              });
+            }, waitMs);
+            return;
+          }
+
+          await runWatchRegistration(event);
+        }
+      });
     }
 
     require("./Logging/index")(client);
@@ -188,6 +369,7 @@ async function initializeBot() {
 
     jobScheduler = new JobScheduler(client);
     await jobScheduler.start();
+    client.jobScheduler = jobScheduler;
   } catch (error) {
     console.error('❌ Fatal error during bot initialization:', error);
     process.exit(1);
@@ -199,17 +381,175 @@ async function initializeBot() {
  * Responsible for delivering due reminders (DMs) and retrying or notifying staff on failures.
  */
 function startReminderChecker(client) {
-  const { reminderCheckInterval } = require('./Config/constants/misc.json').timeouts;
+  const { reminderCheckInterval } = MISC.timeouts;
 
   // Check immediately on startup
   checkPendingReminders(client);
 
   // Check every so often
-  setInterval(() => {
+  reminderTimer = setInterval(() => {
     checkPendingReminders(client);
   }, reminderCheckInterval);
 
+  if (typeof reminderTimer.unref === 'function') {
+    reminderTimer.unref();
+  }
+
   console.log(`⏰ Reminder system started (checking every ${reminderCheckInterval / 1000}s)`);
+}
+
+function startRuntimeHealthMonitor() {
+  if (runtimeHealthTimer) {
+    clearInterval(runtimeHealthTimer);
+    runtimeHealthTimer = null;
+  }
+
+  runtimeHealthTimer = setInterval(async () => {
+    if (runtimeHealthCheckInProgress || shutdownInProgress) return;
+    runtimeHealthCheckInProgress = true;
+
+    try {
+      const DatabaseManager = require('./Functions/MySQLDatabaseManager');
+      const health = await DatabaseManager.getDatabaseHealth();
+
+      if (health?.ok) {
+        if (consecutiveDatabaseHealthFailures > 0) {
+          console.log('✅ Database health restored');
+        }
+        consecutiveDatabaseHealthFailures = 0;
+      } else {
+        consecutiveDatabaseHealthFailures += 1;
+        console.warn(
+          `⚠️  Database health check failed (${consecutiveDatabaseHealthFailures}/${DB_FAILURE_THRESHOLD})${health?.error ? `: ${health.error}` : ''}`
+        );
+
+        if (consecutiveDatabaseHealthFailures >= DB_FAILURE_THRESHOLD) {
+          console.warn('♻️  Attempting database reconnection...');
+          const reinitialized = await DatabaseManager.initialize();
+          if (reinitialized) {
+            consecutiveDatabaseHealthFailures = 0;
+            console.log('✅ Database reconnection successful');
+          } else {
+            console.error('❌ Database reconnection attempt failed');
+          }
+        }
+      }
+
+      client.runtimeHealth.consecutiveDatabaseHealthFailures = consecutiveDatabaseHealthFailures;
+      client.runtimeHealth.lastDatabaseHealthCheckAt = Date.now();
+      client.runtimeHealth.lastDatabaseHealth = Boolean(health?.ok);
+      client.runtimeHealth.lastDatabaseHealthError = health?.error || null;
+
+      if (typeof client.ws?.ping === 'number' && client.ws.ping > 15_000) {
+        console.warn(`⚠️  High Discord gateway ping detected: ${client.ws.ping}ms`);
+      }
+    } catch (error) {
+      consecutiveDatabaseHealthFailures += 1;
+      client.runtimeHealth.consecutiveDatabaseHealthFailures = consecutiveDatabaseHealthFailures;
+      client.runtimeHealth.lastDatabaseHealthCheckAt = Date.now();
+      client.runtimeHealth.lastDatabaseHealth = false;
+      client.runtimeHealth.lastDatabaseHealthError = error?.message || 'Runtime health check failed';
+      console.error('[Health] Runtime health check failed:', error.message || error);
+    } finally {
+      runtimeHealthCheckInProgress = false;
+    }
+  }, HEALTH_CHECK_INTERVAL_MS);
+
+  if (typeof runtimeHealthTimer.unref === 'function') {
+    runtimeHealthTimer.unref();
+  }
+
+  console.log(`🩺 Runtime health monitor started (${HEALTH_CHECK_INTERVAL_MS / 1000}s interval)`);
+}
+
+async function loginWithRetry(clientInstance, token) {
+  let attempt = 0;
+  let delayMs = LOGIN_BASE_RETRY_DELAY_MS;
+
+  while (attempt < LOGIN_MAX_ATTEMPTS) {
+    attempt += 1;
+    try {
+      await clientInstance.login(token);
+      if (attempt > 1) {
+        console.log(`✅ Discord login succeeded on attempt ${attempt}/${LOGIN_MAX_ATTEMPTS}`);
+      }
+      return true;
+    } catch (error) {
+      const isFinal = attempt >= LOGIN_MAX_ATTEMPTS;
+      console.error(`❌ Discord login failed (attempt ${attempt}/${LOGIN_MAX_ATTEMPTS}): ${error.message}`);
+
+      if (isFinal) {
+        throw error;
+      }
+
+      await sleep(delayMs);
+      delayMs = Math.min(LOGIN_MAX_RETRY_DELAY_MS, delayMs * 2);
+    }
+  }
+
+  return false;
+}
+
+async function gracefulShutdown(reason = 'shutdown', exitCode = 0) {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+
+  console.log(`\n🛑 Shutting down (${reason})...`);
+
+  const shutdownTask = (async () => {
+    try {
+      if (runtimeHealthTimer) {
+        clearInterval(runtimeHealthTimer);
+        runtimeHealthTimer = null;
+      }
+
+      if (reminderTimer) {
+        clearInterval(reminderTimer);
+        reminderTimer = null;
+      }
+
+      if (botStatsTimer) {
+        clearInterval(botStatsTimer);
+        botStatsTimer = null;
+      }
+
+      if (jobScheduler && typeof jobScheduler.stop === 'function') {
+        jobScheduler.stop();
+      }
+
+      if (typeof stopCommandWatcher === 'function') {
+        stopCommandWatcher();
+        stopCommandWatcher = null;
+      }
+
+      if (pendingWatchRegistrationTimer) {
+        clearTimeout(pendingWatchRegistrationTimer);
+        pendingWatchRegistrationTimer = null;
+      }
+
+      if (client && typeof client.destroy === 'function') {
+        await client.destroy().catch(() => { });
+      }
+
+      try {
+        const DatabaseManager = require('./Functions/MySQLDatabaseManager');
+        if (DatabaseManager?.connection?.close) {
+          await DatabaseManager.connection.close();
+        }
+      } catch (closeError) {
+        console.warn('⚠️  Failed to close database connection cleanly:', closeError.message);
+      }
+    } catch (error) {
+      console.error('❌ Error during graceful shutdown:', error.message || error);
+    }
+  })();
+
+  await Promise.race([
+    shutdownTask,
+    sleep(SHUTDOWN_TIMEOUT_MS)
+  ]);
+
+  process.exit(exitCode);
 }
 
 // Process pending reminders from the database and deliver them when due.
@@ -218,7 +558,7 @@ async function checkPendingReminders(client) {
     const DatabaseManager = require('./Functions/MySQLDatabaseManager');
     const { EmbedBuilder } = require('discord.js');
     const moment = require('moment-timezone');
-    const { reminders: reminderConfig } = require('./Config/constants/misc.json');
+    const { reminders: reminderConfig } = MISC;
 
     const remindDB = DatabaseManager.getRemindersDB();
     const now = Date.now();
@@ -283,7 +623,7 @@ async function checkPendingReminders(client) {
             console.error(`[Remind] Max delivery attempts reached for reminder ${reminder.id}`);
 
             // Try to notify in notification channel
-            const notificationChannelId = reminderConfig.notificationChannelId;
+            const notificationChannelId = CHANNELS.notificationChannelId;
             if (notificationChannelId && notificationChannelId !== 'YOUR_NOTIFICATIONS_CHANNEL_ID') {
               try {
                 const channel = await client.channels.fetch(notificationChannelId).catch(() => null);
@@ -394,16 +734,17 @@ async function restoreGiveaways(client) {
 // End a giveaway that ended while bot was offline
 async function finalizeGiveawayFromDB(message, giveaway, client) {
   try {
-    let participants = [];
+    let participants = Array.isArray(giveaway?.entries) ? [...new Set(giveaway.entries)] : [];
+    const winnerCount = Math.max(1, Number(giveaway?.winnerCount || 1));
 
     // Check if message and reactions exist
     if (message && message.reactions && message.reactions.cache) {
       const reaction = message.reactions.cache.get('🎉');
 
-      if (reaction) {
+      if (reaction && participants.length === 0) {
         try {
           const users = await reaction.users.fetch();
-          participants = users.filter(user => !user.bot).map(user => user.username);
+          participants = users.filter(user => !user.bot).map(user => user.id);
         } catch (err) {
           console.error('[Giveaway] Could not fetch reaction users:', err.message);
         }
@@ -448,20 +789,24 @@ async function finalizeGiveawayFromDB(message, giveaway, client) {
         timestamp: new Date()
       };
     } else {
-      const winner = participants[Math.floor(Math.random() * participants.length)];
+      const shuffled = [...participants].sort(() => Math.random() - 0.5);
+      const winnerIds = shuffled.slice(0, Math.min(winnerCount, shuffled.length));
+      const winnerMentions = winnerIds.map((id) => `<@${id}>`).join('\n');
       endEmbed = {
         color: 65280,
-        title: '🏆 Giveaway Winner Announced!',
-        description: `━━━━━━━━━━━━━━━━━━━━━\n\n🎉 **Congratulations ${winner}!** 🎉\n\nYou have won the **${giveaway.prize}** giveaway!\n\n━━━━━━━━━━━━━━━━━━━━━`,
+        title: winnerIds.length > 1 ? '🏆 Giveaway Winners Announced!' : '🏆 Giveaway Winner Announced!',
+        description: `━━━━━━━━━━━━━━━━━━━━━\n\n🎉 **Congratulations!** 🎉\n\nYou won the **${giveaway.prize}** giveaway!\n\n━━━━━━━━━━━━━━━━━━━━━`,
         fields: [
           { name: '🎁 Prize Won', value: `**${giveaway.prize}**`, inline: true },
-          { name: '🥇 Winner', value: `**${winner}**`, inline: true },
+          { name: winnerIds.length > 1 ? '🥇 Winners' : '🥇 Winner', value: winnerMentions.slice(0, 1024), inline: false },
           { name: '👥 Total Participants', value: `**${participants.length}**`, inline: true },
-          { name: '📊 Winning Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true }
+          { name: '🏆 Winner Count', value: `**${winnerIds.length}**`, inline: true }
         ],
         footer: { text: '🎊 Giveaway Ended - Congratulations to the winner!' },
         timestamp: new Date()
       };
+
+      giveaway.winnerIds = winnerIds;
     }
 
     await message.edit({ embeds: [endEmbed] }).catch((err) => {
@@ -553,10 +898,18 @@ function sleep(ms) {
 // Select a giveaway winner (random) and update the end embed accordingly.
 async function finalizeGiveaway(message, giveawayId, client, prize, host) {
   try {
-    const reaction = await message.reactions.cache.get('🎉');
-    const users = reaction ? await reaction.users.fetch() : new Map();
+    const DatabaseManager = require('./Functions/MySQLDatabaseManager');
+    const giveawayDB = DatabaseManager.getGiveawaysDB();
+    const giveaway = await giveawayDB.get(giveawayId);
 
-    const participants = users.filter(user => !user.bot).map(user => user.username);
+    let participants = Array.isArray(giveaway?.entries) ? [...new Set(giveaway.entries)] : [];
+    const winnerCount = Math.max(1, Number(giveaway?.winnerCount || 1));
+
+    if (participants.length === 0) {
+      const reaction = await message.reactions.cache.get('🎉');
+      const users = reaction ? await reaction.users.fetch() : new Map();
+      participants = users.filter(user => !user.bot).map(user => user.id);
+    }
 
     let endEmbed;
 
@@ -573,20 +926,26 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
         timestamp: new Date()
       };
     } else {
-      const winner = participants[Math.floor(Math.random() * participants.length)];
+      const shuffled = [...participants].sort(() => Math.random() - 0.5);
+      const winnerIds = shuffled.slice(0, Math.min(winnerCount, shuffled.length));
+      const winnerMentions = winnerIds.map((id) => `<@${id}>`).join('\n');
       endEmbed = {
         color: 65280,
-        title: '🏆 Giveaway Winner Announced!',
-        description: `━━━━━━━━━━━━━━━━━━━━━\n\n🎉 **Congratulations ${winner}!** 🎉\n\nYou have won the **${prize}** giveaway!\n\n━━━━━━━━━━━━━━━━━━━━━`,
+        title: winnerIds.length > 1 ? '🏆 Giveaway Winners Announced!' : '🏆 Giveaway Winner Announced!',
+        description: `━━━━━━━━━━━━━━━━━━━━━\n\n🎉 **Congratulations!** 🎉\n\nYou have won the **${prize}** giveaway!\n\n━━━━━━━━━━━━━━━━━━━━━`,
         fields: [
           { name: '🎁 Prize Won', value: `**${prize}**`, inline: true },
-          { name: '🥇 Winner', value: `**${winner}**`, inline: true },
+          { name: winnerIds.length > 1 ? '🥇 Winners' : '🥇 Winner', value: winnerMentions.slice(0, 1024), inline: false },
           { name: '👥 Total Participants', value: `**${participants.length}**`, inline: true },
-          { name: '📊 Winning Chance', value: `**${((1 / participants.length) * 100).toFixed(2)}%**`, inline: true }
+          { name: '🏆 Winner Count', value: `**${winnerIds.length}**`, inline: true }
         ],
         footer: { text: '🎊 Giveaway Ended - Congratulations to the winner!' },
         timestamp: new Date()
       };
+
+      if (giveaway) {
+        giveaway.winnerIds = winnerIds;
+      }
     }
 
     await message.edit({ embeds: [endEmbed] }).catch((err) => {
@@ -594,11 +953,9 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
     });
 
     // Mark as completed in database
-    const DatabaseManager = require('./Functions/MySQLDatabaseManager');
-    const giveawayDB = DatabaseManager.getGiveawaysDB();
-    const giveaway = await giveawayDB.get(giveawayId);
     if (giveaway) {
       giveaway.completed = true;
+      giveaway.ended = true;
       await giveawayDB.set(giveawayId, giveaway);
     }
 
@@ -620,7 +977,7 @@ client.on("interactionCreate", async (interaction) => {
 
   // Rate limiting
   const RateLimiter = require('./Functions/RateLimiter');
-  const { administratorRoleId, moderatorRoleId } = require('./Config/constants/roles.json');
+  const { administratorRoleId, moderatorRoleId } = ROLES;
   const DatabaseManager = require('./Functions/MySQLDatabaseManager');
 
   // Role and permission checks for moderation/management commands
@@ -773,7 +1130,10 @@ client.once("clientReady", () => {
   updateBotStats();
 
   // Then update every 30 seconds
-  setInterval(updateBotStats, 30000);
+  botStatsTimer = setInterval(updateBotStats, 30000);
+  if (typeof botStatsTimer.unref === 'function') {
+    botStatsTimer.unref();
+  }
 });
 
 client.on('error', (err) => {
@@ -782,24 +1142,39 @@ client.on('error', (err) => {
 client.on('warn', (msg) => {
   console.warn('⚠️  Client warn:', msg);
 });
-
-// Log unhandled promise rejections and exit to avoid inconsistent state.
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Promise Rejection:', err);
-  process.exit(1);
+client.on('shardDisconnect', (event, shardId) => {
+  console.warn(`⚠️  Shard ${shardId} disconnected (code: ${event?.code ?? 'unknown'})`);
+});
+client.on('shardReconnecting', (shardId) => {
+  console.warn(`♻️  Shard ${shardId} reconnecting...`);
+});
+client.on('shardResume', (shardId, replayedEvents) => {
+  console.log(`✅ Shard ${shardId} resumed (${replayedEvents} replayed events)`);
 });
 
-// Log uncaught exceptions and exit to prevent the bot from running in a bad state.
-process.on('uncaughtException', (err) => {
+// Log unhandled promise rejections and optionally exit to avoid inconsistent state.
+process.on('unhandledRejection', async (err) => {
+  console.error('❌ Unhandled Promise Rejection:', err);
+  if (EXIT_ON_UNHANDLED_REJECTION) {
+    await gracefulShutdown('unhandledRejection', 1);
+  }
+});
+
+// Log uncaught exceptions and optionally exit to prevent the bot from running in a bad state.
+process.on('uncaughtException', async (err) => {
   console.error('❌ Uncaught Exception:', err);
-  process.exit(1);
+  if (EXIT_ON_UNCAUGHT_EXCEPTION) {
+    await gracefulShutdown('uncaughtException', 1);
+  }
 });
 
 // Graceful shutdown on SIGINT: destroy the client and exit cleanly.
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down...');
-  await client.destroy();
-  process.exit(0);
+  await gracefulShutdown('SIGINT', 0);
+});
+
+process.on('SIGTERM', async () => {
+  await gracefulShutdown('SIGTERM', 0);
 });
 
 // Start everything
@@ -807,7 +1182,8 @@ process.on('SIGINT', async () => {
   try {
     validateEnvironment();
     await initializeBot();
-    client.login(process.env.TOKEN);
+    await loginWithRetry(client, process.env.TOKEN);
+    startRuntimeHealthMonitor();
 
     // Start admin panel if enabled
     if (process.env.ENABLE_ADMIN_PANEL !== 'false') {

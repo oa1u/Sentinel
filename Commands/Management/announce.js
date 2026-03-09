@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
-const { administratorRoleId } = require("../../Config/constants/roles.json");
-const { announcementChannelId } = require("../../Config/constants/channel.json");
+const { ROLES: { administratorRoleId }, CHANNELS: { announcementChannelId } } = require("../../Config/constants");
 
 // Format long messages so they fit nicely in embed fields—no ugly cutoffs.
 // Note to self: Would be cool to add templates for common announcements.
@@ -54,6 +53,11 @@ module.exports = {
             .setDescription('Embed color (hex code or name)')
             .setRequired(false)
         )
+        .addStringOption(option =>
+          option.setName('image_url')
+            .setDescription('Optional image URL for the announcement embed')
+            .setRequired(false)
+        )
     )
     .addSubcommand(subcommand =>
       subcommand
@@ -72,6 +76,11 @@ module.exports = {
         .addStringOption(option =>
           option.setName('color')
             .setDescription('Embed color (hex code or name)')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option.setName('image_url')
+            .setDescription('Optional image URL for the announcement embed')
             .setRequired(false)
         )
     )
@@ -111,6 +120,7 @@ module.exports = {
     const message = interaction.options.getString('message').trim();
     const defaultColor = pingEveryone ? 'F04747' : '5865F2';
     const colorInput = interaction.options.getString('color') || defaultColor;
+    const imageUrlInput = interaction.options.getString('image_url');
 
     const formattedTitle = title.charAt(0).toUpperCase() + title.slice(1);
 
@@ -148,6 +158,14 @@ module.exports = {
       return interaction.reply({ embeds: [colorEmbed], flags: MessageFlags.Ephemeral });
     }
 
+    if (imageUrlInput && !/^https?:\/\//i.test(imageUrlInput)) {
+      const imageEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle('❌ Invalid Image URL')
+        .setDescription('Please provide a valid image URL that starts with `http://` or `https://`.');
+      return interaction.reply({ embeds: [imageEmbed], flags: MessageFlags.Ephemeral });
+    }
+
     await interaction.deferReply();
 
     const em = new EmbedBuilder()
@@ -155,6 +173,10 @@ module.exports = {
       .setTitle(`📢 ${formattedTitle}`)
       .setFooter({ text: `Announced by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
       .setTimestamp();
+
+    if (imageUrlInput) {
+      em.setImage(imageUrlInput);
+    }
 
     // Format the message based on how long it is.
     const formatted = formatMessageForEmbed(message);

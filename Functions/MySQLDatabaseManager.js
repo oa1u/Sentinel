@@ -1,4 +1,5 @@
 const mysqlConnection = require('./MySQLConnection');
+const { MISC: miscConfig, ECONOMY: economyConfigFile } = require('../Config/constants');
 
 // MySQL Database Manager
 // A centralized place for all database operations: users, moderation cases,
@@ -56,6 +57,42 @@ class MySQLDatabaseManager {
         this.connection = mysqlConnection;
         this.tempDatabases = new Map();
         this._profileSyncColumnsEnsured = false;
+        this._resultCache = new Map();
+        this._defaultCacheTtlMs = Math.max(0, parseInt(process.env.MYSQL_MANAGER_CACHE_TTL_MS || '15000'));
+    }
+
+    getCacheKey(namespace, identifier) {
+        return `${String(namespace || 'global')}::${String(identifier || '')}`;
+    }
+
+    getCachedValue(cacheKey) {
+        const entry = this._resultCache.get(cacheKey);
+        if (!entry) return null;
+        if (!entry.expiresAt || Date.now() > entry.expiresAt) {
+            this._resultCache.delete(cacheKey);
+            return null;
+        }
+        return entry.value;
+    }
+
+    setCachedValue(cacheKey, value, ttlMs = this._defaultCacheTtlMs) {
+        const safeTtl = Number.isFinite(Number(ttlMs)) ? Math.max(0, Number(ttlMs)) : this._defaultCacheTtlMs;
+        if (safeTtl <= 0) return value;
+        this._resultCache.set(cacheKey, {
+            value,
+            expiresAt: Date.now() + safeTtl
+        });
+        return value;
+    }
+
+    invalidateCacheByPrefix(prefix) {
+        const safePrefix = String(prefix || '');
+        if (!safePrefix) return;
+        for (const key of this._resultCache.keys()) {
+            if (key.startsWith(safePrefix)) {
+                this._resultCache.delete(key);
+            }
+        }
     }
 
     // Validates and sanitizes a Discord ID.
@@ -92,6 +129,107 @@ class MySQLDatabaseManager {
         return await this.connection.connect();
     }
 
+    async query(sql, params = [], options = {}) {
+        const {
+            useCache = false,
+            cacheNamespace = 'query',
+            cacheKey = null,
+            cacheTtlMs = this._defaultCacheTtlMs,
+            suppressError = false,
+            fallbackValue = null,
+            logLabel = 'query'
+        } = options;
+
+        const resolvedCacheKey = useCache
+            ? this.getCacheKey(cacheNamespace, cacheKey || `${sql}::${JSON.stringify(params || [])}`)
+            : null;
+
+        if (resolvedCacheKey) {
+            const cached = this.getCachedValue(resolvedCacheKey);
+            if (cached !== null) return cached;
+        }
+
+        try {
+            const rows = await this.connection.query(sql, params);
+            if (resolvedCacheKey) {
+                this.setCachedValue(resolvedCacheKey, rows, cacheTtlMs);
+            }
+            return rows;
+        } catch (error) {
+            if (!suppressError) {
+                console.error(`[MySQLDatabaseManager] ${logLabel} failed: ${error.message}`);
+            }
+            if (suppressError) return fallbackValue;
+            throw error;
+        }
+    }
+
+    async queryOne(sql, params = [], options = {}) {
+        const rows = await this.query(sql, params, options);
+        return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    }
+
+    async queryValue(sql, params = [], columnName = null, options = {}) {
+        const row = await this.queryOne(sql, params, options);
+        if (!row || typeof row !== 'object') return null;
+        if (columnName && Object.prototype.hasOwnProperty.call(row, columnName)) {
+            return row[columnName];
+        }
+        const [firstValue] = Object.values(row);
+        return firstValue ?? null;
+    }
+
+    async withTransaction(handler) {
+        return await this.connection.transaction(handler);
+    }
+
+    async paginatedQuery(baseSql, params = [], { page = 1, pageSize = 25, maxPageSize = 200 } = {}) {
+        const safePage = Math.max(1, parseInt(page) || 1);
+        const safePageSize = Math.max(1, Math.min(parseInt(pageSize) || 25, parseInt(maxPageSize) || 200));
+        const offset = (safePage - 1) * safePageSize;
+
+        const sql = `${baseSql} LIMIT ? OFFSET ?`;
+        const rows = await this.query(sql, [...params, safePageSize, offset]);
+
+        return {
+            rows,
+            pagination: {
+                page: safePage,
+                pageSize: safePageSize,
+                offset,
+                hasResults: Array.isArray(rows) && rows.length > 0
+            }
+        };
+    }
+
+    async getDatabaseHealth() {
+        if (typeof this.connection.healthCheck === 'function') {
+            return await this.connection.healthCheck();
+        }
+
+        try {
+            const startedAt = Date.now();
+            await this.connection.query('SELECT 1');
+            return {
+                ok: true,
+                isConnected: true,
+                latencyMs: Date.now() - startedAt,
+                lastHealthCheckAt: Date.now(),
+                lastHealthCheckLatencyMs: Date.now() - startedAt,
+                error: null
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                isConnected: false,
+                latencyMs: null,
+                lastHealthCheckAt: Date.now(),
+                lastHealthCheckLatencyMs: null,
+                error: error?.message || 'Health check failed'
+            };
+        }
+    }
+
     // USERINFO section: handles user info in the database.
 
     // Adds or updates a user in the userinfo table.
@@ -114,6 +252,8 @@ class MySQLDatabaseManager {
                  ON DUPLICATE KEY UPDATE username = ?, last_seen = NOW()`,
                 [validId, safeUsername, isBot ? 1 : 0, safeUsername]
             );
+
+            this.invalidateCacheByPrefix(this.getCacheKey('userinfo', `${validId}:`));
             return true;
         } catch (error) {
             // If table doesn't exist, just log and return false
@@ -136,11 +276,19 @@ class MySQLDatabaseManager {
                 console.warn('[MySQLDatabaseManager] getUserInfo called with invalid userId');
                 return null;
             }
-            const results = await this.connection.query(
+
+            const row = await this.queryOne(
                 'SELECT * FROM userinfo WHERE user_id = ?',
-                [validId]
+                [validId],
+                {
+                    useCache: true,
+                    cacheNamespace: 'userinfo',
+                    cacheKey: `${validId}:full`,
+                    cacheTtlMs: 10000,
+                    logLabel: 'getUserInfo'
+                }
             );
-            return results[0] || null;
+            return row || null;
         } catch (error) {
             if (error.message.includes("Table 'userinfo'")) {
                 return null; // Table doesn't exist yet
@@ -358,6 +506,287 @@ class MySQLDatabaseManager {
         }
     }
 
+    async ensureTimezoneColumn() {
+        try {
+            await this.connection.pool.execute(`
+                ALTER TABLE userinfo
+                ADD COLUMN IF NOT EXISTS timezone VARCHAR(64)
+            `);
+            return true;
+        } catch (error) {
+            if (error.code === 'ER_DUP_FIELDNAME' || String(error.message || '').includes('Duplicate column')) {
+                return true;
+            }
+            console.error(`[MySQLDatabaseManager] Error ensuring timezone column: ${error.message}`);
+            return false;
+        }
+    }
+
+    async getUserTimezone(userId) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return null;
+
+            await this.ensureTimezoneColumn();
+
+            const row = await this.queryOne(
+                'SELECT timezone FROM userinfo WHERE user_id = ? LIMIT 1',
+                [validId],
+                {
+                    useCache: true,
+                    cacheNamespace: 'userinfo',
+                    cacheKey: `${validId}:timezone`,
+                    cacheTtlMs: 10000,
+                    logLabel: 'getUserTimezone'
+                }
+            );
+
+            return row?.timezone ? String(row.timezone) : null;
+        } catch (error) {
+            console.error(`[MySQLDatabaseManager] Error getting user timezone: ${error.message}`);
+            return null;
+        }
+    }
+
+    async setUserTimezone(userId, timezone) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return false;
+
+            await this.ensureTimezoneColumn();
+
+            const safeTimezone = timezone ? this.validateTextInput(String(timezone), 64) : null;
+
+            await this.connection.query(
+                `INSERT INTO userinfo (user_id, timezone)
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE timezone = ?, last_seen = NOW()`,
+                [validId, safeTimezone, safeTimezone]
+            );
+
+            this.invalidateCacheByPrefix(this.getCacheKey('userinfo', `${validId}:`));
+            return true;
+        } catch (error) {
+            console.error(`[MySQLDatabaseManager] Error setting user timezone: ${error.message}`);
+            return false;
+        }
+    }
+
+    async ensureMessageStreakColumns() {
+        try {
+            await this.connection.pool.execute(`
+                ALTER TABLE userinfo
+                ADD COLUMN IF NOT EXISTS message_streak INT NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS message_streak_best INT NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS message_streak_last_day BIGINT DEFAULT NULL
+            `);
+            return true;
+        } catch (error) {
+            if (error.code === 'ER_DUP_FIELDNAME' || String(error.message || '').includes('Duplicate column')) {
+                return true;
+            }
+            console.error(`[MySQLDatabaseManager] Error ensuring message streak columns: ${error.message}`);
+            return false;
+        }
+    }
+
+    async updateUserMessageStreak(userId, username = null) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return null;
+
+            await this.ensureMessageStreakColumns();
+
+            const now = new Date();
+            const todayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+            const yesterdayStart = todayStart - 86400000;
+
+            const row = await this.queryOne(
+                'SELECT message_streak, message_streak_best, message_streak_last_day FROM userinfo WHERE user_id = ? LIMIT 1',
+                [validId],
+                { logLabel: 'updateUserMessageStreak' }
+            );
+
+            const currentStreak = Number(row?.message_streak || 0);
+            const currentBest = Number(row?.message_streak_best || 0);
+            const lastDay = row?.message_streak_last_day ? Number(row.message_streak_last_day) : null;
+
+            if (lastDay === todayStart) {
+                return { streak: currentStreak, best: currentBest, changed: false };
+            }
+
+            let nextStreak = 1;
+            if (lastDay === yesterdayStart) {
+                nextStreak = currentStreak + 1;
+            }
+
+            const nextBest = Math.max(currentBest, nextStreak);
+            const safeUsername = username ? this.validateTextInput(String(username), 255) : null;
+
+            await this.connection.query(
+                `INSERT INTO userinfo (user_id, username, message_streak, message_streak_best, message_streak_last_day)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    username = COALESCE(VALUES(username), username),
+                    message_streak = VALUES(message_streak),
+                    message_streak_best = VALUES(message_streak_best),
+                    message_streak_last_day = VALUES(message_streak_last_day),
+                    last_seen = NOW()`,
+                [validId, safeUsername, nextStreak, nextBest, todayStart]
+            );
+
+            return { streak: nextStreak, best: nextBest, changed: true };
+        } catch (error) {
+            console.error(`[MySQLDatabaseManager] Error updating message streak: ${error.message}`);
+            return null;
+        }
+    }
+
+    async moderationCaseExists(caseId) {
+        try {
+            const normalizedCaseId = this.validateTextInput(String(caseId || '').trim(), 50);
+            if (!normalizedCaseId) return false;
+
+            const checks = await Promise.all([
+                this.queryOne(
+                    'SELECT 1 AS found FROM warns WHERE case_id = ? LIMIT 1',
+                    [normalizedCaseId],
+                    { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.warns' }
+                ),
+                this.queryOne(
+                    'SELECT 1 AS found FROM timeouts WHERE case_id = ? LIMIT 1',
+                    [normalizedCaseId],
+                    { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.timeouts' }
+                ),
+                this.queryOne(
+                    'SELECT 1 AS found FROM user_bans WHERE ban_case_id = ? LIMIT 1',
+                    [normalizedCaseId],
+                    { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.user_bans' }
+                ),
+                this.queryOne(
+                    'SELECT 1 AS found FROM kicks WHERE case_id = ? LIMIT 1',
+                    [normalizedCaseId],
+                    { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.kicks' }
+                ),
+                this.queryOne(
+                    'SELECT 1 AS found FROM unbans WHERE unban_case_id = ? LIMIT 1',
+                    [normalizedCaseId],
+                    { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.unbans' }
+                )
+            ]);
+
+            return checks.some((row) => !!row);
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error checking moderation case existence:', error.message);
+            return false;
+        }
+    }
+
+    async createModerationIncident({
+        caseId,
+        userId,
+        actionType,
+        reason,
+        proofText,
+        proofUrl,
+        attachmentUrl,
+        messageLink,
+        moderatorId,
+        moderatorName
+    }) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim(), 50);
+            const safeUserId = this.validateDiscordId(userId);
+            const safeModeratorId = this.validateDiscordId(moderatorId);
+            const safeActionType = this.validateTextInput(String(actionType || 'OTHER').toUpperCase(), 20) || 'OTHER';
+            const safeReason = this.validateTextInput(String(reason || ''), 4000) || null;
+            const safeProofText = this.validateTextInput(String(proofText || ''), 8000) || null;
+            const safeProofUrl = this.validateTextInput(String(proofUrl || ''), 1000) || null;
+            const safeAttachmentUrl = this.validateTextInput(String(attachmentUrl || ''), 1000) || null;
+            const safeMessageLink = this.validateTextInput(String(messageLink || ''), 500) || null;
+            const safeModeratorName = this.validateTextInput(String(moderatorName || ''), 100) || null;
+
+            if (!safeCaseId || !safeUserId || !safeModeratorId) {
+                return { success: false, error: 'Invalid incident payload' };
+            }
+
+            await this.connection.query(
+                `INSERT INTO moderation_incidents
+                    (case_id, user_id, action_type, reason, proof_text, proof_url, attachment_url, message_link, moderator_id, moderator_name)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    user_id = VALUES(user_id),
+                    action_type = VALUES(action_type),
+                    reason = VALUES(reason),
+                    proof_text = VALUES(proof_text),
+                    proof_url = VALUES(proof_url),
+                    attachment_url = VALUES(attachment_url),
+                    message_link = VALUES(message_link),
+                    moderator_id = VALUES(moderator_id),
+                    moderator_name = VALUES(moderator_name)`,
+                [
+                    safeCaseId,
+                    safeUserId,
+                    safeActionType,
+                    safeReason,
+                    safeProofText,
+                    safeProofUrl,
+                    safeAttachmentUrl,
+                    safeMessageLink,
+                    safeModeratorId,
+                    safeModeratorName
+                ]
+            );
+
+            return { success: true };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error creating moderation incident:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async getModerationIncidentByCaseId(caseId) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim(), 50);
+            if (!safeCaseId) return null;
+
+            const rows = await this.connection.query(
+                `SELECT id, case_id, user_id, action_type, reason, proof_text, proof_url, attachment_url, message_link, moderator_id, moderator_name, created_at, updated_at
+                 FROM moderation_incidents
+                 WHERE case_id = ?
+                 LIMIT 1`,
+                [safeCaseId]
+            );
+
+            return rows?.[0] || null;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting moderation incident by case ID:', error.message);
+            return null;
+        }
+    }
+
+    async getModerationIncidentsByUser(userId, limit = 10) {
+        try {
+            const safeUserId = this.validateDiscordId(userId);
+            if (!safeUserId) return [];
+            const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+
+            const rows = await this.connection.query(
+                `SELECT id, case_id, user_id, action_type, reason, proof_text, proof_url, attachment_url, message_link, moderator_id, moderator_name, created_at, updated_at
+                 FROM moderation_incidents
+                 WHERE user_id = ?
+                 ORDER BY created_at DESC
+                 LIMIT ?`,
+                [safeUserId, safeLimit]
+            );
+
+            return Array.isArray(rows) ? rows : [];
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting moderation incidents by user:', error.message);
+            return [];
+        }
+    }
+
     async logUserInteraction({ userId, username, commandName, commandCategory, guildId, channelId, status = 'SUCCESS', errorMessage = null, createdAt = Date.now() }) {
         try {
             const validUserId = this.validateDiscordId(userId);
@@ -386,7 +815,88 @@ class MySQLDatabaseManager {
         }
     }
 
-    // ========== LEVELS ==========
+    async getUserCommandUsageSummary(guildId, userId, days = 30, topLimit = 3) {
+        try {
+            const validUserId = this.validateDiscordId(userId);
+            const safeGuildId = guildId ? this.validateDiscordId(guildId) : null;
+            if (!validUserId) {
+                return {
+                    total: 0,
+                    success: 0,
+                    failed: 0,
+                    successRate: 0,
+                    topCommands: []
+                };
+            }
+
+            const safeDays = Number.isFinite(Number(days))
+                ? Math.max(1, Math.min(3650, Number(days)))
+                : null;
+            const sinceMs = safeDays ? Date.now() - (safeDays * 24 * 60 * 60 * 1000) : null;
+            const safeTopLimit = Math.max(1, Math.min(10, Number(topLimit) || 3));
+
+            const whereParts = ['user_id = ?'];
+            const baseParams = [validUserId];
+
+            if (safeGuildId) {
+                whereParts.push('guild_id = ?');
+                baseParams.push(safeGuildId);
+            }
+
+            if (sinceMs) {
+                whereParts.push('created_at >= ?');
+                baseParams.push(sinceMs);
+            }
+
+            const whereClause = whereParts.join(' AND ');
+
+            const totalsRows = await this.connection.query(
+                `SELECT 
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) AS success,
+                    SUM(CASE WHEN status != 'SUCCESS' THEN 1 ELSE 0 END) AS failed
+                 FROM user_interactions
+                 WHERE ${whereClause}`,
+                baseParams
+            );
+
+            const topRows = await this.connection.query(
+                `SELECT command_name, COUNT(*) AS uses
+                 FROM user_interactions
+                 WHERE ${whereClause}
+                 GROUP BY command_name
+                 ORDER BY uses DESC, command_name ASC
+                 LIMIT ?`,
+                [...baseParams, safeTopLimit]
+            );
+
+            const total = Number(totalsRows?.[0]?.total || 0);
+            const success = Number(totalsRows?.[0]?.success || 0);
+            const failed = Number(totalsRows?.[0]?.failed || 0);
+            const successRate = total > 0 ? Math.round((success / total) * 100) : 0;
+
+            return {
+                total,
+                success,
+                failed,
+                successRate,
+                topCommands: (topRows || []).map((row) => ({
+                    command: String(row.command_name || 'unknown'),
+                    uses: Number(row.uses || 0)
+                }))
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting user command usage summary:', error.message);
+            return {
+                total: 0,
+                success: 0,
+                failed: 0,
+                successRate: 0,
+                topCommands: []
+            };
+        }
+    }
+
 
     async getUserLevel(userId) {
         try {
@@ -395,11 +905,18 @@ class MySQLDatabaseManager {
                 console.warn('[MySQLDatabaseManager] getUserLevel called with invalid userId');
                 return null;
             }
-            const results = await this.connection.query(
+            const row = await this.queryOne(
                 'SELECT * FROM levels WHERE user_id = ?',
-                [validId]
+                [validId],
+                {
+                    useCache: true,
+                    cacheNamespace: 'levels',
+                    cacheKey: `${validId}:profile`,
+                    cacheTtlMs: 10000,
+                    logLabel: 'getUserLevel'
+                }
             );
-            return results[0] || null;
+            return row || null;
         } catch (error) {
             console.error(`[MySQLDatabaseManager] Error getting level for user ${userId}: ${error.message}`);
             return null;
@@ -429,6 +946,10 @@ class MySQLDatabaseManager {
                  ON DUPLICATE KEY UPDATE username = ?, xp = ?, level = ?, messages = messages + ?, total_xp = ?, last_message = ?`,
                 [validId, validUsername, validXp, validLevel, validMessages, validTotalXp, validLastMessage, validUsername, validXp, validLevel, 1, validTotalXp, validLastMessage]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', `${validId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', 'count'));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
             return true;
         } catch (error) {
             console.error(`[MySQLDatabaseManager] Error setting level for user ${userId}: ${error.message}`);
@@ -438,9 +959,19 @@ class MySQLDatabaseManager {
 
     async getAllLevels(limit = 100, offset = 0) {
         try {
-            const results = await this.connection.query(
+            const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
+            const safeOffset = Math.max(0, Number(offset) || 0);
+
+            const results = await this.query(
                 'SELECT * FROM levels ORDER BY xp DESC LIMIT ? OFFSET ?',
-                [limit, offset]
+                [safeLimit, safeOffset],
+                {
+                    useCache: true,
+                    cacheNamespace: 'levels',
+                    cacheKey: `list:${safeLimit}:${safeOffset}`,
+                    cacheTtlMs: 12000,
+                    logLabel: 'getAllLevels'
+                }
             );
             return results;
         } catch (error) {
@@ -451,10 +982,19 @@ class MySQLDatabaseManager {
 
     async getLevelsCount() {
         try {
-            const results = await this.connection.query(
-                'SELECT COUNT(*) as count FROM levels'
+            const count = await this.queryValue(
+                'SELECT COUNT(*) as count FROM levels',
+                [],
+                'count',
+                {
+                    useCache: true,
+                    cacheNamespace: 'levels',
+                    cacheKey: 'count',
+                    cacheTtlMs: 20000,
+                    logLabel: 'getLevelsCount'
+                }
             );
-            return results[0]?.count || 0;
+            return Number(count || 0);
         } catch (error) {
             console.error('Error getting levels count:', error);
             return 0;
@@ -463,7 +1003,14 @@ class MySQLDatabaseManager {
 
     async deleteUserLevel(userId) {
         try {
-            await this.connection.query('DELETE FROM levels WHERE user_id = ?', [userId]);
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return false;
+
+            await this.connection.query('DELETE FROM levels WHERE user_id = ?', [validId]);
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', `${validId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', 'count'));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
             return true;
         } catch (error) {
             console.error('Error deleting user level:', error);
@@ -473,10 +1020,16 @@ class MySQLDatabaseManager {
 
     async updateLevel(userId, level = 1, xp = 0) {
         try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return false;
+
             await this.connection.query(
                 'UPDATE levels SET level = ?, xp = ? WHERE user_id = ?',
-                [level, xp, userId]
+                [level, xp, validId]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', `${validId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('levels', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
             return true;
         } catch (error) {
             console.error('Error updating level:', error);
@@ -484,7 +1037,78 @@ class MySQLDatabaseManager {
         }
     }
 
-    // ========== WARNS ==========
+    async trackUserChannelActivity(guildId, userId, channelId, username = null) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const validChannelId = this.validateDiscordId(channelId);
+            if (!validGuildId || !validUserId || !validChannelId) return false;
+
+            const safeUsername = username ? this.validateTextInput(String(username), 100) : null;
+
+            await this.connection.query(
+                `INSERT INTO user_channel_activity (guild_id, user_id, channel_id, username, message_count)
+                 VALUES (?, ?, ?, ?, 1)
+                 ON DUPLICATE KEY UPDATE
+                    username = COALESCE(VALUES(username), username),
+                    message_count = message_count + 1,
+                    last_message_at = CURRENT_TIMESTAMP`,
+                [validGuildId, validUserId, validChannelId, safeUsername]
+            );
+            return true;
+        } catch (error) {
+            console.error('Error tracking user channel activity:', error);
+            return false;
+        }
+    }
+
+    async getTopUserChannels(guildId, userId, limit = 3) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return [];
+
+            const safeLimit = Math.max(1, Math.min(10, Number(limit) || 3));
+            const rows = await this.connection.query(
+                `SELECT channel_id, message_count, last_message_at
+                 FROM user_channel_activity
+                 WHERE guild_id = ? AND user_id = ?
+                 ORDER BY message_count DESC, last_message_at DESC
+                 LIMIT ?`,
+                [validGuildId, validUserId, safeLimit]
+            );
+
+            return (rows || []).map((row) => ({
+                channelId: String(row.channel_id),
+                messageCount: Number(row.message_count || 0),
+                lastMessageAt: row.last_message_at || null
+            }));
+        } catch (error) {
+            console.error('Error getting top user channels:', error);
+            return [];
+        }
+    }
+
+    async getUserChannelMessageTotal(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return 0;
+
+            const rows = await this.connection.query(
+                `SELECT SUM(message_count) AS total_messages
+                 FROM user_channel_activity
+                 WHERE guild_id = ? AND user_id = ?`,
+                [validGuildId, validUserId]
+            );
+
+            return Number(rows?.[0]?.total_messages || 0);
+        } catch (error) {
+            console.error('Error getting user channel message total:', error);
+            return 0;
+        }
+    }
+
 
     async addCase(userId, caseId, caseData) {
         try {
@@ -508,6 +1132,10 @@ class MySQLDatabaseManager {
                      ON DUPLICATE KEY UPDATE reason = ?, moderator_id = ?, user_name = ?, moderator_name = ?, moderator_source = ?, type = ?, timestamp = ?`,
                     [userId, caseId, reason, moderatorId, userName, moderatorName, moderatorSource, type, timestamp, reason, moderatorId, userName, moderatorName, moderatorSource, type, timestamp]
                 );
+                this.invalidateCacheByPrefix(this.getCacheKey('warns', `${userId}:`));
+                this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
+                this.invalidateCacheByPrefix(this.getCacheKey('warns', 'count'));
+                this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${userId}:`));
             }
 
             // Update user_bans table only for ban actions
@@ -526,6 +1154,11 @@ class MySQLDatabaseManager {
                         banned_by_source = ?`,
                     [userId, caseId, moderatorId, reason, userName, moderatorName, moderatorSource, caseId, moderatorId, reason, userName, moderatorName, moderatorSource]
                 );
+                this.invalidateCacheByPrefix(this.getCacheKey('warns', `${userId}:`));
+                this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
+                this.invalidateCacheByPrefix(this.getCacheKey('banned', 'list:'));
+                this.invalidateCacheByPrefix(this.getCacheKey('banned', 'count'));
+                this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${userId}:`));
             }
 
             return true;
@@ -537,14 +1170,33 @@ class MySQLDatabaseManager {
 
     async getUserWarns(userId) {
         try {
-            const warns = await this.connection.query(
+            const validId = this.validateDiscordId(userId);
+            if (!validId) {
+                return { warns: {}, banned: false, lastWarned: null, lastReason: null };
+            }
+
+            const warns = await this.query(
                 'SELECT * FROM warns WHERE user_id = ? AND type = "WARN" ORDER BY created_at DESC',
-                [userId]
+                [validId],
+                {
+                    useCache: true,
+                    cacheNamespace: 'warns',
+                    cacheKey: `${validId}:rows`,
+                    cacheTtlMs: 10000,
+                    logLabel: 'getUserWarns.rows'
+                }
             );
 
-            const banInfo = await this.connection.query(
+            const banInfo = await this.query(
                 'SELECT * FROM user_bans WHERE user_id = ?',
-                [userId]
+                [validId],
+                {
+                    useCache: true,
+                    cacheNamespace: 'warns',
+                    cacheKey: `${validId}:banInfo`,
+                    cacheTtlMs: 10000,
+                    logLabel: 'getUserWarns.banInfo'
+                }
             );
 
             // Convert to old format
@@ -576,11 +1228,22 @@ class MySQLDatabaseManager {
 
     async getUserWarnsCount(userId) {
         try {
-            const results = await this.connection.query(
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return 0;
+
+            const count = await this.queryValue(
                 'SELECT COUNT(*) as count FROM warns WHERE user_id = ? AND type = "WARN"',
-                [userId]
+                [validId],
+                'count',
+                {
+                    useCache: true,
+                    cacheNamespace: 'warns',
+                    cacheKey: `${validId}:count`,
+                    cacheTtlMs: 10000,
+                    logLabel: 'getUserWarnsCount'
+                }
             );
-            return results[0]?.count || 0;
+            return Number(count || 0);
         } catch (error) {
             console.error('Error getting user warns count:', error);
             return 0;
@@ -589,10 +1252,17 @@ class MySQLDatabaseManager {
 
     async clearUserWarns(userId) {
         try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return false;
+
             await this.connection.query(
                 'DELETE FROM warns WHERE user_id = ?',
-                [userId]
+                [validId]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', `${validId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'count'));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
             return true;
         } catch (error) {
             console.error('Error clearing user warns:', error);
@@ -602,10 +1272,17 @@ class MySQLDatabaseManager {
 
     async deleteWarn(userId, caseId) {
         try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId || !caseId) return false;
+
             await this.connection.query(
                 'DELETE FROM warns WHERE user_id = ? AND case_id = ?',
-                [userId, caseId]
+                [validId, caseId]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', `${validId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'count'));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
             return true;
         } catch (error) {
             console.error('Error deleting warn:', error);
@@ -634,6 +1311,11 @@ class MySQLDatabaseManager {
                  ON DUPLICATE KEY UPDATE banned = TRUE`,
                 [userId]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', `${userId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('banned', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('banned', 'count'));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${userId}:`));
             return true;
         } catch (error) {
             console.error('Error marking user banned:', error);
@@ -649,6 +1331,11 @@ class MySQLDatabaseManager {
                  ON DUPLICATE KEY UPDATE banned = FALSE`,
                 [userId]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', `${userId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('banned', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('banned', 'count'));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${userId}:`));
             return true;
         } catch (error) {
             console.error('Error unbanning user:', error);
@@ -677,7 +1364,13 @@ class MySQLDatabaseManager {
                 ) lw ON w.user_id = lw.user_id
                 GROUP BY w.user_id, ub.banned, lw.last_warned, lw.last_reason
             `;
-            const results = await this.connection.query(query);
+            const results = await this.query(query, [], {
+                useCache: true,
+                cacheNamespace: 'warns',
+                cacheKey: 'list:all',
+                cacheTtlMs: 12000,
+                logLabel: 'getAllWarns'
+            });
             return results;
         } catch (error) {
             console.error('Error getting all warns:', error);
@@ -687,10 +1380,19 @@ class MySQLDatabaseManager {
 
     async getWarnsCount() {
         try {
-            const results = await this.connection.query(
-                'SELECT COUNT(DISTINCT user_id) as count FROM warns WHERE type = "WARN"'
+            const count = await this.queryValue(
+                'SELECT COUNT(DISTINCT user_id) as count FROM warns WHERE type = "WARN"',
+                [],
+                'count',
+                {
+                    useCache: true,
+                    cacheNamespace: 'warns',
+                    cacheKey: 'count',
+                    cacheTtlMs: 20000,
+                    logLabel: 'getWarnsCount'
+                }
             );
-            return results[0]?.count || 0;
+            return Number(count || 0);
         } catch (error) {
             console.error('Error getting warns count:', error);
             return 0;
@@ -699,10 +1401,19 @@ class MySQLDatabaseManager {
 
     async getBannedCount() {
         try {
-            const results = await this.connection.query(
-                'SELECT COUNT(*) as count FROM user_bans WHERE banned = TRUE'
+            const count = await this.queryValue(
+                'SELECT COUNT(*) as count FROM user_bans WHERE banned = TRUE',
+                [],
+                'count',
+                {
+                    useCache: true,
+                    cacheNamespace: 'banned',
+                    cacheKey: 'count',
+                    cacheTtlMs: 20000,
+                    logLabel: 'getBannedCount'
+                }
             );
-            return results[0]?.count || 0;
+            return Number(count || 0);
         } catch (error) {
             console.error('Error getting banned count:', error);
             return 0;
@@ -723,21 +1434,25 @@ class MySQLDatabaseManager {
                 GROUP BY ub.user_id, ub.banned_at, ub.banned_by, ub.ban_reason
                 ORDER BY ub.banned_at DESC
             `;
-            const results = await this.connection.query(query);
+            const results = await this.query(query, [], {
+                useCache: true,
+                cacheNamespace: 'banned',
+                cacheKey: 'list:all',
+                cacheTtlMs: 12000,
+                logLabel: 'getAllBannedUsers'
+            });
             return results.map(r => ({
                 userId: r.user_id,
                 bannedAt: r.banned_at,
                 bannedBy: r.banned_by,
                 banReason: r.ban_reason,
-                warnCount: r.warn_count
+                warnCount: Number(r.warn_count || 0)
             }));
         } catch (error) {
             console.error('Error getting all banned users:', error);
             return [];
         }
     }
-
-    // ========== REMINDERS ==========
 
     async addReminder(userId, reminderData) {
         try {
@@ -779,6 +1494,9 @@ class MySQLDatabaseManager {
                     lastFailureTime
                 ]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('reminders', `${userId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('reminders', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('reminders', 'count'));
             return reminderId;
         } catch (error) {
             console.error('Error adding reminder:', error);
@@ -788,9 +1506,19 @@ class MySQLDatabaseManager {
 
     async getUserReminders(userId) {
         try {
-            const results = await this.connection.query(
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return [];
+
+            const results = await this.query(
                 'SELECT * FROM reminders WHERE user_id = ? AND completed = FALSE ORDER BY trigger_at ASC',
-                [userId]
+                [validId],
+                {
+                    useCache: true,
+                    cacheNamespace: 'reminders',
+                    cacheKey: `${validId}:active`,
+                    cacheTtlMs: 8000,
+                    logLabel: 'getUserReminders'
+                }
             );
             return results.map(r => ({
                 id: r.id,
@@ -816,10 +1544,16 @@ class MySQLDatabaseManager {
 
     async removeReminder(userId, reminderId) {
         try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId || !reminderId) return false;
+
             await this.connection.query(
                 'DELETE FROM reminders WHERE user_id = ? AND id = ?',
-                [userId, reminderId]
+                [validId, reminderId]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('reminders', `${validId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('reminders', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('reminders', 'count'));
             return true;
         } catch (error) {
             console.error('Error removing reminder:', error);
@@ -829,8 +1563,16 @@ class MySQLDatabaseManager {
 
     async getAllReminders() {
         try {
-            const results = await this.connection.query(
-                'SELECT * FROM reminders ORDER BY trigger_at ASC'
+            const results = await this.query(
+                'SELECT * FROM reminders ORDER BY trigger_at ASC',
+                [],
+                {
+                    useCache: true,
+                    cacheNamespace: 'reminders',
+                    cacheKey: 'list:all',
+                    cacheTtlMs: 10000,
+                    logLabel: 'getAllReminders'
+                }
             );
             return results.map(r => ({
                 id: r.id,
@@ -864,17 +1606,26 @@ class MySQLDatabaseManager {
 
     async getRemindersCount() {
         try {
-            const results = await this.connection.query(
-                'SELECT COUNT(*) as count FROM reminders'
+            const count = await this.queryValue(
+                'SELECT COUNT(*) as count FROM reminders',
+                [],
+                'count',
+                {
+                    useCache: true,
+                    cacheNamespace: 'reminders',
+                    cacheKey: 'count',
+                    cacheTtlMs: 20000,
+                    logLabel: 'getRemindersCount'
+                }
             );
-            return results[0]?.count || 0;
+            return Number(count || 0);
         } catch (error) {
             console.error('Error getting reminders count:', error);
             return 0;
         }
     }
 
-    // ========== GIVEAWAYS ==========
+
 
     async createGiveaway(id, data) {
         try {
@@ -893,13 +1644,19 @@ class MySQLDatabaseManager {
                 guildId,
                 endTime,
                 winnerCount,
+                requiredRoleId,
+                winnerIds,
                 ended,
                 caseId
             } = data;
 
+            const serializedWinnerIds = Array.isArray(winnerIds)
+                ? JSON.stringify(winnerIds)
+                : (winnerIds ? JSON.stringify(winnerIds) : null);
+
             await this.connection.query(
-                `INSERT INTO giveaways (id, case_id, prize, title, channel_id, message_id, host_id, guild_id, end_time, winner_count, ended) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO giveaways (id, case_id, prize, title, channel_id, message_id, host_id, guild_id, end_time, winner_count, required_role_id, winner_ids, ended) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     id,
                     caseId || null,
@@ -911,9 +1668,14 @@ class MySQLDatabaseManager {
                     guildId || null,
                     endTime || null,
                     winnerCount || 1,
+                    requiredRoleId || null,
+                    serializedWinnerIds,
                     ended ? 1 : 0
                 ]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', `${id}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', 'count'));
             return true;
         } catch (error) {
             console.error('Error creating giveaway:', error);
@@ -928,20 +1690,41 @@ class MySQLDatabaseManager {
                 return null;
             }
 
-            const results = await this.connection.query(
+            const results = await this.query(
                 'SELECT * FROM giveaways WHERE id = ?',
-                [id]
+                [id],
+                {
+                    useCache: true,
+                    cacheNamespace: 'giveaways',
+                    cacheKey: `${id}:base`,
+                    cacheTtlMs: 10000,
+                    logLabel: 'getGiveaway.base'
+                }
             );
 
             if (results.length === 0) return null;
 
             // Get entries
-            const entries = await this.connection.query(
+            const entries = await this.query(
                 'SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?',
-                [id]
+                [id],
+                {
+                    useCache: true,
+                    cacheNamespace: 'giveaways',
+                    cacheKey: `${id}:entries`,
+                    cacheTtlMs: 8000,
+                    logLabel: 'getGiveaway.entries'
+                }
             );
 
             const giveaway = results[0];
+            let parsedWinnerIds = [];
+            try {
+                parsedWinnerIds = giveaway.winner_ids ? JSON.parse(giveaway.winner_ids) : [];
+            } catch (_) {
+                parsedWinnerIds = [];
+            }
+
             return {
                 id: giveaway.id,
                 caseId: giveaway.case_id,
@@ -950,8 +1733,11 @@ class MySQLDatabaseManager {
                 channelId: giveaway.channel_id,
                 messageId: giveaway.message_id,
                 hostId: giveaway.host_id,
+                guildId: giveaway.guild_id,
                 endTime: giveaway.end_time,
                 winnerCount: giveaway.winner_count,
+                requiredRoleId: giveaway.required_role_id,
+                winnerIds: Array.isArray(parsedWinnerIds) ? parsedWinnerIds : [],
                 ended: giveaway.ended,
                 entries: entries.map(e => e.user_id)
             };
@@ -968,11 +1754,23 @@ class MySQLDatabaseManager {
 
             if (data.ended !== undefined) {
                 fields.push('ended = ?');
-                values.push(data.ended);
+                values.push(data.ended ? 1 : 0);
             }
             if (data.endTime !== undefined) {
                 fields.push('end_time = ?');
                 values.push(data.endTime);
+            }
+            if (data.winnerCount !== undefined) {
+                fields.push('winner_count = ?');
+                values.push(Math.max(1, Number(data.winnerCount) || 1));
+            }
+            if (Object.prototype.hasOwnProperty.call(data, 'requiredRoleId')) {
+                fields.push('required_role_id = ?');
+                values.push(data.requiredRoleId || null);
+            }
+            if (Object.prototype.hasOwnProperty.call(data, 'winnerIds')) {
+                fields.push('winner_ids = ?');
+                values.push(Array.isArray(data.winnerIds) ? JSON.stringify(data.winnerIds) : null);
             }
 
             if (fields.length > 0) {
@@ -981,6 +1779,8 @@ class MySQLDatabaseManager {
                     `UPDATE giveaways SET ${fields.join(', ')} WHERE id = ?`,
                     values
                 );
+                this.invalidateCacheByPrefix(this.getCacheKey('giveaways', `${id}:`));
+                this.invalidateCacheByPrefix(this.getCacheKey('giveaways', 'list:'));
             }
             return true;
         } catch (error) {
@@ -995,6 +1795,8 @@ class MySQLDatabaseManager {
                 'INSERT IGNORE INTO giveaway_entries (giveaway_id, user_id) VALUES (?, ?)',
                 [giveawayId, userId]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', `${giveawayId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', 'list:'));
             return true;
         } catch (error) {
             console.error('Error adding giveaway entry:', error);
@@ -1002,21 +1804,52 @@ class MySQLDatabaseManager {
         }
     }
 
+    async removeGiveawayEntry(giveawayId, userId) {
+        try {
+            await this.connection.query(
+                'DELETE FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?',
+                [giveawayId, userId]
+            );
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', `${giveawayId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', 'list:'));
+            return true;
+        } catch (error) {
+            console.error('Error removing giveaway entry:', error);
+            return false;
+        }
+    }
+
     async getAllGiveaways() {
         try {
-            const giveaways = await this.connection.query(
-                'SELECT * FROM giveaways ORDER BY created_at DESC'
+            const giveaways = await this.query(
+                'SELECT * FROM giveaways ORDER BY created_at DESC',
+                [],
+                {
+                    useCache: true,
+                    cacheNamespace: 'giveaways',
+                    cacheKey: 'list:all:base',
+                    cacheTtlMs: 10000,
+                    logLabel: 'getAllGiveaways.base'
+                }
             );
 
             // Get entries for each giveaway
             const result = await Promise.all(giveaways.map(async (g) => {
-                const entries = await this.connection.query(
+                const entries = await this.query(
                     'SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?',
-                    [g.id]
+                    [g.id],
+                    {
+                        useCache: true,
+                        cacheNamespace: 'giveaways',
+                        cacheKey: `${g.id}:entries`,
+                        cacheTtlMs: 8000,
+                        logLabel: 'getAllGiveaways.entries'
+                    }
                 );
 
                 return {
                     id: g.id,
+                    caseId: g.case_id,
                     prize: g.prize,
                     title: g.title,
                     channelId: g.channel_id,
@@ -1024,6 +1857,16 @@ class MySQLDatabaseManager {
                     hostId: g.host_id,
                     guildId: g.guild_id,
                     endTime: g.end_time,
+                    winnerCount: g.winner_count,
+                    requiredRoleId: g.required_role_id,
+                    winnerIds: (() => {
+                        try {
+                            return g.winner_ids ? JSON.parse(g.winner_ids) : [];
+                        } catch (_) {
+                            return [];
+                        }
+                    })(),
+                    ended: g.ended,
                     entries: entries.map(e => e.user_id)
                 };
             }));
@@ -1037,10 +1880,19 @@ class MySQLDatabaseManager {
 
     async getGiveawaysCount() {
         try {
-            const results = await this.connection.query(
-                'SELECT COUNT(*) as count FROM giveaways'
+            const count = await this.queryValue(
+                'SELECT COUNT(*) as count FROM giveaways',
+                [],
+                'count',
+                {
+                    useCache: true,
+                    cacheNamespace: 'giveaways',
+                    cacheKey: 'count',
+                    cacheTtlMs: 20000,
+                    logLabel: 'getGiveawaysCount'
+                }
             );
-            return results[0]?.count || 0;
+            return Number(count || 0);
         } catch (error) {
             console.error('Error getting giveaways count:', error);
             return 0;
@@ -1063,14 +1915,15 @@ class MySQLDatabaseManager {
                 'DELETE FROM giveaways WHERE id = ?',
                 [id]
             );
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', `${id}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', 'list:'));
+            this.invalidateCacheByPrefix(this.getCacheKey('giveaways', 'count'));
             return true;
         } catch (error) {
             console.error('Error deleting giveaway:', error);
             return false;
         }
     }
-
-    // ========== TICKETS ==========
 
     async createTicket(channelId, ticketData) {
         try {
@@ -1106,7 +1959,9 @@ class MySQLDatabaseManager {
                     status: ticket.status,
                     closedAt: ticket.closed_at,
                     closedBy: ticket.closed_by,
-                    closeReason: ticket.close_reason
+                    closeReason: ticket.close_reason,
+                    transcript: ticket.transcript,
+                    transcriptCreatedAt: ticket.transcript_created_at
                 };
             }
             return null;
@@ -1140,6 +1995,14 @@ class MySQLDatabaseManager {
             if (updates.closeReason !== undefined) {
                 fields.push('close_reason = ?');
                 values.push(updates.closeReason);
+            }
+            if (updates.transcript !== undefined) {
+                fields.push('transcript = ?');
+                values.push(updates.transcript);
+            }
+            if (updates.transcriptCreatedAt !== undefined) {
+                fields.push('transcript_created_at = ?');
+                values.push(updates.transcriptCreatedAt);
             }
 
             if (fields.length === 0) return false;
@@ -1218,8 +2081,6 @@ class MySQLDatabaseManager {
         }
     }
 
-    // ========== JOIN TO CREATE ==========
-
     async createJTCChannel(channelId, ownerId, guildId, channelName) {
         try {
             await this.connection.query(
@@ -1257,6 +2118,30 @@ class MySQLDatabaseManager {
             return true;
         } catch (error) {
             console.error('Error deleting JTC channel:', error);
+            return false;
+        }
+    }
+
+    async transferJTCOwner(channelId, newOwnerId, channelName = null) {
+        try {
+            const updates = ['owner_id = ?'];
+            const params = [newOwnerId];
+
+            if (channelName && typeof channelName === 'string') {
+                updates.push('channel_name = ?');
+                params.push(channelName.slice(0, 100));
+            }
+
+            updates.push('is_active = TRUE');
+            params.push(channelId);
+
+            await this.connection.query(
+                `UPDATE join_to_create SET ${updates.join(', ')} WHERE channel_id = ?`,
+                params
+            );
+            return true;
+        } catch (error) {
+            console.error('Error transferring JTC owner:', error);
             return false;
         }
     }
@@ -1465,6 +2350,1609 @@ class MySQLDatabaseManager {
         } catch (error) {
             console.error('Error marking birthday announcements as sent:', error);
             return false;
+        }
+    }
+
+
+    async addReputationPoint(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return null;
+
+            await this.connection.query(
+                `INSERT INTO reputation_points (guild_id, user_id, points)
+                 VALUES (?, ?, 1)
+                 ON DUPLICATE KEY UPDATE points = points + 1, updated_at = CURRENT_TIMESTAMP`,
+                [validGuildId, validUserId]
+            );
+
+            const rows = await this.connection.query(
+                'SELECT points FROM reputation_points WHERE guild_id = ? AND user_id = ? LIMIT 1',
+                [validGuildId, validUserId]
+            );
+
+            return Number(rows?.[0]?.points || 0);
+        } catch (error) {
+            console.error('Error adding reputation point:', error);
+            return null;
+        }
+    }
+
+    async getReputation(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return 0;
+
+            const rows = await this.connection.query(
+                'SELECT points FROM reputation_points WHERE guild_id = ? AND user_id = ? LIMIT 1',
+                [validGuildId, validUserId]
+            );
+
+            return Number(rows?.[0]?.points || 0);
+        } catch (error) {
+            console.error('Error getting reputation:', error);
+            return 0;
+        }
+    }
+
+    async giveReputationPoint(guildId, giverId, targetId, options = {}) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validGiverId = this.validateDiscordId(giverId);
+            const validTargetId = this.validateDiscordId(targetId);
+            if (!validGuildId || !validGiverId || !validTargetId || validGiverId === validTargetId) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const now = Date.now();
+            const safeCooldownMs = Math.max(60_000, Math.min(7 * 24 * 60 * 60 * 1000, Number(options.cooldownMs) || 12 * 60 * 60 * 1000));
+            const safeDailyLimit = Math.max(1, Math.min(100, Number(options.dailyLimit) || 3));
+
+            const dayStart = new Date(now);
+            dayStart.setUTCHours(0, 0, 0, 0);
+
+            const dailyRows = await this.connection.query(
+                `SELECT COUNT(*) AS grant_count
+                 FROM reputation_grants
+                 WHERE guild_id = ? AND giver_id = ? AND created_at >= ?`,
+                [validGuildId, validGiverId, dayStart]
+            );
+
+            const dailyCount = Number(dailyRows?.[0]?.grant_count || 0);
+            if (dailyCount >= safeDailyLimit) {
+                return {
+                    ok: false,
+                    code: 'daily_limit',
+                    dailyLimit: safeDailyLimit,
+                    grantsToday: dailyCount
+                };
+            }
+
+            const pairRows = await this.connection.query(
+                `SELECT UNIX_TIMESTAMP(created_at) AS created_unix
+                 FROM reputation_grants
+                 WHERE guild_id = ? AND giver_id = ? AND target_id = ?
+                 ORDER BY id DESC
+                 LIMIT 1`,
+                [validGuildId, validGiverId, validTargetId]
+            );
+
+            const lastGivenUnix = Number(pairRows?.[0]?.created_unix || 0);
+            if (lastGivenUnix > 0) {
+                const lastGivenAtMs = lastGivenUnix * 1000;
+                const elapsedMs = now - lastGivenAtMs;
+                if (elapsedMs < safeCooldownMs) {
+                    return {
+                        ok: false,
+                        code: 'cooldown',
+                        retryAfterMs: safeCooldownMs - elapsedMs
+                    };
+                }
+            }
+
+            await this.connection.query(
+                `INSERT INTO reputation_grants (guild_id, giver_id, target_id)
+                 VALUES (?, ?, ?)`,
+                [validGuildId, validGiverId, validTargetId]
+            );
+
+            await this.connection.query(
+                `INSERT INTO reputation_points (guild_id, user_id, points)
+                 VALUES (?, ?, 1)
+                 ON DUPLICATE KEY UPDATE points = points + 1, updated_at = CURRENT_TIMESTAMP`,
+                [validGuildId, validTargetId]
+            );
+
+            const totalRep = await this.getReputation(validGuildId, validTargetId);
+            return {
+                ok: true,
+                totalRep,
+                grantsToday: dailyCount + 1,
+                dailyLimit: safeDailyLimit
+            };
+        } catch (error) {
+            console.error('Error giving reputation point:', error);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async getReputationLeaderboard(guildId, limit = 10) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            if (!validGuildId) return [];
+
+            const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const rows = await this.connection.query(
+                `SELECT user_id, points
+                 FROM reputation_points
+                 WHERE guild_id = ?
+                 ORDER BY points DESC, updated_at ASC
+                 LIMIT ?`,
+                [validGuildId, safeLimit]
+            );
+
+            return (rows || []).map(row => ({
+                user_id: String(row.user_id),
+                points: Number(row.points || 0)
+            }));
+        } catch (error) {
+            console.error('Error getting reputation leaderboard:', error);
+            return [];
+        }
+    }
+
+    async getReputationRank(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return null;
+
+            const points = await this.getReputation(validGuildId, validUserId);
+            if (points <= 0) return null;
+
+            const rows = await this.connection.query(
+                `SELECT COUNT(*) AS higher_count
+                 FROM reputation_points
+                 WHERE guild_id = ? AND points > ?`,
+                [validGuildId, points]
+            );
+
+            const higherCount = Number(rows?.[0]?.higher_count || 0);
+            return {
+                points,
+                rank: higherCount + 1
+            };
+        } catch (error) {
+            console.error('Error getting reputation rank:', error);
+            return null;
+        }
+    }
+
+
+
+    async ensureEconomyProfile(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return false;
+
+            await this.connection.query(
+                `INSERT INTO economy_balances (guild_id, user_id)
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE updated_at = updated_at`,
+                [validGuildId, validUserId]
+            );
+
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error ensuring economy profile:', error.message);
+            return false;
+        }
+    }
+
+    async getEconomyBalance(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) {
+                return { wallet: 0, bank: 0, total: 0, totalEarned: 0, totalSpent: 0 };
+            }
+
+            await this.ensureEconomyProfile(validGuildId, validUserId);
+
+            const rows = await this.connection.query(
+                `SELECT wallet, bank, total_earned, total_spent
+                 FROM economy_balances
+                 WHERE guild_id = ? AND user_id = ?
+                 LIMIT 1`,
+                [validGuildId, validUserId]
+            );
+
+            const wallet = Number(rows?.[0]?.wallet || 0);
+            const bank = Number(rows?.[0]?.bank || 0);
+            const totalEarned = Number(rows?.[0]?.total_earned || 0);
+            const totalSpent = Number(rows?.[0]?.total_spent || 0);
+
+            return {
+                wallet,
+                bank,
+                total: wallet + bank,
+                totalEarned,
+                totalSpent
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting economy balance:', error.message);
+            return { wallet: 0, bank: 0, total: 0, totalEarned: 0, totalSpent: 0 };
+        }
+    }
+
+    async listEconomyGuilds() {
+        try {
+            const rows = await this.connection.query(
+                `SELECT DISTINCT guild_id FROM economy_balances`
+            );
+            return Array.isArray(rows)
+                ? rows.map((row) => String(row.guild_id)).filter(Boolean)
+                : [];
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error listing economy guilds:', error.message);
+            return [];
+        }
+    }
+
+    async applyBankInterest(guildId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            if (!validGuildId) return { ok: false, code: 'invalid_guild' };
+
+            const config = economyConfigFile?.bankInterest || {};
+            if (config.enabled === false) return { ok: false, code: 'disabled' };
+
+            const minBalance = Math.max(0, Number(config.minBalance) || 0);
+            const maxInterest = Math.max(0, Number(config.maxInterestPerRun) || 0);
+            const tiers = Array.isArray(config.tiers) ? config.tiers : [];
+            if (!tiers.length) return { ok: false, code: 'no_tiers' };
+
+            const runDate = this.getEconomyDateKey();
+            const existing = await this.connection.query(
+                `SELECT id FROM economy_interest_runs WHERE guild_id = ? AND run_date = ? LIMIT 1`,
+                [validGuildId, runDate]
+            );
+            if (existing?.length) return { ok: false, code: 'already_run' };
+
+            await this.connection.query(
+                `INSERT INTO economy_interest_runs (guild_id, run_date) VALUES (?, ?)`,
+                [validGuildId, runDate]
+            );
+
+            const rows = await this.connection.query(
+                `SELECT user_id, bank
+                 FROM economy_balances
+                 WHERE guild_id = ? AND bank >= ?`,
+                [validGuildId, minBalance]
+            );
+
+            const sortedTiers = [...tiers]
+                .map((tier) => ({
+                    min: Math.max(0, Number(tier.min) || 0),
+                    rate: Math.max(0, Number(tier.rate) || 0)
+                }))
+                .sort((a, b) => a.min - b.min);
+
+            let totalPaid = 0;
+            let paidCount = 0;
+
+            for (const row of rows || []) {
+                const bank = Number(row.bank || 0);
+                if (bank <= 0) continue;
+
+                let rate = 0;
+                for (const tier of sortedTiers) {
+                    if (bank >= tier.min) {
+                        rate = tier.rate;
+                    }
+                }
+
+                const rawInterest = Math.floor(bank * rate);
+                const interest = maxInterest > 0 ? Math.min(maxInterest, rawInterest) : rawInterest;
+                if (interest <= 0) continue;
+
+                await this.connection.query(
+                    `UPDATE economy_balances
+                     SET bank = bank + ?, total_earned = total_earned + ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE guild_id = ? AND user_id = ?`,
+                    [interest, interest, validGuildId, row.user_id]
+                );
+
+                const ratePercent = Math.round(rate * 10000) / 100;
+                await this.connection.query(
+                    `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note)
+                     VALUES (?, ?, 'bank_interest', ?, ?)`,
+                    [validGuildId, row.user_id, interest, `Bank interest (${ratePercent}% rate)`]
+                );
+
+                totalPaid += interest;
+                paidCount += 1;
+            }
+
+            return { ok: true, paidCount, totalPaid };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error applying bank interest:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async recordEconomyFraudFlag(guildId, userId, flagType, details = {}, severity = 'medium') {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeType = this.validateTextInput(String(flagType || ''), 40);
+            const safeSeverity = ['low', 'medium', 'high'].includes(String(severity)) ? String(severity) : 'medium';
+            if (!validGuildId || !validUserId || !safeType) return false;
+
+            const cooldownMs = Math.max(0, Number(economyConfigFile?.fraud?.flagCooldownMs) || 0);
+            if (cooldownMs > 0) {
+                const rows = await this.connection.query(
+                    `SELECT UNIX_TIMESTAMP(created_at) AS created_unix
+                     FROM economy_fraud_flags
+                     WHERE guild_id = ? AND user_id = ? AND flag_type = ?
+                     ORDER BY id DESC
+                     LIMIT 1`,
+                    [validGuildId, validUserId, safeType]
+                );
+
+                const lastUnix = Number(rows?.[0]?.created_unix || 0);
+                if (lastUnix > 0 && (Date.now() - (lastUnix * 1000)) < cooldownMs) {
+                    return false;
+                }
+            }
+
+            await this.connection.query(
+                `INSERT INTO economy_fraud_flags (guild_id, user_id, flag_type, severity, details)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [validGuildId, validUserId, safeType, safeSeverity, JSON.stringify(details || {})]
+            );
+
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error recording economy fraud flag:', error.message);
+            return false;
+        }
+    }
+
+    async checkEconomyTransferFraud(guildId, fromUserId, toUserId, amount) {
+        try {
+            const config = economyConfigFile?.fraud || {};
+            if (config.enabled === false) return;
+
+            const validGuildId = this.validateDiscordId(guildId);
+            const validFrom = this.validateDiscordId(fromUserId);
+            const validTo = this.validateDiscordId(toUserId);
+            const safeAmount = Math.max(0, Number(amount) || 0);
+            if (!validGuildId || !validFrom || !validTo || !safeAmount) return;
+
+            const largeThreshold = Math.max(1, Number(config.largeTransferAmount) || 0);
+            if (largeThreshold > 0 && safeAmount >= largeThreshold) {
+                await this.recordEconomyFraudFlag(validGuildId, validFrom, 'large_transfer', {
+                    amount: safeAmount,
+                    targetUserId: validTo
+                }, 'high');
+            }
+
+            const windowMs = Math.max(60 * 1000, Number(config.rapidTransferWindowMs) || 0);
+            const countThreshold = Math.max(2, Number(config.rapidTransferCount) || 0);
+            if (windowMs > 0 && countThreshold > 0) {
+                const windowSeconds = Math.max(60, Math.floor(windowMs / 1000));
+                const rows = await this.connection.query(
+                    `SELECT COUNT(*) AS tx_count
+                     FROM economy_transactions
+                     WHERE guild_id = ? AND user_id = ? AND tx_type = 'transfer_out'
+                       AND created_at >= (NOW() - INTERVAL ? SECOND)`,
+                    [validGuildId, validFrom, windowSeconds]
+                );
+
+                const txCount = Number(rows?.[0]?.tx_count || 0);
+                if (txCount >= countThreshold) {
+                    await this.recordEconomyFraudFlag(validGuildId, validFrom, 'rapid_transfers', {
+                        windowSeconds,
+                        txCount
+                    }, 'medium');
+                }
+            }
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error checking economy fraud signals:', error.message);
+        }
+    }
+
+    async getLastEconomyTransaction(guildId, userId, txType) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeType = this.validateTextInput(String(txType || ''), 40);
+            if (!validGuildId || !validUserId || !safeType) return null;
+
+            const rows = await this.connection.query(
+                `SELECT UNIX_TIMESTAMP(created_at) AS created_unix
+                 FROM economy_transactions
+                 WHERE guild_id = ? AND user_id = ? AND tx_type = ?
+                 ORDER BY id DESC
+                 LIMIT 1`,
+                [validGuildId, validUserId, safeType]
+            );
+
+            const unix = Number(rows?.[0]?.created_unix || 0);
+            return unix > 0 ? unix * 1000 : null;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting last economy transaction:', error.message);
+            return null;
+        }
+    }
+
+    async claimEconomyReward(guildId, userId, options = {}) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return { ok: false, code: 'invalid_input' };
+
+            const rewardType = this.validateTextInput(String(options.rewardType || ''), 40);
+            if (!rewardType) return { ok: false, code: 'invalid_type' };
+
+            const minReward = Math.max(1, Math.min(1_000_000, Number(options.minReward) || 50));
+            const maxReward = Math.max(minReward, Math.min(5_000_000, Number(options.maxReward) || 150));
+            const cooldownMs = Math.max(60_000, Math.min(7 * 24 * 60 * 60 * 1000, Number(options.cooldownMs) || 60 * 60 * 1000));
+            const now = Date.now();
+
+            const lastClaimMs = await this.getLastEconomyTransaction(validGuildId, validUserId, rewardType);
+            if (lastClaimMs && (now - lastClaimMs) < cooldownMs) {
+                return {
+                    ok: false,
+                    code: 'cooldown',
+                    retryAfterMs: cooldownMs - (now - lastClaimMs)
+                };
+            }
+
+            const amount = Math.floor(Math.random() * (maxReward - minReward + 1)) + minReward;
+
+            await this.ensureEconomyProfile(validGuildId, validUserId);
+
+            await this.connection.query(
+                `UPDATE economy_balances
+                 SET wallet = wallet + ?, total_earned = total_earned + ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE guild_id = ? AND user_id = ?`,
+                [amount, amount, validGuildId, validUserId]
+            );
+
+            await this.connection.query(
+                `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [validGuildId, validUserId, rewardType, amount, options.note || null]
+            );
+
+            const balance = await this.getEconomyBalance(validGuildId, validUserId);
+
+            return {
+                ok: true,
+                amount,
+                balance
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error claiming economy reward:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async awardEconomyActivity(guildId, userId, amount, options = {}) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeAmount = Math.max(1, Math.min(250_000, Number(amount) || 0));
+
+            if (!validGuildId || !validUserId || !safeAmount) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const txType = this.validateTextInput(String(options.txType || 'activity_reward'), 40) || 'activity_reward';
+            const note = this.validateTextInput(String(options.note || 'Message activity reward'), 255);
+
+            await this.ensureEconomyProfile(validGuildId, validUserId);
+
+            await this.connection.query(
+                `UPDATE economy_balances
+                 SET wallet = wallet + ?, total_earned = total_earned + ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE guild_id = ? AND user_id = ?`,
+                [safeAmount, safeAmount, validGuildId, validUserId]
+            );
+
+            await this.connection.query(
+                `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [validGuildId, validUserId, txType, safeAmount, note || null]
+            );
+
+            const balance = await this.getEconomyBalance(validGuildId, validUserId);
+            return { ok: true, amount: safeAmount, balance };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error awarding economy activity:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async getEconomyStats(guildId, userId, options = {}) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return null;
+
+            const txLimit = Math.max(5, Math.min(100, Number(options.recentTxLimit) || 25));
+            const daysWindow = Math.max(1, Math.min(90, Number(options.daysWindow) || 7));
+
+            const [recentRows, totalsRows, flowRows, typeRows, streakRows, weeklyRows] = await Promise.all([
+                this.connection.query(
+                    `SELECT tx_type, amount, UNIX_TIMESTAMP(created_at) AS created_unix
+                     FROM economy_transactions
+                     WHERE guild_id = ? AND user_id = ?
+                     ORDER BY id DESC
+                     LIMIT ?`,
+                    [validGuildId, validUserId, txLimit]
+                ),
+                this.connection.query(
+                    `SELECT COUNT(*) AS tx_count,
+                            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS total_in,
+                            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS total_out
+                     FROM economy_transactions
+                     WHERE guild_id = ? AND user_id = ?`,
+                    [validGuildId, validUserId]
+                ),
+                this.connection.query(
+                    `SELECT SUM(amount) AS net_flow
+                     FROM economy_transactions
+                     WHERE guild_id = ? AND user_id = ?
+                       AND created_at >= (NOW() - INTERVAL ? DAY)`,
+                    [validGuildId, validUserId, daysWindow]
+                ),
+                this.connection.query(
+                    `SELECT tx_type, COUNT(*) AS tx_count
+                     FROM economy_transactions
+                     WHERE guild_id = ? AND user_id = ?
+                     GROUP BY tx_type
+                     ORDER BY tx_count DESC
+                     LIMIT 5`,
+                    [validGuildId, validUserId]
+                ),
+                this.connection.query(
+                    `SELECT DATE(created_at) AS claim_date
+                     FROM economy_transactions
+                     WHERE guild_id = ? AND user_id = ? AND tx_type = 'daily_reward'
+                     GROUP BY DATE(created_at)
+                     ORDER BY claim_date DESC
+                     LIMIT 90`,
+                    [validGuildId, validUserId]
+                ),
+                this.connection.query(
+                    `SELECT DATE(created_at) AS claim_date
+                     FROM economy_transactions
+                     WHERE guild_id = ? AND user_id = ? AND tx_type = 'weekly_reward'
+                     GROUP BY DATE(created_at)
+                     ORDER BY claim_date DESC
+                     LIMIT 52`,
+                    [validGuildId, validUserId]
+                )
+            ]);
+
+            const totals = totalsRows?.[0] || {};
+            const flow = flowRows?.[0] || {};
+
+            const dailyDates = Array.isArray(streakRows)
+                ? streakRows
+                    .map((row) => row?.claim_date ? new Date(row.claim_date) : null)
+                    .filter(Boolean)
+                    .map((date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).getTime())
+                : [];
+
+            const oneDayMs = 24 * 60 * 60 * 1000;
+            const today = new Date();
+            const todayUtcMidnight = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+            const yesterdayUtcMidnight = todayUtcMidnight - oneDayMs;
+
+            let currentStreak = 0;
+            if (dailyDates.length > 0 && (dailyDates[0] === todayUtcMidnight || dailyDates[0] === yesterdayUtcMidnight)) {
+                currentStreak = 1;
+                for (let i = 1; i < dailyDates.length; i++) {
+                    if (dailyDates[i] === dailyDates[i - 1] - oneDayMs) {
+                        currentStreak++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            let bestStreak = 0;
+            let runningStreak = 0;
+            for (let i = 0; i < dailyDates.length; i++) {
+                if (i === 0) {
+                    runningStreak = 1;
+                } else if (dailyDates[i] === dailyDates[i - 1] - oneDayMs) {
+                    runningStreak++;
+                } else {
+                    runningStreak = 1;
+                }
+                if (runningStreak > bestStreak) bestStreak = runningStreak;
+            }
+
+            const weeklyDates = Array.isArray(weeklyRows)
+                ? weeklyRows
+                    .map((row) => row?.claim_date ? new Date(row.claim_date) : null)
+                    .filter(Boolean)
+                    .map((date) => {
+                        const day = date.getUTCDay();
+                        const diff = (day + 6) % 7;
+                        const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+                        start.setUTCDate(start.getUTCDate() - diff);
+                        return start.getTime();
+                    })
+                : [];
+
+            const oneWeekMs = 7 * oneDayMs;
+            const todayWeekStart = (() => {
+                const now = new Date();
+                const day = now.getUTCDay();
+                const diff = (day + 6) % 7;
+                const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+                start.setUTCDate(start.getUTCDate() - diff);
+                return start.getTime();
+            })();
+
+            let currentWeeklyStreak = 0;
+            if (weeklyDates.length > 0 && (weeklyDates[0] === todayWeekStart || weeklyDates[0] === todayWeekStart - oneWeekMs)) {
+                currentWeeklyStreak = 1;
+                for (let i = 1; i < weeklyDates.length; i++) {
+                    if (weeklyDates[i] === weeklyDates[i - 1] - oneWeekMs) {
+                        currentWeeklyStreak++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            let bestWeeklyStreak = 0;
+            let runningWeekly = 0;
+            for (let i = 0; i < weeklyDates.length; i++) {
+                if (i === 0) {
+                    runningWeekly = 1;
+                } else if (weeklyDates[i] === weeklyDates[i - 1] - oneWeekMs) {
+                    runningWeekly++;
+                } else {
+                    runningWeekly = 1;
+                }
+                if (runningWeekly > bestWeeklyStreak) bestWeeklyStreak = runningWeekly;
+            }
+
+            return {
+                txCount: Number(totals.tx_count || 0),
+                totalIn: Number(totals.total_in || 0),
+                totalOut: Number(totals.total_out || 0),
+                netFlowWindow: Number(flow.net_flow || 0),
+                netFlowWindowDays: daysWindow,
+                topTypes: (typeRows || []).map((row) => ({
+                    type: String(row.tx_type || 'unknown'),
+                    count: Number(row.tx_count || 0)
+                })),
+                currentDailyStreak: currentStreak,
+                bestDailyStreak: bestStreak,
+                currentWeeklyStreak,
+                bestWeeklyStreak,
+                recentTransactions: (recentRows || []).map((row) => ({
+                    type: String(row.tx_type || 'unknown'),
+                    amount: Number(row.amount || 0),
+                    createdAtMs: Number(row.created_unix || 0) * 1000
+                }))
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting economy stats:', error.message);
+            return null;
+        }
+    }
+
+    getEconomyDateKey(date = new Date()) {
+        const safeDate = date instanceof Date ? date : new Date();
+        const year = safeDate.getUTCFullYear();
+        const month = String(safeDate.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(safeDate.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    getEconomyWeekStartKey(date = new Date()) {
+        const safeDate = date instanceof Date ? date : new Date();
+        const day = safeDate.getUTCDay();
+        const diff = (day + 6) % 7;
+        const start = new Date(Date.UTC(safeDate.getUTCFullYear(), safeDate.getUTCMonth(), safeDate.getUTCDate()));
+        start.setUTCDate(start.getUTCDate() - diff);
+        return this.getEconomyDateKey(start);
+    }
+
+    async getEconomyClaimDates(guildId, userId, txType, limit = 90) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeType = this.validateTextInput(String(txType || ''), 40);
+            const safeLimit = Math.max(1, Math.min(180, Number(limit) || 90));
+            if (!validGuildId || !validUserId || !safeType) return [];
+
+            const rows = await this.connection.query(
+                `SELECT DATE(created_at) AS claim_date
+                 FROM economy_transactions
+                 WHERE guild_id = ? AND user_id = ? AND tx_type = ?
+                 GROUP BY DATE(created_at)
+                 ORDER BY claim_date DESC
+                 LIMIT ?`,
+                [validGuildId, validUserId, safeType, safeLimit]
+            );
+
+            return Array.isArray(rows)
+                ? rows
+                    .map((row) => row?.claim_date ? new Date(row.claim_date) : null)
+                    .filter(Boolean)
+                    .map((date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).getTime())
+                : [];
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting economy claim dates:', error.message);
+            return [];
+        }
+    }
+
+    getEconomyQuestDefinitions(cadence) {
+        const quests = economyConfigFile?.quests || {};
+        const list = cadence === 'weekly' ? quests.weekly : quests.daily;
+        return Array.isArray(list) ? list : [];
+    }
+
+    async getEconomyQuestProgress(guildId, userId, cadence) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return [];
+
+            const safeCadence = cadence === 'weekly' ? 'weekly' : 'daily';
+            const periodStart = safeCadence === 'weekly'
+                ? this.getEconomyWeekStartKey()
+                : this.getEconomyDateKey();
+
+            return await this.connection.query(
+                `SELECT quest_key, progress, completed_at, claimed_at
+                 FROM economy_quest_progress
+                 WHERE guild_id = ? AND user_id = ? AND cadence = ? AND period_start = ?`,
+                [validGuildId, validUserId, safeCadence, periodStart]
+            );
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting economy quest progress:', error.message);
+            return [];
+        }
+    }
+
+    async updateEconomyQuestProgress(guildId, userId, eventType, amount = 1) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeType = this.validateTextInput(String(eventType || ''), 40);
+            if (!validGuildId || !validUserId || !safeType) return false;
+
+            const targetAmount = Math.max(1, Number(amount) || 1);
+            const cadences = ['daily', 'weekly'];
+            const now = new Date();
+
+            for (const cadence of cadences) {
+                const quests = this.getEconomyQuestDefinitions(cadence);
+                if (!quests.length) continue;
+
+                const periodStart = cadence === 'weekly'
+                    ? this.getEconomyWeekStartKey(now)
+                    : this.getEconomyDateKey(now);
+
+                for (const quest of quests) {
+                    if (!quest || quest.type !== safeType) continue;
+                    const questKey = this.validateTextInput(String(quest.key || ''), 50);
+                    if (!questKey) continue;
+
+                    const increment = ['gamble_wager', 'pay_amount'].includes(safeType)
+                        ? targetAmount
+                        : 1;
+                    const target = Math.max(1, Number(quest.target) || 1);
+
+                    const rows = await this.connection.query(
+                        `SELECT progress, completed_at
+                         FROM economy_quest_progress
+                         WHERE guild_id = ? AND user_id = ? AND quest_key = ? AND cadence = ? AND period_start = ?
+                         LIMIT 1`,
+                        [validGuildId, validUserId, questKey, cadence, periodStart]
+                    );
+
+                    const currentProgress = Number(rows?.[0]?.progress || 0);
+                    const newProgress = Math.min(target, currentProgress + increment);
+                    const completedAt = rows?.[0]?.completed_at || (newProgress >= target ? new Date() : null);
+
+                    if (rows?.length) {
+                        await this.connection.query(
+                            `UPDATE economy_quest_progress
+                             SET progress = ?, completed_at = COALESCE(?, completed_at), updated_at = CURRENT_TIMESTAMP
+                             WHERE guild_id = ? AND user_id = ? AND quest_key = ? AND cadence = ? AND period_start = ?`,
+                            [newProgress, completedAt, validGuildId, validUserId, questKey, cadence, periodStart]
+                        );
+                    } else {
+                        await this.connection.query(
+                            `INSERT INTO economy_quest_progress (guild_id, user_id, quest_key, cadence, period_start, progress, completed_at)
+                             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                            [validGuildId, validUserId, questKey, cadence, periodStart, newProgress, completedAt]
+                        );
+                    }
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error updating economy quest progress:', error.message);
+            return false;
+        }
+    }
+
+    async claimEconomyQuest(guildId, userId, questKey) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeKey = this.validateTextInput(String(questKey || ''), 50);
+            if (!validGuildId || !validUserId || !safeKey) return { ok: false, code: 'invalid_input' };
+
+            const dailyQuest = this.getEconomyQuestDefinitions('daily').find((quest) => quest.key === safeKey);
+            const weeklyQuest = this.getEconomyQuestDefinitions('weekly').find((quest) => quest.key === safeKey);
+            const quest = dailyQuest || weeklyQuest;
+            if (!quest) return { ok: false, code: 'unknown_quest' };
+
+            const cadence = dailyQuest ? 'daily' : 'weekly';
+            const periodStart = cadence === 'weekly'
+                ? this.getEconomyWeekStartKey()
+                : this.getEconomyDateKey();
+            const target = Math.max(1, Number(quest.target) || 1);
+            const reward = Math.max(1, Number(quest.reward) || 1);
+
+            const rows = await this.connection.query(
+                `SELECT progress, claimed_at
+                 FROM economy_quest_progress
+                 WHERE guild_id = ? AND user_id = ? AND quest_key = ? AND cadence = ? AND period_start = ?
+                 LIMIT 1`,
+                [validGuildId, validUserId, safeKey, cadence, periodStart]
+            );
+
+            const progress = Number(rows?.[0]?.progress || 0);
+            const claimedAt = rows?.[0]?.claimed_at || null;
+
+            if (claimedAt) return { ok: false, code: 'already_claimed' };
+            if (progress < target) return { ok: false, code: 'incomplete' };
+
+            await this.ensureEconomyProfile(validGuildId, validUserId);
+
+            await this.connection.query(
+                `UPDATE economy_balances
+                 SET wallet = wallet + ?, total_earned = total_earned + ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE guild_id = ? AND user_id = ?`,
+                [reward, reward, validGuildId, validUserId]
+            );
+
+            await this.connection.query(
+                `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note)
+                 VALUES (?, ?, 'quest_reward', ?, ?)`,
+                [validGuildId, validUserId, reward, `Quest reward: ${safeKey}`]
+            );
+
+            await this.connection.query(
+                `UPDATE economy_quest_progress
+                 SET claimed_at = CURRENT_TIMESTAMP
+                 WHERE guild_id = ? AND user_id = ? AND quest_key = ? AND cadence = ? AND period_start = ?`,
+                [validGuildId, validUserId, safeKey, cadence, periodStart]
+            );
+
+            const balance = await this.getEconomyBalance(validGuildId, validUserId);
+            return { ok: true, reward, balance };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error claiming economy quest:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async getEconomyInventory(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return [];
+
+            return await this.connection.query(
+                `SELECT item_id, quantity
+                 FROM economy_inventory
+                 WHERE guild_id = ? AND user_id = ? AND quantity > 0`,
+                [validGuildId, validUserId]
+            );
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting economy inventory:', error.message);
+            return [];
+        }
+    }
+
+    async addEconomyInventoryItem(guildId, userId, itemId, quantity) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeItemId = this.validateTextInput(String(itemId || ''), 50);
+            const safeQuantity = Math.max(1, Math.min(1000, Number(quantity) || 1));
+            if (!validGuildId || !validUserId || !safeItemId) return false;
+
+            await this.connection.query(
+                `INSERT INTO economy_inventory (guild_id, user_id, item_id, quantity)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity), updated_at = CURRENT_TIMESTAMP`,
+                [validGuildId, validUserId, safeItemId, safeQuantity]
+            );
+
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error adding economy inventory item:', error.message);
+            return false;
+        }
+    }
+
+    async consumeEconomyInventoryItem(guildId, userId, itemId, quantity) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeItemId = this.validateTextInput(String(itemId || ''), 50);
+            const safeQuantity = Math.max(1, Math.min(1000, Number(quantity) || 1));
+            if (!validGuildId || !validUserId || !safeItemId) return { ok: false, code: 'invalid_input' };
+
+            const rows = await this.connection.query(
+                `SELECT quantity
+                 FROM economy_inventory
+                 WHERE guild_id = ? AND user_id = ? AND item_id = ?
+                 LIMIT 1`,
+                [validGuildId, validUserId, safeItemId]
+            );
+
+            const currentQty = Number(rows?.[0]?.quantity || 0);
+            if (currentQty < safeQuantity) return { ok: false, code: 'insufficient_items', available: currentQty };
+
+            await this.connection.query(
+                `UPDATE economy_inventory
+                 SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE guild_id = ? AND user_id = ? AND item_id = ?`,
+                [safeQuantity, validGuildId, validUserId, safeItemId]
+            );
+
+            return { ok: true, remaining: currentQty - safeQuantity };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error consuming economy inventory item:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async spendEconomyFunds(guildId, userId, amount, txType = 'economy_spend', note = null) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeAmount = Math.max(1, Math.min(100_000_000, Number(amount) || 0));
+            const safeType = this.validateTextInput(String(txType || ''), 40) || 'economy_spend';
+            const safeNote = this.validateTextInput(String(note || ''), 255) || null;
+            if (!validGuildId || !validUserId || !safeAmount) return { ok: false, code: 'invalid_input' };
+
+            const result = await this.connection.transaction(async (conn) => {
+                await conn.query(
+                    `INSERT INTO economy_balances (guild_id, user_id)
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE updated_at = updated_at`,
+                    [validGuildId, validUserId]
+                );
+
+                const [debitResult] = await conn.query(
+                    `UPDATE economy_balances
+                     SET wallet = wallet - ?, total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE guild_id = ? AND user_id = ? AND wallet >= ?`,
+                    [safeAmount, safeAmount, validGuildId, validUserId, safeAmount]
+                );
+
+                if (!debitResult || Number(debitResult.affectedRows || 0) === 0) {
+                    return { ok: false, code: 'insufficient_funds' };
+                }
+
+                await conn.query(
+                    `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [validGuildId, validUserId, safeType, -safeAmount, safeNote]
+                );
+
+                return { ok: true };
+            });
+
+            if (!result?.ok) return result || { ok: false, code: 'spend_failed' };
+
+            const balance = await this.getEconomyBalance(validGuildId, validUserId);
+            return { ok: true, balance, amount: safeAmount };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error spending economy funds:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async addEconomyBoost(guildId, userId, boostType, multiplier, usesRemaining, expiresAt) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeType = this.validateTextInput(String(boostType || ''), 40);
+            const safeMultiplier = Math.max(1, Math.min(10, Number(multiplier) || 1));
+            const safeUses = Math.max(1, Math.min(100, Number(usesRemaining) || 1));
+            const safeExpires = Math.max(0, Number(expiresAt) || 0);
+            if (!validGuildId || !validUserId || !safeType) return false;
+
+            await this.connection.query(
+                `INSERT INTO economy_boosts (guild_id, user_id, boost_type, multiplier, uses_remaining, expires_at)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [validGuildId, validUserId, safeType, safeMultiplier, safeUses, safeExpires]
+            );
+
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error adding economy boost:', error.message);
+            return false;
+        }
+    }
+
+    async consumeEconomyBoost(guildId, userId, boostType) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeType = this.validateTextInput(String(boostType || ''), 40);
+            if (!validGuildId || !validUserId || !safeType) return null;
+
+            const now = Date.now();
+            await this.connection.query(
+                `DELETE FROM economy_boosts
+                 WHERE guild_id = ? AND user_id = ? AND expires_at > 0 AND expires_at < ?`,
+                [validGuildId, validUserId, now]
+            );
+
+            const rows = await this.connection.query(
+                `SELECT id, multiplier, uses_remaining
+                 FROM economy_boosts
+                 WHERE guild_id = ? AND user_id = ? AND boost_type = ?
+                 ORDER BY id ASC
+                 LIMIT 1`,
+                [validGuildId, validUserId, safeType]
+            );
+
+            const row = rows?.[0];
+            if (!row) return null;
+
+            const usesRemaining = Math.max(0, Number(row.uses_remaining || 0));
+            const nextUses = Math.max(0, usesRemaining - 1);
+
+            if (nextUses <= 0) {
+                await this.connection.query(
+                    `DELETE FROM economy_boosts WHERE id = ?`,
+                    [row.id]
+                );
+            } else {
+                await this.connection.query(
+                    `UPDATE economy_boosts SET uses_remaining = ? WHERE id = ?`,
+                    [nextUses, row.id]
+                );
+            }
+
+            return Number(row.multiplier || 1);
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error consuming economy boost:', error.message);
+            return null;
+        }
+    }
+
+    async listEconomyBounties(guildId, status = 'open', limit = 10) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const safeStatus = ['open', 'awarded', 'closed'].includes(status) ? status : 'open';
+            const safeLimit = Math.max(1, Math.min(25, Number(limit) || 10));
+            if (!validGuildId) return [];
+
+            return await this.connection.query(
+                `SELECT * FROM economy_bounties
+                 WHERE guild_id = ? AND status = ?
+                 ORDER BY created_at DESC
+                 LIMIT ?`,
+                [validGuildId, safeStatus, safeLimit]
+            );
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error listing economy bounties:', error.message);
+            return [];
+        }
+    }
+
+    async createEconomyBounty(guildId, createdBy, title, description, rewardAmount) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validCreator = this.validateDiscordId(createdBy);
+            const safeTitle = this.validateTextInput(String(title || ''), 120);
+            const safeDescription = this.validateTextInput(String(description || ''), 1000) || null;
+            const safeReward = Math.max(1, Math.min(100_000_000, Number(rewardAmount) || 0));
+            if (!validGuildId || !validCreator || !safeTitle || !safeReward) return null;
+
+            const result = await this.connection.query(
+                `INSERT INTO economy_bounties (guild_id, created_by, title, description, reward_amount)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [validGuildId, validCreator, safeTitle, safeDescription, safeReward]
+            );
+
+            return result?.insertId || null;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error creating economy bounty:', error.message);
+            return null;
+        }
+    }
+
+    async awardEconomyBounty(guildId, bountyId, awardedTo, awardedBy, note = null) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validAwardedTo = this.validateDiscordId(awardedTo);
+            const validAwardedBy = this.validateDiscordId(awardedBy);
+            const safeId = Number(bountyId);
+            const safeNote = this.validateTextInput(String(note || ''), 255) || null;
+            if (!validGuildId || !validAwardedTo || !validAwardedBy || !Number.isFinite(safeId) || safeId <= 0) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const rows = await this.connection.query(
+                `SELECT reward_amount, status
+                 FROM economy_bounties
+                 WHERE bounty_id = ? AND guild_id = ?
+                 LIMIT 1`,
+                [safeId, validGuildId]
+            );
+
+            const bounty = rows?.[0];
+            if (!bounty) return { ok: false, code: 'not_found' };
+            if (bounty.status !== 'open') return { ok: false, code: 'not_open' };
+
+            const reward = Math.max(1, Number(bounty.reward_amount || 0));
+            await this.ensureEconomyProfile(validGuildId, validAwardedTo);
+
+            await this.connection.query(
+                `UPDATE economy_balances
+                 SET wallet = wallet + ?, total_earned = total_earned + ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE guild_id = ? AND user_id = ?`,
+                [reward, reward, validGuildId, validAwardedTo]
+            );
+
+            await this.connection.query(
+                `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note, source_user_id)
+                 VALUES (?, ?, 'bounty_reward', ?, ?, ?)`,
+                [validGuildId, validAwardedTo, reward, safeNote || `Bounty reward #${safeId}`, validAwardedBy]
+            );
+
+            await this.connection.query(
+                `UPDATE economy_bounties
+                 SET status = 'awarded', awarded_to = ?, awarded_by = ?, awarded_at = CURRENT_TIMESTAMP
+                 WHERE bounty_id = ? AND guild_id = ?`,
+                [validAwardedTo, validAwardedBy, safeId, validGuildId]
+            );
+
+            const balance = await this.getEconomyBalance(validGuildId, validAwardedTo);
+            return { ok: true, reward, balance };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error awarding economy bounty:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async closeEconomyBounty(guildId, bountyId, closedBy, reason = null) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validClosedBy = this.validateDiscordId(closedBy);
+            const safeId = Number(bountyId);
+            const safeReason = this.validateTextInput(String(reason || ''), 255) || null;
+            if (!validGuildId || !validClosedBy || !Number.isFinite(safeId) || safeId <= 0) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const result = await this.connection.query(
+                `UPDATE economy_bounties
+                 SET status = 'closed', closed_at = CURRENT_TIMESTAMP, close_reason = ?
+                 WHERE bounty_id = ? AND guild_id = ? AND status = 'open'`,
+                [safeReason, safeId, validGuildId]
+            );
+
+            return { ok: (result?.affectedRows || 0) > 0 };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error closing economy bounty:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async adminAdjustEconomyBalance(guildId, userId, amount, options = {}) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const actorId = this.validateDiscordId(options.actorId) || null;
+            const scope = ['wallet', 'bank'].includes(String(options.scope || '').toLowerCase())
+                ? String(options.scope).toLowerCase()
+                : null;
+            const mode = ['set', 'add', 'remove'].includes(String(options.mode || '').toLowerCase())
+                ? String(options.mode).toLowerCase()
+                : null;
+            const safeAmount = Math.max(0, Math.min(100_000_000, Number(amount) || 0));
+            const reason = this.validateTextInput(String(options.reason || ''), 255) || null;
+
+            if (!validGuildId || !validUserId || !scope || !mode || !Number.isFinite(safeAmount)) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const result = await this.connection.transaction(async (conn) => {
+                await conn.query(
+                    `INSERT INTO economy_balances (guild_id, user_id)
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE updated_at = updated_at`,
+                    [validGuildId, validUserId]
+                );
+
+                const [rows] = await conn.query(
+                    `SELECT wallet, bank
+                     FROM economy_balances
+                     WHERE guild_id = ? AND user_id = ?
+                     LIMIT 1`,
+                    [validGuildId, validUserId]
+                );
+
+                const currentWallet = Number(rows?.[0]?.wallet || 0);
+                const currentBank = Number(rows?.[0]?.bank || 0);
+                const currentValue = scope === 'wallet' ? currentWallet : currentBank;
+
+                let nextValue = currentValue;
+                if (mode === 'set') {
+                    nextValue = safeAmount;
+                } else if (mode === 'add') {
+                    nextValue = currentValue + safeAmount;
+                } else if (mode === 'remove') {
+                    if (currentValue < safeAmount) {
+                        return { ok: false, code: 'insufficient_funds', currentValue };
+                    }
+                    nextValue = currentValue - safeAmount;
+                }
+
+                const delta = nextValue - currentValue;
+                const txAmount = delta;
+
+                if (scope === 'wallet') {
+                    await conn.query(
+                        `UPDATE economy_balances
+                         SET wallet = ?,
+                             total_earned = total_earned + ?,
+                             total_spent = total_spent + ?,
+                             updated_at = CURRENT_TIMESTAMP
+                         WHERE guild_id = ? AND user_id = ?`,
+                        [
+                            nextValue,
+                            delta > 0 ? delta : 0,
+                            delta < 0 ? Math.abs(delta) : 0,
+                            validGuildId,
+                            validUserId
+                        ]
+                    );
+                } else {
+                    await conn.query(
+                        `UPDATE economy_balances
+                         SET bank = ?,
+                             total_earned = total_earned + ?,
+                             total_spent = total_spent + ?,
+                             updated_at = CURRENT_TIMESTAMP
+                         WHERE guild_id = ? AND user_id = ?`,
+                        [
+                            nextValue,
+                            delta > 0 ? delta : 0,
+                            delta < 0 ? Math.abs(delta) : 0,
+                            validGuildId,
+                            validUserId
+                        ]
+                    );
+                }
+
+                const txType = `admin_${mode}_${scope}`;
+                await conn.query(
+                    `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, source_user_id, note)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [
+                        validGuildId,
+                        validUserId,
+                        txType,
+                        txAmount,
+                        actorId,
+                        reason || `Admin ${mode} ${scope}: ${currentValue} -> ${nextValue}`
+                    ]
+                );
+
+                return { ok: true, previous: currentValue, current: nextValue, delta };
+            });
+
+            if (!result?.ok) return result || { ok: false, code: 'adjust_failed' };
+
+            const balance = await this.getEconomyBalance(validGuildId, validUserId);
+            return {
+                ok: true,
+                scope,
+                mode,
+                previous: result.previous,
+                current: result.current,
+                delta: result.delta,
+                balance
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error in admin economy adjustment:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async transferEconomy(guildId, fromUserId, toUserId, amount) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validFromUserId = this.validateDiscordId(fromUserId);
+            const validToUserId = this.validateDiscordId(toUserId);
+            const safeAmount = Math.max(1, Math.min(5_000_000, Number(amount) || 0));
+
+            if (!validGuildId || !validFromUserId || !validToUserId || validFromUserId === validToUserId || !safeAmount) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const result = await this.connection.transaction(async (conn) => {
+                await conn.query(
+                    `INSERT INTO economy_balances (guild_id, user_id)
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE updated_at = updated_at`,
+                    [validGuildId, validFromUserId]
+                );
+
+                await conn.query(
+                    `INSERT INTO economy_balances (guild_id, user_id)
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE updated_at = updated_at`,
+                    [validGuildId, validToUserId]
+                );
+
+                const [debitResult] = await conn.query(
+                    `UPDATE economy_balances
+                     SET wallet = wallet - ?, total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE guild_id = ? AND user_id = ? AND wallet >= ?`,
+                    [safeAmount, safeAmount, validGuildId, validFromUserId, safeAmount]
+                );
+
+                if (!debitResult || Number(debitResult.affectedRows || 0) === 0) {
+                    return { ok: false, code: 'insufficient_funds' };
+                }
+
+                await conn.query(
+                    `UPDATE economy_balances
+                     SET wallet = wallet + ?, total_earned = total_earned + ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE guild_id = ? AND user_id = ?`,
+                    [safeAmount, safeAmount, validGuildId, validToUserId]
+                );
+
+                await conn.query(
+                    `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, source_user_id, note)
+                     VALUES (?, ?, 'transfer_out', ?, ?, ?)`,
+                    [validGuildId, validFromUserId, -safeAmount, validToUserId, 'User transfer sent']
+                );
+
+                await conn.query(
+                    `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, source_user_id, note)
+                     VALUES (?, ?, 'transfer_in', ?, ?, ?)`,
+                    [validGuildId, validToUserId, safeAmount, validFromUserId, 'User transfer received']
+                );
+
+                return { ok: true };
+            });
+
+            if (!result?.ok) return result || { ok: false, code: 'transfer_failed' };
+
+            const fromBalance = await this.getEconomyBalance(validGuildId, validFromUserId);
+            const toBalance = await this.getEconomyBalance(validGuildId, validToUserId);
+
+            this.checkEconomyTransferFraud(validGuildId, validFromUserId, validToUserId, safeAmount).catch(() => { });
+
+            return {
+                ok: true,
+                amount: safeAmount,
+                fromBalance,
+                toBalance
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error transferring economy funds:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async moveEconomyFunds(guildId, userId, amount, direction = 'deposit') {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeAmount = Math.max(1, Math.min(5_000_000, Number(amount) || 0));
+            const safeDirection = ['deposit', 'withdraw'].includes(String(direction || '').toLowerCase())
+                ? String(direction).toLowerCase()
+                : null;
+
+            if (!validGuildId || !validUserId || !safeAmount || !safeDirection) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const result = await this.connection.transaction(async (conn) => {
+                await conn.query(
+                    `INSERT INTO economy_balances (guild_id, user_id)
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE updated_at = updated_at`,
+                    [validGuildId, validUserId]
+                );
+
+                if (safeDirection === 'deposit') {
+                    const [moveResult] = await conn.query(
+                        `UPDATE economy_balances
+                         SET wallet = wallet - ?, bank = bank + ?, updated_at = CURRENT_TIMESTAMP
+                         WHERE guild_id = ? AND user_id = ? AND wallet >= ?`,
+                        [safeAmount, safeAmount, validGuildId, validUserId, safeAmount]
+                    );
+
+                    if (!moveResult || Number(moveResult.affectedRows || 0) === 0) {
+                        return { ok: false, code: 'insufficient_wallet' };
+                    }
+                } else {
+                    const [moveResult] = await conn.query(
+                        `UPDATE economy_balances
+                         SET bank = bank - ?, wallet = wallet + ?, updated_at = CURRENT_TIMESTAMP
+                         WHERE guild_id = ? AND user_id = ? AND bank >= ?`,
+                        [safeAmount, safeAmount, validGuildId, validUserId, safeAmount]
+                    );
+
+                    if (!moveResult || Number(moveResult.affectedRows || 0) === 0) {
+                        return { ok: false, code: 'insufficient_bank' };
+                    }
+                }
+
+                await conn.query(
+                    `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [
+                        validGuildId,
+                        validUserId,
+                        safeDirection === 'deposit' ? 'deposit_to_bank' : 'withdraw_from_bank',
+                        safeAmount,
+                        safeDirection === 'deposit' ? 'Moved wallet -> bank' : 'Moved bank -> wallet'
+                    ]
+                );
+
+                return { ok: true };
+            });
+
+            if (!result?.ok) return result || { ok: false, code: 'move_failed' };
+
+            const balance = await this.getEconomyBalance(validGuildId, validUserId);
+            return { ok: true, amount: safeAmount, direction: safeDirection, balance };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error moving economy funds:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async gambleEconomy(guildId, userId, wager, options = {}) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            const safeWager = Math.max(1, Math.min(5_000_000, Number(wager) || 0));
+            if (!validGuildId || !validUserId || !safeWager) {
+                return { ok: false, code: 'invalid_input' };
+            }
+
+            const winChanceRaw = Number(options.winChance);
+            const safeWinChance = Number.isFinite(winChanceRaw)
+                ? Math.min(Math.max(winChanceRaw, 0.05), 0.95)
+                : 0.45;
+            const multiplierRaw = Number(options.multiplier);
+            const safeMultiplier = Number.isFinite(multiplierRaw)
+                ? Math.min(Math.max(multiplierRaw, 1.1), 10)
+                : 2;
+            const cooldownMs = Math.max(10_000, Math.min(24 * 60 * 60 * 1000, Number(options.cooldownMs) || 120_000));
+
+            const lastPlayMs = await this.getLastEconomyTransaction(validGuildId, validUserId, 'gamble_play');
+            if (lastPlayMs && (Date.now() - lastPlayMs) < cooldownMs) {
+                return {
+                    ok: false,
+                    code: 'cooldown',
+                    retryAfterMs: cooldownMs - (Date.now() - lastPlayMs)
+                };
+            }
+
+            const isWin = Math.random() < safeWinChance;
+            const payout = isWin ? Math.max(1, Math.floor(safeWager * safeMultiplier)) : 0;
+            const netChange = payout - safeWager;
+
+            const result = await this.connection.transaction(async (conn) => {
+                await conn.query(
+                    `INSERT INTO economy_balances (guild_id, user_id)
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE updated_at = updated_at`,
+                    [validGuildId, validUserId]
+                );
+
+                const [updateResult] = await conn.query(
+                    `UPDATE economy_balances
+                     SET wallet = wallet + ?,
+                         total_spent = total_spent + ?,
+                         total_earned = total_earned + ?,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE guild_id = ? AND user_id = ? AND wallet >= ?`,
+                    [netChange, safeWager, payout, validGuildId, validUserId, safeWager]
+                );
+
+                if (!updateResult || Number(updateResult.affectedRows || 0) === 0) {
+                    return { ok: false, code: 'insufficient_funds' };
+                }
+
+                await conn.query(
+                    `INSERT INTO economy_transactions (guild_id, user_id, tx_type, amount, note)
+                     VALUES (?, ?, 'gamble_play', ?, ?)`,
+                    [
+                        validGuildId,
+                        validUserId,
+                        netChange,
+                        isWin
+                            ? `Gamble win: wager ${safeWager}, payout ${payout}`
+                            : `Gamble loss: wager ${safeWager}`
+                    ]
+                );
+
+                return { ok: true };
+            });
+
+            if (!result?.ok) return result || { ok: false, code: 'gamble_failed' };
+
+            const balance = await this.getEconomyBalance(validGuildId, validUserId);
+            return {
+                ok: true,
+                isWin,
+                wager: safeWager,
+                payout,
+                netChange,
+                winChance: safeWinChance,
+                multiplier: safeMultiplier,
+                balance
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error in economy gamble:', error.message);
+            return { ok: false, code: 'db_error' };
+        }
+    }
+
+    async getEconomyLeaderboard(guildId, limit = 10) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            if (!validGuildId) return [];
+
+            const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const rows = await this.connection.query(
+                `SELECT user_id, wallet, bank, (wallet + bank) AS total
+                 FROM economy_balances
+                 WHERE guild_id = ?
+                 ORDER BY total DESC, updated_at ASC
+                 LIMIT ?`,
+                [validGuildId, safeLimit]
+            );
+
+            return (rows || []).map((row) => ({
+                user_id: String(row.user_id),
+                wallet: Number(row.wallet || 0),
+                bank: Number(row.bank || 0),
+                total: Number(row.total || 0)
+            }));
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting economy leaderboard:', error.message);
+            return [];
         }
     }
 
@@ -2131,13 +4619,137 @@ class MySQLDatabaseManager {
         }
     }
 
-    // ===== AUTOMOD VIOLATIONS =====
-    async logAutomodViolation(userId, guildId, violationType, messageContent, channelId, actionTaken) {
+    // ===== INVITE TRACKING =====
+    async incrementInviteUsage({ guildId, inviteCode, inviterId = null, joinedAt = Date.now() } = {}) {
         try {
+            if (!guildId || !inviteCode) return false;
+
+            await this.connection.query(
+                `INSERT INTO invite_usage (guild_id, invite_code, inviter_id, join_count, last_joined_at)
+                 VALUES (?, ?, ?, 1, ?)
+                 ON DUPLICATE KEY UPDATE
+                     join_count = join_count + 1,
+                     last_joined_at = VALUES(last_joined_at),
+                     inviter_id = COALESCE(invite_usage.inviter_id, VALUES(inviter_id))`,
+                [String(guildId), String(inviteCode), inviterId ? String(inviterId) : null, Number(joinedAt) || Date.now()]
+            );
+
+            return true;
+        } catch (error) {
+            console.error('[InviteTracker] Failed to increment invite usage:', error.message);
+            return false;
+        }
+    }
+
+    async getInviteStatsByUser(guildId, inviterId) {
+        try {
+            if (!guildId || !inviterId) {
+                return { total: 0, perInvite: [] };
+            }
+
+            const rows = await this.connection.query(
+                `SELECT invite_code, join_count, last_joined_at
+                 FROM invite_usage
+                 WHERE guild_id = ? AND inviter_id = ?
+                 ORDER BY join_count DESC`,
+                [String(guildId), String(inviterId)]
+            );
+
+            const perInvite = Array.isArray(rows)
+                ? rows.map((row) => ({
+                    code: row.invite_code,
+                    joins: Number(row.join_count || 0),
+                    lastJoinedAt: row.last_joined_at ? Number(row.last_joined_at) : null
+                }))
+                : [];
+
+            const total = perInvite.reduce((sum, entry) => sum + Number(entry.joins || 0), 0);
+
+            return { total, perInvite };
+        } catch (error) {
+            console.error('[InviteTracker] Failed to fetch invite stats:', error.message);
+            return { total: 0, perInvite: [] };
+        }
+    }
+
+    async getInviteStatsByCode(guildId, inviteCode) {
+        try {
+            if (!guildId || !inviteCode) return null;
+
+            const row = await this.queryOne(
+                `SELECT invite_code, inviter_id, join_count, last_joined_at
+                 FROM invite_usage
+                 WHERE guild_id = ? AND invite_code = ?
+                 LIMIT 1`,
+                [String(guildId), String(inviteCode)]
+            );
+
+            if (!row) return null;
+
+            return {
+                code: row.invite_code,
+                inviterId: row.inviter_id ? String(row.inviter_id) : null,
+                joins: Number(row.join_count || 0),
+                lastJoinedAt: row.last_joined_at ? Number(row.last_joined_at) : null
+            };
+        } catch (error) {
+            console.error('[InviteTracker] Failed to fetch invite stats by code:', error.message);
+            return null;
+        }
+    }
+
+    async getInviteLeaderboard(guildId, limit = 10) {
+        try {
+            if (!guildId) return [];
+            const safeLimit = Math.max(1, Math.min(20, Number(limit) || 10));
+
+            const rows = await this.connection.query(
+                `SELECT inviter_id, SUM(join_count) AS joins
+                 FROM invite_usage
+                 WHERE guild_id = ? AND inviter_id IS NOT NULL
+                 GROUP BY inviter_id
+                 ORDER BY joins DESC
+                 LIMIT ?`,
+                [String(guildId), safeLimit]
+            );
+
+            return Array.isArray(rows)
+                ? rows.map((row) => ({
+                    inviterId: String(row.inviter_id),
+                    joins: Number(row.joins || 0)
+                }))
+                : [];
+        } catch (error) {
+            console.error('[InviteTracker] Failed to fetch invite leaderboard:', error.message);
+            return [];
+        }
+    }
+
+    // ===== AUTOMOD VIOLATIONS =====
+    async logAutomodViolation(userId, guildId, violationType, messageContent, channelId, actionTaken, context = {}) {
+        try {
+            const safeRiskScore = Number.isFinite(Number(context?.riskScore)) ? Number(context.riskScore) : null;
+            const safeRiskLevel = ['low', 'medium', 'high', 'critical'].includes(String(context?.riskLevel || '').toLowerCase())
+                ? String(context.riskLevel).toLowerCase()
+                : null;
+            const safeSignalCount = Number.isFinite(Number(context?.signalCount))
+                ? Math.max(1, Math.round(Number(context.signalCount)))
+                : null;
+            const appealNotified = context?.appealNotified === true;
+            let metadataJson = null;
+            if (context?.metadata && typeof context.metadata === 'object') {
+                try {
+                    metadataJson = JSON.stringify(context.metadata);
+                } catch (_) {
+                    metadataJson = null;
+                }
+            }
+
             await this.connection.query(
                 `INSERT INTO automod_violations (user_id, guild_id, violation_type, message_content, 
-                 channel_id, action_taken) VALUES (?, ?, ?, ?, ?, ?)`,
-                [userId, guildId, violationType, messageContent, channelId, actionTaken]
+                 channel_id, action_taken, risk_score, risk_level, signal_count, appeal_notified, metadata_json)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [userId, guildId, violationType, messageContent, channelId, actionTaken, safeRiskScore, safeRiskLevel, safeSignalCount, appealNotified, metadataJson]
             );
         } catch (error) {
             console.error('Error logging automod violation:', error);
@@ -2158,8 +4770,60 @@ class MySQLDatabaseManager {
         }
     }
 
-    // ===== USER SEARCH & PROFILE =====
-    // ===== POLL METHODS =====
+    // ===== ANTI-RAID EVENTS =====
+    async logAntiRaidEvent(guildId, eventType, riskScore = null, triggerCount = null, details = null) {
+        try {
+            if (!guildId || !eventType) return false;
+            const safeRisk = Number.isFinite(Number(riskScore)) ? Math.max(0, Math.round(Number(riskScore))) : null;
+            const safeTriggerCount = Number.isFinite(Number(triggerCount)) ? Math.max(0, Math.round(Number(triggerCount))) : null;
+            let detailsJson = null;
+            if (details && typeof details === 'object') {
+                try {
+                    detailsJson = JSON.stringify(details);
+                } catch (_) {
+                    detailsJson = null;
+                }
+            }
+
+            await this.connection.query(
+                `INSERT INTO anti_raid_events (guild_id, event_type, risk_score, trigger_count, details_json)
+                 VALUES (?, ?, ?, ?, ?)`
+                , [String(guildId), String(eventType), safeRisk, safeTriggerCount, detailsJson]
+            );
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error logging anti-raid event:', error.message);
+            return false;
+        }
+    }
+
+    async logManualLockdown({ guildId, actionType, caseId, moderatorId, moderatorName, reason }) {
+        try {
+            if (!guildId || !actionType || !caseId || !moderatorId || !reason) return false;
+            const safeAction = String(actionType).toLowerCase() === 'disable' ? 'disable' : 'enable';
+            const safeCaseId = String(caseId).trim();
+            const safeReason = String(reason).trim();
+            if (!safeCaseId || !safeReason) return false;
+
+            await this.connection.query(
+                `INSERT INTO manual_lockdowns (guild_id, action_type, case_id, moderator_id, moderator_name, reason)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                    String(guildId),
+                    safeAction,
+                    safeCaseId,
+                    String(moderatorId),
+                    moderatorName ? String(moderatorName) : null,
+                    safeReason
+                ]
+            );
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error logging manual lockdown:', error.message);
+            return false;
+        }
+    }
+
     async createPoll(messageId, guildId, userId, question, optionsJson, endsAt = null) {
         try {
             await this.connection.query(
@@ -2204,7 +4868,6 @@ class MySQLDatabaseManager {
         }
     }
 
-    // ===== SEARCH & FILTER METHODS =====
     async searchUsers(query, limit = 20) {
         try {
             const results = await this.connection.query(
@@ -2226,46 +4889,84 @@ class MySQLDatabaseManager {
 
     async getUserProfile(userId) {
         try {
-            // Validate userId - Discord IDs are strings of 17-20 digits
-            if (!userId || typeof userId !== 'string' || !/^\d{17,20}$/.test(userId)) {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) {
                 console.error('Invalid userId format:', userId);
                 return null;
             }
 
-            // Get user basic info
-            const userInfo = await this.connection.query(
-                'SELECT * FROM levels WHERE user_id = ?',
-                [userId]
-            );
-
-            // Get all warnings
-            const warnings = await this.connection.query(
-                'SELECT * FROM warns WHERE user_id = ? AND type = "WARN" ORDER BY timestamp DESC',
-                [userId]
-            );
-
-            // Get ban info
-            const banInfo = await this.connection.query(
-                'SELECT * FROM user_bans WHERE user_id = ?',
-                [userId]
-            );
-
-            // Get audit log entries
-            const auditLogs = await this.connection.query(
-                'SELECT * FROM audit_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT 50',
-                [userId]
-            );
-
-            // Get automod violations
-            const violations = await this.connection.query(
-                'SELECT * FROM automod_violations WHERE user_id = ? ORDER BY timestamp DESC LIMIT 20',
-                [userId]
-            );
+            const [profileUser, warnings, banInfo, auditLogs, violations] = await Promise.all([
+                this.queryOne(
+                    'SELECT * FROM levels WHERE user_id = ?',
+                    [validId],
+                    {
+                        useCache: true,
+                        cacheNamespace: 'userprofile',
+                        cacheKey: `${validId}:user`,
+                        cacheTtlMs: 10000,
+                        suppressError: true,
+                        fallbackValue: null,
+                        logLabel: 'getUserProfile.user'
+                    }
+                ),
+                this.query(
+                    'SELECT * FROM warns WHERE user_id = ? AND type = "WARN" ORDER BY timestamp DESC',
+                    [validId],
+                    {
+                        useCache: true,
+                        cacheNamespace: 'userprofile',
+                        cacheKey: `${validId}:warnings`,
+                        cacheTtlMs: 10000,
+                        suppressError: true,
+                        fallbackValue: [],
+                        logLabel: 'getUserProfile.warnings'
+                    }
+                ),
+                this.queryOne(
+                    'SELECT * FROM user_bans WHERE user_id = ?',
+                    [validId],
+                    {
+                        useCache: true,
+                        cacheNamespace: 'userprofile',
+                        cacheKey: `${validId}:ban`,
+                        cacheTtlMs: 10000,
+                        suppressError: true,
+                        fallbackValue: null,
+                        logLabel: 'getUserProfile.ban'
+                    }
+                ),
+                this.query(
+                    'SELECT * FROM audit_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT 50',
+                    [validId],
+                    {
+                        useCache: true,
+                        cacheNamespace: 'userprofile',
+                        cacheKey: `${validId}:audit`,
+                        cacheTtlMs: 8000,
+                        suppressError: true,
+                        fallbackValue: [],
+                        logLabel: 'getUserProfile.audit'
+                    }
+                ),
+                this.query(
+                    'SELECT * FROM automod_violations WHERE user_id = ? ORDER BY timestamp DESC LIMIT 20',
+                    [validId],
+                    {
+                        useCache: true,
+                        cacheNamespace: 'userprofile',
+                        cacheKey: `${validId}:violations`,
+                        cacheTtlMs: 8000,
+                        suppressError: true,
+                        fallbackValue: [],
+                        logLabel: 'getUserProfile.violations'
+                    }
+                )
+            ]);
 
             return {
-                user: Array.isArray(userInfo) ? userInfo[0] : userInfo,
+                user: profileUser || null,
                 warnings: Array.isArray(warnings) ? warnings : [],
-                ban: Array.isArray(banInfo) ? banInfo[0] : null,
+                ban: banInfo || null,
                 auditLogs: Array.isArray(auditLogs) ? auditLogs : [],
                 violations: Array.isArray(violations) ? violations : []
             };
@@ -2274,8 +4975,6 @@ class MySQLDatabaseManager {
             return null;
         }
     }
-
-    // ========== COMPATIBILITY WRAPPERS (Legacy API) ==========
 
     getWarnsDB() {
         const db = this;
@@ -2403,6 +5102,12 @@ class MySQLDatabaseManager {
             },
             size: async () => {
                 return await db.getGiveawaysCount();
+            },
+            addEntry: async (giveawayId, userId) => {
+                return await db.addGiveawayEntry(giveawayId, userId);
+            },
+            removeEntry: async (giveawayId, userId) => {
+                return await db.removeGiveawayEntry(giveawayId, userId);
             }
         };
     }
@@ -2454,7 +5159,7 @@ class MySQLDatabaseManager {
     }
 
     clearCache() {
-        // No cache to clear with MySQL
+        this._resultCache.clear();
     }
 
     async close() {

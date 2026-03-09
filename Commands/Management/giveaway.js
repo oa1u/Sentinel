@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { administratorRoleId } = require('../../Config/constants/roles.json');
+const { ROLES: { administratorRoleId } } = require('../../Config/constants');
 const giveawayHandler = require('../../Events/Giveaway');
 
 // This command handles giveaways—start, extend, reroll, and more!
@@ -24,6 +24,18 @@ module.exports = {
             .setMinLength(2)
             .setMaxLength(100)
         )
+        .addIntegerOption(option =>
+          option.setName('winners')
+            .setDescription('How many winners to pick (default: 1)')
+            .setMinValue(1)
+            .setMaxValue(10)
+            .setRequired(false)
+        )
+        .addRoleOption(option =>
+          option.setName('required-role')
+            .setDescription('Only members with this role can win (optional)')
+            .setRequired(false)
+        )
     )
     .addSubcommand(subcommand =>
       subcommand
@@ -47,6 +59,23 @@ module.exports = {
         .addStringOption(option =>
           option.setName('message-id')
             .setDescription('The Case ID of the ended giveaway (e.g., GIVE-kX7mP9qL2n)')
+            .setRequired(true)
+        )
+        .addIntegerOption(option =>
+          option.setName('winners')
+            .setDescription('How many new winners to pick (default: original count)')
+            .setMinValue(1)
+            .setMaxValue(10)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('end')
+        .setDescription('End an active giveaway immediately')
+        .addStringOption(option =>
+          option.setName('message-id')
+            .setDescription('The Case ID of the giveaway (e.g., GIVE-kX7mP9qL2n)')
             .setRequired(true)
         )
     ),
@@ -76,6 +105,8 @@ module.exports = {
       await giveawayHandler.handleExtendGiveaway(interaction, interaction.client);
     } else if (subcommand === 'reroll') {
       await giveawayHandler.handleRerollGiveaway(interaction, interaction.client);
+    } else if (subcommand === 'end') {
+      await giveawayHandler.handleEndGiveaway(interaction, interaction.client);
     }
   }
 };

@@ -406,6 +406,7 @@
                             <span class="role-badge" id="dropdownRole">user</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -462,18 +463,18 @@
                 faqs: [
                     {
                         question: 'How do I reset my Admin Panel password?',
-                        answer: 'Use the Recovery page in the panel and submit the email linked to your account. Follow the reset link in your inbox to create a new password.',
-                        example: 'Tip: If the email does not arrive, check spam and confirm your SMTP credentials in Config/credentials.env.'
+                        answer: 'Theres a reset password section in your profile settings. Enter your current password, then choose a new one. If you forgot your password, use the "Forgot password?" link on the login page to receive a reset email.',
+                        example: 'Tip: If the email never arrives, double-check SMTP settings in Config/credentials.env and your spam folder.'
                     },
                     {
-                        question: 'Why can’t I see Admin or Owner pages?',
-                        answer: 'Panel pages are role-gated. Your account role must include the required permission level (Moderator, Admin, or Owner) to access those routes.',
-                        example: 'Tip: Ask an Owner to verify your role mapping if links are hidden or return Unauthorized.'
+                        question: 'Why do some pages show Unauthorized or stay hidden?',
+                        answer: 'Panel routes are role-gated. Only Admin and Owner roles can access certain dashboards. If a link is hidden, your account likely lacks the required role level.',
+                        example: 'Tip: Ask an Owner to confirm your admin_users role in the database.'
                     },
                     {
-                        question: 'Where do I manage my profile and linked Discord account?',
-                        answer: 'Open My Profile from the top-right user menu. This page is used to view account details and any linked Discord identity information.',
-                        example: 'Tip: Keep your profile details current so recovery and notifications work correctly.'
+                        question: 'Why do I need to link a Discord account?',
+                        answer: 'Its a security precaution. Linking your Discord account allows the panel to verify your identity and permissions without relying solely on an invite',
+                        example: 'Tip: If linking fails, confirm the Discord OAuth settings and callback host match your panel URL.'
                     }
                 ]
             },
@@ -482,19 +483,19 @@
                 icon: '🔒',
                 faqs: [
                     {
-                        question: 'How is access to commands and pages protected?',
-                        answer: 'The bot and panel use role checks and permission validation. Management commands require elevated roles, and panel routes validate session/account access before rendering.',
-                        example: 'Tip: Review role IDs in your config files after migrating to a new server.'
+                        question: 'How do I enable 2FA for my panel account?',
+                        answer: 'Open My Profile, go to Security, and click Enable 2FA. You will be prompted to scan a QR code and confirm a 6-digit token before it turns on.',
+                        example: 'Tip: Save recovery codes and keep them offline in case you lose access to your authenticator app.'
                     },
                     {
-                        question: 'Does this project support TOTP/2FA?',
-                        answer: 'Yes. The project includes TOTP helpers and related security flows, allowing stronger account protection where enabled in your setup.',
-                        example: 'Tip: Store backup recovery codes securely before enforcing 2FA for staff accounts.'
+                        question: 'Why am I asked for a 2FA code at login?',
+                        answer: 'If 2FA is enabled on your account, the login flow will request a one-time code after your password is verified. This is expected behavior.',
+                        example: 'Tip: Make sure your device time is correct. TOTP codes will fail if the device clock drifts.'
                     },
                     {
-                        question: 'What should I do if I think a token or credential leaked?',
-                        answer: 'Immediately rotate your bot token and SMTP/API secrets, update Config/credentials.env, restart the bot and panel, and audit recent account activity.',
-                        example: 'Tip: Never share .env files or paste secrets in support channels.'
+                        question: 'What should I do if a token or credential leaked?',
+                        answer: 'Rotate the bot token and any SMTP/API secrets immediately, update Config/credentials.env, restart both the bot and panel, and review recent security events.',
+                        example: 'Tip: Never paste secrets into support chats or screenshots.'
                     }
                 ]
             },
@@ -503,19 +504,19 @@
                 icon: '🤖',
                 faqs: [
                     {
-                        question: 'What feature groups are available in the bot?',
-                        answer: 'The bot includes Moderation, Management, Ticketing, Utility, Verification, Voice, Leveling, and Fun command groups.',
-                        example: 'Tip: Use the Features page in the panel for a categorized overview before configuring modules.'
+                        question: 'What are the main feature areas?',
+                        answer: 'Moderation, verification, tickets, utilities, leveling, voice/music, and admin workflows. Most features are configurable in the panel or constants JSON files.',
+                        example: 'Tip: Start with moderation and verification before enabling everything else.'
                     },
                     {
-                        question: 'Can I use announcements and embeds for server updates?',
-                        answer: 'Yes. The management command set includes announcement tools for posting structured server updates to your configured announcement channel.',
-                        example: 'Tip: Keep announcement text concise and use clear titles for better readability.'
+                        question: 'How does Join-to-Create behave?',
+                        answer: 'Users join a lobby channel and receive a temporary room. Ownership transfers if the owner leaves and the room stays active. Empty rooms are auto-cleaned after a short grace period.',
+                        example: 'Tip: Adjust the JTC_IDLE_CLEANUP_MS env value to tune auto-clean timing.'
                     },
                     {
-                        question: 'Which systems are integrated besides slash commands?',
-                        answer: 'The project includes event-driven modules such as automod flows, giveaways, welcome/leave events, leveling updates, verification handlers, and ticket reactions.',
-                        example: 'Tip: Confirm each module’s required channel/role IDs in your constants before going live.'
+                        question: 'What is the music system designed for?',
+                        answer: 'Music focuses on reliability: multi-backend streams, retry handling, and queue controls. Use /music play to start, then /music nowplaying and /music queue for status.',
+                        example: 'Tip: If a link fails, try a search query instead of a URL.'
                     }
                 ]
             },
@@ -524,19 +525,19 @@
                 icon: '🚀',
                 faqs: [
                     {
-                        question: 'What are the first setup steps for a new install?',
-                        answer: 'Install dependencies, configure credentials/env values, set required role/channel constants, enable privileged intents, and start the bot with node index.js.',
-                        example: 'Tip: Follow the Getting Started page in the panel for the cleanest setup order.'
+                        question: 'What is the quickest setup path?',
+                        answer: 'Install dependencies, fill Config/credentials.env, set channels and roles in Config/constants, enable privileged intents, then start the bot and panel.',
+                        example: 'Tip: Use the Getting Started page for the recommended order.'
                     },
                     {
-                        question: 'Where can I see all bot and panel capabilities quickly?',
-                        answer: 'Open the Features page in the Admin Panel. It summarizes core modules and helps you identify what to configure next.',
-                        example: 'Tip: Use Features first, then Changelog to understand what is new in your version.'
+                        question: 'Do I need MySQL to run the bot?',
+                        answer: 'Yes for most features. Tickets, moderation history, analytics, and admin security flows rely on MySQL tables.',
+                        example: 'Tip: Run the migration script before testing panel features.'
                     },
                     {
-                        question: 'Do I need to configure the Admin Panel separately?',
-                        answer: 'Yes. Besides bot credentials, the web panel requires its own config, account setup, and any OAuth/email settings used by your deployment.',
-                        example: 'Tip: Verify panel login and notifications before inviting production staff users.'
+                        question: 'Where do I set branding and links?',
+                        answer: 'Update Config/main.json for server name, website link, and panel branding. The panel reads that file to populate titles and labels.',
+                        example: 'Tip: Keep the websiteName short so it fits in the header.'
                     }
                 ]
             },
@@ -545,19 +546,19 @@
                 icon: '📞',
                 faqs: [
                     {
-                        question: 'Where should I report bugs or request features?',
-                        answer: 'Use the GitHub repository issues page. Include a clear title, expected behavior, and what happened instead.',
-                        example: 'Tip: Add screenshots, console errors, and reproduction steps for faster fixes.'
+                        question: 'Where do I report issues or request features?',
+                        answer: 'Open a GitHub issue with a clear title, steps to reproduce, and what you expected to happen.',
+                        example: 'Tip: Include screenshots and relevant logs when possible.'
                     },
                     {
-                        question: 'What details should I include when asking for help?',
-                        answer: 'Provide your bot version, recent changes, relevant logs, and the exact command/page that failed. This speeds up troubleshooting significantly.',
-                        example: 'Tip: Mention whether the issue is bot-side, panel-side, or both.'
+                        question: 'What info helps the most when troubleshooting?',
+                        answer: 'Your bot version, recent changes, the exact command/page, and any console errors from both the bot and the Admin Panel.',
+                        example: 'Tip: Mention if the issue happens only on one server or everywhere.'
                     },
                     {
-                        question: 'Is there built-in guidance inside the panel?',
-                        answer: 'Yes. The FAQ, Getting Started, Features, and Moderation Playbook pages are designed as the primary in-panel help resources.',
-                        example: 'Tip: Point staff to these pages first to reduce repeated setup questions.'
+                        question: 'What in-panel help exists for staff?',
+                        answer: 'FAQ, Features, Getting Started, and the Moderation Playbook are built-in and kept up to date.',
+                        example: 'Tip: Link staff to these pages instead of writing one-off docs.'
                     }
                 ]
             },
@@ -566,19 +567,19 @@
                 icon: '🛠️',
                 faqs: [
                     {
-                        question: 'Why is the bot online but slash commands are not working?',
-                        answer: 'Most often this is missing command registration permissions, wrong CLIENT_ID/GUILD_ID, or command deployment not refreshed after changes.',
-                        example: 'Tip: Recheck applications.commands scope and rerun your command deployment flow.'
+                        question: 'Slash commands are missing or not responding. Why?',
+                        answer: 'This is usually a registration or permissions issue. Make sure CLIENT_ID and GUILD_ID are correct and the bot was invited with applications.commands.',
+                        example: 'Tip: Restart the bot after changing credentials to re-register commands.'
                     },
                     {
-                        question: 'Why are live dashboard updates not appearing?',
-                        answer: 'WebSocket updates can fail if socket.io is unavailable, blocked, or disconnected. Confirm socket scripts load and check browser console/network logs.',
-                        example: 'Tip: Refresh the page and verify the socket connection is established before testing events.'
+                        question: 'Why are live dashboard updates delayed?',
+                        answer: 'Socket updates require an active connection. If the browser or proxy blocks WebSocket traffic, the panel will still work but updates may lag.',
+                        example: 'Tip: Check the browser console for socket connection errors.'
                     },
                     {
-                        question: 'Why are email notifications not sending?',
-                        answer: 'Check SMTP host, port, sender credentials, and anti-abuse/rate-limit behavior in the email helper. Also verify the recipient address and spam filters.',
-                        example: 'Tip: Use your local email test script to validate templates and sending flow safely.'
+                        question: 'Why are website-to-bot webhooks not firing?',
+                        answer: 'The internal webhook requires BOT_WEBHOOK_URL and BOT_WEBHOOK_SECRET to be set on both the panel and bot, and the bot must be reachable on the configured port.',
+                        example: 'Tip: Confirm the bot log shows “Bot webhook listener running” and that both BOT_WEBHOOK_URL and BOT_WEBHOOK_SECRET are identical on the panel and bot.'
                     }
                 ]
             }

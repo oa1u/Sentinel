@@ -1,4 +1,573 @@
 let inviteStatsData = [];
+let securityEventsData = [];
+let securityEventsAutoRefreshTimer = null;
+let securityEventsAutoRefreshIntervalMs = 30000;
+let backupTablesCache = [];
+const OWNER_NOTIFICATION_STORAGE_KEY = 'owner_notification_center_v1';
+const ownerNotificationFeedState = {
+    events: [],
+    maxEntries: 300,
+    toastCapturePatched: false
+};
+
+function escapeNotificationCell(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatOwnerNotificationTime(timestamp) {
+    const date = new Date(timestamp || 0);
+    if (Number.isNaN(date.getTime())) return 'Unknown';
+    return date.toLocaleString();
+}
+
+function normalizeOwnerNotificationSource(source) {
+    const normalized = String(source || 'system').toLowerCase();
+    if (['toast', 'system', 'action'].includes(normalized)) return normalized;
+    return 'system';
+}
+
+function normalizeOwnerNotificationEntry(entry = {}) {
+    const timestamp = Number(entry.timestamp) || Date.now();
+    const typeRaw = String(entry.type || 'info').toLowerCase();
+    const type = ['success', 'error', 'warning', 'info'].includes(typeRaw) ? typeRaw : 'info';
+    const title = String(entry.title || 'Untitled').trim() || 'Untitled';
+    const message = String(entry.message || '').trim();
+    const source = normalizeOwnerNotificationSource(entry.source);
+    return {
+        id: String(entry.id || `${timestamp}-${Math.random().toString(36).slice(2, 10)}`),
+        timestamp,
+        type,
+        title,
+        message,
+        source
+    };
+}
+
+function saveOwnerNotificationFeed() {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        localStorage.setItem(OWNER_NOTIFICATION_STORAGE_KEY, JSON.stringify(ownerNotificationFeedState.events));
+    } catch (error) {
+        console.warn('Failed to persist notification center feed:', error);
+    }
+}
+
+function loadOwnerNotificationFeed() {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        const raw = localStorage.getItem(OWNER_NOTIFICATION_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return;
+        ownerNotificationFeedState.events = parsed.map(normalizeOwnerNotificationEntry).slice(0, ownerNotificationFeedState.maxEntries);
+    } catch (error) {
+        console.warn('Failed to load notification center feed:', error);
+    }
+}
+
+function recordOwnerNotificationEvent(entry, options = {}) {
+    const normalized = normalizeOwnerNotificationEntry(entry);
+    const duplicate = ownerNotificationFeedState.events.find((existing) => {
+        return existing.type === normalized.type
+            && existing.title === normalized.title
+            && existing.message === normalized.message
+            && Math.abs(existing.timestamp - normalized.timestamp) < 1500;
+    });
+    if (duplicate) return duplicate;
+
+    ownerNotificationFeedState.events.unshift(normalized);
+    if (ownerNotificationFeedState.events.length > ownerNotificationFeedState.maxEntries) {
+        ownerNotificationFeedState.events.length = ownerNotificationFeedState.maxEntries;
+    }
+
+    if (options.persist !== false) {
+        saveOwnerNotificationFeed();
+    }
+
+    if (options.refresh !== false) {
+        loadOwnerNotificationHistory();
+    }
+
+    return normalized;
+}
+
+function importToastHistoryToOwnerFeed(limit = 100) {
+    if (typeof window.getNotificationHistory !== 'function') return;
+    const rows = window.getNotificationHistory(limit);
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    rows.slice().reverse().forEach((entry) => {
+        recordOwnerNotificationEvent({
+            timestamp: entry.timestamp,
+            type: entry.type,
+            title: entry.title,
+            message: entry.message,
+            source: 'toast'
+        }, { refresh: false, persist: false });
+    });
+    saveOwnerNotificationFeed();
+}
+
+function patchOwnerToastCapture() {
+    if (ownerNotificationFeedState.toastCapturePatched) return;
+    const map = [
+        ['showSuccess', 'success'],
+        ['showError', 'error'],
+        ['showWarning', 'warning'],
+        ['showInfo', 'info']
+    ];
+
+    map.forEach(([fnName, fallbackType]) => {
+        const original = window[fnName];
+        if (typeof original !== 'function') return;
+        window[fnName] = function patchedOwnerToastCapture(...args) {
+            const title = String(args[0] ?? '').trim() || fallbackType.toUpperCase();
+            const message = typeof args[1] === 'string' ? args[1] : '';
+            recordOwnerNotificationEvent({
+                timestamp: Date.now(),
+                type: fallbackType,
+                title,
+                message,
+                source: 'toast'
+            }, { refresh: false });
+            return original.apply(this, args);
+        };
+    });
+
+    ownerNotificationFeedState.toastCapturePatched = true;
+}
+
+function getOwnerNotificationFilters() {
+    const typeFilter = String(document.getElementById('ownerNotificationTypeFilter')?.value || 'all').toLowerCase();
+    const sourceFilter = String(document.getElementById('ownerNotificationSourceFilter')?.value || 'all').toLowerCase();
+    const search = String(document.getElementById('ownerNotificationSearch')?.value || '').trim().toLowerCase();
+    return { typeFilter, sourceFilter, search };
+}
+
+function filterOwnerNotificationRows(rows) {
+    const { typeFilter, sourceFilter, search } = getOwnerNotificationFilters();
+    return rows.filter((entry) => {
+        const type = String(entry.type || 'info').toLowerCase();
+        const source = normalizeOwnerNotificationSource(entry.source);
+        const text = `${entry.title || ''} ${entry.message || ''}`.toLowerCase();
+
+        if (typeFilter !== 'all' && type !== typeFilter) return false;
+        if (sourceFilter !== 'all' && source !== sourceFilter) return false;
+        if (search && !text.includes(search)) return false;
+        return true;
+    });
+}
+
+function renderOwnerNotificationRows(rows) {
+    const tbody = document.getElementById('ownerNotificationHistoryTable');
+    if (!tbody) return;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No notification history yet.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map((entry) => {
+        const type = String(entry?.type || 'info').toLowerCase();
+        const typeBadge = `<span class="badge badge-${escapeNotificationCell(type)}">${escapeNotificationCell(type.toUpperCase())}</span>`;
+        const source = normalizeOwnerNotificationSource(entry?.source);
+        const sourceBadge = `<span class="badge">${escapeNotificationCell(source.toUpperCase())}</span>`;
+        return `
+            <tr>
+                <td>${escapeNotificationCell(formatOwnerNotificationTime(entry?.timestamp))}</td>
+                <td>${typeBadge}</td>
+                <td>${sourceBadge}</td>
+                <td>${escapeNotificationCell(entry?.title || 'Untitled')}</td>
+                <td>${escapeNotificationCell(entry?.message || '-')}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function escapeSecurityHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function getSecuritySignalLabel(signal) {
+    const map = {
+        'api-origin-blocked': 'API Origin Blocked',
+        'csrf-origin-failed': 'CSRF Origin Failed',
+        'csrf-token-failed': 'CSRF Token Failed',
+        'rate-limit-hit': 'Rate Limit Hit',
+        'login-ip-locked': 'Login IP Locked',
+        'login-bruteforce-threshold': 'Brute Force Threshold',
+        'new-device-login': 'New Device Login',
+        'device-binding-blocked': 'Device Binding Blocked',
+        'ip-reputation-elevated': 'IP Reputation Elevated',
+        'ip-reputation-blocked': 'IP Reputation Blocked',
+        'login-captcha-failed': 'Login Captcha Failed',
+        'register-captcha-failed': 'Register Captcha Failed',
+        'captcha-failed': 'Captcha Failed',
+        'captcha-challenge-mismatch': 'Captcha Challenge Mismatch',
+        'captcha-expired': 'Captcha Expired',
+        'captcha-solve-too-fast': 'Captcha Solve Too Fast',
+        'captcha-ip-blocked': 'Captcha IP Blocked',
+        'captcha-policy-updated': 'Captcha Policy Updated',
+        'suspicious-activity-detected': 'Suspicious Activity Detected'
+    };
+    return map[String(signal || '').toLowerCase()] || (String(signal || 'unknown').replace(/_/g, ' '));
+}
+
+function getSecuritySignalSeverity(signal) {
+    const normalized = String(signal || '').toLowerCase();
+    if (normalized === 'suspicious-activity-detected' || normalized === 'login-bruteforce-threshold' || normalized === 'login-ip-locked') {
+        return 'critical';
+    }
+    if (normalized === 'device-binding-blocked') {
+        return 'critical';
+    }
+    if (normalized === 'new-device-login') {
+        return 'high';
+    }
+    if (normalized === 'ip-reputation-blocked') {
+        return 'critical';
+    }
+    if (normalized === 'ip-reputation-elevated') {
+        return 'high';
+    }
+    if (normalized === 'csrf-token-failed' || normalized === 'api-origin-blocked') {
+        return 'high';
+    }
+    if (normalized === 'captcha-ip-blocked' || normalized === 'captcha-solve-too-fast' || normalized === 'captcha-challenge-mismatch') {
+        return 'high';
+    }
+    if (normalized === 'login-captcha-failed' || normalized === 'register-captcha-failed') {
+        return 'medium';
+    }
+    if (normalized === 'captcha-failed' || normalized === 'captcha-expired') {
+        return 'medium';
+    }
+    if (normalized === 'captcha-policy-updated') {
+        return 'low';
+    }
+    if (normalized === 'csrf-origin-failed' || normalized === 'rate-limit-hit') {
+        return 'medium';
+    }
+    return 'low';
+}
+
+function getSecuritySeverityBadge(severity) {
+    const level = String(severity || 'low').toLowerCase();
+    if (level === 'critical') {
+        return '<span class="badge" style="background: rgba(244,67,54,0.2); color: #ff8a80; border: 1px solid rgba(244,67,54,0.45);">CRITICAL</span>';
+    }
+    if (level === 'high') {
+        return '<span class="badge" style="background: rgba(255,152,0,0.2); color: #ffcc80; border: 1px solid rgba(255,152,0,0.45);">HIGH</span>';
+    }
+    if (level === 'medium') {
+        return '<span class="badge" style="background: rgba(255,193,7,0.2); color: #ffe082; border: 1px solid rgba(255,193,7,0.45);">MEDIUM</span>';
+    }
+    return '<span class="badge" style="background: rgba(76,175,80,0.2); color: #a5d6a7; border: 1px solid rgba(76,175,80,0.45);">LOW</span>';
+}
+
+function formatSecurityEventDetails(event) {
+    const metadata = (event?.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+    const signal = event?.signal || metadata.signal || 'unknown';
+    const signalLabel = getSecuritySignalLabel(signal);
+    const severity = getSecuritySignalSeverity(signal);
+    const userAgent = event?.userAgent || metadata.userAgent || '-';
+    const pathName = metadata.path || '-';
+    const method = metadata.method || '-';
+    const reasons = Array.isArray(metadata.reasons) ? metadata.reasons.join(', ') : (metadata.reason || '-');
+    const attempts = Number.isFinite(Number(metadata.attempts)) ? String(Number(metadata.attempts)) : '-';
+
+    const metadataJson = escapeSecurityHtml(JSON.stringify(metadata, null, 2));
+
+    return `
+        <div class="security-event-details">
+            <div><strong>Signal:</strong> ${escapeSecurityHtml(signalLabel)} (${escapeSecurityHtml(severity)})</div>
+            <div><strong>Method:</strong> ${escapeSecurityHtml(method)} &nbsp; <strong>Path:</strong> ${escapeSecurityHtml(pathName)}</div>
+            <div><strong>User Agent:</strong> ${escapeSecurityHtml(userAgent)}</div>
+            <div><strong>Reason/Flags:</strong> ${escapeSecurityHtml(reasons)} &nbsp; <strong>Attempts:</strong> ${escapeSecurityHtml(attempts)}</div>
+            <pre>${metadataJson}</pre>
+        </div>
+    `;
+}
+
+function renderSecurityEventsRows(rows) {
+    const tbody = document.getElementById('securityEventsTableBody');
+    if (!tbody) return;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No security events found for current filters.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map((event, index) => {
+        const createdAt = event?.createdAt ? new Date(event.createdAt) : null;
+        const timeText = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.toLocaleString() : 'Unknown';
+        const metadata = (event?.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+        const username = metadata.username || event.username || '-';
+        const pathName = metadata.path || '-';
+        const signal = event?.signal || metadata.signal;
+        const severity = getSecuritySignalSeverity(signal);
+        const signalLabel = getSecuritySignalLabel(signal);
+        const severityBadge = getSecuritySeverityBadge(severity);
+        const details = [
+            metadata.reason ? `reason: ${metadata.reason}` : null,
+            metadata.mode ? `mode: ${metadata.mode}` : null,
+            Number.isFinite(Number(metadata.attempts)) ? `attempts: ${Number(metadata.attempts)}` : null,
+            Number.isFinite(Number(metadata.limit)) ? `limit: ${Number(metadata.limit)}` : null
+        ].filter(Boolean).join(' • ') || '-';
+        const eventId = String(event?.id || `${signal || 'event'}-${index}`);
+        const detailsPanel = formatSecurityEventDetails(event);
+
+        return `
+            <tr class="security-event-row severity-${escapeSecurityHtml(severity)}" data-event-id="${escapeSecurityHtml(eventId)}">
+                <td>${escapeSecurityHtml(timeText)}</td>
+                <td>${escapeSecurityHtml(signalLabel)}<div style="margin-top:0.35rem;">${severityBadge}</div></td>
+                <td>${escapeSecurityHtml(username)}</td>
+                <td>${escapeSecurityHtml(event?.ipAddress || '-')}</td>
+                <td>${escapeSecurityHtml(pathName)}</td>
+                <td>
+                    <div>${escapeSecurityHtml(details)}</div>
+                    <button class="security-event-toggle-btn" data-event-toggle="${escapeSecurityHtml(eventId)}">Details</button>
+                </td>
+            </tr>
+            <tr class="security-event-details-row" data-event-details="${escapeSecurityHtml(eventId)}">
+                <td colspan="6">${detailsPanel}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function loadSecurityEventsFeed(force = false) {
+    const metaEl = document.getElementById('securityEventsMeta');
+    const signalFilter = String(document.getElementById('securityEventsSignalFilter')?.value || '').trim();
+    const usernameFilter = String(document.getElementById('securityEventsUserFilter')?.value || '').trim();
+    const requestedLimit = Number(document.getElementById('securityEventsLimit')?.value || 100);
+    const limit = Math.max(1, Math.min(500, Number.isFinite(requestedLimit) ? requestedLimit : 100));
+
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (signalFilter) params.set('signal', signalFilter);
+    if (usernameFilter) params.set('username', usernameFilter);
+
+    if (metaEl) {
+        metaEl.textContent = force ? 'Refreshing security events…' : 'Loading security events…';
+    }
+
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson(`/api/security/events?${params.toString()}`);
+        if (!response.ok || !data?.success) {
+            throw new Error(data?.error || 'Failed to fetch security events');
+        }
+
+        securityEventsData = Array.isArray(data.events) ? data.events : [];
+        renderSecurityEventsRows(securityEventsData);
+
+        if (metaEl) {
+            metaEl.textContent = `Last updated: ${new Date().toLocaleString()} • Showing ${securityEventsData.length} event(s)`;
+        }
+    } catch (error) {
+        console.error('Error loading security events:', error);
+        renderSecurityEventsRows([]);
+        if (metaEl) {
+            metaEl.textContent = 'Failed to load security events.';
+        }
+        if (typeof showError === 'function') {
+            showError('Failed to load security events feed');
+        }
+    }
+}
+
+function applySecurityEventsFilters() {
+    loadSecurityEventsFeed(false);
+}
+
+function clearSecurityEventsFilters() {
+    const signalEl = document.getElementById('securityEventsSignalFilter');
+    const userEl = document.getElementById('securityEventsUserFilter');
+    const limitEl = document.getElementById('securityEventsLimit');
+    if (signalEl) signalEl.value = '';
+    if (userEl) userEl.value = '';
+    if (limitEl) limitEl.value = '100';
+    loadSecurityEventsFeed(true);
+}
+
+window.loadSecurityEventsFeed = loadSecurityEventsFeed;
+window.applySecurityEventsFilters = applySecurityEventsFilters;
+window.clearSecurityEventsFilters = clearSecurityEventsFilters;
+
+function isSecurityEventsTabActive() {
+    const tab = document.getElementById('security-events');
+    return tab && tab.classList.contains('active');
+}
+
+function stopSecurityEventsAutoRefresh() {
+    if (securityEventsAutoRefreshTimer) {
+        clearInterval(securityEventsAutoRefreshTimer);
+        securityEventsAutoRefreshTimer = null;
+    }
+}
+
+function startSecurityEventsAutoRefresh() {
+    stopSecurityEventsAutoRefresh();
+    const toggle = document.getElementById('securityEventsAutoRefreshToggle');
+    if (!toggle || !toggle.checked) return;
+    if (!isSecurityEventsTabActive() || document.hidden) return;
+
+    securityEventsAutoRefreshTimer = setInterval(() => {
+        if (!isSecurityEventsTabActive() || document.hidden) {
+            stopSecurityEventsAutoRefresh();
+            return;
+        }
+        loadSecurityEventsFeed(false);
+    }, securityEventsAutoRefreshIntervalMs);
+}
+
+function updateSecurityEventsRefreshInterval() {
+    const select = document.getElementById('securityEventsRefreshInterval');
+    const nextInterval = Number(select?.value || 30000);
+    securityEventsAutoRefreshIntervalMs = Number.isFinite(nextInterval) ? nextInterval : 30000;
+    startSecurityEventsAutoRefresh();
+}
+
+function toggleSecurityEventsAutoRefresh() {
+    const toggle = document.getElementById('securityEventsAutoRefreshToggle');
+    if (!toggle) return;
+    if (toggle.checked) {
+        startSecurityEventsAutoRefresh();
+    } else {
+        stopSecurityEventsAutoRefresh();
+    }
+}
+
+function escapeCssSelector(value) {
+    if (window.CSS && typeof window.CSS.escape === 'function') {
+        return window.CSS.escape(value);
+    }
+    return String(value || '').replace(/"/g, '\\"');
+}
+
+document.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('[data-event-toggle]');
+    if (!button) return;
+    const eventId = String(button.getAttribute('data-event-toggle') || '');
+    const detailsRow = document.querySelector(`[data-event-details="${escapeCssSelector(eventId)}"]`);
+    if (!detailsRow) return;
+    const isOpen = detailsRow.classList.toggle('is-open');
+    button.textContent = isOpen ? 'Hide' : 'Details';
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        stopSecurityEventsAutoRefresh();
+    } else {
+        startSecurityEventsAutoRefresh();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('securityEventsAutoRefreshToggle');
+    const intervalSelect = document.getElementById('securityEventsRefreshInterval');
+    if (toggle) toggle.addEventListener('change', toggleSecurityEventsAutoRefresh);
+    if (intervalSelect) intervalSelect.addEventListener('change', updateSecurityEventsRefreshInterval);
+
+    document.querySelectorAll('.tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const tabName = btn.dataset.tab;
+            if (tabName === 'security-events') {
+                loadSecurityEventsFeed(true);
+                startSecurityEventsAutoRefresh();
+            } else {
+                stopSecurityEventsAutoRefresh();
+            }
+        });
+    });
+});
+
+function loadOwnerNotificationHistory(limit = 30) {
+    const updatedEl = document.getElementById('ownerNotificationHistoryUpdated');
+    try {
+        if (typeof window.getNotificationHistory === 'function') {
+            const latestToast = window.getNotificationHistory(1);
+            if (Array.isArray(latestToast) && latestToast.length > 0) {
+                const toast = latestToast[0];
+                recordOwnerNotificationEvent({
+                    timestamp: toast.timestamp,
+                    type: toast.type,
+                    title: toast.title,
+                    message: toast.message,
+                    source: 'toast'
+                }, { refresh: false, persist: false });
+            }
+        }
+
+        const safeLimit = Math.max(10, Math.min(300, Number(limit) || 30));
+        const rows = ownerNotificationFeedState.events.slice(0, safeLimit);
+        const filteredRows = filterOwnerNotificationRows(rows);
+        renderOwnerNotificationRows(filteredRows);
+        if (updatedEl) {
+            updatedEl.textContent = `Last updated: ${new Date().toLocaleString()} • ${filteredRows.length}/${rows.length} shown • ${ownerNotificationFeedState.events.length} total`;
+        }
+        saveOwnerNotificationFeed();
+    } catch (error) {
+        console.error('Failed to load notification history:', error);
+        renderOwnerNotificationRows([]);
+        if (updatedEl) updatedEl.textContent = 'Last updated: failed';
+    }
+}
+
+function initializeOwnerNotificationCenter() {
+    loadOwnerNotificationFeed();
+    patchOwnerToastCapture();
+    importToastHistoryToOwnerFeed(120);
+
+    const filterIds = ['ownerNotificationSearch', 'ownerNotificationTypeFilter', 'ownerNotificationSourceFilter'];
+    filterIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const eventName = id === 'ownerNotificationSearch' ? 'input' : 'change';
+        el.addEventListener(eventName, () => loadOwnerNotificationHistory(120));
+    });
+
+    recordOwnerNotificationEvent({
+        type: 'info',
+        title: 'Notification Center Ready',
+        message: 'Tracking toast, system, and action events on this page.',
+        source: 'system'
+    }, { refresh: false });
+}
+
+function clearOwnerNotificationHistory() {
+    try {
+        if (typeof window.clearNotificationHistory === 'function') {
+            window.clearNotificationHistory({ clearActive: false });
+        }
+        ownerNotificationFeedState.events = [];
+        saveOwnerNotificationFeed();
+        loadOwnerNotificationHistory();
+        if (typeof showSuccess === 'function') {
+            showSuccess('Notification Center', 'Notification history cleared.');
+        }
+    } catch (error) {
+        console.error('Failed to clear notification history:', error);
+        if (typeof showError === 'function') {
+            showError('Notification Center', 'Failed to clear notification history.');
+        }
+    }
+}
+
+window.loadOwnerNotificationHistory = loadOwnerNotificationHistory;
+window.clearOwnerNotificationHistory = clearOwnerNotificationHistory;
+window.recordOwnerNotificationEvent = recordOwnerNotificationEvent;
 
 // Generate a new invite code
 async function generateInvite() {
@@ -21,7 +590,7 @@ async function generateInvite() {
         if (response.ok && data.success) {
             const resultDiv = document.getElementById('inviteResult');
             const expiresDate = new Date(data.expiresAt);
-            
+
             resultDiv.innerHTML = `
                 <div style="background: var(--bg-secondary); border: 1px solid var(--color-green); border-radius: var(--radius-md); padding: 1.5rem; margin-top: 1.5rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
@@ -44,10 +613,10 @@ async function generateInvite() {
                     </div>
                 </div>
             `;
-            
+
             // Clear form
             document.getElementById('inviteDescription').value = '';
-            
+
             // Reload stats
             setTimeout(() => loadInviteStats(), 500);
         } else {
@@ -79,25 +648,27 @@ async function copyInviteCode(code) {
 async function loadInviteStats() {
     try {
         const { response, data } = await window.AdminPanel.api.getJson('/api/invites/stats');
-        
+
         if (!response.ok) {
             throw new Error(data.error || 'Failed to load invite stats');
         }
 
         inviteStatsData = Array.isArray(data) ? data : [];
-        
+
         // Calculate statistics
         const stats = {
             active: 0,
             fullyUsed: 0,
             expired: 0,
             revoked: 0,
-            totalUses: 0
+            totalUses: 0,
+            totalMaxUses: 0
         };
 
         inviteStatsData.forEach(invite => {
             stats.totalUses += invite.current_uses || 0;
-            
+            stats.totalMaxUses += invite.max_uses || 0;
+
             if (invite.status === 'active') stats.active++;
             else if (invite.status === 'fully_used') stats.fullyUsed++;
             else if (invite.status === 'expired') stats.expired++;
@@ -109,6 +680,20 @@ async function loadInviteStats() {
         document.getElementById('totalUsedInvites').textContent = stats.fullyUsed;
         document.getElementById('totalExpiredInvites').textContent = stats.expired;
         document.getElementById('totalInviteUses').textContent = stats.totalUses;
+        const revokedEl = document.getElementById('totalRevokedInvites');
+        if (revokedEl) revokedEl.textContent = stats.revoked;
+        const conversionEl = document.getElementById('inviteConversionRate');
+        if (conversionEl) {
+            const conversion = stats.totalMaxUses > 0
+                ? (stats.totalUses / stats.totalMaxUses) * 100
+                : 0;
+            conversionEl.textContent = `${conversion.toFixed(1)}%`;
+        }
+
+        const metaEl = document.getElementById('inviteStatsMeta');
+        if (metaEl) {
+            metaEl.textContent = `Last updated: ${new Date().toLocaleString()} • ${inviteStatsData.length} invite(s)`;
+        }
 
         // Render table
         filterInviteStats();
@@ -142,7 +727,7 @@ function filterInviteStats() {
                 invite.used_by,
                 invite.description
             ].filter(Boolean).join(' ').toLowerCase();
-            
+
             if (!searchableText.includes(searchTerm)) return false;
         }
 
@@ -155,7 +740,7 @@ function filterInviteStats() {
 // Render invite stats table
 function renderInviteStatsTable(invites) {
     const tbody = document.getElementById('inviteStatsTable');
-    
+
     if (!invites || invites.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No invites found</td></tr>';
         return;
@@ -165,7 +750,7 @@ function renderInviteStatsTable(invites) {
         const statusBadge = getInviteStatusBadge(invite.status);
         const createdDate = new Date(invite.created_at);
         const expiresDate = invite.expires_at ? new Date(invite.expires_at) : null;
-        
+
         return `
             <tr>
                 <td><code style="font-size: 0.85rem; background: var(--bg-secondary); padding: 0.2rem 0.4rem; border-radius: 4px;">${invite.code}</code></td>
@@ -176,8 +761,8 @@ function renderInviteStatsTable(invites) {
                 <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${invite.description || ''}">${invite.description || '-'}</td>
                 <td>${createdDate.toLocaleDateString()}</td>
                 <td>${expiresDate ? expiresDate.toLocaleDateString() : 'Never'}</td>
-                <td>
-                    <div class="btn-group" style="gap: 0.3rem;">
+                <td class="invite-actions-cell">
+                    <div class="invite-actions">
                         ${getInviteActionButtons(invite)}
                     </div>
                 </td>
@@ -201,16 +786,21 @@ function getInviteStatusBadge(status) {
 // Get action buttons based on invite status
 function getInviteActionButtons(invite) {
     const buttons = [];
-    
+    const hasBeenUsed = Boolean(invite?.used_by || invite?.used_at || Number(invite?.current_uses || 0) > 0 || String(invite?.status || '') === 'fully_used');
+
     if (invite.status === 'active') {
-        buttons.push(`<button class="btn btn-sm btn-secondary" onclick="extendInvite('${invite.code}')" title="Extend expiration">⏰ Extend</button>`);
-        buttons.push(`<button class="btn btn-sm btn-danger" onclick="revokeInvite('${invite.code}')" title="Revoke invite">🚫 Revoke</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary invite-action-btn" onclick="extendInvite('${invite.code}')" title="Extend expiration">⏰ Extend</button>`);
+        buttons.push(`<button class="btn btn-sm btn-danger invite-action-btn" onclick="revokeInvite('${invite.code}')" title="Revoke invite">🚫 Revoke</button>`);
     } else if (invite.status === 'revoked') {
-        buttons.push(`<button class="btn btn-sm btn-success" onclick="restoreInvite('${invite.code}')" title="Restore invite">♻️ Restore</button>`);
+        buttons.push(`<button class="btn btn-sm btn-success invite-action-btn" onclick="restoreInvite('${invite.code}')" title="Restore invite">♻️ Restore</button>`);
     }
-    
-    buttons.push(`<button class="btn btn-sm btn-danger" onclick="deleteInvitePermanent('${invite.code}')" title="Permanently delete">🗑️ Delete</button>`);
-    
+
+    if (hasBeenUsed) {
+        buttons.push('<button class="btn btn-sm btn-secondary invite-action-btn" disabled title="Used invites cannot be permanently deleted">🔒 Delete Blocked</button>');
+    } else {
+        buttons.push(`<button class="btn btn-sm btn-danger invite-action-btn" onclick="deleteInvitePermanent('${invite.code}')" title="Permanently delete">🗑️ Delete</button>`);
+    }
+
     return buttons.join('');
 }
 
@@ -222,7 +812,7 @@ async function revokeInvite(code) {
         confirmText: 'Revoke',
         type: 'warning'
     });
-    
+
     if (!confirmed) return;
 
     try {
@@ -259,26 +849,29 @@ async function restoreInvite(code) {
 
 // Extend invite expiration
 async function extendInvite(code) {
-    const days = typeof window.showPromptModal === 'function'
-        ? await window.showPromptModal({
-            title: 'Extend Invite Expiry',
-            label: 'Extend expiration by how many days? (1-365)',
-            placeholder: 'Enter days (1-365)',
-            defaultValue: '7',
-            confirmText: 'Extend',
-            cancelText: 'Cancel',
-            inputType: 'number',
-            validate: (value) => {
-                const parsed = Number.parseInt(value, 10);
-                if (!Number.isFinite(parsed) || parsed < 1 || parsed > 365) {
-                    return 'Please enter a valid number between 1 and 365.';
-                }
-                return true;
+    if (typeof window.showPromptModal !== 'function') {
+        showError('Unavailable', 'Prompt modal is not available right now. Please refresh and try again.');
+        return;
+    }
+
+    const days = await window.showPromptModal({
+        title: 'Extend Invite Expiry',
+        label: 'Extend expiration by how many days? (1-365)',
+        placeholder: 'Enter days (1-365)',
+        defaultValue: '7',
+        confirmText: 'Extend',
+        cancelText: 'Cancel',
+        inputType: 'number',
+        validate: (value) => {
+            const parsed = Number.parseInt(value, 10);
+            if (!Number.isFinite(parsed) || parsed < 1 || parsed > 365) {
+                return 'Please enter a valid number between 1 and 365.';
             }
-        })
-        : prompt('Extend expiration by how many days? (1-365)', '7');
+            return true;
+        }
+    });
     if (!days) return;
-    
+
     const additionalDays = parseInt(days);
     if (isNaN(additionalDays) || additionalDays < 1 || additionalDays > 365) {
         showError('Invalid Input', 'Please enter a number between 1 and 365');
@@ -303,13 +896,23 @@ async function extendInvite(code) {
 
 // Permanently delete invite
 async function deleteInvitePermanent(code) {
+    const invite = Array.isArray(inviteStatsData)
+        ? inviteStatsData.find((item) => String(item?.code || '') === String(code || ''))
+        : null;
+    const hasBeenUsed = Boolean(invite?.used_by || invite?.used_at || Number(invite?.current_uses || 0) > 0 || String(invite?.status || '') === 'fully_used');
+
+    if (hasBeenUsed) {
+        showError('Blocked', 'Used invites cannot be permanently deleted.');
+        return;
+    }
+
     const confirmed = await window.modalManager?.showConfirm({
         title: 'Permanently Delete',
         message: 'This will PERMANENTLY delete the invite code and cannot be undone. Are you absolutely sure?',
         confirmText: 'Delete Forever',
         type: 'danger'
     });
-    
+
     if (!confirmed) return;
 
     try {
@@ -358,7 +961,7 @@ function exportInvitesCsv() {
     link.href = URL.createObjectURL(blob);
     link.download = `invite_codes_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
-    
+
     showSuccess('Exported', 'Invite data exported to CSV');
 }
 
@@ -380,12 +983,12 @@ window.exportInvitesCsv = exportInvitesCsv;
 async function viewAdminUserDetail(userId, username) {
     const modal = document.getElementById('adminUserDetailModal');
     const content = document.getElementById('adminUserDetailContent');
-    
+
     if (!modal || !content) return;
-    
+
     modal.style.display = 'flex';
     content.innerHTML = '<div class="loading show">Loading account details...</div>';
-    
+
     try {
         if (!userId || userId === 'undefined' || userId === '[object Object]') {
             console.warn('viewAdminUserDetail called with invalid userId:', { userId, username });
@@ -400,11 +1003,11 @@ async function viewAdminUserDetail(userId, username) {
         }
 
         const { response, data } = await window.AdminPanel.api.getJson(`/api/admin/users/${encodeURIComponent(userId)}/details`);
-        
+
         if (!response.ok || !data) {
             throw new Error(data?.error || 'Failed to load account details');
         }
-        
+
         renderAdminUserDetail(data);
     } catch (error) {
         content.innerHTML = `
@@ -420,14 +1023,14 @@ async function viewAdminUserDetail(userId, username) {
 function renderAdminUserDetail(user) {
     const content = document.getElementById('adminUserDetailContent');
     if (!content) return;
-    
+
     const roleColor = user.role === 'owner' ? 'var(--color-red)' : user.role === 'admin' ? 'var(--color-blue)' : 'var(--color-green)';
     const createdDate = user.created_at ? new Date(user.created_at) : null;
     const lastLogin = user.last_login ? new Date(user.last_login) : null;
     const passwordChanged = user.password_changed_at ? new Date(user.password_changed_at) : null;
     const discordLinked = user.discord_linked_at ? new Date(user.discord_linked_at) : null;
     const twoFactorEnabled = user.two_factor_enabled_at ? new Date(user.two_factor_enabled_at) : null;
-    
+
     const formatDate = (date) => date ? `${date.toLocaleDateString()} ${date.toLocaleTimeString()}` : 'Never';
     const formatRelative = (date) => {
         if (!date) return 'Never';
@@ -435,13 +1038,13 @@ function renderAdminUserDetail(user) {
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor(diff / (1000 * 60));
-        
+
         if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
         if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
         if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
         return 'Just now';
     };
-    
+
     const recentActivityHtml = user.recentActivity && user.recentActivity.length > 0 ? user.recentActivity.map(event => {
         const eventDate = event.created_at ? new Date(event.created_at) : null;
         const eventIcon = {
@@ -461,7 +1064,7 @@ function renderAdminUserDetail(user) {
             </tr>
         `;
     }).join('') : '';
-    
+
     content.innerHTML = `
         <div style="display: grid; gap: 1.5rem;">
             <!-- Basic Info -->
@@ -558,26 +1161,31 @@ window.closeAdminUserDetail = closeAdminUserDetail;
 
 // ==================== END ADMIN USER DETAIL VIEW ====================
 
-// Legacy revoke function kept for compatibility
-
-// Patch: Attach loadEmailAnalytics to window if defined elsewhere
-if (typeof loadEmailAnalytics === 'function') {
-    window.loadEmailAnalytics = loadEmailAnalytics;
-}
-// This function lets you open and close the user dropdown menu. Makes navigation easier for owners.
-function toggleUserDropdown() {
-    const menu = document.getElementById('userDropdownMenu');
-    const trigger = document.querySelector('.user-dropdown-trigger');
-    if (menu && trigger) {
-        menu.classList.toggle('show');
-        trigger.classList.toggle('active');
-    }
-}
 // This script handles all the owner-level features and access. Only for the top admin!
 if (!window.api || !window.ui) {
     const { api, ui } = window.AdminPanel || {};
     window.api = api;
     window.ui = ui;
+}
+
+function createSocketConnection(options = {}) {
+    if (typeof io === 'undefined') return null;
+    if (window.socket) return window.socket;
+
+    const socket = io({
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 20,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5,
+        timeout: 10000,
+        ...options
+    });
+
+    window.socket = socket;
+    return socket;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -587,12 +1195,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (accountInfo && typeof accountInfo === 'object' && accountInfo.username && accountInfo.role) {
             if (typeof io !== 'undefined') {
                 try {
-                    window.socket = io({
-                        auth: {
-                            username: accountInfo.username,
-                            role: accountInfo.role
-                        }
-                    });
+                    window.socket = createSocketConnection();
                 } catch (err) {
                     console.error('Socket.IO connection failed:', err);
                 }
@@ -607,13 +1210,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/unauthorized';
         return;
     }
-    
+
     // Set up tab event listeners
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const tabName = btn.dataset.tab;
             if (tabName) {
                 switchTab(e, tabName);
+                recordOwnerNotificationEvent({
+                    type: 'info',
+                    title: 'Tab Opened',
+                    message: `Switched to ${tabName.replace(/-/g, ' ')} tab`,
+                    source: 'action'
+                }, { refresh: false });
                 // Load diagnostics when diagnostics tab is clicked
                 if (tabName === 'diagnostics') {
                     loadDiagnostics();
@@ -622,13 +1231,109 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (tabName === 'invites') {
                     loadInviteStats();
                 }
+                if (tabName === 'security') {
+                    loadSecurityEventsFeed(false);
+                }
+                if (tabName === 'security-events') {
+                    loadSecurityEventsFeed(true);
+                    loadAntiRaidDashboard();
+                }
+                if (tabName === 'notifications') {
+                    loadOwnerNotificationHistory();
+                }
+                if (tabName === 'system') {
+                    loadBackupTables();
+                    loadBackupStatus();
+                }
             }
         });
     });
-    
+
+    initializeOwnerNotificationCenter();
+
     await loadSystemStatus();
+    recordOwnerNotificationEvent({
+        type: 'success',
+        title: 'System Status Synced',
+        message: 'Owner dashboard metrics refreshed.',
+        source: 'system'
+    }, { refresh: false });
+    loadOwnerNotificationHistory();
     startDiagnosticsAutoRefresh();
+    startSocketHealthAutoRefresh();
     setupLiveTerminal();
+
+    const runBackupBtn = document.getElementById('runBackupBtn');
+    const saveBackupConfigBtn = document.getElementById('saveBackupConfigBtn');
+    const backupSelectAll = document.getElementById('backupTablesSelectAll');
+    runBackupBtn?.addEventListener('click', () => runBackupNow());
+    saveBackupConfigBtn?.addEventListener('click', () => saveBackupSettings());
+    backupSelectAll?.addEventListener('change', () => {
+        const list = document.getElementById('backupTablesList');
+        if (!list) return;
+        const shouldSelect = Boolean(backupSelectAll.checked);
+        list.querySelectorAll('.backup-table-checkbox').forEach((checkbox) => {
+            checkbox.checked = shouldSelect;
+        });
+        updateBackupTableCount();
+    });
+
+    await loadBackupTables();
+
+    function getTerminalLogDownloadName(response) {
+        const header = response?.headers?.get('content-disposition') || '';
+        const match = header.match(/filename\*?=(?:UTF-8''|\")?([^";]+)/i);
+        if (match && match[1]) {
+            try {
+                return decodeURIComponent(match[1].replace(/"/g, '').trim());
+            } catch {
+                return match[1].replace(/"/g, '').trim();
+            }
+        }
+        return '';
+    }
+
+    async function downloadTerminalLogs() {
+        const downloadBtn = document.getElementById('downloadTerminalLogsBtn');
+        const originalText = downloadBtn ? downloadBtn.textContent : '';
+        if (downloadBtn) {
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = 'Preparing...';
+        }
+
+        try {
+            const response = await fetch('/api/owner/terminal-logs/download?limit=500', { credentials: 'include' });
+            if (!response.ok) {
+                throw new Error(`Download failed (${response.status})`);
+            }
+
+            const blob = await response.blob();
+            const fallbackName = `terminal-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+            const fileName = getTerminalLogDownloadName(response) || fallbackName;
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+
+            if (typeof showSuccess === 'function') {
+                showSuccess('Download Ready', 'Terminal logs saved to your downloads folder.');
+            }
+        } catch (error) {
+            console.error('Failed to download terminal logs:', error);
+            if (typeof showError === 'function') {
+                showError('Download Failed', error.message || 'Unable to download terminal logs.');
+            }
+        } finally {
+            if (downloadBtn) {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = originalText || 'Download Logs';
+            }
+        }
+    }
 
     function setupLiveTerminal() {
         const terminalOutput = document.getElementById('terminalOutput');
@@ -638,8 +1343,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const socket = window.socket || io({ withCredentials: true });
-        window.socket = socket;
+        const downloadBtn = document.getElementById('downloadTerminalLogsBtn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', downloadTerminalLogs);
+        }
+
+        const socket = window.socket || createSocketConnection();
+        if (!socket) return;
 
         const ANSI_REGEX = /\x1B\[[0-9;]*m/g;
         const MAX_TERMINAL_LINES = 450;
@@ -737,11 +1447,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         socket.off('terminal-logs');
         socket.off('terminal-log-line');
+        socket.off('suspicious-activity-alert');
         socket.off('connect_error');
 
-        socket.emit('request-terminal-logs', { limit: 80 });
+        socket.emit('subscribe-terminal', { limit: 80 });
         socket.on('terminal-logs', renderLogs);
         socket.on('terminal-log-line', appendLog);
+        socket.on('suspicious-activity-alert', (payload = {}) => {
+            const ipAddress = String(payload?.ipAddress || payload?.ip || 'unknown');
+            const score = Number(payload?.score || 0);
+            const distinctSignals = Number(payload?.distinctSignals || 0);
+            const observed = Number(payload?.totalSignalsObserved || 0);
+            const message = `IP ${ipAddress} triggered suspicious activity (score ${score}, ${distinctSignals} signal type${distinctSignals === 1 ? '' : 's'}, ${observed} events).`;
+
+            if (typeof showWarning === 'function') {
+                showWarning('Suspicious Activity Alert', message, 9000);
+            } else if (typeof showToast === 'function') {
+                showToast('warning', 'Suspicious Activity Alert', message, 9000);
+            }
+
+            recordOwnerNotificationEvent({
+                type: 'warning',
+                title: 'Suspicious Activity Alert',
+                message,
+                source: 'security',
+                timestamp: payload?.createdAt || Date.now()
+            }, { refresh: true });
+
+            loadSecurityEventsFeed(true);
+        });
+        socket.on('connect', () => {
+            socket.emit('subscribe-terminal', { limit: 80 });
+        });
         socket.on('connect_error', () => {
             renderLogs(['[system] [error] Unable to connect to live logs.']);
         });
@@ -775,26 +1512,31 @@ async function checkOwnerAccess() {
 
 function switchTab(e, tabName) {
     e.preventDefault();
-    
+
     // Hide everything first
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
     });
-    
+
     // Deactivate all tab buttons
     document.querySelectorAll('.tab').forEach(btn => {
         btn.classList.remove('active');
     });
-    
+
     // Show selected tab
     document.getElementById(tabName).classList.add('active');
     const clickedTab = e.currentTarget || e.target?.closest?.('.tab') || e.target;
     if (clickedTab?.classList?.contains('tab')) {
         clickedTab.classList.add('active');
     }
+
+    if (tabName === 'notifications') {
+        loadOwnerNotificationHistory();
+    }
 }
 
 window.diagnosticsAutoRefreshIntervalId = window.diagnosticsAutoRefreshIntervalId || null;
+window.socketHealthAutoRefreshIntervalId = window.socketHealthAutoRefreshIntervalId || null;
 
 function startDiagnosticsAutoRefresh() {
     if (window.diagnosticsAutoRefreshIntervalId) {
@@ -806,6 +1548,19 @@ function startDiagnosticsAutoRefresh() {
         const isDiagnosticsActive = Boolean(diagnosticsTab && diagnosticsTab.classList.contains('active'));
         if (!isDiagnosticsActive || document.hidden) return;
         loadDiagnostics();
+    }, 30000);
+}
+
+function startSocketHealthAutoRefresh() {
+    if (window.socketHealthAutoRefreshIntervalId) {
+        clearInterval(window.socketHealthAutoRefreshIntervalId);
+    }
+
+    window.socketHealthAutoRefreshIntervalId = setInterval(() => {
+        const systemTab = document.getElementById('system');
+        const isSystemActive = Boolean(systemTab && systemTab.classList.contains('active'));
+        if (!isSystemActive || document.hidden) return;
+        loadSocketHealth();
     }, 30000);
 }
 
@@ -833,25 +1588,25 @@ async function loadSystemStatus() {
             const bannedUsers = data.bannedUsers || 0;
             const totalWarnings = data.totalWarnings || 0;
             const memoryUsage = data.memoryUsage || 128;
-            
+
             // Health calculation factors (each is 0-100 score)
             const userHealthFactor = Math.max(0, 100 - (bannedUsers > 0 && totalUsers > 0 ? (bannedUsers / totalUsers * 20) : 0));
             const warningHealthFactor = Math.max(0, 100 - (totalWarnings > 0 && totalUsers > 0 ? (totalWarnings / totalUsers * 15) : 0));
             const memoryHealthFactor = Math.max(0, 100 - (memoryUsage > 100 ? (memoryUsage - 100) : 0));
-            
+
             // Overall health score (weighted average)
-            const healthScore = Math.max(0, Math.min(100, 
+            const healthScore = Math.max(0, Math.min(100,
                 (userHealthFactor * 0.4) + (warningHealthFactor * 0.35) + (memoryHealthFactor * 0.25)
             ));
-            
+
             // Determine health status and color
             const healthStatus = healthScore >= 80 ? 'Excellent' : healthScore >= 60 ? 'Good' : healthScore >= 40 ? 'Fair' : 'Poor';
             const healthColor = healthScore >= 80 ? 'var(--color-green)' : healthScore >= 60 ? 'var(--color-yellow)' : healthScore >= 40 ? 'var(--color-yellow)' : 'var(--color-red)';
-            
+
             // Calculate response time estimate (random for now, but would come from real data)
             const responseTime = Math.floor(Math.random() * 50) + 10; // 10-60ms
             const responseTimeHealth = Math.max(0, 100 - (responseTime > 50 ? (responseTime - 50) * 2 : 0));
-            
+
             // Real uptime from owner metrics endpoint (seconds)
             const uptimeSeconds = Number(metricsData.uptime || 0) || 0;
             const uptimeHoursTotal = Math.floor(uptimeSeconds / 3600);
@@ -860,14 +1615,14 @@ async function loadSystemStatus() {
             const uptimeLabel = uptimeDays > 0
                 ? `${uptimeDays}d ${uptimeHoursRemainder}h`
                 : `${uptimeHoursTotal}h`;
-            
+
             // Update health circle and status with dynamic information
             const healthCircle = document.querySelector('.system-health-circle');
             if (healthCircle) {
                 healthCircle.style.setProperty('--health-percentage', healthScore);
                 healthCircle.style.setProperty('--health-color', healthColor);
                 setText('healthScore', Math.round(healthScore));
-                
+
                 // Database health with more detail
                 const dbHealth = userHealthFactor >= 80 ? 'Healthy' : 'Degraded';
                 const dbStatus = totalUsers > 0 ? `${dbHealth} | ${totalUsers.toLocaleString()} records` : 'No data';
@@ -875,7 +1630,7 @@ async function loadSystemStatus() {
                 if (dbElement) {
                     dbElement.innerHTML = `<span class="system-health-status-dot ${userHealthFactor >= 80 ? 'healthy' : 'warning'}"></span>${dbStatus}`;
                 }
-                
+
                 // Bot connection health with uptime
                 const botHealth = healthScore >= 70 ? 'Connected' : 'Unstable';
                 const botUptime = `${uptimeLabel} uptime`;
@@ -883,7 +1638,7 @@ async function loadSystemStatus() {
                 if (botElement) {
                     botElement.innerHTML = `<span class="system-health-status-dot ${healthScore >= 70 ? 'healthy' : 'warning'}"></span>${botHealth} | ${botUptime}`;
                 }
-                
+
                 // Performance health with response time
                 const perfHealth = responseTime < 30 ? 'Optimal' : responseTime < 50 ? 'Good' : 'Slow';
                 const perfDetail = `${responseTime}ms response`;
@@ -1038,12 +1793,382 @@ async function loadSystemStatus() {
                 `;
             }
         }
+
+        await loadSocketHealth();
+        await loadBackupStatus();
     } catch (error) {
         console.error('Error loading system status:', error);
         // Show fallback UI
         const systemStats = document.getElementById('systemStats');
         if (systemStats) {
             systemStats.innerHTML = '<div role="alert" style="padding: 2rem; text-align: center; color: var(--text-secondary);"><p>Unable to load system statistics</p></div>';
+        }
+        updateSocketHealthFallback('Unable to load WebSocket health');
+    }
+}
+
+async function loadSocketHealth() {
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/system/socket-health');
+        if (!response.ok || !data) {
+            updateSocketHealthFallback('WebSocket health unavailable');
+            return;
+        }
+
+        const socketCount = Number(data.sockets || 0);
+        const active = Number(data.active || 0);
+        const rejected = Number(data.rejected || 0);
+        const errors = Number(data.errors || 0);
+        const roomCount = Array.isArray(data.rooms) ? data.rooms.length : 0;
+
+        setText('socketActiveCount', active.toLocaleString());
+        setText('socketActiveMeta', `${socketCount.toLocaleString()} sockets tracked`);
+        setText('socketRejectedCount', rejected.toLocaleString());
+        setText('socketErrorCount', errors.toLocaleString());
+        setText('socketRoomCount', roomCount.toLocaleString());
+
+        const lastError = String(data.lastError || '').trim();
+        setText('socketLastError', lastError ? `Last error: ${lastError}` : 'No recent errors');
+
+        const updated = new Date(data.sampledAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setText('socketHealthUpdated', `Updated: ${updated}`);
+    } catch (error) {
+        console.error('Error loading socket health:', error);
+        updateSocketHealthFallback('WebSocket health unavailable');
+    }
+}
+
+function updateSocketHealthFallback(message) {
+    const note = String(message || 'WebSocket health unavailable');
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    setText('socketActiveCount', '-');
+    setText('socketActiveMeta', note);
+    setText('socketRejectedCount', '-');
+    setText('socketErrorCount', '-');
+    setText('socketRoomCount', '-');
+    setText('socketLastError', 'No data');
+    setText('socketHealthUpdated', 'Updated: --');
+}
+
+function formatAntiRaidEventType(type) {
+    const normalized = String(type || '').replace(/_/g, ' ').trim();
+    if (!normalized) return 'Unknown';
+    return normalized.replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+async function loadAntiRaidDashboard() {
+    const metaEl = document.getElementById('antiRaidEventsMeta');
+    const tableBody = document.getElementById('antiRaidEventsTable');
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/anti-raid-dashboard?days=30&limit=20');
+        if (!response.ok || !data?.success) {
+            throw new Error(data?.error || 'Failed to load anti-raid data');
+        }
+
+        const summary = data.summary || {};
+        const avgRisk = Number.isFinite(Number(summary.avgRisk)) ? Number(summary.avgRisk) : null;
+        const peakRisk = Number.isFinite(Number(summary.peakRisk)) ? Number(summary.peakRisk) : null;
+
+        setText('antiRaidEventsTotal', Number(summary.total || 0).toLocaleString());
+        setText('antiRaidAvgRisk', avgRisk === null ? '--' : avgRisk.toFixed(1));
+        setText('antiRaidPeakRisk', peakRisk === null ? '--' : peakRisk.toFixed(0));
+        setText('antiRaidAutoLockdowns', Number(summary.autoLockdowns || 0).toLocaleString());
+        setText('antiRaidManualLockdowns', Number(summary.manualLockdowns || 0).toLocaleString());
+        setText('antiRaidResolved', Number(summary.resolved || 0).toLocaleString());
+
+        const topTriggers = Array.isArray(data.topTriggers) && data.topTriggers.length
+            ? data.topTriggers.map((entry) => `${entry.name} (${entry.count})`).join(' • ')
+            : 'No triggers recorded yet.';
+        setText('antiRaidTopTriggers', topTriggers);
+
+        const events = Array.isArray(data.recent) ? data.recent : [];
+        if (metaEl) {
+            metaEl.textContent = `Updated: ${new Date().toLocaleString()} • ${events.length} recent event${events.length === 1 ? '' : 's'}`;
+        }
+
+        if (tableBody) {
+            if (!events.length) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No anti-raid events yet.</td></tr>';
+            } else {
+                tableBody.innerHTML = events.map((event) => {
+                    const createdAt = event.createdAt ? new Date(event.createdAt).toLocaleString() : '--';
+                    const riskScore = Number.isFinite(Number(event.riskScore)) ? Number(event.riskScore) : null;
+                    const triggerCount = Number.isFinite(Number(event.triggerCount)) ? Number(event.triggerCount) : 0;
+                    const triggers = Array.isArray(event.details?.triggers) ? event.details.triggers : [];
+                    const triggerSummary = triggers.length
+                        ? triggers.map((t) => t?.name).filter(Boolean).slice(0, 2).join(', ')
+                        : (event.details?.reason || '—');
+
+                    return `
+                        <tr>
+                            <td>${escapeNotificationCell(createdAt)}</td>
+                            <td>${escapeNotificationCell(formatAntiRaidEventType(event.eventType))}</td>
+                            <td>${riskScore === null ? '--' : escapeNotificationCell(riskScore.toFixed(0))}</td>
+                            <td>${triggerCount || triggers.length || 0}</td>
+                            <td>${escapeNotificationCell(triggerSummary || '—')}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load anti-raid dashboard:', error);
+        if (metaEl) metaEl.textContent = 'Failed to load anti-raid dashboard.';
+        if (tableBody) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Unable to load anti-raid metrics.</td></tr>';
+        }
+    }
+}
+
+function formatBackupTime(value) {
+    if (!value) return '--';
+    const date = new Date(Number(value));
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleString();
+}
+
+function formatBackupBytes(bytes) {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value)) return '0 B';
+    if (value < 1024) return `${value} B`;
+    const kb = value / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+function renderBackupFiles(files) {
+    const list = document.getElementById('backupFilesList');
+    if (!list) return;
+    if (!Array.isArray(files) || files.length === 0) {
+        list.textContent = 'No backups yet.';
+        return;
+    }
+
+    list.innerHTML = files.slice(0, 8).map((file) => {
+        const name = file?.name || 'backup.sql';
+        const size = formatBackupBytes(file?.size || 0);
+        const created = formatBackupTime(file?.createdAt || null);
+        const downloadUrl = `/api/owner/backups/download?file=${encodeURIComponent(name)}`;
+        return `
+            <div class="backup-file-row">
+                <div class="backup-file-meta">
+                    <div class="backup-file-name">${escapeNotificationCell(name)}</div>
+                    <div>${escapeNotificationCell(created)} • ${escapeNotificationCell(size)}</div>
+                </div>
+                <div class="backup-file-actions">
+                    <a class="btn btn-sm btn-secondary" href="${downloadUrl}">Download</a>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function applyBackupConfigToControls(config) {
+    const enabledToggle = document.getElementById('backupEnabledToggle');
+    const intervalSelect = document.getElementById('backupIntervalSelect');
+    const retentionInput = document.getElementById('backupRetentionInput');
+    const formatSelect = document.getElementById('backupFormatSelect');
+
+    if (enabledToggle) enabledToggle.checked = Boolean(config?.enabled);
+    if (intervalSelect && config?.intervalMinutes) intervalSelect.value = String(config.intervalMinutes);
+    if (retentionInput && config?.retentionCount) retentionInput.value = String(config.retentionCount);
+    if (formatSelect && config?.format) formatSelect.value = String(config.format);
+    if (Array.isArray(config?.tables)) {
+        applyBackupTableSelection(config.tables);
+    }
+}
+
+function updateBackupStatus(state = {}) {
+    const statusEl = document.getElementById('backupStatusValue');
+    const lastRunEl = document.getElementById('backupLastRunValue');
+    const nextRunEl = document.getElementById('backupNextRunValue');
+    const lastResultEl = document.getElementById('backupLastResultValue');
+    const noteEl = document.getElementById('backupStatusNote');
+    const headerStatusEl = document.getElementById('backupHeaderStatus');
+    const headerLastRunEl = document.getElementById('backupHeaderLastRun');
+
+    const rawStatus = state.running ? 'Running' : (state.lastRunStatus || 'Idle');
+    const normalized = String(rawStatus || 'Idle').toLowerCase();
+    const pillClassMap = {
+        running: 'backup-pill--running',
+        success: 'backup-pill--success',
+        warning: 'backup-pill--warning',
+        failed: 'backup-pill--error',
+        error: 'backup-pill--error',
+        idle: 'backup-pill--idle'
+    };
+    const pillClass = pillClassMap[normalized] || 'backup-pill--idle';
+
+    if (statusEl) {
+        statusEl.textContent = rawStatus;
+    }
+    if (lastRunEl) lastRunEl.textContent = formatBackupTime(state.lastRunAt);
+    if (nextRunEl) nextRunEl.textContent = formatBackupTime(state.nextRunAt);
+    if (lastResultEl) lastResultEl.textContent = state.lastRunStatus || '--';
+    if (noteEl) {
+        noteEl.textContent = state.lastRunError || 'Backups use the server-side MySQL tools.';
+    }
+
+    if (headerStatusEl) {
+        headerStatusEl.textContent = rawStatus;
+        headerStatusEl.classList.remove('backup-pill--running', 'backup-pill--success', 'backup-pill--warning', 'backup-pill--error', 'backup-pill--idle');
+        headerStatusEl.classList.add(pillClass);
+    }
+    if (headerLastRunEl) {
+        headerLastRunEl.textContent = `Last run: ${formatBackupTime(state.lastRunAt)}`;
+    }
+}
+
+async function loadBackupStatus() {
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/backups/status');
+        if (!response.ok || !data) return;
+        applyBackupConfigToControls(data.config || {});
+        updateBackupStatus(data.state || {});
+        renderBackupFiles(data.files || []);
+    } catch (error) {
+        console.error('Error loading backup status:', error);
+    }
+}
+
+function renderBackupTables(tables = []) {
+    const list = document.getElementById('backupTablesList');
+    if (!list) return;
+    if (!Array.isArray(tables) || tables.length === 0) {
+        list.textContent = 'No tables available.';
+        return;
+    }
+
+    list.innerHTML = tables.map((table) => {
+        const safeName = escapeNotificationCell(table);
+        return `
+            <label class="backup-table-item">
+                <input type="checkbox" class="backup-table-checkbox" value="${safeName}" />
+                <span>${safeName}</span>
+            </label>
+        `;
+    }).join('');
+
+    list.querySelectorAll('.backup-table-checkbox').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => updateBackupTableCount());
+    });
+}
+
+function applyBackupTableSelection(selected = []) {
+    const list = document.getElementById('backupTablesList');
+    if (!list) return;
+    const selectedSet = new Set(selected.map((value) => String(value || '').trim()));
+    list.querySelectorAll('.backup-table-checkbox').forEach((checkbox) => {
+        checkbox.checked = selectedSet.has(checkbox.value);
+    });
+    updateBackupTableCount();
+}
+
+function getSelectedBackupTables() {
+    const list = document.getElementById('backupTablesList');
+    if (!list) return [];
+    return Array.from(list.querySelectorAll('.backup-table-checkbox:checked'))
+        .map((checkbox) => String(checkbox.value || '').trim())
+        .filter(Boolean);
+}
+
+function updateBackupTableCount() {
+    const countEl = document.getElementById('backupTableCount');
+    const selectAll = document.getElementById('backupTablesSelectAll');
+    const selected = getSelectedBackupTables();
+    if (countEl) countEl.textContent = `${selected.length} selected`;
+
+    if (selectAll) {
+        const total = document.querySelectorAll('#backupTablesList .backup-table-checkbox').length;
+        selectAll.checked = total > 0 && selected.length === total;
+        selectAll.indeterminate = selected.length > 0 && selected.length < total;
+    }
+}
+
+async function loadBackupTables() {
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/backups/tables');
+        if (!response.ok || !data) return;
+        backupTablesCache = Array.isArray(data.tables) ? data.tables : [];
+        renderBackupTables(backupTablesCache);
+        updateBackupTableCount();
+    } catch (error) {
+        console.error('Error loading backup tables:', error);
+    }
+}
+
+async function saveBackupSettings() {
+    const enabled = Boolean(document.getElementById('backupEnabledToggle')?.checked);
+    const interval = Number(document.getElementById('backupIntervalSelect')?.value || 0);
+    const retention = Number(document.getElementById('backupRetentionInput')?.value || 0);
+    const format = String(document.getElementById('backupFormatSelect')?.value || 'json');
+    const tables = getSelectedBackupTables();
+
+    try {
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/backups/config', {
+            enabled,
+            intervalMinutes: interval,
+            retentionCount: retention,
+            tables,
+            format
+        });
+        if (!response.ok) {
+            showError(data?.error || 'Failed to update backup settings');
+            return;
+        }
+        applyBackupConfigToControls(data.config || {});
+        updateBackupStatus(data.state || {});
+        showSuccess('Backup settings updated');
+    } catch (error) {
+        console.error('Error saving backup settings:', error);
+        showError('Failed to update backup settings');
+    }
+}
+
+async function runBackupNow() {
+    const runBtn = document.getElementById('runBackupBtn');
+    if (runBtn) {
+        runBtn.disabled = true;
+        runBtn.textContent = 'Running...';
+    }
+
+    try {
+        const format = String(document.getElementById('backupFormatSelect')?.value || 'json');
+        const tables = getSelectedBackupTables();
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/backups/run', {
+            format,
+            tables
+        });
+        if (!response.ok) {
+            showError(data?.error || 'Backup failed');
+            return;
+        }
+        showSuccess('Backup completed');
+    } catch (error) {
+        console.error('Error running backup:', error);
+        showError('Backup failed');
+    } finally {
+        await loadBackupStatus();
+        if (runBtn) {
+            runBtn.disabled = false;
+            runBtn.textContent = 'Run Backup';
         }
     }
 }
@@ -1229,7 +2354,7 @@ function toggleUserDropdown() {
     menu.classList.toggle('show');
     trigger.classList.toggle('active');
 }
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
     const dropdown = document.querySelector('.user-dropdown');
     if (dropdown && !dropdown.contains(event.target)) {
         document.getElementById('userDropdownMenu')?.classList.remove('show');
@@ -1248,132 +2373,6 @@ async function logout() {
     window.AdminPanel.api.logout();
 }
 
-// Alert Settings Analytics Pie Chart logic
-window.alertSettingsPieChart = window.alertSettingsPieChart || null;
-window.alertSettingsPieLastUpdatedAt = window.alertSettingsPieLastUpdatedAt || null;
-window.alertSettingsPieLastUpdatedTickerId = window.alertSettingsPieLastUpdatedTickerId || null;
-
-function renderAlertSettingsPieLastUpdated() {
-    const lastUpdatedEl = document.getElementById('alertSettingsPieLastUpdated');
-    if (!lastUpdatedEl) return;
-    if (!alertSettingsPieLastUpdatedAt) {
-        lastUpdatedEl.textContent = 'Last updated: --';
-        lastUpdatedEl.style.color = 'var(--text-secondary)';
-        return;
-    }
-    const ageMs = Date.now() - alertSettingsPieLastUpdatedAt.getTime();
-    if (ageMs < 60 * 1000) {
-        lastUpdatedEl.style.color = 'var(--color-green)';
-    } else if (ageMs < 5 * 60 * 1000) {
-        lastUpdatedEl.style.color = 'var(--color-orange)';
-    } else {
-        lastUpdatedEl.style.color = 'var(--color-red)';
-    }
-    const absolute = alertSettingsPieLastUpdatedAt.toLocaleString();
-    const relative = formatRelativeTime(alertSettingsPieLastUpdatedAt);
-    lastUpdatedEl.textContent = `Last updated: ${absolute} (${relative})`;
-}
-
-function startAlertSettingsPieLastUpdatedTicker() {
-    if (alertSettingsPieLastUpdatedTickerId) {
-        clearInterval(alertSettingsPieLastUpdatedTickerId);
-    }
-    alertSettingsPieLastUpdatedTickerId = setInterval(() => {
-        const tab = document.getElementById('alert-analytics');
-        const isActive = Boolean(tab && tab.classList.contains('active'));
-        if (isActive && !document.hidden) {
-            renderAlertSettingsPieLastUpdated();
-        }
-    }, 15000);
-}
-
-async function loadAlertSettingsPie() {
-    const pieCanvas = document.getElementById('alertSettingsPieChart');
-    const legendEl = document.getElementById('alertSettingsPieLegend');
-    const lastUpdatedEl = document.getElementById('alertSettingsPieLastUpdated');
-    if (!pieCanvas || !legendEl || !lastUpdatedEl) return;
-    try {
-        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/alert-settings-analytics');
-        if (!response.ok) {
-            legendEl.innerHTML = '<div class="message error">Failed to load alert settings analytics</div>';
-            return;
-        }
-        const breakdown = Array.isArray(data?.breakdown) ? data.breakdown : [];
-        if (!breakdown.length) {
-            legendEl.innerHTML = '<div class="text-muted">No alert settings analytics available yet</div>';
-            if (alertSettingsPieChart) alertSettingsPieChart.destroy();
-            return;
-        }
-        const labels = breakdown.map(row => row.alert_type || 'unknown');
-        const values = breakdown.map(row => Number(row.enabled_count || 0));
-        const colors = [
-            '#ff5b5b', '#5b7fff', '#ffd45b', '#5bffb8', '#a78bfa', '#f472b6', '#34d399', '#f87171', '#facc15', '#ffb84d'
-        ];
-        if (alertSettingsPieChart) alertSettingsPieChart.destroy();
-        alertSettingsPieChart = new Chart(pieCanvas, {
-            type: 'pie',
-            data: {
-                labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: colors.slice(0, labels.length),
-                    borderColor: '#222c37',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const label = context.label || '';
-                                const value = context.parsed || 0;
-                                const total = values.reduce((a, b) => a + b, 0);
-                                const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                                return `${label}: ${value} (${percent}%)`;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        // Render legend
-        const total = values.reduce((a, b) => a + b, 0);
-        legendEl.innerHTML = labels.map((label, i) => {
-            const value = values[i];
-            const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-            return `<span style="display:inline-block;width:14px;height:14px;background:${colors[i]};border-radius:3px;margin-right:7px;vertical-align:middle;"></span> <span style="font-weight:600;">${label}</span>: <span style="color:var(--text-secondary);">${value} (${percent}%)</span>`;
-        }).join('<br>');
-        alertSettingsPieLastUpdatedAt = new Date();
-        renderAlertSettingsPieLastUpdated();
-    } catch (error) {
-        legendEl.innerHTML = '<div class="message error">Failed to load alert settings analytics</div>';
-        alertSettingsPieLastUpdatedAt = null;
-        renderAlertSettingsPieLastUpdated();
-    }
-}
-
-// Auto-load alert settings pie chart when tab is activated
-document.addEventListener('DOMContentLoaded', function() {
-    startAlertSettingsPieLastUpdatedTicker();
-    const tabs = document.querySelectorAll('#ownerTabs .tab');
-    tabs.forEach(tab => {
-        tab.addEventListener('click', function() {
-            const tabName = tab.getAttribute('data-tab');
-            if (tabName === 'alert-analytics') {
-                loadAlertSettingsPie();
-            }
-        });
-    });
-    // If page loads with alert analytics tab active (unlikely), load it
-    const alertTab = document.getElementById('alert-analytics');
-    if (alertTab && alertTab.classList.contains('active')) {
-        loadAlertSettingsPie();
-    }
-});
-
 const adminUserState = {
     users: [],
     filteredUsers: [],
@@ -1385,6 +2384,102 @@ const adminUserState = {
     activityFilter: 'all',
     sortBy: 'created_desc'
 };
+
+function showSelectModal(options = {}) {
+    return new Promise((resolve) => {
+        const {
+            title = 'Select Option',
+            label = 'Choose an option',
+            optionsList = [],
+            defaultValue = '',
+            confirmText = 'Confirm',
+            cancelText = 'Cancel'
+        } = options;
+
+        const container = document.getElementById('modal-container') || (() => {
+            if (typeof document === 'undefined') return null;
+            const c = document.createElement('div');
+            c.id = 'modal-container';
+            c.className = 'modal-container';
+            document.body.appendChild(c);
+            return c;
+        })();
+
+        if (!container) {
+            resolve(null);
+            return;
+        }
+
+        const modalId = `modal-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal-wrapper';
+
+        const optionMarkup = (Array.isArray(optionsList) ? optionsList : [])
+            .map((opt) => {
+                const value = String(opt?.value ?? '');
+                const labelText = String(opt?.label ?? value);
+                const selected = value === String(defaultValue) ? 'selected' : '';
+                return `<option value="${value.replace(/"/g, '&quot;')}" ${selected}>${labelText}</option>`;
+            })
+            .join('');
+
+        modal.innerHTML = `
+            <div class="modal-overlay"></div>
+            <div class="notification-modal" role="dialog" aria-modal="true" aria-labelledby="${modalId}-title">
+                <div class="modal-header">
+                    <h3 id="${modalId}-title">⚙️ ${title}</h3>
+                    <button class="modal-close" type="button">×</button>
+                </div>
+                <div class="modal-body">
+                    <label for="${modalId}-select" style="display:block; font-weight:600; color:var(--text-primary); margin-bottom:0.45rem;">${label}</label>
+                    <select id="${modalId}-select" class="form-input">${optionMarkup}</select>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-action="cancel">${cancelText}</button>
+                    <button class="btn btn-primary" type="button" data-action="confirm">${confirmText}</button>
+                </div>
+            </div>
+        `;
+
+        if (window.modalManager?.applyModalWrapperLayout) {
+            window.modalManager.applyModalWrapperLayout(modal);
+        } else {
+            modal.style.position = 'fixed';
+            modal.style.inset = '0';
+            modal.style.display = 'grid';
+            modal.style.placeItems = 'center';
+            modal.style.zIndex = '9001';
+        }
+
+        const selectEl = modal.querySelector(`#${modalId}-select`);
+        const closeBtn = modal.querySelector('.modal-close');
+        const cancelBtn = modal.querySelector('[data-action="cancel"]');
+        const confirmBtn = modal.querySelector('[data-action="confirm"]');
+
+        const cleanup = (value) => {
+            modal.classList.remove('show');
+            setTimeout(() => {
+                modal.remove();
+                resolve(value);
+            }, 180);
+        };
+
+        const onCancel = () => cleanup(null);
+        const onConfirm = () => cleanup(selectEl?.value ?? null);
+
+        modal.querySelector('.modal-overlay')?.addEventListener('click', onCancel);
+        closeBtn?.addEventListener('click', onCancel);
+        cancelBtn?.addEventListener('click', onCancel);
+        confirmBtn?.addEventListener('click', onConfirm);
+
+        container.appendChild(modal);
+        setTimeout(() => {
+            modal.classList.add('show');
+            selectEl?.focus();
+        }, 10);
+    });
+}
 
 function ownerNotifyError(message) {
     if (typeof showError === 'function') return showError(message);
@@ -1415,6 +2510,80 @@ function parseDateSafe(value) {
     if (!value) return null;
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function normalizeAdminUserId(input) {
+    let raw = input;
+
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        if (raw.id !== undefined && raw.id !== null) raw = raw.id;
+        else if (raw.userId !== undefined && raw.userId !== null) raw = raw.userId;
+        else if (raw.user_id !== undefined && raw.user_id !== null) raw = raw.user_id;
+    }
+
+    if (raw === null || raw === undefined) return '';
+
+    if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'bigint') {
+        return String(raw).trim();
+    }
+
+    if (raw && typeof raw === 'object') {
+        const isBufferLike = raw.type === 'Buffer' && Array.isArray(raw.data);
+        if (isBufferLike) {
+            const bytes = raw.data
+                .map((value) => Number(value))
+                .filter((value) => Number.isFinite(value) && value >= 0 && value <= 255);
+
+            if (bytes.length === 16) {
+                const hex = bytes.map((value) => value.toString(16).padStart(2, '0')).join('');
+                return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+            }
+
+            if (bytes.length) {
+                const printable = bytes.every((value) => value >= 32 && value <= 126);
+                if (printable) {
+                    return String.fromCharCode(...bytes).replace(/\0+$/g, '').trim();
+                }
+                return bytes.map((value) => value.toString(16).padStart(2, '0')).join('');
+            }
+        }
+
+        if (raw.value !== undefined && raw.value !== null) {
+            return String(raw.value).trim();
+        }
+
+        if (typeof raw.toString === 'function') {
+            const text = String(raw.toString()).trim();
+            if (text && text !== '[object Object]') return text;
+        }
+    }
+
+    return '';
+}
+
+function isValidAdminIdFormat(value) {
+    return /^\d+$/.test(value) || /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(value);
+}
+
+function resolveAdminUserId(user, fallbackRawId = '') {
+    const direct = normalizeAdminUserId(user);
+    if (direct && isValidAdminIdFormat(direct)) return direct;
+
+    const candidateFields = ['id', 'userId', 'user_id', 'adminId', 'admin_id', 'uuid', 'uid', '_id', 'ID'];
+    if (user && typeof user === 'object') {
+        for (const field of candidateFields) {
+            const candidate = normalizeAdminUserId(user[field]);
+            if (candidate && isValidAdminIdFormat(candidate)) return candidate;
+        }
+
+        for (const value of Object.values(user)) {
+            const candidate = normalizeAdminUserId(value);
+            if (candidate && isValidAdminIdFormat(candidate)) return candidate;
+        }
+    }
+
+    const fallback = normalizeAdminUserId(fallbackRawId);
+    return isValidAdminIdFormat(fallback) ? fallback : '';
 }
 
 function getRoleWeight(role) {
@@ -1469,7 +2638,10 @@ function renderAdminUsersTable() {
 
     const startIndex = (adminUserState.page - 1) * adminUserState.pageSize;
     const pageRows = filtered.slice(startIndex, startIndex + adminUserState.pageSize);
-    const allPageSelected = pageRows.length > 0 && pageRows.every((row) => adminUserState.selectedIds.has(String(row.id)));
+    const allPageSelected = pageRows.length > 0 && pageRows.every((row) => {
+        const rowId = resolveAdminUserId(row);
+        return rowId && adminUserState.selectedIds.has(rowId);
+    });
 
     let html = `
         <table>
@@ -1487,12 +2659,7 @@ function renderAdminUsersTable() {
     `;
 
     pageRows.forEach((user) => {
-        // Ensure we retrieve a scalar ID; some drivers might return buffers or objects for IDs unexpectedly
-        let plainId = user.id;
-        if (plainId && typeof plainId === 'object' && plainId.toString) {
-            plainId = plainId.toString();
-        }
-        const userId = String(plainId || '');
+        const userId = resolveAdminUserId(user);
         const created = parseDateSafe(user.created_at);
         const lastLoginDate = parseDateSafe(user.last_login);
         const createdText = created ? created.toLocaleDateString() : 'Unknown';
@@ -1502,9 +2669,14 @@ function renderAdminUsersTable() {
         const isOwner = role === 'owner';
         const isSelected = adminUserState.selectedIds.has(userId);
         const viewBtn = `<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem;" onclick="viewAdminUserDetail('${escapeOwnerHtml(userId)}', '${escapeOwnerHtml(user.username || '')}')" title="View account details">👁️ View</button>`;
+        const updateRoleBtn = userId
+            ? `<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem;" onclick="updateAdminUserRole('${escapeOwnerHtml(userId)}', '${escapeOwnerHtml(user.username || '')}', '${escapeOwnerHtml(role)}')">Role</button>`
+            : '<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem; opacity:0.8;" disabled>Role</button>';
         const deleteBtn = isOwner
             ? '<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem; opacity:0.8;" disabled>Protected</button>'
-            : `<button class="btn btn-danger" style="padding: 0.45rem 0.8rem; font-size: 0.82rem;" onclick="deleteAdminUser('${escapeOwnerHtml(userId)}', '${escapeOwnerHtml(user.username || '')}')">Delete</button>`;
+            : userId
+                ? `<button class="btn btn-danger" style="padding: 0.45rem 0.8rem; font-size: 0.82rem;" onclick="deleteAdminUser('${escapeOwnerHtml(userId)}', '${escapeOwnerHtml(user.username || '')}')">Delete</button>`
+                : '<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem; opacity:0.8;" disabled>ID Unavailable</button>';
 
         html += `
             <tr>
@@ -1513,7 +2685,7 @@ function renderAdminUsersTable() {
                 <td><strong style="color: ${roleColor};">${escapeOwnerHtml(role.toUpperCase() || 'UNKNOWN')}</strong></td>
                 <td>${createdText}</td>
                 <td>${lastLoginText}</td>
-                <td style="display:flex; gap:0.5rem; flex-wrap:wrap;">${viewBtn}${deleteBtn}</td>
+                <td style="display:flex; gap:0.5rem; flex-wrap:wrap;">${viewBtn}${updateRoleBtn}${deleteBtn}</td>
             </tr>
         `;
     });
@@ -1526,7 +2698,8 @@ function renderAdminUsersTable() {
         selectAllEl.addEventListener('change', (event) => {
             const checked = Boolean(event.target.checked);
             pageRows.forEach((row) => {
-                const rowId = String(row.id);
+                const rowId = resolveAdminUserId(row);
+                if (!rowId) return;
                 if (checked) {
                     adminUserState.selectedIds.add(rowId);
                 } else {
@@ -1678,11 +2851,19 @@ async function loadAdminUsers() {
 }
 
 async function deleteAdminUser(userId, username) {
+    userId = normalizeAdminUserId(userId);
+    if (!isValidAdminIdFormat(userId) && username) {
+        const usernameMatch = adminUserState.users.find(
+            (user) => String(user?.username || '').toLowerCase() === String(username || '').toLowerCase()
+        );
+        userId = resolveAdminUserId(usernameMatch, userId);
+    }
     if (!userId || userId === 'undefined' || userId === '[object Object]') {
+        console.warn('deleteAdminUser invalid id payload:', { userId, username });
         ownerNotifyError('Cannot delete user: Invalid ID');
         return;
     }
-    const target = adminUserState.users.find((user) => String(user.id) === String(userId));
+    const target = adminUserState.users.find((user) => resolveAdminUserId(user) === userId);
     if (String(target?.role || '').toLowerCase() === 'owner') {
         ownerNotifyError('Owner accounts are protected and cannot be deleted here');
         return;
@@ -1707,12 +2888,12 @@ async function deleteAdminUser(userId, username) {
 
         if (!promptResult) return; // user cancelled
     } catch (err) {
-        // Fallback to native confirm if modal system fails
-        if (!confirm(`Are you sure you want to delete admin account "${username}"?`)) return;
+        ownerNotifyError('Confirmation dialog unavailable. Please refresh and try again.');
+        return;
     }
 
     try {
-        const { response } = await window.AdminPanel.api.requestJson(`/api/admin/users/${userId}`, { method: 'DELETE' });
+        const { response } = await window.AdminPanel.api.requestJson(`/api/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
         if (response.ok) {
             adminUserState.selectedIds.delete(String(userId));
             ownerNotifySuccess('Admin user deleted');
@@ -1725,6 +2906,67 @@ async function deleteAdminUser(userId, username) {
     }
 }
 
+async function updateAdminUserRole(userId, username, currentRole) {
+    userId = normalizeAdminUserId(userId);
+    const normalizedCurrentRole = String(currentRole || '').toLowerCase().trim();
+
+    if (!isValidAdminIdFormat(userId)) {
+        ownerNotifyError('Cannot update role: Invalid ID');
+        return;
+    }
+
+    if (typeof showSelectModal !== 'function') {
+        ownerNotifyError('Role update dialog is unavailable. Please refresh and try again.');
+        return;
+    }
+
+    const allowedRoles = ['owner', 'admin', 'moderator'];
+    const roleInput = await showSelectModal({
+        title: 'Update Account Role',
+        label: `Set new role for "${username}":`,
+        defaultValue: normalizedCurrentRole || 'moderator',
+        confirmText: 'Update Role',
+        cancelText: 'Cancel',
+        optionsList: [
+            { value: 'owner', label: 'Owner' },
+            { value: 'admin', label: 'Admin' },
+            { value: 'moderator', label: 'Moderator' }
+        ]
+    });
+
+    if (!roleInput) return;
+
+    const nextRole = String(roleInput).toLowerCase().trim();
+    if (!allowedRoles.includes(nextRole)) {
+        ownerNotifyError('Invalid role selected');
+        return;
+    }
+
+    if (nextRole === normalizedCurrentRole) {
+        ownerNotifyError('Choose a different role to update.');
+        return;
+    }
+
+    try {
+        const { response, data } = await window.AdminPanel.api.requestJson(`/api/admin/users/${encodeURIComponent(userId)}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ role: nextRole })
+        });
+
+        if (response.ok) {
+            ownerNotifySuccess(`Updated ${username} role to ${nextRole.toUpperCase()}`);
+            await loadAdminUsers();
+        } else {
+            ownerNotifyError(data?.error || 'Failed to update user role');
+        }
+    } catch (error) {
+        ownerNotifyError('Error updating user role');
+    }
+}
+
 async function deleteSelectedAdminUsers() {
     const ids = Array.from(adminUserState.selectedIds);
     if (!ids.length) {
@@ -1732,7 +2974,11 @@ async function deleteSelectedAdminUsers() {
         return;
     }
 
-    const usersById = new Map(adminUserState.users.map((user) => [String(user.id), user]));
+    const usersById = new Map(
+        adminUserState.users
+            .map((user) => [resolveAdminUserId(user), user])
+            .filter(([id]) => Boolean(id))
+    );
     const deletableIds = ids.filter((id) => String(usersById.get(String(id))?.role || '').toLowerCase() !== 'owner');
 
     if (!deletableIds.length) {
@@ -1740,7 +2986,14 @@ async function deleteSelectedAdminUsers() {
         return;
     }
 
-    if (!confirm(`Delete ${deletableIds.length} selected account(s)? This cannot be undone.`)) return;
+    const confirmed = await window.modalManager?.showConfirm({
+        title: 'Delete Selected Accounts',
+        message: `Delete ${deletableIds.length} selected account(s)? This cannot be undone.`,
+        confirmText: 'Delete Selected',
+        cancelText: 'Cancel',
+        type: 'danger'
+    });
+    if (!confirmed) return;
 
     let deleted = 0;
     let failed = 0;
@@ -1799,5 +3052,41 @@ window.applyAdminUserFiltersAndRender = applyAdminUserFiltersAndRender;
 window.changeAdminUsersPage = changeAdminUsersPage;
 window.loadAdminUsers = loadAdminUsers;
 window.deleteAdminUser = deleteAdminUser;
+window.updateAdminUserRole = updateAdminUserRole;
 window.deleteSelectedAdminUsers = deleteSelectedAdminUsers;
 window.exportAdminUsersCsv = exportAdminUsersCsv;
+
+function refreshOwnerVisibleData() {
+    const activeTab = document.querySelector('#ownerTabs .tab.active')?.dataset?.tab || 'system';
+
+    if (activeTab === 'diagnostics') {
+        if (typeof loadDiagnostics === 'function') loadDiagnostics();
+        if (typeof loadSocketHealth === 'function') loadSocketHealth();
+        return;
+    }
+    if (activeTab === 'invites') {
+        if (typeof loadInviteStats === 'function') loadInviteStats();
+        return;
+    }
+    if (activeTab === 'users') {
+        if (typeof loadAdminUsers === 'function') loadAdminUsers();
+        return;
+    }
+    if (activeTab === 'security' || activeTab === 'security-events') {
+        if (typeof loadSecurityEventsFeed === 'function') loadSecurityEventsFeed(false);
+        return;
+    }
+    if (activeTab === 'notifications') {
+        if (typeof loadOwnerNotificationHistory === 'function') loadOwnerNotificationHistory();
+        return;
+    }
+
+    if (typeof loadSystemStatus === 'function') loadSystemStatus();
+    if (typeof loadBackupStatus === 'function') loadBackupStatus();
+}
+
+if (window.AdminPanel) {
+    window.AdminPanel.refreshVisibleData = refreshOwnerVisibleData;
+}
+
+document.addEventListener('adminpanel:refresh-visible-data', refreshOwnerVisibleData);

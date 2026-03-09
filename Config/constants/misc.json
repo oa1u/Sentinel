@@ -1,4 +1,14 @@
 {
+	"Email": {
+		"minSecondsBetweenSameRecipient": 10,
+		"maxRecipientEmailsPerWindow": 12,
+		"emailAbuseWindowSeconds": 3600,
+		"maxGlobalEmailsPerMinute": 80,
+		"maxSendRetries": 2,
+		"retryBaseDelayMs": 500,
+		"retryMaxDelayMs": 5000,
+		"sendTimeoutMs": 15000
+	},
 	"timeouts": {
 		"ticketChannelDelete": 5000,
 		"verificationMessageDelete": 60000,
@@ -11,7 +21,10 @@
 	"cleanup": {
 		"cooldownCleanupInterval": 300000,
 		"reminderCheckInterval": 60000,
-		"spamDataCleanupInterval": 300000
+		"spamDataCleanupInterval": 300000,
+		"inactiveChannelReportDays": 30,
+		"inactiveChannelReportIntervalMs": 604800000,
+		"inactiveChannelReportMaxResults": 20
 	},
 	"limits": {
 		"minAnnounceLength": 3,
@@ -31,17 +44,132 @@
 	},
 	"reminders": {
 		"maxDeliveryAttempts": 5,
-		"retryDelayMinutes": 5,
-		"notificationChannelId": "DISCORD_NOTIFICATION_CHANNEL_ID_HERE"
+		"retryDelayMinutes": 5
 	},
 	"alerts": {
-		"discordRoutingEnabled": true,
-		"discordChannelId": "DISCORD_ALERT_CHANNEL_ID_HERE"
+		"discordRoutingEnabled": true
+	},
+	"afk": {
+		"mentionNoticeCooldownMs": 45000,
+		"defaultMentionsMode": "compact",
+		"richMentionsMaxUsers": 5
+	},
+	"reputation": {
+		"dailyLimit": 3,
+		"pairCooldownMs": 43200000
+	},
+	"economy": {
+		"currencyName": "coins",
+		"currencySymbol": "💰",
+		"dailyMin": 150,
+		"dailyMax": 300,
+		"dailyCooldownMs": 86400000,
+		"dailyStreakBonusPerDay": 0.02,
+		"dailyStreakMaxBonus": 0.2,
+		"weeklyMin": 800,
+		"weeklyMax": 1500,
+		"weeklyCooldownMs": 604800000,
+		"weeklyStreakBonusPerWeek": 0.05,
+		"weeklyStreakMaxBonus": 0.25,
+		"workMin": 40,
+		"workMax": 120,
+		"workCooldownMs": 3600000,
+		"maxTransfer": 250000,
+		"maxMove": 1000000,
+		"maxGamble": 200000,
+		"gambleWinChance": 0.45,
+		"gambleMultiplier": 2,
+		"gambleCooldownMs": 30000,
+		"statsFlowDays": 7,
+		"maxAdminAdjust": 5000000,
+		"activityEnabled": true,
+		"activityMinReward": 4,
+		"activityMaxReward": 12,
+		"activityCooldownMs": 60000,
+		"activityMinMessageLength": 8,
+		"activityBonusChance": 0.03,
+		"activityBonusMultiplier": 2,
+		"activityBonusNotifyChance": 0.25,
+		"leaderboardLimit": 10,
+		"rateLimitExemptRoles": []
+	},
+	"luckyDrop": {
+		"enabled": true,
+		"chance": 0.01,
+		"cooldownMs": 300000,
+		"xpMin": 5,
+		"xpMax": 25,
+		"coinsMin": 25,
+		"coinsMax": 150,
+		"coinWeight": 0.5,
+		"notifyChannel": true
+	},
+	"verification": {
+		"challengeTimeoutMs": 600000,
+		"maxWrongAttemptsPerStep": 3,
+		"strictAccountAgeDays": 7,
+		"riskBased": {
+			"enabled": true,
+			"strictScoreThreshold": 30,
+			"autoFailEnabled": false,
+			"autoFailScoreThreshold": 80,
+			"antiRaidLink": {
+				"enabled": true,
+				"forceStrictOnLockdown": true,
+				"autoFailOnLockdown": false,
+				"recentLockdownMs": 900000
+			},
+			"accountAgeDaysThreshold": 7,
+			"noAvatarEnabled": true,
+			"digitRatioThreshold": 0.5,
+			"repeatCharThreshold": 4,
+			"entropyThreshold": 0.35,
+			"joinBurstWindowMs": 60000,
+			"recentNameWindowMs": 1800000,
+			"nameCollisionEnabled": true,
+			"weights": {
+				"youngAccount": 25,
+				"noAvatar": 10,
+				"digitHeavyName": 12,
+				"repeatChars": 10,
+				"lowEntropyName": 12,
+				"joinBurst": 15,
+				"nameCollision": 18
+			}
+		}
+	},
+	"firstMessage": {
+		"enabled": true,
+		"announceInWelcomeChannel": true,
+		"announceInChannelFallback": true,
+		"logToServerChannel": true,
+		"replyToUser": true,
+		"replyInChannel": true,
+		"replyInDm": false,
+		"replyMention": false,
+		"replyMessage": "Thanks for your first message and welcome to the server! Please read {rulesChannel}, and feel free to ask a staff member if you need help. We are glad you are here."
+	},
+	"revival": {
+		"enabled": true,
+		"intervalMs": 21600000,
+		"minInactiveMs": 259200000,
+		"cooldownMs": 604800000,
+		"chance": 0.35
 	},
 	"securitySettings": {
 		"singleSessionMode": true,
 		"idleTimeoutMs": 1800000,
 		"absoluteTimeoutMs": 28800000,
 		"singleSessionCheckIntervalMs": 80000
+	},
+	"resilience": {
+		"loginMaxAttempts": 5,
+		"loginBaseRetryDelayMs": 2500,
+		"loginMaxRetryDelayMs": 30000,
+		"healthCheckIntervalMs": 60000,
+		"dbFailureThreshold": 3,
+		"shutdownTimeoutMs": 15000,
+		"exitOnUnhandledRejection": true,
+		"exitOnUncaughtException": true
 	}
 }

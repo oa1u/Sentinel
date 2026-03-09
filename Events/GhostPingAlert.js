@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { serverLogChannelId } = require('../Config/constants/channel.json');
+const { CHANNELS: { serverLogChannelId } } = require('../Config/constants');
 
 const DEFAULT_GHOST_PING_WINDOW_MS = 120000;
 const configuredWindow = Number(process.env.GHOST_PING_WINDOW_MS);
@@ -9,6 +9,7 @@ const GHOST_PING_WINDOW_MS = Number.isFinite(configuredWindow) && configuredWind
 
 module.exports = {
     name: 'messageDelete',
+    disabled: true,
     async execute(message, client) {
         try {
             if (!message) return;

@@ -34,7 +34,7 @@ async function getMemberFromMention(guild, input) {
 
     // Try exact username or display name match (case-insensitive).
     const lowerInput = trimmedInput.toLowerCase();
-    let member = guild.members.cache.find(m => 
+    let member = guild.members.cache.find(m =>
         m.user.username.toLowerCase() === lowerInput ||
         m.displayName.toLowerCase() === lowerInput
     );
@@ -47,7 +47,7 @@ async function getMemberFromMention(guild, input) {
             m.user.username.toLowerCase().includes(lowerInput) ||
             m.displayName.toLowerCase().includes(lowerInput)
         );
-        
+
         if (member) {
             console.log(`[GetMemberFromMention] Fuzzy match: '${trimmedInput}' matched member ${member.user.tag}`);
             return member;
@@ -93,7 +93,7 @@ async function getUserFromInput(client, input) {
 // Return true if the member has the specified role (by id or role object).
 function memberHasRole(member, roleInput) {
     if (!member) return false;
-    
+
     const roleId = typeof roleInput === 'string' ? roleInput : roleInput?.id;
     return member.roles.cache.has(roleId);
 }
@@ -103,7 +103,7 @@ function getMembersWithRole(guild, roleInput) {
     if (!guild) {
         throw new Error('Guild is required');
     }
-    
+
     const roleId = typeof roleInput === 'string' ? roleInput : roleInput?.id;
     return guild.members.cache.filter(m => m.roles.cache.has(roleId));
 }
@@ -111,11 +111,11 @@ function getMembersWithRole(guild, roleInput) {
 // Add the specified role to a member. Returns the member on success.
 async function addRoleToMember(member, roleInput, reason = 'No reason provided') {
     if (!member) return null;
-    
+
     try {
         const role = typeof roleInput === 'string' ? member.guild.roles.cache.get(roleInput) : roleInput;
         if (!role) return null;
-        
+
         await member.roles.add(role, reason);
         return member;
     } catch (err) {
@@ -127,11 +127,11 @@ async function addRoleToMember(member, roleInput, reason = 'No reason provided')
 // Remove the specified role from a member. Returns the member on success.
 async function removeRoleFromMember(member, roleInput, reason = 'No reason provided') {
     if (!member) return null;
-    
+
     try {
         const role = typeof roleInput === 'string' ? member.guild.roles.cache.get(roleInput) : roleInput;
         if (!role) return null;
-        
+
         await member.roles.remove(role, reason);
         return member;
     } catch (err) {

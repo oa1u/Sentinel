@@ -1,10 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
+const { CHANNELS: { welcomeChannelId } } = require('../Config/constants');
 
 // Welcome handler: send a warm welcome message and record the join in the database.
 // We also snapshot basic profile info so admins can look up recent joiners later.
 module.exports = {
   name: 'guildMemberAdd',
+  disabled: true,
   async execute(member) {
     try {
       // Log that this member joined the server, so we can track activity.
@@ -59,8 +61,6 @@ module.exports = {
       } catch (dbErr) {
         console.warn(`[Database] Could not initialize user in levels table: ${dbErr.message}`);
       }
-
-      const { welcomeChannelId } = require('../Config/constants/channel.json');
 
       // If no welcome channel is configured, warn and skip sending the welcome message.
       if (!welcomeChannelId || welcomeChannelId === '') {

@@ -3,7 +3,7 @@ require("moment-duration-format");
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
@@ -40,7 +40,7 @@ module.exports = {
     // Fetch member to verify they exist in guild
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
-      await sendErrorReply(
+      await sendWarningReply(
         interaction,
         'Invalid User',
         `**${targetUser.tag}** is not in this server!`
@@ -118,5 +118,13 @@ module.exports = {
       `**🔑 Case ID:** \`${caseId}\`\n` +
       `**📬 DM Status:** ${dmSent ? '✅ Sent' : '❌ Failed'}`
     );
+
+    await interaction.followUp({
+      content:
+        `🧾 **Incident proof reminder**\n` +
+        `Use this (ephemeral) command to attach evidence for this action:\n` +
+        `\`/incident create caseid:${caseId} user:@${targetUser.username} action:WARN reason:<reason> proof:<proof details>\``,
+      flags: MessageFlags.Ephemeral
+    }).catch(() => { });
   }
 };

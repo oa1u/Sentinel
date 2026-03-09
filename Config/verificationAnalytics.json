@@ -1,0 +1,28 @@
+{
+  "totals": {
+    "sessionsStarted": 0,
+    "successes": 0,
+    "failures": 0,
+    "timeouts": 0,
+    "fallbackUsed": 0,
+    "roleAssignmentFailures": 0,
+    "penaltiesApplied": 0,
+    "staffOverrides": 0,
+    "multiStepChallenges": 0,
+    "captchaStepPassed": 0,
+    "challengeStepPassed": 0
+  },
+  "breakdown": {
+    "challengeTypes": {
+      "math": 0,
+      "reverse": 0,
+      "phrase": 0
+    },
+    "verificationModes": {
+      "dm": 0,
+      "channel_fallback": 0
+    }
+  },
+  "recent": [],
+  "updatedAt": null
+}

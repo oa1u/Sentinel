@@ -15,38 +15,89 @@ class MySQLConnection {
     constructor() {
         this.pool = null;
         this.isConnected = false;
+        this.maxConnectRetries = Math.max(0, parseInt(process.env.MYSQL_CONNECT_RETRIES || '2'));
+        this.connectRetryDelayMs = Math.max(250, parseInt(process.env.MYSQL_CONNECT_RETRY_DELAY_MS || '1500'));
+        this.queryRetryAttempts = Math.max(0, parseInt(process.env.MYSQL_QUERY_RETRY_ATTEMPTS || '1'));
+        this.queryRetryDelayMs = Math.max(100, parseInt(process.env.MYSQL_QUERY_RETRY_DELAY_MS || '250'));
+        this.slowQueryThresholdMs = Math.max(0, parseInt(process.env.MYSQL_SLOW_QUERY_MS || '1500'));
+        this.lastHealthCheckAt = null;
+        this.lastHealthCheckLatencyMs = null;
+        this.connectionConfig = {
+            host: process.env.MYSQL_HOST || 'localhost',
+            port: parseInt(process.env.MYSQL_PORT) || 3306,
+            user: process.env.MYSQL_USER || 'root',
+            password: process.env.MYSQL_PASSWORD || '',
+            database: process.env.MYSQL_DATABASE || 'discord_bot',
+            connectionLimit: parseInt(process.env.MYSQL_CONNECTION_LIMIT) || 10,
+            queueLimit: parseInt(process.env.MYSQL_QUEUE_LIMIT) || 0,
+            waitForConnections: true,
+            enableKeepAlive: true,
+            keepAliveInitialDelay: 0,
+            connectTimeout: 10000
+        };
+    }
+
+    async delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    isTransientMySQLError(error) {
+        const transientCodes = new Set([
+            'PROTOCOL_CONNECTION_LOST',
+            'ECONNRESET',
+            'ECONNREFUSED',
+            'ETIMEDOUT',
+            'ER_LOCK_DEADLOCK',
+            'ER_LOCK_WAIT_TIMEOUT'
+        ]);
+
+        const code = error?.code;
+        const message = String(error?.message || '').toLowerCase();
+        if (code && transientCodes.has(code)) return true;
+        return message.includes('deadlock') || message.includes('lock wait timeout') || message.includes('connection lost');
     }
 
     async connect() {
-        try {
-            this.pool = mysql.createPool({
-                host: process.env.MYSQL_HOST || 'localhost',
-                port: parseInt(process.env.MYSQL_PORT) || 3306,
-                user: process.env.MYSQL_USER || 'root',
-                password: process.env.MYSQL_PASSWORD || '',
-                database: process.env.MYSQL_DATABASE || 'discord_bot',
-                connectionLimit: parseInt(process.env.MYSQL_CONNECTION_LIMIT) || 10,
-                queueLimit: parseInt(process.env.MYSQL_QUEUE_LIMIT) || 0,
-                waitForConnections: true,
-                enableKeepAlive: true,
-                keepAliveInitialDelay: 0,
-                connectTimeout: 10000
-            });
-
-            // Test the database connection to make sure everything works.
-            const connection = await this.pool.getConnection();
-            console.log('✅ MySQL Connected Successfully');
-            connection.release();
-
-            this.isConnected = true;
-            await this.initializeTables();
-
+        if (this.isConnected && this.pool) {
             return true;
-        } catch (error) {
-            console.error('❌ MySQL Connection Failed:', error.message);
-            this.isConnected = false;
-            return false;
         }
+
+        const maxAttempts = this.maxConnectRetries + 1;
+        let lastError = null;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                this.pool = mysql.createPool(this.connectionConfig);
+
+                const connection = await this.pool.getConnection();
+                await connection.ping();
+                connection.release();
+
+                this.isConnected = true;
+                await this.initializeTables();
+                console.log(`✅ MySQL Connected Successfully${attempt > 1 ? ` (attempt ${attempt}/${maxAttempts})` : ''}`);
+                return true;
+            } catch (error) {
+                lastError = error;
+                this.isConnected = false;
+                console.error(`❌ MySQL Connection Failed (attempt ${attempt}/${maxAttempts}):`, error.message);
+
+                if (this.pool) {
+                    try {
+                        await this.pool.end();
+                    } catch {
+                    }
+                }
+                this.pool = null;
+
+                if (attempt < maxAttempts) {
+                    await this.delay(this.connectRetryDelayMs * attempt);
+                }
+            }
+        }
+
+        console.error('❌ MySQL Connection Failed:', lastError?.message || 'Unknown error');
+        return false;
     }
 
     async initializeTables() {
@@ -67,6 +118,10 @@ class MySQLConnection {
             const userInfoColumnsToAdd = [
                 { name: 'nickname', type: 'VARCHAR(255) DEFAULT NULL' },
                 { name: 'bio', type: 'TEXT DEFAULT NULL' },
+                { name: 'message_streak', type: 'INT NOT NULL DEFAULT 0' },
+                { name: 'message_streak_best', type: 'INT NOT NULL DEFAULT 0' },
+                { name: 'message_streak_last_day', type: 'BIGINT DEFAULT NULL' },
+                { name: 'timezone', type: 'VARCHAR(64) DEFAULT NULL' },
                 { name: 'profile_sync_enabled', type: 'TINYINT(1) NOT NULL DEFAULT 0' },
                 { name: 'profile_last_selected_at', type: 'BIGINT DEFAULT NULL' },
                 { name: 'profile_last_synced_at', type: 'BIGINT DEFAULT NULL' }
@@ -130,6 +185,22 @@ class MySQLConnection {
                     INDEX idx_user (user_id),
                     INDEX idx_type (type)
                 )
+            `);
+
+            // Create invite usage table for persistent invite tracking
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS invite_usage (
+                    guild_id BIGINT UNSIGNED NOT NULL,
+                    invite_code VARCHAR(32) NOT NULL,
+                    inviter_id VARCHAR(20) DEFAULT NULL,
+                    join_count INT NOT NULL DEFAULT 0,
+                    last_joined_at BIGINT DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (guild_id, invite_code),
+                    INDEX idx_inviter (guild_id, inviter_id),
+                    INDEX idx_guild (guild_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
 
             // Add missing warns columns (migration)
@@ -416,6 +487,8 @@ class MySQLConnection {
                     host_id VARCHAR(20),
                     end_time BIGINT,
                     winner_count INT DEFAULT 1,
+                    required_role_id VARCHAR(20) DEFAULT NULL,
+                    winner_ids TEXT DEFAULT NULL,
                     ended BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -448,6 +521,30 @@ class MySQLConnection {
                 }
             }
 
+            // Add required_role_id column if it doesn't exist (migration)
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE giveaways
+                    ADD COLUMN IF NOT EXISTS required_role_id VARCHAR(20) DEFAULT NULL AFTER winner_count
+                `);
+            } catch (err) {
+                if (!err.message.includes('Duplicate column')) {
+                    console.error(`Note: required_role_id column migration:`, err.message);
+                }
+            }
+
+            // Add winner_ids column if it doesn't exist (migration)
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE giveaways
+                    ADD COLUMN IF NOT EXISTS winner_ids TEXT DEFAULT NULL AFTER required_role_id
+                `);
+            } catch (err) {
+                if (!err.message.includes('Duplicate column')) {
+                    console.error(`Note: winner_ids column migration:`, err.message);
+                }
+            }
+
             // Create giveaway_entries table
             await this.pool.execute(`
                 CREATE TABLE IF NOT EXISTS giveaway_entries (
@@ -474,12 +571,23 @@ class MySQLConnection {
                     closed_at BIGINT DEFAULT NULL,
                     closed_by VARCHAR(20) DEFAULT NULL,
                     close_reason TEXT DEFAULT NULL,
+                    transcript LONGTEXT DEFAULT NULL,
+                    transcript_created_at BIGINT DEFAULT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     INDEX idx_user_id (user_id),
                     INDEX idx_status (status),
                     INDEX idx_priority (priority)
                 )
             `);
+
+            try {
+                await this.pool.execute('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS transcript LONGTEXT DEFAULT NULL');
+                await this.pool.execute('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS transcript_created_at BIGINT DEFAULT NULL');
+            } catch (err) {
+                if (!err.message.includes('Duplicate column')) {
+                    console.error('Ticket transcript column migration failed:', err.message);
+                }
+            }
 
             // Create join_to_create table
             await this.pool.execute(`
@@ -526,6 +634,170 @@ class MySQLConnection {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
 
+            // Create reputation points table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS reputation_points (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    points INT UNSIGNED NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_reputation_user (guild_id, user_id),
+                    INDEX idx_reputation_guild_points (guild_id, points),
+                    INDEX idx_reputation_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS reputation_grants (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    giver_id VARCHAR(20) NOT NULL,
+                    target_id VARCHAR(20) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_rep_grants_guild_giver_time (guild_id, giver_id, created_at),
+                    INDEX idx_rep_grants_pair_time (guild_id, giver_id, target_id, created_at),
+                    INDEX idx_rep_grants_target_time (guild_id, target_id, created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create economy balances table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_balances (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    wallet BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    bank BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    total_earned BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    total_spent BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_economy_user (guild_id, user_id),
+                    INDEX idx_economy_guild_wallet (guild_id, wallet),
+                    INDEX idx_economy_guild_bank (guild_id, bank),
+                    INDEX idx_economy_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create economy transaction table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_transactions (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    tx_type VARCHAR(40) NOT NULL,
+                    amount BIGINT NOT NULL,
+                    source_user_id VARCHAR(20) DEFAULT NULL,
+                    note VARCHAR(255) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_economy_tx_guild_user_time (guild_id, user_id, created_at),
+                    INDEX idx_economy_tx_guild_type_time (guild_id, tx_type, created_at),
+                    INDEX idx_economy_tx_source_user (source_user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Track daily bank interest runs to avoid double payouts
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_interest_runs (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    run_date CHAR(10) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_economy_interest_run (guild_id, run_date),
+                    INDEX idx_economy_interest_guild (guild_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Economy fraud flag tracking
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_fraud_flags (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    flag_type VARCHAR(40) NOT NULL,
+                    severity ENUM('low', 'medium', 'high') DEFAULT 'medium',
+                    details JSON DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_economy_fraud_guild (guild_id, created_at),
+                    INDEX idx_economy_fraud_user (guild_id, user_id, created_at),
+                    INDEX idx_economy_fraud_type (flag_type)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create economy inventory table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_inventory (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    item_id VARCHAR(50) NOT NULL,
+                    quantity INT UNSIGNED NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_economy_inventory (guild_id, user_id, item_id),
+                    INDEX idx_economy_inventory_user (guild_id, user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create economy boosts table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_boosts (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    boost_type VARCHAR(40) NOT NULL,
+                    multiplier DECIMAL(6,2) NOT NULL DEFAULT 1.0,
+                    uses_remaining INT UNSIGNED NOT NULL DEFAULT 1,
+                    expires_at BIGINT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_economy_boosts_user (guild_id, user_id),
+                    INDEX idx_economy_boosts_type (boost_type),
+                    INDEX idx_economy_boosts_expires (expires_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create economy quest progress table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_quest_progress (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    quest_key VARCHAR(50) NOT NULL,
+                    cadence ENUM('daily', 'weekly') NOT NULL,
+                    period_start CHAR(10) NOT NULL,
+                    progress INT UNSIGNED NOT NULL DEFAULT 0,
+                    completed_at TIMESTAMP NULL DEFAULT NULL,
+                    claimed_at TIMESTAMP NULL DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_economy_quest (guild_id, user_id, quest_key, cadence, period_start),
+                    INDEX idx_economy_quest_user (guild_id, user_id),
+                    INDEX idx_economy_quest_period (guild_id, cadence, period_start)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create economy bounty table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS economy_bounties (
+                    bounty_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    created_by VARCHAR(20) NOT NULL,
+                    title VARCHAR(120) NOT NULL,
+                    description TEXT DEFAULT NULL,
+                    reward_amount BIGINT UNSIGNED NOT NULL,
+                    status ENUM('open', 'awarded', 'closed') DEFAULT 'open',
+                    awarded_to VARCHAR(20) DEFAULT NULL,
+                    awarded_by VARCHAR(20) DEFAULT NULL,
+                    awarded_at TIMESTAMP NULL DEFAULT NULL,
+                    closed_at TIMESTAMP NULL DEFAULT NULL,
+                    close_reason VARCHAR(255) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_economy_bounty_status (guild_id, status),
+                    INDEX idx_economy_bounty_created (guild_id, created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
             // Create admin_users table for panel authentication
             await this.pool.execute(`
                 CREATE TABLE IF NOT EXISTS admin_users (
@@ -554,6 +826,7 @@ class MySQLConnection {
                 { name: 'password_changed_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
                 { name: 'recovery_code_hashes', type: 'TEXT DEFAULT NULL' },
                 { name: 'recovery_codes_generated_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                { name: 'trusted_devices_json', type: 'TEXT DEFAULT NULL' },
                 { name: 'discord_user_id', type: 'VARCHAR(20) DEFAULT NULL' },
                 { name: 'discord_username', type: 'VARCHAR(100) DEFAULT NULL' },
                 { name: 'discord_linked_at', type: 'TIMESTAMP NULL DEFAULT NULL' }
@@ -676,16 +949,83 @@ class MySQLConnection {
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     user_id VARCHAR(20) NOT NULL,
                     guild_id VARCHAR(20) NOT NULL,
-                    violation_type ENUM('spam', 'caps', 'links', 'invites', 'mentions', 'profanity') NOT NULL,
+                    violation_type ENUM('spam', 'caps', 'links', 'invites', 'mentions', 'profanity', 'similarity', 'regex') NOT NULL,
                     message_content TEXT,
                     channel_id VARCHAR(20),
                     action_taken ENUM('delete', 'warn', 'timeout', 'kick', 'ban') NOT NULL,
+                    risk_score INT DEFAULT NULL,
+                    risk_level ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium',
+                    signal_count INT DEFAULT 1,
+                    appeal_notified BOOLEAN DEFAULT FALSE,
+                    metadata_json JSON DEFAULT NULL,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     INDEX idx_user_id (user_id),
                     INDEX idx_violation_type (violation_type),
                     INDEX idx_timestamp (timestamp)
                 )
             `);
+
+            // Create anti-raid events table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS anti_raid_events (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    event_type ENUM('lockdown_start', 'lockdown_end', 'manual_enable', 'manual_disable') NOT NULL,
+                    risk_score INT DEFAULT NULL,
+                    trigger_count INT DEFAULT NULL,
+                    details_json JSON DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_anti_raid_guild_created (guild_id, created_at),
+                    INDEX idx_anti_raid_type (event_type)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            // Create manual lockdown audit table
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS manual_lockdowns (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    action_type ENUM('enable', 'disable') NOT NULL,
+                    case_id VARCHAR(32) NOT NULL,
+                    moderator_id VARCHAR(20) NOT NULL,
+                    moderator_name VARCHAR(100) DEFAULT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_manual_lockdowns_guild_created (guild_id, created_at),
+                    INDEX idx_manual_lockdowns_case (case_id),
+                    INDEX idx_manual_lockdowns_action (action_type)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
+            const automodColumnsToAdd = [
+                { name: 'risk_score', type: 'INT DEFAULT NULL' },
+                { name: 'risk_level', type: "ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium'" },
+                { name: 'signal_count', type: 'INT DEFAULT 1' },
+                { name: 'appeal_notified', type: 'BOOLEAN DEFAULT FALSE' },
+                { name: 'metadata_json', type: 'JSON DEFAULT NULL' }
+            ];
+
+            for (const col of automodColumnsToAdd) {
+                try {
+                    await this.pool.execute(`
+                        ALTER TABLE automod_violations ADD COLUMN ${col.name} ${col.type}
+                    `);
+                    console.log(`✅ Added column '${col.name}' to automod_violations table`);
+                } catch (err) {
+                    if (err.code !== 'ER_DUP_FIELDNAME') {
+                        console.error(`Error adding column ${col.name} to automod_violations:`, err.message);
+                    }
+                }
+            }
+
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE automod_violations
+                    MODIFY COLUMN violation_type ENUM('spam', 'caps', 'links', 'invites', 'mentions', 'profanity', 'similarity', 'regex') NOT NULL
+                `);
+            } catch (err) {
+                console.error('Error updating automod_violations.violation_type enum:', err.message);
+            }
 
             // Create automod review state table (workflow queue status + reviewer notes)
             await this.pool.execute(`
@@ -793,6 +1133,29 @@ class MySQLConnection {
                 }
             }
 
+            // Create moderation incidents table (proof/evidence linked to moderation actions)
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS moderation_incidents (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    case_id VARCHAR(50) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    action_type VARCHAR(20) NOT NULL DEFAULT 'OTHER',
+                    reason TEXT,
+                    proof_text TEXT,
+                    proof_url VARCHAR(1000) DEFAULT NULL,
+                    attachment_url VARCHAR(1000) DEFAULT NULL,
+                    message_link VARCHAR(500) DEFAULT NULL,
+                    moderator_id VARCHAR(20) NOT NULL,
+                    moderator_name VARCHAR(100) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_moderation_incident_case (case_id),
+                    INDEX idx_moderation_incident_user (user_id),
+                    INDEX idx_moderation_incident_action (action_type),
+                    INDEX idx_moderation_incident_created (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+
             // Create polls table
             await this.pool.execute(`
                 CREATE TABLE IF NOT EXISTS polls (
@@ -824,6 +1187,23 @@ class MySQLConnection {
                     INDEX idx_timestamp (timestamp),
                     INDEX idx_guild_id (guild_id)
                 )
+            `);
+
+            await this.pool.execute(`
+                CREATE TABLE IF NOT EXISTS user_channel_activity (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    guild_id VARCHAR(20) NOT NULL,
+                    user_id VARCHAR(20) NOT NULL,
+                    channel_id VARCHAR(20) NOT NULL,
+                    username VARCHAR(100) NULL,
+                    message_count INT UNSIGNED NOT NULL DEFAULT 0,
+                    first_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_user_channel (guild_id, user_id, channel_id),
+                    INDEX idx_uca_user (guild_id, user_id),
+                    INDEX idx_uca_channel (guild_id, channel_id),
+                    INDEX idx_uca_message_count (message_count)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
 
             // Create sessions table for express-session
@@ -1044,6 +1424,28 @@ class MySQLConnection {
                 }
             }
 
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE ban_appeals ADD COLUMN decided_by_id VARCHAR(64) DEFAULT NULL
+                `);
+                console.log('✅ Added decided_by_id column to ban_appeals table');
+            } catch (err) {
+                if (err.code !== 'ER_DUP_FIELDNAME') {
+                    console.error('Error adding decided_by_id column to ban_appeals:', err.message);
+                }
+            }
+
+            try {
+                await this.pool.execute(`
+                    ALTER TABLE ban_appeals ADD COLUMN decided_by_name VARCHAR(100) DEFAULT NULL
+                `);
+                console.log('✅ Added decided_by_name column to ban_appeals table');
+            } catch (err) {
+                if (err.code !== 'ER_DUP_FIELDNAME') {
+                    console.error('Error adding decided_by_name column to ban_appeals:', err.message);
+                }
+            }
+
             // Create alert settings table
             await this.pool.execute(`
                 CREATE TABLE IF NOT EXISTS alert_settings (
@@ -1098,14 +1500,41 @@ class MySQLConnection {
                     status ENUM('sent', 'failed', 'blocked') NOT NULL,
                     error_message TEXT NULL,
                     message_id VARCHAR(255) NULL,
+                    correlation_id VARCHAR(128) NULL,
+                    source VARCHAR(100) NULL,
+                    provider_response TEXT NULL,
+                    attempt_count INT DEFAULT 1,
+                    latency_ms INT DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     INDEX idx_created (created_at),
                     INDEX idx_status (status),
                     INDEX idx_template (template_name),
-                    INDEX idx_recipient_domain (recipient_domain)
+                    INDEX idx_recipient_domain (recipient_domain),
+                    INDEX idx_correlation_id (correlation_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
             console.log('✅ Email Delivery Logs table initialized');
+
+            const emailDeliveryColumnsToAdd = [
+                { name: 'correlation_id', type: 'VARCHAR(128) DEFAULT NULL' },
+                { name: 'source', type: 'VARCHAR(100) DEFAULT NULL' },
+                { name: 'provider_response', type: 'TEXT' },
+                { name: 'attempt_count', type: 'INT DEFAULT 1' },
+                { name: 'latency_ms', type: 'INT DEFAULT NULL' }
+            ];
+
+            for (const col of emailDeliveryColumnsToAdd) {
+                try {
+                    await this.pool.execute(`
+                        ALTER TABLE email_delivery_logs ADD COLUMN ${col.name} ${col.type}
+                    `);
+                    console.log(`✅ Added column '${col.name}' to email_delivery_logs table`);
+                } catch (err) {
+                    if (err.code !== 'ER_DUP_FIELDNAME') {
+                        console.error(`Error adding column ${col.name} to email_delivery_logs:`, err.message);
+                    }
+                }
+            }
 
             // Create persistent scheduled jobs table
             await this.pool.execute(`
@@ -1157,17 +1586,111 @@ class MySQLConnection {
 
     async query(sql, params = []) {
         if (!this.isConnected || !this.pool) {
-            throw new Error('MySQL not connected');
+            const connected = await this.connect();
+            if (!connected) {
+                throw new Error('MySQL not connected');
+            }
         }
+
+        const maxAttempts = this.queryRetryAttempts + 1;
+        let lastError = null;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                const startedAt = Date.now();
+                const [results] = await this.pool.execute(sql, params);
+                const durationMs = Date.now() - startedAt;
+
+                if (durationMs >= this.slowQueryThresholdMs) {
+                    console.warn(`[MySQL] Slow query (${durationMs}ms)`);
+                }
+
+                return results;
+            } catch (error) {
+                lastError = error;
+                const isRetryable = this.isTransientMySQLError(error) && attempt < maxAttempts;
+
+                if (isRetryable) {
+                    await this.delay(this.queryRetryDelayMs * attempt);
+                    continue;
+                }
+
+                if (!error.message || !error.message.includes('Unknown column')) {
+                    console.error('MySQL Query Error:', error.message);
+                }
+                throw error;
+            }
+        }
+
+        throw lastError || new Error('MySQL query failed');
+    }
+
+    async transaction(handler) {
+        if (typeof handler !== 'function') {
+            throw new Error('MySQL transaction handler must be a function');
+        }
+
+        if (!this.isConnected || !this.pool) {
+            const connected = await this.connect();
+            if (!connected) {
+                throw new Error('MySQL not connected');
+            }
+        }
+
+        const connection = await this.pool.getConnection();
         try {
-            const [results] = await this.pool.execute(sql, params);
-            return results;
+            await connection.beginTransaction();
+            const result = await handler(connection);
+            await connection.commit();
+            return result;
         } catch (error) {
-            // Suppress known column errors as they're handled by catch blocks in callers
-            if (!error.message || !error.message.includes('Unknown column')) {
-                console.error('MySQL Query Error:', error.message);
+            try {
+                await connection.rollback();
+            } catch {
             }
             throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    async healthCheck() {
+        if (!this.pool || !this.isConnected) {
+            return {
+                ok: false,
+                isConnected: false,
+                latencyMs: null,
+                lastHealthCheckAt: this.lastHealthCheckAt,
+                lastHealthCheckLatencyMs: this.lastHealthCheckLatencyMs,
+                error: 'MySQL not connected'
+            };
+        }
+
+        try {
+            const startedAt = Date.now();
+            await this.pool.query('SELECT 1 AS ok');
+            const latencyMs = Date.now() - startedAt;
+
+            this.lastHealthCheckAt = Date.now();
+            this.lastHealthCheckLatencyMs = latencyMs;
+
+            return {
+                ok: true,
+                isConnected: this.isConnected,
+                latencyMs,
+                lastHealthCheckAt: this.lastHealthCheckAt,
+                lastHealthCheckLatencyMs: this.lastHealthCheckLatencyMs,
+                error: null
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                isConnected: this.isConnected,
+                latencyMs: null,
+                lastHealthCheckAt: this.lastHealthCheckAt,
+                lastHealthCheckLatencyMs: this.lastHealthCheckLatencyMs,
+                error: error.message
+            };
         }
     }
 

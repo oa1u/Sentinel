@@ -1,12 +1,12 @@
 const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
-const { ticketCategoryId, ticketLogChannelId } = require("../Config/constants/channel.json");
-const { supportTeamRoleId } = require("../Config/constants/roles.json");
+const { CHANNELS: { ticketCategoryId, ticketLogChannelId }, ROLES: { supportTeamRoleId } } = require("../Config/constants");
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 
 // Ticket reaction handler — manages close reactions on ticket channels.
 // Users or staff can close tickets with the ❌ reaction and the handler archives the transcript.
 module.exports = {
     name: "messageReactionAdd",
+    disabled: true,
     runOnce: false,
     call: async (client, args) => {
         if (!args || !args[0] || !args[1]) return;
@@ -160,7 +160,9 @@ module.exports = {
             status: 'closed',
             closedAt: Date.now(),
             closedBy: user.id,
-            closeReason: 'Closed via ❌ reaction'
+            closeReason: 'Closed via ❌ reaction',
+            transcript,
+            transcriptCreatedAt: Date.now()
         });
 
         // Close the ticket
@@ -181,8 +183,7 @@ module.exports = {
             await channel.delete().catch((err) => {
                 console.error(`[TicketReaction] Failed to delete ticket channel: ${err.message}`);
             });
-            // Clean up database after deletion
-            await MySQLDatabaseManager.deleteTicket(channelId);
+            // Keep ticket record for transcript viewer.
         }, 5000);
     }
 };

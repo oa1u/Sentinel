@@ -12,17 +12,11 @@
         MAX_RETRIES: 1
     };
 
-    /**
-     * Internal state for token management
-     */
+
     let _csrfTokenCache = null;
     let _tokenPromise = null;
     let _isFetching = false; // Add explicit flag
 
-    /**
-     * Fetches a fresh CSRF token from the backend.
-     * Uses a promise lock to prevent multiple simultaneous requests.
-     */
     async function fetchNewToken() {
         if (_tokenPromise) return _tokenPromise;
 
@@ -59,11 +53,10 @@
         return _tokenPromise;
     }
 
-    /**
-     * Gets the current CSRF token, refreshing if necessary.
-     * @param {boolean} forceRefresh - Whether to bypass cache and fetch new.
-     */
     async function getCsrfToken(forceRefresh = false) {
+        if (window.AdminPanel?.api?.getCsrfToken) {
+            return window.AdminPanel.api.getCsrfToken(forceRefresh);
+        }
         // If we have a cached token and invalidation is not forced, use it.
         // We also check if the token looks vaguely valid (non-empty string)
         if (!forceRefresh && _csrfTokenCache && typeof _csrfTokenCache === 'string' && _csrfTokenCache.length > 10) {

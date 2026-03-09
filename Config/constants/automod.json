@@ -7,7 +7,17 @@
         "capsThreshold": 0.7,
         "minLengthForCaps": 10,
         "spamTimeout": 600000,
-        "spamWarningThreshold": 2
+        "spamWarningThreshold": 2,
+        "similarityWindowMs": 120000,
+        "similarityThreshold": 0.88,
+        "similarityMinLength": 12,
+        "similarityRepeatThreshold": 3,
+        "riskWarnThreshold": 20,
+        "riskDeleteThreshold": 35,
+        "riskTimeoutThreshold": 60,
+        "baseTimeoutMs": 600000,
+        "maxTimeoutMs": 21600000,
+        "profanityFilterEnabled": true
     },
     "autoModAdvanced": {
         "exemptChannelIds": [],
@@ -15,10 +25,72 @@
         "inviteAllowlistGuildIds": [],
         "blockedRegexPatterns": [],
         "escalationThreshold24h": 4,
-        "escalationTimeoutMs": 1800000
+        "escalationTimeoutMs": 1800000,
+        "progressiveTimeoutMultiplier": 1.4,
+        "kickThreshold24h": 14,
+        "regexMaxPatternLength": 180,
+        "riskWeights": {
+            "spam": 28,
+            "similarity": 30,
+            "caps": 14,
+            "profanity": 26,
+            "regex": 34,
+            "invites": 30,
+            "mentions": 18
+        }
+    },
+    "antiRaid": {
+        "enabled": true,
+        "joinWindowMs": 60000,
+        "joinThreshold": 8,
+        "adaptiveThresholds": {
+            "enabled": true,
+            "baseJoinThreshold": 8,
+            "minJoinThreshold": 5,
+            "maxJoinThreshold": 25,
+            "perMembersStep": 1000
+        },
+        "accountAgeDaysThreshold": 7,
+        "accountAgeSkewThreshold": 0.6,
+        "accountAgeMinSamples": 6,
+        "usernameEntropyThreshold": 0.35,
+        "usernameEntropyMinLength": 6,
+        "usernameEntropyTriggerCount": 5,
+        "nameClusterSimilarity": 0.82,
+        "nameClusterMinCount": 4,
+        "inviteAnomalyWindowMs": 300000,
+        "inviteAnomalyThreshold": 6,
+        "inviteReputation": {
+            "enabled": true,
+            "firstUseMultiplier": 1.4,
+            "lowJoinThreshold": 3,
+            "lowJoinMultiplier": 1.6,
+            "highJoinThreshold": 20,
+            "highJoinMultiplier": 0.6,
+            "vanityMultiplier": 0.5,
+            "unknownMultiplier": 1.2,
+            "lowInviterJoinsThreshold": 5,
+            "lowInviterMultiplier": 1.3
+        },
+        "earlyLeaveWindowMs": 300000,
+        "earlyLeaveThreshold": 5,
+        "earlyLeaveMaxAgeMs": 900000,
+        "lockdownSlowmodeSeconds": 30,
+        "lockdownAllTextChannels": true,
+        "lockdownChannelIds": [],
+        "autoRevertMs": 1800000,
+        "quarantineRoleId": "",
+        "protectedRoleIds": [],
+        "verificationSignals": {
+            "enabled": true,
+            "riskWindowMs": 600000,
+            "highRiskScoreThreshold": 45,
+            "highRiskCountThreshold": 4,
+            "autoLockdownOnHighRisk": false
+        }
     },
     "autoModProfiles": {
-        "activeProfile": "balanced",
+        "activeProfile": "relaxed",
         "profiles": {
             "balanced": {
                 "blockExternalInvites": true,
@@ -29,11 +101,32 @@
                     "capsThreshold": 0.7,
                     "minLengthForCaps": 10,
                     "spamTimeout": 600000,
-                    "spamWarningThreshold": 2
+                    "spamWarningThreshold": 2,
+                    "similarityWindowMs": 120000,
+                    "similarityThreshold": 0.88,
+                    "similarityMinLength": 12,
+                    "similarityRepeatThreshold": 3,
+                    "riskWarnThreshold": 20,
+                    "riskDeleteThreshold": 35,
+                    "riskTimeoutThreshold": 60,
+                    "baseTimeoutMs": 600000,
+                    "maxTimeoutMs": 21600000
                 },
                 "autoModAdvanced": {
                     "escalationThreshold24h": 4,
                     "escalationTimeoutMs": 1800000,
+                    "progressiveTimeoutMultiplier": 1.4,
+                    "kickThreshold24h": 14,
+                    "regexMaxPatternLength": 180,
+                    "riskWeights": {
+                        "spam": 28,
+                        "similarity": 30,
+                        "caps": 14,
+                        "profanity": 26,
+                        "regex": 34,
+                        "invites": 30,
+                        "mentions": 18
+                    },
                     "blockedRegexPatterns": [],
                     "exemptChannelIds": [],
                     "exemptRoleIds": []
@@ -48,11 +141,32 @@
                     "capsThreshold": 0.7,
                     "minLengthForCaps": 8,
                     "spamTimeout": 600000,
-                    "spamWarningThreshold": 2
+                    "spamWarningThreshold": 2,
+                    "similarityWindowMs": 150000,
+                    "similarityThreshold": 0.84,
+                    "similarityMinLength": 10,
+                    "similarityRepeatThreshold": 3,
+                    "riskWarnThreshold": 18,
+                    "riskDeleteThreshold": 32,
+                    "riskTimeoutThreshold": 52,
+                    "baseTimeoutMs": 900000,
+                    "maxTimeoutMs": 21600000
                 },
                 "autoModAdvanced": {
                     "escalationThreshold24h": 4,
                     "escalationTimeoutMs": 1800000,
+                    "progressiveTimeoutMultiplier": 1.5,
+                    "kickThreshold24h": 12,
+                    "regexMaxPatternLength": 180,
+                    "riskWeights": {
+                        "spam": 30,
+                        "similarity": 34,
+                        "caps": 16,
+                        "profanity": 28,
+                        "regex": 36,
+                        "invites": 32,
+                        "mentions": 20
+                    },
                     "blockedRegexPatterns": [],
                     "exemptChannelIds": [],
                     "exemptRoleIds": []
@@ -67,11 +181,33 @@
                     "capsThreshold": 0.7,
                     "minLengthForCaps": 12,
                     "spamTimeout": 600000,
-                    "spamWarningThreshold": 2
+                    "spamWarningThreshold": 2,
+                    "similarityWindowMs": 90000,
+                    "similarityThreshold": 0.91,
+                    "similarityMinLength": 14,
+                    "similarityRepeatThreshold": 4,
+                    "riskWarnThreshold": 24,
+                    "riskDeleteThreshold": 42,
+                    "riskTimeoutThreshold": 70,
+                    "baseTimeoutMs": 420000,
+                    "maxTimeoutMs": 10800000,
+                    "profanityFilterEnabled": true
                 },
                 "autoModAdvanced": {
                     "escalationThreshold24h": 4,
                     "escalationTimeoutMs": 1800000,
+                    "progressiveTimeoutMultiplier": 1.3,
+                    "kickThreshold24h": 16,
+                    "regexMaxPatternLength": 180,
+                    "riskWeights": {
+                        "spam": 24,
+                        "similarity": 26,
+                        "caps": 12,
+                        "profanity": 24,
+                        "regex": 30,
+                        "invites": 28,
+                        "mentions": 16
+                    },
                     "blockedRegexPatterns": [],
                     "exemptChannelIds": [],
                     "exemptRoleIds": []

@@ -1,8 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
-const { levelUpLogChannelId } = require('../Config/constants/channel.json');
-const { config: CONFIG, multipliers: MULTIPLIERS, levelRoles: LEVEL_ROLES } = require('../Config/constants/leveling.json');
-const misc = require('../Config/constants/misc.json');
+const { CHANNELS: { levelUpLogChannelId, welcomeChannelId, serverLogChannelId, rulesChannelId }, LEVELING: { config: CONFIG, multipliers: MULTIPLIERS, levelRoles: LEVEL_ROLES }, MISC: misc } = require('../Config/constants');
 
 // Leveling system: awards XP for messages, tracks progress, and handles level-up notifications and rewards.
 // TODO: Add per-channel/admin-configurable XP multipliers for finer control.
@@ -100,6 +98,81 @@ async function saveUserData(userId, data, username) {
         });
     } catch (error) {
         console.error('[Leveling] Error saving user data:', error);
+    }
+}
+
+async function sendFirstMessageHighlight(message) {
+    const firstMessageConfig = misc?.firstMessage || {};
+    if (firstMessageConfig.enabled === false) return;
+
+    const logTarget = serverLogChannelId
+        ? (message.guild.channels.cache.get(serverLogChannelId) || await message.guild.channels.fetch(serverLogChannelId).catch(() => null))
+        : null;
+
+    if (firstMessageConfig.logToServerChannel !== false && logTarget?.isTextBased?.()) {
+        const logEmbed = new EmbedBuilder()
+            .setColor(0x43B581)
+            .setTitle('📌 First Message Logged')
+            .setDescription(`${message.author.tag} posted their first message.`)
+            .addFields(
+                {
+                    name: 'Member', value: `${message.author.toString()}
+\`ID: ${message.author.id}\``, inline: true
+                },
+                { name: 'Channel', value: message.channel.toString(), inline: true },
+                { name: 'Message', value: `[Jump to message](${message.url})`, inline: true }
+            )
+            .setTimestamp();
+
+        await logTarget.send({ embeds: [logEmbed] }).catch((err) => {
+            console.error(`[FirstMessage] Failed to send log highlight: ${err.message}`);
+        });
+    }
+
+    if (firstMessageConfig.replyToUser !== false) {
+        const replyText = String(firstMessageConfig.replyMessage || '').trim();
+        if (replyText) {
+            const rulesMention = rulesChannelId ? `<#${rulesChannelId}>` : 'the rules channel';
+            const resolvedReplyText = replyText.replace(/\{rulesChannel\}/g, rulesMention);
+            const mentionUser = firstMessageConfig.replyMention !== false;
+            const replyEmbed = new EmbedBuilder()
+                .setColor(0x43B581)
+                .setTitle(`Welcome to ${message.guild?.name || 'the server'}!`)
+                .setDescription(resolvedReplyText)
+                .addFields(
+                    { name: 'Getting Started', value: `Please read ${rulesMention} and check any pinned guides.`, inline: false },
+                    { name: 'Need Help?', value: 'Feel free to ask a staff member if you need anything.', inline: false }
+                )
+                .setThumbnail(message.author.displayAvatarURL({ size: 128 }))
+                .setFooter({ text: 'Thanks for joining us!' });
+            const replyPayload = {
+                embeds: [replyEmbed],
+                allowedMentions: {
+                    repliedUser: mentionUser,
+                    users: mentionUser ? [message.author.id] : []
+                }
+            };
+
+            let replied = false;
+            if (firstMessageConfig.replyInChannel !== false && message.channel?.isTextBased?.()) {
+                try {
+                    const replyMessage = await message.reply(replyPayload);
+                    setTimeout(() => replyMessage.delete().catch(() => { }), 120000);
+                    replied = true;
+                } catch (err) {
+                    console.error(`[FirstMessage] Failed to reply in channel: ${err.message}`);
+                }
+            }
+
+            if (!replied && firstMessageConfig.replyInDm === true) {
+                try {
+                    const dmMessage = await message.author.send({ embeds: [replyEmbed] });
+                    setTimeout(() => dmMessage.delete().catch(() => { }), 120000);
+                } catch (err) {
+                    console.error(`[FirstMessage] Failed to DM user: ${err.message}`);
+                }
+            }
+        }
     }
 }
 
@@ -205,6 +278,18 @@ async function processXP(message) {
     if (message.author.bot) return;
     if (!message.guild) return;
 
+    MySQLDatabaseManager.updateUserMessageStreak(
+        message.author.id,
+        message.author.username
+    ).catch(() => { });
+
+    MySQLDatabaseManager.trackUserChannelActivity(
+        message.guild.id,
+        message.author.id,
+        message.channel.id,
+        message.author.username
+    ).catch(() => { });
+
     const now = Date.now();
     const cooldownKey = `${message.author.id}_${message.guild.id}`;
 
@@ -229,6 +314,7 @@ async function processXP(message) {
     const xpGain = calculateXPGain(message);
     userData.xp += xpGain;
     userData.totalXP += xpGain;
+    const wasFirstMessage = userData.messages === 0;
     userData.messages += 1;
     userData.lastXPGain = now;
 
@@ -244,10 +330,43 @@ async function processXP(message) {
     // Save to database
     await saveUserData(message.author.id, userData, message.author.username);
 
+    if (wasFirstMessage) {
+        await sendFirstMessageHighlight(message);
+    }
+
     // Send level up notification if leveled up
     if (newLevel > oldLevel) {
         await sendLevelUpNotification(message, userData, newLevel);
     }
+}
+
+async function addBonusXP(message, bonusXp = 0) {
+    if (!message || !message.guild || !message.author || message.author.bot) return null;
+
+    const safeBonus = Math.max(1, Math.floor(Number(bonusXp) || 0));
+    if (!safeBonus) return null;
+
+    const userData = await getUserData(message.author.id);
+    const oldLevel = userData.level;
+
+    userData.xp += safeBonus;
+    userData.totalXP += safeBonus;
+
+    let newLevel = oldLevel;
+    while (userData.xp >= calculateRequiredXP(newLevel + 1)) {
+        userData.xp -= calculateRequiredXP(newLevel + 1);
+        newLevel++;
+    }
+
+    userData.level = newLevel;
+
+    await saveUserData(message.author.id, userData, message.author.username);
+
+    if (newLevel > oldLevel) {
+        await sendLevelUpNotification(message, userData, newLevel);
+    }
+
+    return { oldLevel, newLevel };
 }
 
 // Gets top users
@@ -316,21 +435,27 @@ async function resetUser(userId) {
     }
 }
 
+async function handleMessageCreate(message) {
+    try {
+        await processXP(message);
+    } catch (error) {
+        console.error('[Leveling] Error processing XP:', error);
+        // Don't throw - just log and continue to prevent bot crashes
+    }
+}
+
 module.exports = {
     name: 'messageCreate',
+    disabled: true,
     async execute(message) {
-        try {
-            await processXP(message);
-        } catch (error) {
-            console.error('[Leveling] Error processing XP:', error);
-            // Don't throw - just log and continue to prevent bot crashes
-        }
+        return handleMessageCreate(message);
     },
-    // Export utility functions for commands
+    handleMessageCreate,
     getUserData,
     getLeaderboard,
     getUserRank,
     calculateRequiredXP,
+    addBonusXP,
     setUserXP,
     resetUser,
     CONFIG,

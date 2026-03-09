@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
-const { administratorRoleId } = require("../../Config/constants/roles.json");
-const { rulesChannelId } = require("../../Config/constants/channel.json");
+const { ROLES: { administratorRoleId }, CHANNELS: { rulesChannelId } } = require("../../Config/constants");
 const fs = require('fs');
 const path = require('path');
 

@@ -8,6 +8,8 @@ const MySQLStore = require('express-mysql-session')(session);
 const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { spawn } = require('child_process');
 const bodyParser = require('body-parser');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -15,10 +17,11 @@ const MySQLDatabaseManager = require('./Functions/MySQLDatabaseManager');
 const AdminPanelHelper = require('./Functions/AdminPanelHelper');
 const TotpHelper = require('./Functions/TotpHelper');
 const EmailHelper = require('./Functions/EmailHelper');
+const { getVerificationAnalytics } = require('./Functions/VerificationAnalytics');
 const CsrfHelper = require('./Functions/CsrfHelper');
 const { getStats } = require('./Functions/botStats');
 const { generateCaseId } = require('./Events/caseId');
-const { serverLogChannelId } = require('./Config/constants/channel.json');
+const { CHANNELS: { serverLogChannelId, discordChannelId }, RULES: RULES_CONFIG, MISC: MISC_CONFIG } = require('./Config/constants');
 
 function validateCsrfHelperApi() {
     const requiredMethods = ['generateSecret', 'createToken', 'verifyToken', 'verifyOrigin'];
@@ -47,6 +50,283 @@ require('dotenv').config({
 });
 
 const app = express();
+app.disable('x-powered-by');
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const ADMIN_PORT = process.env.ADMIN_PORT || 3000;
+const ADMIN_ORIGIN = String(process.env.ADMIN_ORIGIN || '').trim();
+const ENFORCE_HOST_HEADER = (() => {
+    const raw = String(process.env.ADMIN_ENFORCE_HOST_HEADER || (IS_PRODUCTION ? 'true' : 'false')).trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(raw);
+})();
+const ADMIN_ALLOWED_HOSTS = new Set(
+    String(process.env.ADMIN_ALLOWED_HOSTS || '')
+        .split(',')
+        .map((entry) => String(entry || '').trim().toLowerCase())
+        .filter(Boolean)
+);
+
+function normalizeHostName(hostValue) {
+    const raw = String(hostValue || '').trim().toLowerCase();
+    if (!raw) return '';
+
+    try {
+        const parsed = new URL(`http://${raw}`);
+        return String(parsed.hostname || '').trim().toLowerCase();
+    } catch {
+        const noPort = raw.startsWith('[')
+            ? raw.replace(/^\[([^\]]+)\](?::\d+)?$/, '$1')
+            : raw.replace(/:\d+$/, '');
+        return noPort.replace(/\.+$/, '').trim();
+    }
+}
+
+function getAllowedHostNames() {
+    const hosts = new Set(['localhost', '127.0.0.1', '::1']);
+    for (const host of ADMIN_ALLOWED_HOSTS) {
+        const normalized = normalizeHostName(host);
+        if (normalized) hosts.add(normalized);
+    }
+
+    if (ADMIN_ORIGIN) {
+        try {
+            const hostFromOrigin = new URL(ADMIN_ORIGIN).hostname;
+            const normalized = normalizeHostName(hostFromOrigin);
+            if (normalized) hosts.add(normalized);
+        } catch {
+            const normalized = normalizeHostName(ADMIN_ORIGIN);
+            if (normalized) hosts.add(normalized);
+        }
+    }
+
+    return hosts;
+}
+
+const ALLOWED_HOST_NAMES = getAllowedHostNames();
+
+function isAllowedHostHeader(hostHeader) {
+    const normalized = normalizeHostName(String(hostHeader || '').split(',')[0]);
+    if (!normalized) return true;
+
+    if (!ENFORCE_HOST_HEADER) {
+        return true;
+    }
+
+    return ALLOWED_HOST_NAMES.has(normalized);
+}
+
+function isAllowedOrigin(origin) {
+    if (!origin) return true;
+
+    const normalized = String(origin).trim().toLowerCase();
+    const localOrigins = new Set([
+        `http://localhost:${ADMIN_PORT}`.toLowerCase(),
+        `http://127.0.0.1:${ADMIN_PORT}`.toLowerCase(),
+        `https://localhost:${ADMIN_PORT}`.toLowerCase(),
+        `https://127.0.0.1:${ADMIN_PORT}`.toLowerCase()
+    ]);
+
+    if (ADMIN_ORIGIN && normalized === ADMIN_ORIGIN.toLowerCase()) {
+        return true;
+    }
+
+    if (localOrigins.has(normalized)) {
+        return true;
+    }
+
+    if (!IS_PRODUCTION && normalized.includes('ngrok')) {
+        return true;
+    }
+
+    return false;
+}
+
+const securitySignalThrottle = new Map();
+const suspiciousSignalActivityByIp = new Map();
+const suspiciousAlertThrottleByIp = new Map();
+
+const SUSPICIOUS_SIGNAL_WEIGHTS = Object.freeze({
+    'host-header-blocked': 6,
+    'api-origin-blocked': 4,
+    'csrf-token-failed': 3,
+    'csrf-origin-failed': 2,
+    'rate-limit-hit': 2,
+    'login-ip-locked': 5,
+    'login-bruteforce-threshold': 6,
+    'new-device-login': 3,
+    'device-binding-blocked': 8,
+    'ip-reputation-elevated': 3,
+    'ip-reputation-blocked': 8
+});
+
+const IP_REPUTATION_BLOCK_SCORE = (() => {
+    const parsed = Number(process.env.IP_REPUTATION_BLOCK_SCORE);
+    return Number.isFinite(parsed) && parsed >= 40 && parsed <= 100 ? parsed : 80;
+})();
+
+const IP_REPUTATION_ELEVATED_SCORE = (() => {
+    const parsed = Number(process.env.IP_REPUTATION_ELEVATED_SCORE);
+    if (Number.isFinite(parsed) && parsed >= 20 && parsed < IP_REPUTATION_BLOCK_SCORE) {
+        return parsed;
+    }
+    return Math.min(55, Math.max(20, IP_REPUTATION_BLOCK_SCORE - 20));
+})();
+
+const DEVICE_BINDING_STRICT_MODE = (() => {
+    const raw = String(process.env.DEVICE_BINDING_STRICT_MODE || 'false').trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(raw);
+})();
+
+const DEVICE_BINDING_MAX_DEVICES = (() => {
+    const parsed = Number(process.env.DEVICE_BINDING_MAX_DEVICES);
+    return Number.isFinite(parsed) && parsed >= 3 && parsed <= 50 ? Math.floor(parsed) : 20;
+})();
+
+const NEW_DEVICE_EMAIL_ALERT_ENABLED = (() => {
+    const raw = String(process.env.NEW_DEVICE_EMAIL_ALERT_ENABLED || 'true').trim().toLowerCase();
+    return !['0', 'false', 'no', 'off'].includes(raw);
+})();
+
+const SUSPICIOUS_ACTIVITY_WINDOW_MS = (() => {
+    const parsed = Number(process.env.SUSPICIOUS_ACTIVITY_WINDOW_MS);
+    return Number.isFinite(parsed) && parsed >= 60 * 1000 ? parsed : 10 * 60 * 1000;
+})();
+
+const SUSPICIOUS_ACTIVITY_SCORE_THRESHOLD = (() => {
+    const parsed = Number(process.env.SUSPICIOUS_ACTIVITY_SCORE_THRESHOLD);
+    return Number.isFinite(parsed) && parsed >= 5 ? parsed : 9;
+})();
+
+const SUSPICIOUS_ACTIVITY_MIN_DISTINCT_SIGNALS = (() => {
+    const parsed = Number(process.env.SUSPICIOUS_ACTIVITY_MIN_DISTINCT_SIGNALS);
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 2;
+})();
+
+const SUSPICIOUS_ACTIVITY_ALERT_COOLDOWN_MS = (() => {
+    const parsed = Number(process.env.SUSPICIOUS_ACTIVITY_ALERT_COOLDOWN_MS);
+    return Number.isFinite(parsed) && parsed >= 60 * 1000 ? parsed : 10 * 60 * 1000;
+})();
+
+function cleanupSuspiciousMaps(now = Date.now()) {
+    if (suspiciousSignalActivityByIp.size > 3000) {
+        for (const [ip, records] of suspiciousSignalActivityByIp.entries()) {
+            const active = (Array.isArray(records) ? records : []).filter((entry) => now - Number(entry?.timestamp || 0) <= SUSPICIOUS_ACTIVITY_WINDOW_MS);
+            if (active.length === 0) {
+                suspiciousSignalActivityByIp.delete(ip);
+            } else {
+                suspiciousSignalActivityByIp.set(ip, active);
+            }
+        }
+    }
+
+    if (suspiciousAlertThrottleByIp.size > 3000) {
+        for (const [ip, lastAt] of suspiciousAlertThrottleByIp.entries()) {
+            if (now - Number(lastAt || 0) > Math.max(SUSPICIOUS_ACTIVITY_ALERT_COOLDOWN_MS, 30 * 60 * 1000)) {
+                suspiciousAlertThrottleByIp.delete(ip);
+            }
+        }
+    }
+}
+
+function maybeTriggerSuspiciousActivityAlert(req, signal, metadata = {}) {
+    try {
+        const signalKey = String(signal || '').toLowerCase();
+        const weight = Number(SUSPICIOUS_SIGNAL_WEIGHTS[signalKey] || 0);
+        if (weight <= 0 || signalKey === 'suspicious-activity-detected') return;
+
+        const now = Date.now();
+        const ip = String(req?.clientIP || req?.ip || metadata?.ipAddress || 'unknown');
+        const existing = suspiciousSignalActivityByIp.get(ip) || [];
+        const active = existing.filter((entry) => now - Number(entry?.timestamp || 0) <= SUSPICIOUS_ACTIVITY_WINDOW_MS);
+        active.push({
+            signal: signalKey,
+            weight,
+            timestamp: now
+        });
+
+        suspiciousSignalActivityByIp.set(ip, active);
+        cleanupSuspiciousMaps(now);
+
+        const totalScore = active.reduce((sum, entry) => sum + Number(entry?.weight || 0), 0);
+        const distinctSignalCount = new Set(active.map((entry) => String(entry?.signal || '').toLowerCase()).filter(Boolean)).size;
+        if (totalScore < SUSPICIOUS_ACTIVITY_SCORE_THRESHOLD) return;
+        if (distinctSignalCount < SUSPICIOUS_ACTIVITY_MIN_DISTINCT_SIGNALS) return;
+
+        const lastAlertAt = Number(suspiciousAlertThrottleByIp.get(ip) || 0);
+        if (now - lastAlertAt < SUSPICIOUS_ACTIVITY_ALERT_COOLDOWN_MS) return;
+        suspiciousAlertThrottleByIp.set(ip, now);
+
+        const summarySignals = Array.from(new Set(active.map((entry) => entry.signal))).slice(0, 6);
+        const alertPayload = {
+            signal: 'suspicious-activity-detected',
+            ipAddress: ip,
+            score: totalScore,
+            distinctSignals: distinctSignalCount,
+            totalSignalsObserved: active.length,
+            windowMs: SUSPICIOUS_ACTIVITY_WINDOW_MS,
+            signals: summarySignals,
+            path: String(req?.path || metadata?.path || ''),
+            method: String(req?.method || metadata?.method || '').toUpperCase(),
+            username: String(req?.session?.username || metadata?.username || 'security')
+        };
+
+        logAdminAuthEvent('security', 'LOGIN_FAILED', req, alertPayload).catch(() => { });
+
+        try {
+            if (io && typeof io.to === 'function') {
+                io.to('owners').emit('suspicious-activity-alert', {
+                    ...alertPayload,
+                    createdAt: new Date(now).toISOString()
+                });
+            }
+        } catch (socketError) {
+            console.error('[Security] Failed to emit suspicious activity alert socket event:', socketError?.message || socketError);
+        }
+
+        console.warn(`[Security] Suspicious activity alert triggered for ${ip}. score=${totalScore}, distinct=${distinctSignalCount}, signals=${summarySignals.join(', ')}`);
+    } catch (error) {
+        console.error('[Security] Failed to evaluate suspicious activity alert:', error?.message || error);
+    }
+}
+
+function emitSecuritySignal(req, signal, metadata = {}, throttleMs = 60 * 1000) {
+    try {
+        const ip = String(req?.clientIP || req?.ip || 'unknown');
+        const pathName = String(req?.path || metadata?.path || 'unknown');
+        const method = String(req?.method || metadata?.method || 'unknown').toUpperCase();
+        const key = `${signal}:${ip}:${pathName}:${method}`;
+        const now = Date.now();
+        const lastAt = Number(securitySignalThrottle.get(key) || 0);
+
+        if (now - lastAt < Math.max(1000, Number(throttleMs) || 0)) {
+            return;
+        }
+
+        securitySignalThrottle.set(key, now);
+
+        if (securitySignalThrottle.size > 2000) {
+            for (const [entryKey, timestamp] of securitySignalThrottle.entries()) {
+                if (now - Number(timestamp || 0) > 10 * 60 * 1000) {
+                    securitySignalThrottle.delete(entryKey);
+                }
+            }
+        }
+
+        const payload = {
+            signal,
+            path: pathName,
+            method,
+            ...metadata
+        };
+
+        maybeTriggerSuspiciousActivityAlert(req, signal, payload);
+
+        console.warn(`[Security] ${signal} detected for ${ip} on ${method} ${pathName}`);
+        logAdminAuthEvent('security', 'LOGIN_FAILED', req, payload).catch(() => { });
+    } catch (error) {
+        console.error('[Security] Failed to emit security signal:', error.message || error);
+    }
+}
 
 function logDiscordOAuthStartupStatus() {
     const required = [
@@ -84,7 +364,6 @@ app.use((req, res, next) => {
     }
     next();
 });
-// (trust proxy is enabled later with a friendlier comment)
 
 // Reference to the Discord bot client, set by index.js
 let discordClient = null;
@@ -118,16 +397,7 @@ const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
         origin: function (origin, callback) {
-            // Allow localhost and ngrok URLs during development so local dev
-            // and tunneling tools (like ngrok) work without CORS blocks.
-            const allowedOrigins = [
-                `http://localhost:${process.env.ADMIN_PORT || 3000}`,
-                `http://127.0.0.1:${process.env.ADMIN_PORT || 3000}`,
-                process.env.ADMIN_ORIGIN
-            ];
-
-            // Accept any ngrok URL for local development
-            if (!origin || origin.includes('ngrok') || allowedOrigins.includes(origin)) {
+            if (isAllowedOrigin(origin)) {
                 callback(null, true);
             } else {
                 callback(new Error('CORS not allowed'));
@@ -135,14 +405,42 @@ const io = socketIo(server, {
         },
         methods: ['GET', 'POST'],
         credentials: true
+    },
+    pingInterval: 25000,
+    pingTimeout: 20000,
+    maxHttpBufferSize: 1e6,
+    allowRequest: (req, callback) => {
+        const origin = req.headers?.origin;
+        if (origin && !isAllowedOrigin(origin)) {
+            return callback('CORS not allowed', false);
+        }
+        callback(null, true);
     }
 });
-const PORT = process.env.ADMIN_PORT || 3000;
+const PORT = ADMIN_PORT;
+
+const socketMetrics = {
+    active: 0,
+    rejected: 0,
+    errors: 0,
+    connects: 0,
+    disconnects: 0,
+    lastConnectAt: null,
+    lastDisconnectAt: null,
+    lastError: null,
+    perRole: {
+        owner: 0,
+        admin: 0,
+        moderator: 0,
+        user: 0
+    }
+};
 
 // Optional: stream recent server logs to connected admin UI clients.
 // We keep a small rolling buffer so new clients can see recent activity.
 const MAX_TERMINAL_LOGS = 500;
 const terminalLogBuffer = [];
+const TERMINAL_ROOM = 'terminal-subscribers';
 
 // Convert various console argument types into a readable string for the
 // terminal stream (strings, errors, objects, etc.).
@@ -167,7 +465,7 @@ function addTerminalLog(level, args = []) {
     }
 
     try {
-        io.emit('terminal-log-line', line);
+        io.to(TERMINAL_ROOM).emit('terminal-log-line', line);
     } catch {
         // Socket emit failures are fine — logging shouldn't crash the admin panel.
     }
@@ -199,9 +497,8 @@ console.error = (...args) => {
 };
 
 
-// Enable `trust proxy` so we can read the original client IP when behind a proxy
-// (load balancers, reverse proxies, etc.). This helps accurate logging and rate-limits.
-app.set('trust proxy', 1);
+// Enable trust proxy in production deployments (reverse proxy / load balancer).
+app.set('trust proxy', IS_PRODUCTION ? 1 : false);
 
 // Configuration for the MySQL-backed session store used by the admin panel.
 const sessionStoreOptions = {
@@ -231,15 +528,44 @@ try {
 
 // Apply a set of strict security headers to reduce attack surface (CSP, HSTS, etc.).
 app.use((req, res, next) => {
+    const hostHeader = req.headers.host;
+    const forwardedHost = req.headers['x-forwarded-host'];
+
+    if (!isAllowedHostHeader(hostHeader) || !isAllowedHostHeader(forwardedHost)) {
+        emitSecuritySignal(req, 'host-header-blocked', {
+            host: String(hostHeader || ''),
+            forwardedHost: String(forwardedHost || '')
+        });
+
+        if (req.path.startsWith('/api/')) {
+            return res.status(400).json({ error: 'Invalid host header' });
+        }
+
+        return res.status(400).send('Bad Request');
+    }
+
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+    res.setHeader('Origin-Agent-Cluster', '?1');
     // Strict CSP: No inline scripts allowed (prevents XSS)
     // Chrome DevTools may show .well-known/appspecific requests; that's just browser behavior
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io 'unsafe-inline' 'unsafe-hashes'; style-src 'self' 'unsafe-inline' 'unsafe-hashes'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io; frame-src 'self' https://www.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; child-src 'none'; object-src 'none';");
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
+    const noStoreTargets = new Set(['/login', '/register', '/recovery', '/owner', '/admin', '/moderator', '/dashboard', '/profile']);
+    if (req.path.startsWith('/api/') || noStoreTargets.has(req.path)) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
+    }
+
     next();
 });
 
@@ -288,7 +614,7 @@ const SESSION_SINGLE_SESSION_CHECK_INTERVAL_MS = (() => {
     const parsed = Number(process.env.SESSION_SINGLE_SESSION_CHECK_INTERVAL_MS);
     return Number.isFinite(parsed) && parsed >= 15 * 1000 ? parsed : 60 * 1000;
 })();
-const SESSION_COOKIE_SECURE = process.env.NODE_ENV === 'production';
+const SESSION_COOKIE_SECURE = IS_PRODUCTION;
 const SESSION_POLICY_LIMITS = Object.freeze({
     idleMinMs: 5 * 60 * 1000,
     idleMaxMs: 12 * 60 * 60 * 1000,
@@ -304,6 +630,80 @@ const DEFAULT_SESSION_POLICY = Object.freeze({
     singleSessionCheckIntervalMs: SESSION_SINGLE_SESSION_CHECK_INTERVAL_MS
 });
 let sessionPolicyState = { ...DEFAULT_SESSION_POLICY };
+
+const BOT_WEBHOOK_URL = String(process.env.BOT_WEBHOOK_URL || process.env.WEBSITE_TO_BOT_WEBHOOK_URL || '').trim();
+const BOT_WEBHOOK_SECRET = String(process.env.BOT_WEBHOOK_SECRET || '').trim();
+const BOT_WEBHOOK_TIMEOUT_MS = Math.max(1000, Math.min(15000, Number(process.env.BOT_WEBHOOK_TIMEOUT_MS) || 6000));
+
+async function sendBotWebhook(event, data = {}, req = null) {
+    if (!BOT_WEBHOOK_URL || !BOT_WEBHOOK_SECRET) return false;
+
+    const payload = {
+        event: String(event || '').trim(),
+        data: data && typeof data === 'object' ? data : {},
+        actor: req?.session?.username || 'system',
+        ipAddress: req?.clientIP || null,
+        userAgent: req?.userAgent || null,
+        timestamp: new Date().toISOString()
+    };
+
+    if (!payload.event) return false;
+
+    const body = JSON.stringify(payload);
+    const timestamp = Date.now().toString();
+    const signature = crypto
+        .createHmac('sha256', BOT_WEBHOOK_SECRET)
+        .update(`${timestamp}.${body}`)
+        .digest('hex');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), BOT_WEBHOOK_TIMEOUT_MS);
+
+    try {
+        const response = await fetch(BOT_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Sentinel-AdminPanel-Webhook',
+                'X-Webhook-Timestamp': timestamp,
+                'X-Webhook-Signature': signature
+            },
+            body,
+            signal: controller.signal
+        });
+
+        if (!response.ok) {
+            console.warn('[Webhook] Bot webhook failed:', response.status, await response.text().catch(() => ''));
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        if (error?.name !== 'AbortError') {
+            console.warn('[Webhook] Bot webhook error:', error?.message || error);
+        }
+        return false;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function normalizeCredentialInput(value, options = {}) {
+    const {
+        minLength = 1,
+        maxLength = 100,
+        allowControlChars = false
+    } = options;
+
+    if (typeof value !== 'string') return '';
+
+    const normalized = value.normalize('NFKC').trim();
+    if (!normalized) return '';
+    if (normalized.length < minLength || normalized.length > maxLength) return '';
+    if (!allowControlChars && /[\u0000-\u001F\u007F]/.test(normalized)) return '';
+
+    return normalized;
+}
 if (!SESSION_SECRET) {
     console.error('❌ CRITICAL: SESSION_SECRET is not set in Config/credentials.env');
     console.error('   This is a security vulnerability. Admin panel will not start.');
@@ -320,13 +720,15 @@ const sessionMiddleware = session({
     key: 'admin_session',
     secret: SESSION_SECRET,
     store: sessionStore,
+    proxy: IS_PRODUCTION,
     resave: false,
     saveUninitialized: false,
     cookie: {
         secure: SESSION_COOKIE_SECURE, // Use environment setting (true in production)
-        sameSite: SESSION_COOKIE_SECURE ? 'none' : 'lax', // 'none' requires secure: true
+        sameSite: 'lax',
         maxAge: DEFAULT_SESSION_POLICY.idleTimeoutMs,
         httpOnly: true, // Prevent JavaScript from accessing cookies
+        priority: 'high',
         path: '/'
     },
     rolling: true
@@ -341,6 +743,24 @@ app.use(sessionMiddleware);
 
 app.use(bodyParser.json({ limit: '10kb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10kb' }));
+
+// Validate Origin for API requests when provided (defense-in-depth against cross-site abuse).
+app.use((req, res, next) => {
+    if (!req.path.startsWith('/api/')) return next();
+    const origin = req.headers.origin;
+    if (!origin) return next();
+
+    if (!isAllowedOrigin(origin)) {
+        emitSecuritySignal(req, 'api-origin-blocked', {
+            origin: String(origin || ''),
+            host: String(req.headers.host || ''),
+            forwardedHost: String(req.headers['x-forwarded-host'] || '')
+        });
+        return res.status(403).json({ error: 'Origin not allowed' });
+    }
+
+    return next();
+});
 
 // Block TRACE and OPTIONS HTTP methods for security
 app.use((req, res, next) => {
@@ -498,7 +918,7 @@ app.get('/api/csrf', (req, res) => {
 
     res.cookie('csrfToken', token, {
         httpOnly: false,
-        sameSite: 'lax', // Use Lax for better compatibility unless strict is needed
+        sameSite: 'strict',
         secure: req.secure || (req.headers['x-forwarded-proto'] === 'https'), // Auto-detect secure context
         path: '/'
     });
@@ -529,6 +949,11 @@ app.use((req, res, next) => {
         // Ensures the request wasn't triggered by a malicious site
         if (!CsrfHelper.verifyOrigin(req)) {
             console.warn(`[CSRF] Invalid Origin/Referer for '${req.session.username || 'n/a'}'. Origin: ${req.headers.origin}, Referer: ${req.headers.referer}`);
+            emitSecuritySignal(req, 'csrf-origin-failed', {
+                username: req.session?.username || null,
+                origin: String(req.headers.origin || ''),
+                referer: String(req.headers.referer || '')
+            }, 15 * 1000);
             return res.status(403).json({ error: 'Invalid Origin' });
         }
 
@@ -538,6 +963,10 @@ app.use((req, res, next) => {
         // 2. Verify Signed Token (Advanced timestamp + salt check)
         if (!CsrfHelper.verifyToken(secret, token)) {
             console.warn(`[CSRF] Invalid CSRF token for '${req.session.username}' (role: ${req.session.role}). Token verify failed.`);
+            emitSecuritySignal(req, 'csrf-token-failed', {
+                username: req.session?.username || null,
+                role: req.session?.role || null
+            }, 15 * 1000);
             // Helps frontend clear stale tokens
             res.clearCookie('csrfToken', { path: '/' });
             return res.status(403).json({ error: 'Invalid or expired CSRF token', cause: 'verify_failed' });
@@ -548,9 +977,12 @@ app.use((req, res, next) => {
 
 // Basic rate limiter to prevent abuse of sensitive endpoints
 const rateLimitStore = new Map();
+let rateLimitLastCleanupAt = Date.now();
 function createRateLimiter(maxRequests = 5, windowMs = 60000) {
     return (req, res, next) => {
-        const key = `${req.ip}_${req.path}`;
+        const ipKey = String(req.clientIP || req.ip || 'unknown');
+        const accountKey = String(req.body?.username || req.session?.username || '').toLowerCase();
+        const key = `${ipKey}_${req.path}_${accountKey}`;
         const now = Date.now();
         const userLimits = rateLimitStore.get(key) || [];
 
@@ -558,15 +990,32 @@ function createRateLimiter(maxRequests = 5, windowMs = 60000) {
         const recentRequests = userLimits.filter(timestamp => now - timestamp < windowMs);
 
         if (recentRequests.length >= maxRequests) {
-            res.setHeader('Retry-After', Math.ceil(windowMs / 1000));
+            const oldestTimestamp = recentRequests[0] || now;
+            const retryAfterMs = Math.max(0, windowMs - (now - oldestTimestamp));
+            const retryAfterSeconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+            emitSecuritySignal(req, 'rate-limit-hit', {
+                limit: maxRequests,
+                windowMs,
+                observedRequests: recentRequests.length + 1
+            }, 20 * 1000);
+            res.setHeader('RateLimit-Limit', String(maxRequests));
+            res.setHeader('RateLimit-Remaining', '0');
+            res.setHeader('RateLimit-Reset', String(retryAfterSeconds));
+            res.setHeader('Retry-After', String(retryAfterSeconds));
             return res.status(429).json({ error: 'Too many requests, please try again later' });
         }
 
         recentRequests.push(now);
         rateLimitStore.set(key, recentRequests);
+        const remaining = Math.max(0, maxRequests - recentRequests.length);
+        const oldestTimestamp = recentRequests[0] || now;
+        const resetSeconds = Math.max(1, Math.ceil(Math.max(0, windowMs - (now - oldestTimestamp)) / 1000));
+        res.setHeader('RateLimit-Limit', String(maxRequests));
+        res.setHeader('RateLimit-Remaining', String(remaining));
+        res.setHeader('RateLimit-Reset', String(resetSeconds));
 
-        // Occasionally clean up the rate limit store
-        if (Math.random() < 0.01) {
+        // Periodically clean up the rate limit store
+        if (now - rateLimitLastCleanupAt > Math.max(windowMs, 60 * 1000)) {
             for (const [k, v] of rateLimitStore.entries()) {
                 const active = v.filter(t => now - t < windowMs);
                 if (active.length === 0) {
@@ -575,6 +1024,7 @@ function createRateLimiter(maxRequests = 5, windowMs = 60000) {
                     rateLimitStore.set(k, active);
                 }
             }
+            rateLimitLastCleanupAt = now;
         }
 
         next();
@@ -591,12 +1041,14 @@ io.use(sharedSession(sessionMiddleware, {
 io.use((socket, next) => {
     const session = socket.handshake.session;
     if (!session || !session.authenticated || !session.username || !session.role) {
+        socketMetrics.rejected += 1;
         return next(new Error('Unauthorized Socket.IO connection'));
     }
 
     const now = Date.now();
     const expiry = getSessionExpiryState(session, now);
     if (expiry.expired) {
+        socketMetrics.rejected += 1;
         return next(new Error('Session expired'));
     }
 
@@ -609,10 +1061,16 @@ io.use((socket, next) => {
 app.use('/css', express.static(path.join(__dirname, 'AdminPanel', 'css')));
 app.use('/public', express.static(path.join(__dirname, 'AdminPanel', 'public')));
 app.use('/images', express.static(path.join(__dirname, 'AdminPanel', 'images')));
-// Serve Functions directory statically for frontend access to AdminPanelHelper.js
-app.use('/Functions', express.static(path.join(__dirname, 'Functions')));
-// Serve /Config directory statically for frontend access to main.json and other config files
-app.use('/Config', express.static(path.join(__dirname, 'Config')));
+
+// Expose only a safe config file used by frontend version/rendering logic.
+app.get('/Config/main.json', (req, res) => {
+    const mainConfigPath = path.join(__dirname, 'Config', 'main.json');
+    return res.sendFile(mainConfigPath, {
+        headers: {
+            'Cache-Control': 'no-store'
+        }
+    });
+});
 
 // Clean up expired sessions every hour
 setInterval(() => {
@@ -636,8 +1094,51 @@ setInterval(() => {
     }
 }, 30 * 60 * 1000); // 30 minutes
 
+const DISCORD_LINK_EXEMPT_PATHS = new Set([
+    '/profile',
+    '/api/account/info',
+    '/api/account/discord/oauth/start',
+    '/api/account/discord/oauth/runtime',
+    '/api/account/discord/oauth/callback',
+    '/api/account/discord-unlink'
+]);
+
+async function ensureDiscordLinkStatus(req) {
+    if (!req?.session?.username) return false;
+
+    const now = Date.now();
+    const verifiedAt = Number(req.session.discordLinkedVerifiedAt) || 0;
+    const cacheTtlMs = 2 * 60 * 1000;
+    const cachedLinked = Boolean(req.session.discordLinked);
+    if (cachedLinked && (now - verifiedAt < cacheTtlMs)) {
+        return true;
+    }
+
+    try {
+        const user = await AdminPanelHelper.getAdminUser(req.session.username);
+        const linked = Boolean(user?.discord_user_id);
+        req.session.discordLinked = linked;
+        req.session.discordLinkedVerifiedAt = now;
+        return linked;
+    } catch (error) {
+        console.warn('[DiscordLink] Failed to refresh discord link status:', error?.message || error);
+        return Boolean(req.session.discordLinked);
+    }
+}
+
+function isDiscordLinkExemptPath(req) {
+    const pathName = String(req.path || '').trim();
+    if (!pathName) return false;
+    if (DISCORD_LINK_EXEMPT_PATHS.has(pathName)) return true;
+    if (pathName.startsWith('/api/account/')) return true;
+    if (pathName.startsWith('/api/security/')) return true;
+    if (pathName.startsWith('/api/user')) return true;
+    if (pathName.startsWith('/api/users/')) return true;
+    return false;
+}
+
 // Middleware to require authentication for protected routes
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
     // (Debug) Log session and cookies if needed
     if (req.session && req.session.authenticated) {
         // Save the user's IP and user agent in the session if not already set
@@ -646,6 +1147,15 @@ function requireAuth(req, res, next) {
             req.session.ipAddressV4 = req.clientIPV4;
             req.session.ipAddressV6 = req.clientIPV6;
             req.session.userAgent = req.userAgent;
+        }
+        if (!isDiscordLinkExemptPath(req)) {
+            const linked = await ensureDiscordLinkStatus(req);
+            if (!linked) {
+                if (req.path.startsWith('/api/')) {
+                    return res.status(403).json({ error: 'Discord account must be linked', discordLinkRequired: true });
+                }
+                return res.redirect('/profile?discord_required=1');
+            }
         }
         return next();
     }
@@ -673,7 +1183,8 @@ const PUBLIC_API_PATTERNS = [
     /^\/api\/account\/password-reset\/recovery$/,
     /^\/api\/email\/verify$/,
     /^\/api\/csrf$/,
-    /^\/api\/appeals\/submit$/
+    /^\/api\/appeals\/submit$/,
+    /^\/api\/appeals\/validate-case-id$/
 ];
 
 const API_ROLE_POLICIES = [
@@ -681,6 +1192,7 @@ const API_ROLE_POLICIES = [
     { methods: null, pattern: /^\/api\/jobs(?:\/|$)/, minRole: 'owner' },
     { methods: null, pattern: /^\/api\/automod(?:\/|$)/, minRole: 'owner' },
     { methods: null, pattern: /^\/api\/alerts(?:\/|$)/, minRole: 'owner' },
+    { methods: null, pattern: /^\/api\/security(?:\/|$)/, minRole: 'owner' },
     { methods: null, pattern: /^\/api\/system(?:\/|$)/, minRole: 'owner' },
     { methods: null, pattern: /^\/api\/audit-logs$/, minRole: 'owner' },
     { methods: ['POST'], pattern: /^\/api\/appeals\/\d+\/(accept|deny)$/, minRole: 'owner' },
@@ -776,6 +1288,25 @@ app.use(enforceApiRolePolicy);
 
 const MISC_CONFIG_PATH = path.join(__dirname, 'Config', 'constants', 'misc.json');
 const AUTOMOD_CONFIG_PATH = path.join(__dirname, 'Config', 'constants', 'automod.json');
+const BACKUP_CONFIG_PATH = path.join(__dirname, 'Config', 'backups.json');
+const BACKUP_DIR = path.join(__dirname, 'backups', 'db');
+const DEFAULT_BACKUP_CONFIG = Object.freeze({
+    enabled: false,
+    intervalMinutes: 1440,
+    retentionCount: 10,
+    tables: [],
+    format: 'json'
+});
+const backupState = {
+    running: false,
+    lastRunAt: null,
+    lastRunFile: null,
+    lastRunStatus: 'idle',
+    lastRunError: null,
+    nextRunAt: null
+};
+let backupConfig = null;
+let backupTimer = null;
 const DEFAULT_AUTOMOD_PROFILES = Object.freeze({
     balanced: {
         blockExternalInvites: true,
@@ -786,11 +1317,32 @@ const DEFAULT_AUTOMOD_PROFILES = Object.freeze({
             capsThreshold: 0.70,
             minLengthForCaps: 10,
             spamTimeout: 600000,
-            spamWarningThreshold: 2
+            spamWarningThreshold: 2,
+            similarityWindowMs: 120000,
+            similarityThreshold: 0.88,
+            similarityMinLength: 12,
+            similarityRepeatThreshold: 3,
+            riskWarnThreshold: 20,
+            riskDeleteThreshold: 35,
+            riskTimeoutThreshold: 60,
+            baseTimeoutMs: 600000,
+            maxTimeoutMs: 21600000
         },
         autoModAdvanced: {
             escalationThreshold24h: 4,
-            escalationTimeoutMs: 1800000
+            escalationTimeoutMs: 1800000,
+            progressiveTimeoutMultiplier: 1.4,
+            kickThreshold24h: 14,
+            regexMaxPatternLength: 180,
+            riskWeights: {
+                spam: 28,
+                similarity: 30,
+                caps: 14,
+                profanity: 26,
+                regex: 34,
+                invites: 30,
+                mentions: 18
+            }
         }
     },
     strict: {
@@ -802,11 +1354,32 @@ const DEFAULT_AUTOMOD_PROFILES = Object.freeze({
             capsThreshold: 0.60,
             minLengthForCaps: 8,
             spamTimeout: 900000,
-            spamWarningThreshold: 1
+            spamWarningThreshold: 1,
+            similarityWindowMs: 150000,
+            similarityThreshold: 0.84,
+            similarityMinLength: 10,
+            similarityRepeatThreshold: 3,
+            riskWarnThreshold: 18,
+            riskDeleteThreshold: 32,
+            riskTimeoutThreshold: 52,
+            baseTimeoutMs: 900000,
+            maxTimeoutMs: 21600000
         },
         autoModAdvanced: {
             escalationThreshold24h: 3,
-            escalationTimeoutMs: 2700000
+            escalationTimeoutMs: 2700000,
+            progressiveTimeoutMultiplier: 1.5,
+            kickThreshold24h: 12,
+            regexMaxPatternLength: 180,
+            riskWeights: {
+                spam: 30,
+                similarity: 34,
+                caps: 16,
+                profanity: 28,
+                regex: 36,
+                invites: 32,
+                mentions: 20
+            }
         }
     },
     relaxed: {
@@ -818,11 +1391,32 @@ const DEFAULT_AUTOMOD_PROFILES = Object.freeze({
             capsThreshold: 0.80,
             minLengthForCaps: 12,
             spamTimeout: 420000,
-            spamWarningThreshold: 3
+            spamWarningThreshold: 3,
+            similarityWindowMs: 90000,
+            similarityThreshold: 0.91,
+            similarityMinLength: 14,
+            similarityRepeatThreshold: 4,
+            riskWarnThreshold: 24,
+            riskDeleteThreshold: 42,
+            riskTimeoutThreshold: 70,
+            baseTimeoutMs: 420000,
+            maxTimeoutMs: 10800000
         },
         autoModAdvanced: {
             escalationThreshold24h: 6,
-            escalationTimeoutMs: 1200000
+            escalationTimeoutMs: 1200000,
+            progressiveTimeoutMultiplier: 1.3,
+            kickThreshold24h: 16,
+            regexMaxPatternLength: 180,
+            riskWeights: {
+                spam: 24,
+                similarity: 26,
+                caps: 12,
+                profanity: 24,
+                regex: 30,
+                invites: 28,
+                mentions: 16
+            }
         }
     }
 });
@@ -844,6 +1438,277 @@ function loadAutoModConfig() {
 function saveAutoModConfig(config) {
     fs.writeFileSync(AUTOMOD_CONFIG_PATH, `${JSON.stringify(config, null, '\t')}\n`, 'utf8');
 }
+
+function ensureBackupDir() {
+    try {
+        fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    } catch (error) {
+        console.error('[Backup] Failed to ensure backup directory:', error.message);
+    }
+}
+
+function loadBackupConfig() {
+    try {
+        if (!fs.existsSync(BACKUP_CONFIG_PATH)) {
+            const payload = { ...DEFAULT_BACKUP_CONFIG };
+            fs.writeFileSync(BACKUP_CONFIG_PATH, `${JSON.stringify(payload, null, '\t')}\n`, 'utf8');
+            return payload;
+        }
+        const raw = fs.readFileSync(BACKUP_CONFIG_PATH, 'utf8');
+        const parsed = JSON.parse(raw);
+        return {
+            ...DEFAULT_BACKUP_CONFIG,
+            ...(parsed && typeof parsed === 'object' ? parsed : {})
+        };
+    } catch (error) {
+        console.error('[Backup] Failed to load backup config:', error.message);
+        return { ...DEFAULT_BACKUP_CONFIG };
+    }
+}
+
+function saveBackupConfig(config) {
+    backupConfig = { ...DEFAULT_BACKUP_CONFIG, ...config };
+    fs.writeFileSync(BACKUP_CONFIG_PATH, `${JSON.stringify(backupConfig, null, '\t')}\n`, 'utf8');
+    scheduleBackupTimer();
+    return backupConfig;
+}
+
+function listBackupFiles() {
+    try {
+        ensureBackupDir();
+        const files = fs.readdirSync(BACKUP_DIR)
+            .filter((file) => file.endsWith('.sql') || file.endsWith('.json'))
+            .map((file) => {
+                const fullPath = path.join(BACKUP_DIR, file);
+                const stat = fs.statSync(fullPath);
+                return {
+                    name: file,
+                    size: stat.size,
+                    createdAt: stat.mtimeMs
+                };
+            })
+            .sort((a, b) => b.createdAt - a.createdAt);
+        return files;
+    } catch (error) {
+        console.error('[Backup] Failed to list backup files:', error.message);
+        return [];
+    }
+}
+
+async function listBackupTables() {
+    try {
+        const [rows] = await MySQLDatabaseManager.connection.pool.query(
+            'SELECT table_name as name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name'
+        );
+        return Array.isArray(rows) ? rows.map((row) => row.name).filter(Boolean) : [];
+    } catch (error) {
+        console.error('[Backup] Failed to list tables:', error.message);
+        return [];
+    }
+}
+
+async function exportTablesToJson(tables = []) {
+    const database = process.env.MYSQL_DATABASE || 'discord_bot';
+    const payload = {
+        database,
+        generatedAt: new Date().toISOString(),
+        tables: {}
+    };
+
+    for (const table of tables) {
+        try {
+            const [columns] = await MySQLDatabaseManager.connection.pool.query(
+                'SELECT COLUMN_NAME as name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? ORDER BY ORDINAL_POSITION',
+                [table]
+            );
+            const [rows] = await MySQLDatabaseManager.connection.pool.query('SELECT * FROM ??', [table]);
+            payload.tables[table] = {
+                columns: Array.isArray(columns) ? columns.map((col) => col.name) : [],
+                rows: Array.isArray(rows) ? rows : []
+            };
+        } catch (error) {
+            payload.tables[table] = {
+                columns: [],
+                rows: [],
+                error: error.message || 'Failed to export table.'
+            };
+        }
+    }
+
+    return payload;
+}
+
+function scheduleBackupTimer() {
+    if (backupTimer) {
+        clearInterval(backupTimer);
+        backupTimer = null;
+    }
+
+    if (!backupConfig?.enabled) {
+        backupState.nextRunAt = null;
+        return;
+    }
+
+    const intervalMinutes = Math.max(15, Number(backupConfig.intervalMinutes) || DEFAULT_BACKUP_CONFIG.intervalMinutes);
+    const intervalMs = intervalMinutes * 60 * 1000;
+    backupState.nextRunAt = Date.now() + intervalMs;
+    backupTimer = setInterval(() => {
+        backupState.nextRunAt = Date.now() + intervalMs;
+        runDatabaseBackup('scheduled', { tables: backupConfig?.tables, format: backupConfig?.format }).catch(() => { });
+    }, intervalMs);
+}
+
+async function runDatabaseBackup(trigger = 'manual', options = {}) {
+    if (backupState.running) {
+        return { success: false, error: 'Backup already in progress.' };
+    }
+
+    ensureBackupDir();
+    backupState.running = true;
+    backupState.lastRunStatus = 'running';
+    backupState.lastRunError = null;
+
+    const host = process.env.MYSQL_HOST || 'localhost';
+    const port = String(process.env.MYSQL_PORT || 3306);
+    const user = process.env.MYSQL_USER || 'root';
+    const password = process.env.MYSQL_PASSWORD || '';
+    const database = process.env.MYSQL_DATABASE || 'discord_bot';
+
+    const availableTables = await listBackupTables();
+    const allowedTables = new Set(availableTables);
+    const requestedTables = Array.isArray(options.tables) ? options.tables : backupConfig?.tables || [];
+    const selectedTables = requestedTables
+        .map((table) => String(table || '').trim())
+        .filter((table) => allowedTables.has(table));
+    const tablesToExport = selectedTables.length > 0 ? selectedTables : availableTables;
+    const format = String(options.format || backupConfig?.format || 'json').toLowerCase();
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileExt = format === 'json' ? 'json' : 'sql';
+    const fileName = `backup-${database}-${timestamp}.${fileExt}`;
+    const filePath = path.join(BACKUP_DIR, fileName);
+
+    const env = { ...process.env };
+    if (password) {
+        env.MYSQL_PWD = password;
+    }
+
+    if (format === 'json') {
+        try {
+            const payload = await exportTablesToJson(tablesToExport);
+            fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+            backupState.lastRunAt = Date.now();
+            backupState.lastRunFile = fileName;
+            backupState.lastRunStatus = 'success';
+            backupState.lastRunError = null;
+            backupState.running = false;
+        } catch (error) {
+            backupState.lastRunStatus = 'failed';
+            backupState.lastRunError = error.message || 'Backup failed.';
+            backupState.running = false;
+            return { success: false, error: backupState.lastRunError };
+        }
+
+        const retention = Math.max(1, Number(backupConfig?.retentionCount) || DEFAULT_BACKUP_CONFIG.retentionCount);
+        const files = listBackupFiles();
+        const toRemove = files.slice(retention);
+        toRemove.forEach((file) => {
+            try {
+                fs.unlinkSync(path.join(BACKUP_DIR, file.name));
+            } catch (error) {
+                console.warn('[Backup] Failed to prune backup:', error.message);
+            }
+        });
+
+        return { success: true, fileName, trigger };
+    }
+
+    const dumpCommand = process.env.MYSQLDUMP_PATH || process.env.MYSQL_DUMP_PATH || 'mysqldump';
+    if (dumpCommand.includes(path.sep) && !fs.existsSync(dumpCommand)) {
+        backupState.lastRunStatus = 'failed';
+        backupState.lastRunError = 'mysqldump path not found. Check MYSQLDUMP_PATH.';
+        backupState.running = false;
+        return { success: false, error: backupState.lastRunError };
+    }
+
+    const args = [
+        '--host', host,
+        '--port', port,
+        '--user', user,
+        '--routines',
+        '--events',
+        '--triggers',
+        '--single-transaction',
+        database
+    ];
+
+    const result = await new Promise((resolve) => {
+        const output = fs.createWriteStream(filePath, { flags: 'w' });
+        let stderr = '';
+        let completed = false;
+
+        const child = spawn(dumpCommand, args, { env });
+
+        child.stdout.pipe(output);
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk.toString();
+        });
+
+        child.on('error', (error) => {
+            if (completed) return;
+            completed = true;
+            resolve({
+                success: false,
+                error: error.code === 'ENOENT'
+                    ? 'mysqldump not found. Ensure MySQL tools are installed and on PATH.'
+                    : (error.message || 'Backup process failed.')
+            });
+        });
+
+        child.on('close', (code) => {
+            if (completed) return;
+            completed = true;
+            if (code === 0) {
+                resolve({ success: true });
+            } else {
+                resolve({ success: false, error: stderr.trim() || `Backup failed (exit ${code})` });
+            }
+        });
+    });
+
+    if (!result.success) {
+        try {
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch {
+        }
+        backupState.lastRunStatus = 'failed';
+        backupState.lastRunError = result.error || 'Backup failed.';
+        backupState.running = false;
+        return result;
+    }
+
+    backupState.lastRunAt = Date.now();
+    backupState.lastRunFile = fileName;
+    backupState.lastRunStatus = 'success';
+    backupState.lastRunError = null;
+    backupState.running = false;
+
+    const retention = Math.max(1, Number(backupConfig?.retentionCount) || DEFAULT_BACKUP_CONFIG.retentionCount);
+    const files = listBackupFiles();
+    const toRemove = files.slice(retention);
+    toRemove.forEach((file) => {
+        try {
+            fs.unlinkSync(path.join(BACKUP_DIR, file.name));
+        } catch (error) {
+            console.warn('[Backup] Failed to prune backup:', error.message);
+        }
+    });
+
+    return { success: true, fileName, trigger };
+}
+
+backupConfig = loadBackupConfig();
+scheduleBackupTimer();
 
 function cloneDefaultAutoModProfiles() {
     return JSON.parse(JSON.stringify(DEFAULT_AUTOMOD_PROFILES));
@@ -880,6 +1745,162 @@ function toInt(value, fallback) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return fallback;
     return Math.round(numeric);
+}
+
+const DEFAULT_CAPTCHA_POLICY = Object.freeze({
+    loginEnabled: (() => {
+        const raw = String(process.env.CAPTCHA_LOGIN_ENABLED || 'true').trim().toLowerCase();
+        return !['0', 'false', 'no', 'off'].includes(raw);
+    })(),
+    registerEnabled: (() => {
+        const raw = String(process.env.CAPTCHA_REGISTER_ENABLED || 'true').trim().toLowerCase();
+        return !['0', 'false', 'no', 'off'].includes(raw);
+    })(),
+    ttlMs: (() => {
+        const parsed = Number(process.env.CAPTCHA_CHALLENGE_TTL_MS);
+        return Number.isFinite(parsed) && parsed >= 60 * 1000 ? parsed : 5 * 60 * 1000;
+    })(),
+    maxAttempts: (() => {
+        const parsed = Number(process.env.CAPTCHA_MAX_ATTEMPTS);
+        return Number.isFinite(parsed) && parsed >= 1 ? parsed : 3;
+    })(),
+    minValue: (() => {
+        const parsed = Number(process.env.CAPTCHA_MIN_VALUE);
+        return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    })(),
+    maxValue: (() => {
+        const parsed = Number(process.env.CAPTCHA_MAX_VALUE);
+        return Number.isFinite(parsed) && parsed >= 5 ? parsed : 20;
+    })(),
+    minSolveMs: (() => {
+        const parsed = Number(process.env.CAPTCHA_MIN_SOLVE_MS);
+        return Number.isFinite(parsed) && parsed >= 300 ? parsed : 900;
+    })(),
+    adaptiveDifficultyEnabled: (() => {
+        const raw = String(process.env.CAPTCHA_ADAPTIVE_DIFFICULTY || 'true').trim().toLowerCase();
+        return !['0', 'false', 'no', 'off'].includes(raw);
+    })(),
+    failureWindowMs: (() => {
+        const parsed = Number(process.env.CAPTCHA_FAILURE_WINDOW_MS);
+        return Number.isFinite(parsed) && parsed >= 60 * 1000 ? parsed : 15 * 60 * 1000;
+    })(),
+    failureThreshold: (() => {
+        const parsed = Number(process.env.CAPTCHA_FAILURE_THRESHOLD);
+        return Number.isFinite(parsed) && parsed >= 3 ? parsed : 10;
+    })(),
+    failureBlockMs: (() => {
+        const parsed = Number(process.env.CAPTCHA_FAILURE_BLOCK_MS);
+        return Number.isFinite(parsed) && parsed >= 60 * 1000 ? parsed : 10 * 60 * 1000;
+    })()
+});
+
+const CAPTCHA_POLICY_LIMITS = Object.freeze({
+    ttlMinMs: 60 * 1000,
+    ttlMaxMs: 15 * 60 * 1000,
+    maxAttemptsMin: 1,
+    maxAttemptsMax: 10,
+    minValueMin: 1,
+    minValueMax: 100,
+    maxValueMin: 2,
+    maxValueMax: 200,
+    minSolveMinMs: 300,
+    minSolveMaxMs: 5000,
+    failureWindowMinMs: 60 * 1000,
+    failureWindowMaxMs: 60 * 60 * 1000,
+    failureThresholdMin: 3,
+    failureThresholdMax: 50,
+    failureBlockMinMs: 60 * 1000,
+    failureBlockMaxMs: 60 * 60 * 1000
+});
+
+function normalizeCaptchaPolicy(input = {}, basePolicy = DEFAULT_CAPTCHA_POLICY) {
+    const base = {
+        ...DEFAULT_CAPTCHA_POLICY,
+        ...(basePolicy || {})
+    };
+
+    const minValue = Math.min(
+        CAPTCHA_POLICY_LIMITS.minValueMax,
+        Math.max(
+            CAPTCHA_POLICY_LIMITS.minValueMin,
+            toInt(input.minValue, base.minValue)
+        )
+    );
+
+    const maxFloor = Math.max(CAPTCHA_POLICY_LIMITS.maxValueMin, minValue + 1);
+    const maxValue = Math.min(
+        CAPTCHA_POLICY_LIMITS.maxValueMax,
+        Math.max(
+            maxFloor,
+            toInt(input.maxValue, base.maxValue)
+        )
+    );
+
+    return {
+        loginEnabled: typeof input.loginEnabled === 'boolean'
+            ? input.loginEnabled
+            : Boolean(base.loginEnabled),
+        registerEnabled: typeof input.registerEnabled === 'boolean'
+            ? input.registerEnabled
+            : Boolean(base.registerEnabled),
+        ttlMs: Math.min(
+            CAPTCHA_POLICY_LIMITS.ttlMaxMs,
+            Math.max(
+                CAPTCHA_POLICY_LIMITS.ttlMinMs,
+                toInt(input.ttlMs, base.ttlMs)
+            )
+        ),
+        maxAttempts: Math.min(
+            CAPTCHA_POLICY_LIMITS.maxAttemptsMax,
+            Math.max(
+                CAPTCHA_POLICY_LIMITS.maxAttemptsMin,
+                toInt(input.maxAttempts, base.maxAttempts)
+            )
+        ),
+        minSolveMs: Math.min(
+            CAPTCHA_POLICY_LIMITS.minSolveMaxMs,
+            Math.max(
+                CAPTCHA_POLICY_LIMITS.minSolveMinMs,
+                toInt(input.minSolveMs, base.minSolveMs)
+            )
+        ),
+        adaptiveDifficultyEnabled: typeof input.adaptiveDifficultyEnabled === 'boolean'
+            ? input.adaptiveDifficultyEnabled
+            : Boolean(base.adaptiveDifficultyEnabled),
+        failureWindowMs: Math.min(
+            CAPTCHA_POLICY_LIMITS.failureWindowMaxMs,
+            Math.max(
+                CAPTCHA_POLICY_LIMITS.failureWindowMinMs,
+                toInt(input.failureWindowMs, base.failureWindowMs)
+            )
+        ),
+        failureThreshold: Math.min(
+            CAPTCHA_POLICY_LIMITS.failureThresholdMax,
+            Math.max(
+                CAPTCHA_POLICY_LIMITS.failureThresholdMin,
+                toInt(input.failureThreshold, base.failureThreshold)
+            )
+        ),
+        failureBlockMs: Math.min(
+            CAPTCHA_POLICY_LIMITS.failureBlockMaxMs,
+            Math.max(
+                CAPTCHA_POLICY_LIMITS.failureBlockMinMs,
+                toInt(input.failureBlockMs, base.failureBlockMs)
+            )
+        ),
+        minValue,
+        maxValue
+    };
+}
+
+function resolveCaptchaPolicySettings() {
+    try {
+        const config = loadMiscConfig();
+        const stored = config?.securitySettings?.captchaPolicy || {};
+        return normalizeCaptchaPolicy(stored, DEFAULT_CAPTCHA_POLICY);
+    } catch (_) {
+        return { ...DEFAULT_CAPTCHA_POLICY };
+    }
 }
 
 function normalizeSessionPolicy(input = {}, basePolicy = DEFAULT_SESSION_POLICY) {
@@ -934,6 +1955,7 @@ function resolveSessionPolicySettings() {
 }
 
 sessionPolicyState = resolveSessionPolicySettings();
+let captchaPolicyState = resolveCaptchaPolicySettings();
 
 function buildEffectiveAutoModConfig(config) {
     const profileConfig = config?.autoModProfiles?.profiles?.[config?.autoModProfiles?.activeProfile] || {};
@@ -966,6 +1988,106 @@ function toFiniteNumber(value, fallback, min = null, max = null) {
     return next;
 }
 
+function sanitizeRegexPatternList(input, maxItems = 100) {
+    if (!Array.isArray(input)) return [];
+    return input
+        .filter(item => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(Boolean)
+        .slice(0, maxItems);
+}
+
+function sanitizeDiscordIdList(input, maxItems = 200) {
+    if (!Array.isArray(input)) return [];
+    return input
+        .filter(item => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(item => DISCORD_USER_ID_LIST_REGEX.test(item))
+        .slice(0, maxItems);
+}
+
+function sanitizeRiskWeights(weightsInput, baseWeights = {}) {
+    const source = (weightsInput && typeof weightsInput === 'object') ? weightsInput : {};
+    const base = (baseWeights && typeof baseWeights === 'object') ? baseWeights : {};
+    return {
+        spam: toFiniteNumber(source.spam, toFiniteNumber(base.spam, 28, 1, 200), 1, 200),
+        similarity: toFiniteNumber(source.similarity, toFiniteNumber(base.similarity, 30, 1, 200), 1, 200),
+        caps: toFiniteNumber(source.caps, toFiniteNumber(base.caps, 14, 1, 200), 1, 200),
+        profanity: toFiniteNumber(source.profanity, toFiniteNumber(base.profanity, 26, 1, 200), 1, 200),
+        regex: toFiniteNumber(source.regex, toFiniteNumber(base.regex, 34, 1, 200), 1, 200),
+        invites: toFiniteNumber(source.invites, toFiniteNumber(base.invites, 30, 1, 200), 1, 200),
+        mentions: toFiniteNumber(source.mentions, toFiniteNumber(base.mentions, 18, 1, 200), 1, 200)
+    };
+}
+
+function sanitizeAutoModProfileInput(input = {}, baseProfile = {}) {
+    const source = (input && typeof input === 'object') ? input : {};
+    const base = (baseProfile && typeof baseProfile === 'object') ? baseProfile : {};
+
+    const sourceAutoMod = (source.autoMod && typeof source.autoMod === 'object') ? source.autoMod : {};
+    const baseAutoMod = (base.autoMod && typeof base.autoMod === 'object') ? base.autoMod : {};
+
+    const sourceAdvanced = (source.autoModAdvanced && typeof source.autoModAdvanced === 'object') ? source.autoModAdvanced : {};
+    const baseAdvanced = (base.autoModAdvanced && typeof base.autoModAdvanced === 'object') ? base.autoModAdvanced : {};
+
+    const regexMaxPatternLength = toFiniteNumber(
+        sourceAdvanced.regexMaxPatternLength,
+        toFiniteNumber(baseAdvanced.regexMaxPatternLength, 180, 20, 1000),
+        20,
+        1000
+    );
+
+    const blockedRegexPatterns = sanitizeRegexPatternList(
+        Array.isArray(sourceAdvanced.blockedRegexPatterns)
+            ? sourceAdvanced.blockedRegexPatterns
+            : baseAdvanced.blockedRegexPatterns,
+        100
+    )
+        .map(pattern => pattern.slice(0, regexMaxPatternLength))
+        .filter(Boolean);
+
+    return {
+        blockExternalInvites: source.blockExternalInvites !== undefined
+            ? Boolean(source.blockExternalInvites)
+            : Boolean(base.blockExternalInvites),
+        maxMentionsBeforeFlag: toFiniteNumber(source.maxMentionsBeforeFlag, toFiniteNumber(base.maxMentionsBeforeFlag, 6, 1, 200), 1, 200),
+        autoMod: {
+            spamThreshold: toFiniteNumber(sourceAutoMod.spamThreshold, toFiniteNumber(baseAutoMod.spamThreshold, 5, 1, 200), 1, 200),
+            spamWindow: toFiniteNumber(sourceAutoMod.spamWindow, toFiniteNumber(baseAutoMod.spamWindow, 5000, 250, 300000), 250, 300000),
+            spamWarningThreshold: toFiniteNumber(sourceAutoMod.spamWarningThreshold, toFiniteNumber(baseAutoMod.spamWarningThreshold, 2, 1, 200), 1, 200),
+            spamTimeout: toFiniteNumber(sourceAutoMod.spamTimeout, toFiniteNumber(baseAutoMod.spamTimeout, 600000, 1000, 86400000), 1000, 86400000),
+            capsThreshold: toFiniteNumber(sourceAutoMod.capsThreshold, toFiniteNumber(baseAutoMod.capsThreshold, 0.7, 0.1, 1), 0.1, 1),
+            minLengthForCaps: toFiniteNumber(sourceAutoMod.minLengthForCaps, toFiniteNumber(baseAutoMod.minLengthForCaps, 10, 1, 2000), 1, 2000),
+            similarityWindowMs: toFiniteNumber(sourceAutoMod.similarityWindowMs, toFiniteNumber(baseAutoMod.similarityWindowMs, 120000, 5000, 3600000), 5000, 3600000),
+            similarityThreshold: toFiniteNumber(sourceAutoMod.similarityThreshold, toFiniteNumber(baseAutoMod.similarityThreshold, 0.88, 0.5, 0.99), 0.5, 0.99),
+            similarityMinLength: toFiniteNumber(sourceAutoMod.similarityMinLength, toFiniteNumber(baseAutoMod.similarityMinLength, 12, 4, 2000), 4, 2000),
+            similarityRepeatThreshold: toFiniteNumber(sourceAutoMod.similarityRepeatThreshold, toFiniteNumber(baseAutoMod.similarityRepeatThreshold, 3, 2, 30), 2, 30),
+            riskWarnThreshold: toFiniteNumber(sourceAutoMod.riskWarnThreshold, toFiniteNumber(baseAutoMod.riskWarnThreshold, 20, 1, 1000), 1, 1000),
+            riskDeleteThreshold: toFiniteNumber(sourceAutoMod.riskDeleteThreshold, toFiniteNumber(baseAutoMod.riskDeleteThreshold, 35, 1, 1000), 1, 1000),
+            riskTimeoutThreshold: toFiniteNumber(sourceAutoMod.riskTimeoutThreshold, toFiniteNumber(baseAutoMod.riskTimeoutThreshold, 60, 1, 1000), 1, 1000),
+            baseTimeoutMs: toFiniteNumber(sourceAutoMod.baseTimeoutMs, toFiniteNumber(baseAutoMod.baseTimeoutMs, 600000, 1000, 86400000), 1000, 86400000),
+            maxTimeoutMs: toFiniteNumber(sourceAutoMod.maxTimeoutMs, toFiniteNumber(baseAutoMod.maxTimeoutMs, 21600000, 1000, 86400000), 1000, 86400000)
+        },
+        autoModAdvanced: {
+            escalationThreshold24h: toFiniteNumber(sourceAdvanced.escalationThreshold24h, toFiniteNumber(baseAdvanced.escalationThreshold24h, 4, 1, 1000), 1, 1000),
+            escalationTimeoutMs: toFiniteNumber(sourceAdvanced.escalationTimeoutMs, toFiniteNumber(baseAdvanced.escalationTimeoutMs, 1800000, 1000, 86400000), 1000, 86400000),
+            progressiveTimeoutMultiplier: toFiniteNumber(sourceAdvanced.progressiveTimeoutMultiplier, toFiniteNumber(baseAdvanced.progressiveTimeoutMultiplier, 1.4, 1, 5), 1, 5),
+            kickThreshold24h: toFiniteNumber(sourceAdvanced.kickThreshold24h, toFiniteNumber(baseAdvanced.kickThreshold24h, 14, 1, 5000), 1, 5000),
+            regexMaxPatternLength,
+            blockedRegexPatterns,
+            exemptChannelIds: sanitizeDiscordIdList(
+                Array.isArray(sourceAdvanced.exemptChannelIds) ? sourceAdvanced.exemptChannelIds : baseAdvanced.exemptChannelIds,
+                200
+            ),
+            exemptRoleIds: sanitizeDiscordIdList(
+                Array.isArray(sourceAdvanced.exemptRoleIds) ? sourceAdvanced.exemptRoleIds : baseAdvanced.exemptRoleIds,
+                200
+            ),
+            riskWeights: sanitizeRiskWeights(sourceAdvanced.riskWeights, baseAdvanced.riskWeights)
+        }
+    };
+}
+
 function mergeAutoModSimulationDraft(effectiveConfig, draftConfig) {
     const merged = JSON.parse(JSON.stringify(effectiveConfig || {}));
     const draft = (draftConfig && typeof draftConfig === 'object') ? draftConfig : {};
@@ -985,6 +2107,13 @@ function mergeAutoModSimulationDraft(effectiveConfig, draftConfig) {
     if (Number.isFinite(Number(draftAutoMod.spamWarningThreshold))) merged.autoMod.spamWarningThreshold = toFiniteNumber(draftAutoMod.spamWarningThreshold, 2, 1, 200);
     if (Number.isFinite(Number(draftAutoMod.spamTimeout))) merged.autoMod.spamTimeout = toFiniteNumber(draftAutoMod.spamTimeout, 600000, 1000, 86400000);
     if (Number.isFinite(Number(draftAutoMod.capsThreshold))) merged.autoMod.capsThreshold = toFiniteNumber(draftAutoMod.capsThreshold, 0.7, 0.1, 1);
+    if (Number.isFinite(Number(draftAutoMod.similarityWindowMs))) merged.autoMod.similarityWindowMs = toFiniteNumber(draftAutoMod.similarityWindowMs, 120000, 5000, 3600000);
+    if (Number.isFinite(Number(draftAutoMod.similarityThreshold))) merged.autoMod.similarityThreshold = toFiniteNumber(draftAutoMod.similarityThreshold, 0.88, 0.5, 0.99);
+    if (Number.isFinite(Number(draftAutoMod.similarityMinLength))) merged.autoMod.similarityMinLength = toFiniteNumber(draftAutoMod.similarityMinLength, 12, 4, 2000);
+    if (Number.isFinite(Number(draftAutoMod.similarityRepeatThreshold))) merged.autoMod.similarityRepeatThreshold = toFiniteNumber(draftAutoMod.similarityRepeatThreshold, 3, 2, 30);
+    if (Number.isFinite(Number(draftAutoMod.riskWarnThreshold))) merged.autoMod.riskWarnThreshold = toFiniteNumber(draftAutoMod.riskWarnThreshold, 20, 1, 1000);
+    if (Number.isFinite(Number(draftAutoMod.riskDeleteThreshold))) merged.autoMod.riskDeleteThreshold = toFiniteNumber(draftAutoMod.riskDeleteThreshold, 35, 1, 1000);
+    if (Number.isFinite(Number(draftAutoMod.riskTimeoutThreshold))) merged.autoMod.riskTimeoutThreshold = toFiniteNumber(draftAutoMod.riskTimeoutThreshold, 60, 1, 1000);
 
     merged.autoModAdvanced = merged.autoModAdvanced || {};
     const draftAdvanced = (draft.autoModAdvanced && typeof draft.autoModAdvanced === 'object') ? draft.autoModAdvanced : {};
@@ -997,6 +2126,15 @@ function mergeAutoModSimulationDraft(effectiveConfig, draftConfig) {
     }
     if (Number.isFinite(Number(draftAdvanced.escalationThreshold24h))) merged.autoModAdvanced.escalationThreshold24h = toFiniteNumber(draftAdvanced.escalationThreshold24h, 4, 1, 1000);
     if (Number.isFinite(Number(draftAdvanced.escalationTimeoutMs))) merged.autoModAdvanced.escalationTimeoutMs = toFiniteNumber(draftAdvanced.escalationTimeoutMs, 1800000, 1000, 86400000);
+    if (Number.isFinite(Number(draftAdvanced.progressiveTimeoutMultiplier))) merged.autoModAdvanced.progressiveTimeoutMultiplier = toFiniteNumber(draftAdvanced.progressiveTimeoutMultiplier, 1.4, 1, 5);
+    if (Number.isFinite(Number(draftAdvanced.kickThreshold24h))) merged.autoModAdvanced.kickThreshold24h = toFiniteNumber(draftAdvanced.kickThreshold24h, 14, 1, 5000);
+    if (Number.isFinite(Number(draftAdvanced.regexMaxPatternLength))) merged.autoModAdvanced.regexMaxPatternLength = toFiniteNumber(draftAdvanced.regexMaxPatternLength, 180, 20, 1000);
+    if (draftAdvanced.riskWeights && typeof draftAdvanced.riskWeights === 'object') {
+        merged.autoModAdvanced.riskWeights = {
+            ...(merged.autoModAdvanced.riskWeights || {}),
+            ...draftAdvanced.riskWeights
+        };
+    }
 
     return merged;
 }
@@ -1008,20 +2146,31 @@ function evaluateAutoModSimulation({ message, recentMessageCount, priorViolation
 
     const findings = [];
     const actions = [];
+    const signals = [];
     const matchedRegexPatterns = [];
     const invalidRegexPatterns = [];
+
+    const riskWeights = {
+        spam: toFiniteNumber(advanced?.riskWeights?.spam, 28, 1, 200),
+        similarity: toFiniteNumber(advanced?.riskWeights?.similarity, 30, 1, 200),
+        caps: toFiniteNumber(advanced?.riskWeights?.caps, 14, 1, 200),
+        profanity: toFiniteNumber(advanced?.riskWeights?.profanity, 26, 1, 200),
+        regex: toFiniteNumber(advanced?.riskWeights?.regex, 34, 1, 200),
+        invites: toFiniteNumber(advanced?.riskWeights?.invites, 30, 1, 200),
+        mentions: toFiniteNumber(advanced?.riskWeights?.mentions, 18, 1, 200)
+    };
 
     const inviteRegex = /(discord\.gg|discord(app)?\.com\/invite)\/\S+/i;
     if (Boolean(config.blockExternalInvites) && inviteRegex.test(message)) {
         findings.push('Contains invite link while invite blocking is enabled');
-        actions.push('Delete message / issue moderation action');
+        signals.push({ type: 'invites', score: riskWeights.invites });
     }
 
     const mentionMatches = message.match(/<@!?\d+>|@everyone|@here/g);
     const mentionCount = Array.isArray(mentionMatches) ? mentionMatches.length : 0;
     if (mentionCount > toFiniteNumber(config.maxMentionsBeforeFlag, 6, 1, 200)) {
         findings.push(`Mention count ${mentionCount} exceeds limit ${toFiniteNumber(config.maxMentionsBeforeFlag, 6, 1, 200)}`);
-        actions.push('Flag for mention spam review');
+        signals.push({ type: 'mentions', score: riskWeights.mentions });
     }
 
     const letters = message.match(/[A-Za-z]/g) || [];
@@ -1032,13 +2181,22 @@ function evaluateAutoModSimulation({ message, recentMessageCount, priorViolation
         const capsThreshold = toFiniteNumber(autoMod.capsThreshold, 0.7, 0.1, 1);
         if (ratio >= capsThreshold) {
             findings.push(`Caps ratio ${(ratio * 100).toFixed(1)}% exceeds ${(capsThreshold * 100).toFixed(0)}% threshold`);
-            actions.push('Apply caps warning policy');
+            signals.push({ type: 'caps', score: riskWeights.caps });
         }
     }
 
     const patterns = Array.isArray(advanced.blockedRegexPatterns) ? advanced.blockedRegexPatterns : [];
+    const regexMaxPatternLength = toFiniteNumber(advanced.regexMaxPatternLength, 180, 20, 1000);
     patterns.forEach((pattern) => {
         if (typeof pattern !== 'string' || !pattern.trim()) return;
+        if (pattern.length > regexMaxPatternLength) {
+            invalidRegexPatterns.push(pattern);
+            return;
+        }
+        if (pattern.trim() === '.*' || pattern.trim() === '.+') {
+            invalidRegexPatterns.push(pattern);
+            return;
+        }
         try {
             const reg = new RegExp(pattern, 'i');
             if (reg.test(message)) matchedRegexPatterns.push(pattern);
@@ -1048,31 +2206,79 @@ function evaluateAutoModSimulation({ message, recentMessageCount, priorViolation
     });
     if (matchedRegexPatterns.length) {
         findings.push(`Matched blocked regex pattern(s): ${matchedRegexPatterns.slice(0, 3).join(', ')}${matchedRegexPatterns.length > 3 ? ' ...' : ''}`);
-        actions.push('Delete message and log pattern match');
+        signals.push({ type: 'regex', score: riskWeights.regex + ((matchedRegexPatterns.length - 1) * 4) });
+    }
+
+    const normalizedMessage = String(message || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const similarityRepeatThreshold = toFiniteNumber(autoMod.similarityRepeatThreshold, 3, 2, 30);
+    const similarityThreshold = toFiniteNumber(autoMod.similarityThreshold, 0.88, 0.5, 0.99);
+    if (normalizedMessage.length >= toFiniteNumber(autoMod.similarityMinLength, 12, 4, 2000)) {
+        const syntheticSimilarityCount = recentMessageCount;
+        if (syntheticSimilarityCount >= similarityRepeatThreshold) {
+            findings.push(`Similarity model predicts repeated near-duplicate content (${syntheticSimilarityCount} messages, threshold ${similarityRepeatThreshold}, ratio ${Math.round(similarityThreshold * 100)}%)`);
+            signals.push({ type: 'similarity', score: riskWeights.similarity });
+        }
     }
 
     const spamThreshold = toFiniteNumber(autoMod.spamThreshold, 5, 1, 200);
-    const spamWarningThreshold = toFiniteNumber(autoMod.spamWarningThreshold, 2, 1, 200);
-    const spamTimeout = toFiniteNumber(autoMod.spamTimeout, 600000, 1000, 86400000);
     if (recentMessageCount >= spamThreshold) {
         findings.push(`Recent message count ${recentMessageCount} reaches spam threshold ${spamThreshold}`);
-        actions.push(`Apply spam timeout (${spamTimeout}ms)`);
-    } else if (recentMessageCount >= spamWarningThreshold) {
-        findings.push(`Recent message count ${recentMessageCount} reaches warning threshold ${spamWarningThreshold}`);
-        actions.push('Issue spam warning');
+        signals.push({ type: 'spam', score: riskWeights.spam });
     }
+
+    const riskScore = signals.reduce((sum, signal) => sum + Number(signal.score || 0), 0);
+    const riskWarnThreshold = toFiniteNumber(autoMod.riskWarnThreshold, 20, 1, 1000);
+    const riskDeleteThreshold = toFiniteNumber(autoMod.riskDeleteThreshold, 35, 1, 1000);
+    const riskTimeoutThreshold = toFiniteNumber(autoMod.riskTimeoutThreshold, 60, 1, 1000);
+
+    let riskLevel = 'low';
+    if (riskScore >= riskTimeoutThreshold + 20) riskLevel = 'critical';
+    else if (riskScore >= riskTimeoutThreshold) riskLevel = 'high';
+    else if (riskScore >= riskDeleteThreshold) riskLevel = 'medium';
+
+    let predictedAction = 'warn';
+    if (riskScore >= riskTimeoutThreshold) predictedAction = 'timeout';
+    else if (riskScore >= riskDeleteThreshold) predictedAction = 'delete';
+    else if (riskScore >= riskWarnThreshold) predictedAction = 'warn';
 
     const escalationThreshold = toFiniteNumber(advanced.escalationThreshold24h, 4, 1, 1000);
     const escalationTimeout = toFiniteNumber(advanced.escalationTimeoutMs, 1800000, 1000, 86400000);
-    if (priorViolations24h >= escalationThreshold) {
-        findings.push(`Prior violations ${priorViolations24h} trigger escalation threshold ${escalationThreshold}`);
-        actions.push(`Escalate timeout (${escalationTimeout}ms)`);
+    const progressiveMultiplier = toFiniteNumber(advanced.progressiveTimeoutMultiplier, 1.4, 1, 5);
+    const kickThreshold = toFiniteNumber(advanced.kickThreshold24h, 14, 1, 5000);
+    const baseTimeoutMs = toFiniteNumber(autoMod.baseTimeoutMs, 600000, 1000, 86400000);
+    const maxTimeoutMs = toFiniteNumber(autoMod.maxTimeoutMs, 21600000, baseTimeoutMs, 86400000);
+
+    if (predictedAction === 'warn' && priorViolations24h >= escalationThreshold) {
+        predictedAction = 'delete';
+    }
+    if ((predictedAction === 'delete' || predictedAction === 'timeout') && priorViolations24h >= escalationThreshold) {
+        predictedAction = 'timeout';
+    }
+    let predictedTimeoutMs = 0;
+    if (predictedAction === 'timeout') {
+        const tier = Math.floor(priorViolations24h / 3);
+        predictedTimeoutMs = Math.min(maxTimeoutMs, Math.round(baseTimeoutMs * (progressiveMultiplier ** tier)));
+        if (priorViolations24h >= escalationThreshold) {
+            predictedTimeoutMs = Math.max(predictedTimeoutMs, escalationTimeout);
+        }
+    }
+    if (predictedAction === 'timeout' && priorViolations24h >= kickThreshold) {
+        predictedAction = 'kick';
+        predictedTimeoutMs = 0;
+    }
+
+    if (signals.length) {
+        actions.push(`Predicted action: ${predictedAction}${predictedTimeoutMs ? ` (${predictedTimeoutMs}ms)` : ''}`);
     }
 
     return {
         verdict: findings.length ? 'flagged' : 'clean',
         findings,
         actions,
+        riskScore,
+        riskLevel,
+        predictedAction,
+        predictedTimeoutMs,
         metrics: {
             mentionCount,
             lettersCount: letters.length,
@@ -1080,6 +2286,7 @@ function evaluateAutoModSimulation({ message, recentMessageCount, priorViolation
             recentMessageCount,
             priorViolations24h
         },
+        signals,
         matchedRegexPatterns,
         invalidRegexPatterns
     };
@@ -1399,6 +2606,303 @@ app.get('/moderator', requireAuth, (req, res) => {
 
 // Track login attempts to prevent brute force attacks
 const loginAttempts = new Map();
+const captchaFailuresByIp = new Map();
+
+function normalizeCaptchaScope(scope) {
+    const normalized = String(scope || '').trim().toLowerCase();
+    if (normalized === 'login' || normalized === 'register') return normalized;
+    return 'auth';
+}
+
+function isCaptchaEnabledForScope(scope) {
+    const safeScope = normalizeCaptchaScope(scope);
+    if (safeScope === 'login') return Boolean(captchaPolicyState.loginEnabled);
+    if (safeScope === 'register') return Boolean(captchaPolicyState.registerEnabled);
+    return Boolean(captchaPolicyState.loginEnabled || captchaPolicyState.registerEnabled);
+}
+
+function normalizeCaptchaAnswer(value) {
+    return String(value || '').trim().replace(/\s+/g, '');
+}
+
+function randomIntInclusive(min, max) {
+    const safeMin = Math.min(min, max);
+    const safeMax = Math.max(min, max);
+    return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+}
+
+function pruneCaptchaFailureEntry(entry, now = Date.now()) {
+    if (!entry || typeof entry !== 'object') {
+        return { attempts: [], blockedUntil: 0 };
+    }
+
+    const windowMs = Number(captchaPolicyState.failureWindowMs || 15 * 60 * 1000);
+    const attempts = Array.isArray(entry.attempts)
+        ? entry.attempts.filter((timestamp) => Number.isFinite(Number(timestamp)) && (now - Number(timestamp) <= windowMs))
+        : [];
+
+    return {
+        attempts,
+        blockedUntil: Number(entry.blockedUntil || 0)
+    };
+}
+
+function getCaptchaFailureState(ip, now = Date.now()) {
+    const key = String(ip || 'unknown');
+    const current = pruneCaptchaFailureEntry(captchaFailuresByIp.get(key), now);
+    if (current.attempts.length === 0 && Number(current.blockedUntil || 0) <= now) {
+        captchaFailuresByIp.delete(key);
+        return { attempts: [], blockedUntil: 0 };
+    }
+
+    captchaFailuresByIp.set(key, current);
+    return current;
+}
+
+function clearCaptchaFailureState(ip) {
+    const key = String(ip || 'unknown');
+    captchaFailuresByIp.delete(key);
+}
+
+function registerCaptchaFailure(ip, now = Date.now()) {
+    const key = String(ip || 'unknown');
+    const state = getCaptchaFailureState(key, now);
+    state.attempts.push(now);
+
+    if (state.attempts.length >= Number(captchaPolicyState.failureThreshold || 10)) {
+        state.blockedUntil = now + Number(captchaPolicyState.failureBlockMs || 10 * 60 * 1000);
+    }
+
+    captchaFailuresByIp.set(key, state);
+    return state;
+}
+
+function getCaptchaDifficultyForRequest(scope, req) {
+    const safeScope = normalizeCaptchaScope(scope);
+    const ip = String(req?.clientIP || req?.ip || 'unknown');
+    const state = getCaptchaFailureState(ip);
+
+    if (!captchaPolicyState.adaptiveDifficultyEnabled) {
+        return 1;
+    }
+
+    const recentFailures = state.attempts.length;
+    let level = safeScope === 'register' ? 2 : 1;
+
+    if (recentFailures >= 5) level = 2;
+    if (recentFailures >= 8) level = 3;
+
+    return Math.max(1, Math.min(3, level));
+}
+
+function buildMathCaptchaChallenge(minValue, maxValue, difficulty) {
+    const a = randomIntInclusive(minValue, maxValue);
+    const b = randomIntInclusive(minValue, maxValue);
+
+    if (difficulty <= 1) {
+        const useSubtract = Math.random() > 0.5;
+        if (useSubtract) {
+            const hi = Math.max(a, b);
+            const lo = Math.min(a, b);
+            return {
+                question: `Solve: ${hi} - ${lo}`,
+                answer: String(hi - lo),
+                mode: 'basic-subtract'
+            };
+        }
+
+        return {
+            question: `Solve: ${a} + ${b}`,
+            answer: String(a + b),
+            mode: 'basic-add'
+        };
+    }
+
+    if (difficulty === 2) {
+        const multiplier = randomIntInclusive(2, Math.min(12, Math.max(3, Math.floor(maxValue / 2))));
+        const extra = randomIntInclusive(minValue, maxValue);
+
+        if (Math.random() > 0.5) {
+            return {
+                question: `Solve: (${a} + ${b}) - ${extra}`,
+                answer: String((a + b) - extra),
+                mode: 'mid-parentheses'
+            };
+        }
+
+        return {
+            question: `Solve: (${a} × ${multiplier}) + ${extra}`,
+            answer: String((a * multiplier) + extra),
+            mode: 'mid-multiply'
+        };
+    }
+
+    const divisor = randomIntInclusive(2, Math.min(10, Math.max(3, Math.floor(maxValue / 2))));
+    const quotient = randomIntInclusive(Math.max(2, minValue), Math.max(4, Math.min(maxValue, 30)));
+    const dividend = divisor * quotient;
+    const c = randomIntInclusive(minValue, maxValue);
+    const d = randomIntInclusive(minValue, maxValue);
+
+    return {
+        question: `Solve: (${dividend} ÷ ${divisor}) + (${c} × ${d})`,
+        answer: String(quotient + (c * d)),
+        mode: 'advanced-divmul'
+    };
+}
+
+function createCaptchaChallenge(scope = 'auth', req = null) {
+    const safeScope = normalizeCaptchaScope(scope);
+    const challengeId = createSecureToken(12);
+    const minValue = Number(captchaPolicyState.minValue || 1);
+    const maxValue = Number(captchaPolicyState.maxValue || 20);
+    const difficulty = getCaptchaDifficultyForRequest(safeScope, req);
+    const mathChallenge = buildMathCaptchaChallenge(minValue, maxValue, difficulty);
+
+    return {
+        scope: safeScope,
+        challengeId,
+        question: String(mathChallenge.question),
+        answer: normalizeCaptchaAnswer(mathChallenge.answer),
+        mode: String(mathChallenge.mode || 'basic'),
+        difficulty,
+        issuedAt: Date.now(),
+        expiresAt: Date.now() + Number(captchaPolicyState.ttlMs),
+        attempts: 0
+    };
+}
+
+function issueCaptchaChallenge(req, scope = 'auth') {
+    if (!req?.session) return null;
+
+    if (!isCaptchaEnabledForScope(scope)) {
+        return {
+            scope: normalizeCaptchaScope(scope),
+            enabled: false,
+            challengeId: null,
+            question: null,
+            expiresInMs: 0
+        };
+    }
+
+    const challenge = createCaptchaChallenge(scope, req);
+    if (!req.session.captchaChallenges || typeof req.session.captchaChallenges !== 'object') {
+        req.session.captchaChallenges = {};
+    }
+
+    req.session.captchaChallenges[challenge.scope] = {
+        challengeId: challenge.challengeId,
+        answer: challenge.answer,
+        mode: challenge.mode,
+        difficulty: challenge.difficulty,
+        issuedAt: challenge.issuedAt,
+        expiresAt: challenge.expiresAt,
+        attempts: challenge.attempts
+    };
+
+    return {
+        scope: challenge.scope,
+        enabled: true,
+        challengeId: challenge.challengeId,
+        question: challenge.question,
+        difficulty: challenge.difficulty,
+        expiresInMs: Number(captchaPolicyState.ttlMs)
+    };
+}
+
+function verifyCaptchaChallenge(req, scope, challengeId, answer) {
+    const safeScope = normalizeCaptchaScope(scope);
+    if (!isCaptchaEnabledForScope(safeScope)) {
+        return { ok: true, status: 200, error: null, refreshRequired: false, bypassed: true };
+    }
+
+    const invalidResponse = {
+        ok: false,
+        status: 400,
+        error: 'Captcha verification failed',
+        refreshRequired: true
+    };
+
+    if (!req?.session) {
+        return {
+            ok: false,
+            status: 500,
+            error: 'Session not initialized',
+            refreshRequired: true
+        };
+    }
+
+    const ip = String(req.clientIP || req.ip || 'unknown');
+    const failureState = getCaptchaFailureState(ip);
+    if (Number(failureState.blockedUntil || 0) > Date.now()) {
+        emitSecuritySignal(req, 'captcha-ip-blocked', {
+            ip,
+            blockedUntil: Number(failureState.blockedUntil || 0),
+            attempts: failureState.attempts.length,
+            scope: safeScope
+        }, 30 * 1000);
+        return {
+            ...invalidResponse,
+            status: 429,
+            error: 'Too many captcha failures. Please wait before trying again.',
+            refreshRequired: false
+        };
+    }
+
+    const challenges = req.session.captchaChallenges && typeof req.session.captchaChallenges === 'object'
+        ? req.session.captchaChallenges
+        : {};
+    const current = challenges[safeScope];
+    const providedChallengeId = String(challengeId || '').trim();
+    const providedAnswer = normalizeCaptchaAnswer(answer);
+
+    const fail = (errorMessage, options = {}) => {
+        const state = registerCaptchaFailure(ip);
+        if (options.signal) {
+            emitSecuritySignal(req, options.signal, {
+                scope: safeScope,
+                ip,
+                attempts: state.attempts.length,
+                reason: String(errorMessage || 'captcha-failure')
+            }, 10 * 1000);
+        }
+
+        return {
+            ...invalidResponse,
+            error: errorMessage,
+            refreshRequired: options.refreshRequired !== undefined ? Boolean(options.refreshRequired) : true
+        };
+    };
+
+    if (!current || !providedChallengeId || !providedAnswer) {
+        return fail('Captcha is required', { signal: 'captcha-failed' });
+    }
+
+    if (String(current.challengeId || '') !== providedChallengeId) {
+        return fail('Captcha challenge mismatch', { signal: 'captcha-challenge-mismatch' });
+    }
+
+    const now = Date.now();
+    if (!Number.isFinite(Number(current.expiresAt)) || now > Number(current.expiresAt)) {
+        delete challenges[safeScope];
+        return fail('Captcha expired. Please try again.', { signal: 'captcha-expired' });
+    }
+
+    if (Number.isFinite(Number(current.issuedAt)) && (now - Number(current.issuedAt) < Number(captchaPolicyState.minSolveMs || 900))) {
+        return fail('Please take a moment and solve the captcha again.', { signal: 'captcha-solve-too-fast' });
+    }
+
+    if (normalizeCaptchaAnswer(current.answer) !== providedAnswer) {
+        current.attempts = Number(current.attempts || 0) + 1;
+        if (current.attempts >= Number(captchaPolicyState.maxAttempts)) {
+            delete challenges[safeScope];
+        }
+        return fail('Captcha answer is incorrect', { signal: 'captcha-failed' });
+    }
+
+    delete challenges[safeScope];
+    clearCaptchaFailureState(ip);
+    return { ok: true, status: 200, error: null, refreshRequired: false };
+}
 
 function trackLoginAttempt(ip) {
     const now = Date.now();
@@ -1421,6 +2925,20 @@ function isIPLocked(ip) {
     return attempts.length >= 5;
 }
 
+app.get('/api/captcha/challenge', createRateLimiter(20, 60000), (req, res) => {
+    const scope = normalizeCaptchaScope(req.query?.scope || 'auth');
+    const challenge = issueCaptchaChallenge(req, scope);
+    if (!challenge) {
+        return res.status(500).json({ error: 'Failed to generate captcha challenge' });
+    }
+
+    return res.json({
+        success: true,
+        enabled: Boolean(challenge.enabled !== false),
+        ...challenge
+    });
+});
+
 // Login endpoint with rate limiting and lockout protection
 app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
     // Login endpoint was called
@@ -1428,12 +2946,30 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
         // If AdminPanelHelper or getAdminUser is missing, something is wrong
     }
     const clientIP = req.clientIP;
-    const { username, password, twoFactorToken, twoFactorChallenge } = req.body;
+    const username = normalizeCredentialInput(req.body?.username, { minLength: 3, maxLength: 50 });
+    const password = String(req.body?.password || '');
+    const twoFactorToken = String(req.body?.twoFactorToken || '').trim();
+    const twoFactorChallenge = String(req.body?.twoFactorChallenge || '').trim();
+    const captchaChallengeId = String(req.body?.captchaChallengeId || '').trim();
+    const captchaAnswer = String(req.body?.captchaAnswer || '').trim();
 
     // Block login if IP is locked out
     if (isIPLocked(clientIP)) {
+        emitSecuritySignal(req, 'login-ip-locked', {
+            username: String(username || ''),
+            attempts: (loginAttempts.get(clientIP) || []).length,
+            mode: 'password'
+        }, 30 * 1000);
         // Too many failed logins from this IP
         return res.status(429).json({ error: 'Too many failed attempts. Try again in 30 minutes.' });
+    }
+
+    const loginIpReputation = evaluateRequestIpReputation(req, 'login', username);
+    if (loginIpReputation.shouldBlock) {
+        return res.status(403).json({
+            error: 'Access from this network is temporarily blocked. Please try a trusted connection.',
+            reputationBlocked: true
+        });
     }
 
     // Make sure username and password are provided
@@ -1442,12 +2978,33 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
     }
 
     // Check that the username is a valid string
-    if (typeof username !== 'string' || username.length > 50 || username.length < 3) {
+    if (!username) {
         return res.status(400).json({ error: 'Invalid username format' });
     }
 
     if (typeof password !== 'string' || password.length > 100) {
         return res.status(400).json({ error: 'Invalid password format' });
+    }
+
+    const captchaResult = verifyCaptchaChallenge(req, 'login', captchaChallengeId, captchaAnswer);
+    if (!captchaResult.ok) {
+        emitSecuritySignal(req, 'login-captcha-failed', {
+            username: String(username || ''),
+            reason: String(captchaResult.error || 'captcha-failed')
+        }, 10 * 1000);
+        return res.status(captchaResult.status).json({
+            error: captchaResult.error,
+            captchaInvalid: true,
+            captchaRefreshRequired: captchaResult.refreshRequired
+        });
+    }
+
+    if (twoFactorToken && !/^\d{6}$/.test(twoFactorToken)) {
+        return res.status(400).json({ error: 'Invalid 2FA code format' });
+    }
+
+    if (twoFactorChallenge && !/^[a-f0-9]{16,128}$/i.test(twoFactorChallenge)) {
+        return res.status(400).json({ error: 'Invalid 2FA challenge format' });
     }
 
     try {
@@ -1463,6 +3020,13 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
             // Log this failed login attempt
             const attempts = trackLoginAttempt(clientIP);
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'user-not-found', attempts: attempts.length });
+            if (attempts.length >= 5) {
+                emitSecuritySignal(req, 'login-bruteforce-threshold', {
+                    username: String(username || ''),
+                    attempts: attempts.length,
+                    reason: 'user-not-found'
+                }, 30 * 1000);
+            }
             // Log failed login for this user
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -1518,39 +3082,83 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
                 twoFactorChallenges.delete(twoFactorChallenge);
             }
 
+            let deviceBindingResult = {
+                allowed: true,
+                isNewDevice: false,
+                trustedDeviceCount: 0,
+                deviceLabel: null
+            };
+            try {
+                deviceBindingResult = await evaluateAndBindTrustedDevice(req, user, 'password');
+            } catch (deviceBindingError) {
+                console.error('[DeviceBinding] Failed to evaluate trusted device (password login):', deviceBindingError?.message || deviceBindingError);
+            }
+
+            if (!deviceBindingResult.allowed) {
+                return res.status(403).json({
+                    error: 'New devices are blocked for this account. Use a previously trusted device or contact the owner.',
+                    deviceBindingBlocked: true
+                });
+            }
+
             // Reset failed login attempts for this IP
             loginAttempts.delete(clientIP);
 
             return await establishLoginSession(req, res, user, {
-                authMethod: 'password'
+                authMethod: 'password',
+                logMetadata: {
+                    newDeviceLogin: Boolean(deviceBindingResult.isNewDevice),
+                    trustedDeviceCount: Number(deviceBindingResult.trustedDeviceCount || 0),
+                    deviceLabel: String(deviceBindingResult.deviceLabel || '')
+                }
             });
         } else {
             // Track failed attempt
             const attempts = trackLoginAttempt(clientIP);
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'password-mismatch', attempts: attempts.length });
+            if (attempts.length >= 5) {
+                emitSecuritySignal(req, 'login-bruteforce-threshold', {
+                    username: String(username || ''),
+                    attempts: attempts.length,
+                    reason: 'password-mismatch'
+                }, 30 * 1000);
+            }
             // Failed password attempt for user
             res.status(401).json({ error: 'Invalid credentials' });
         }
     } catch (error) {
         // Login error
-        res.status(500).json({ error: 'Login failed', details: error?.message || error });
+        res.status(500).json({ error: 'Login failed' });
     }
 });
 
 app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) => {
     const clientIP = req.clientIP;
-    const username = String(req.body?.username || '').trim();
+    const username = normalizeCredentialInput(req.body?.username, { minLength: 3, maxLength: 50 });
     const recoveryCodeRaw = String(req.body?.recoveryCode || '').trim();
 
     if (isIPLocked(clientIP)) {
+        emitSecuritySignal(req, 'login-ip-locked', {
+            username,
+            attempts: (loginAttempts.get(clientIP) || []).length,
+            mode: 'recovery'
+        }, 30 * 1000);
         return res.status(429).json({ error: 'Too many failed attempts. Try again in 30 minutes.' });
+    }
+
+    const recoveryIpReputation = evaluateRequestIpReputation(req, 'recovery-login', username);
+    if (recoveryIpReputation.shouldBlock) {
+        return res.status(403).json({
+            error: 'Access from this network is temporarily blocked. Please try a trusted connection.',
+            reputationBlocked: true
+        });
     }
 
     if (!username || !recoveryCodeRaw) {
         return res.status(400).json({ error: 'Username and recovery code are required' });
     }
 
-    if (typeof username !== 'string' || username.length > 50 || username.length < 3) {
+    if (!username) {
         return res.status(400).json({ error: 'Invalid username format' });
     }
 
@@ -1564,6 +3172,14 @@ app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) =>
         if (!user) {
             const attempts = trackLoginAttempt(clientIP);
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'user-not-found', mode: 'recovery', attempts: attempts.length });
+            if (attempts.length >= 5) {
+                emitSecuritySignal(req, 'login-bruteforce-threshold', {
+                    username,
+                    attempts: attempts.length,
+                    reason: 'recovery-user-not-found',
+                    mode: 'recovery'
+                }, 30 * 1000);
+            }
             return res.status(401).json({ error: 'Invalid recovery credentials' });
         }
 
@@ -1574,6 +3190,14 @@ app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) =>
         if (index === -1) {
             const attempts = trackLoginAttempt(clientIP);
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'recovery-code-mismatch', mode: 'recovery', attempts: attempts.length });
+            if (attempts.length >= 5) {
+                emitSecuritySignal(req, 'login-bruteforce-threshold', {
+                    username,
+                    attempts: attempts.length,
+                    reason: 'recovery-code-mismatch',
+                    mode: 'recovery'
+                }, 30 * 1000);
+            }
             return res.status(401).json({ error: 'Invalid recovery credentials' });
         }
 
@@ -1608,11 +3232,33 @@ app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) =>
             }
         }
 
+        let recoveryDeviceBindingResult = {
+            allowed: true,
+            isNewDevice: false,
+            trustedDeviceCount: 0,
+            deviceLabel: null
+        };
+        try {
+            recoveryDeviceBindingResult = await evaluateAndBindTrustedDevice(req, user, 'recovery-code');
+        } catch (deviceBindingError) {
+            console.error('[DeviceBinding] Failed to evaluate trusted device (recovery login):', deviceBindingError?.message || deviceBindingError);
+        }
+
+        if (!recoveryDeviceBindingResult.allowed) {
+            return res.status(403).json({
+                error: 'New devices are blocked for this account. Use a previously trusted device or contact the owner.',
+                deviceBindingBlocked: true
+            });
+        }
+
         return await establishLoginSession(req, res, user, {
             authMethod: 'recovery-code',
             logMetadata: {
                 role: user.role,
-                remainingRecoveryCodes: remainingHashes.length
+                remainingRecoveryCodes: remainingHashes.length,
+                newDeviceLogin: Boolean(recoveryDeviceBindingResult.isNewDevice),
+                trustedDeviceCount: Number(recoveryDeviceBindingResult.trustedDeviceCount || 0),
+                deviceLabel: String(recoveryDeviceBindingResult.deviceLabel || '')
             }
         });
     } catch (error) {
@@ -1629,6 +3275,113 @@ function normalizeRecoveryCodeInput(value) {
 
 function isValidEmailAddress(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+// Validation helpers (shared across routes)
+// Keep ID, reason, and duration checks centralized to avoid drift.
+
+const ADMIN_USER_ID_REGEX = /^(\d+|[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})$/;
+
+function isValidAdminUserId(userId) {
+    return typeof userId === 'string' && ADMIN_USER_ID_REGEX.test(userId);
+}
+
+function normalizeAdminUserIdValue(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
+        return String(value).trim();
+    }
+
+    if (Buffer.isBuffer(value)) {
+        if (value.length === 16) {
+            const hex = value.toString('hex');
+            return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+        }
+        const utf = value.toString('utf8').replace(/\0+$/g, '').trim();
+        return utf || value.toString('hex');
+    }
+
+    if (typeof value === 'object') {
+        if (value.type === 'Buffer' && Array.isArray(value.data)) {
+            const buffer = Buffer.from(value.data);
+            return normalizeAdminUserIdValue(buffer);
+        }
+        if (value.id !== undefined && value.id !== null) return normalizeAdminUserIdValue(value.id);
+        if (value.userId !== undefined && value.userId !== null) return normalizeAdminUserIdValue(value.userId);
+        if (value.user_id !== undefined && value.user_id !== null) return normalizeAdminUserIdValue(value.user_id);
+    }
+
+    return '';
+}
+
+function normalizeAdminUserRecord(user) {
+    const base = (user && typeof user === 'object') ? user : {};
+    return {
+        ...base,
+        id: normalizeAdminUserIdValue(base.id)
+    };
+}
+
+const DISCORD_USER_ID_REGEX = /^\d{17,19}$/;
+const DISCORD_USER_ID_LIST_REGEX = /^\d{17,20}$/;
+
+function isValidDiscordUserId(userId) {
+    return typeof userId === 'string' && DISCORD_USER_ID_REGEX.test(userId);
+}
+
+function validateBulkDiscordUserIds(userIds, options = {}) {
+    const {
+        maxCount = 50,
+        maxCountError = 'Cannot process more than 50 users at once'
+    } = options;
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+        return 'Invalid user IDs';
+    }
+
+    if (Number.isFinite(maxCount) && userIds.length > maxCount) {
+        return maxCountError;
+    }
+
+    const invalidIds = userIds.filter((id) => !id || typeof id !== 'string' || !DISCORD_USER_ID_LIST_REGEX.test(id));
+    if (invalidIds.length > 0) {
+        return 'Invalid Discord ID format in user list';
+    }
+
+    return null;
+}
+
+function isValidModerationReason(reason, options = {}) {
+    const { minLength = 3, maxLength = 500 } = options;
+    if (typeof reason !== 'string') return false;
+    const normalized = reason.trim();
+    return normalized.length >= minLength && normalized.length <= maxLength;
+}
+
+const TIMEOUT_DURATION_MIN_MS = 60 * 1000;
+const TIMEOUT_DURATION_MAX_MS = 28 * 24 * 60 * 60 * 1000;
+
+function isValidTimeoutDurationMs(durationMs) {
+    return Number.isFinite(durationMs)
+        && durationMs >= TIMEOUT_DURATION_MIN_MS
+        && durationMs <= TIMEOUT_DURATION_MAX_MS;
+}
+
+function hasModeratorAccess(user) {
+    return Boolean(user && (user.role === 'moderator' || user.role === 'admin' || user.role === 'owner'));
+}
+
+function hasAdminAccess(user) {
+    return Boolean(user && (user.role === 'admin' || user.role === 'owner'));
+}
+
+function hasOwnerAccess(user) {
+    return Boolean(user && user.role === 'owner');
+}
+
+function createPrefixedCaseId(prefix) {
+    const safePrefix = String(prefix || 'CASE').toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    return `${safePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 function isStrongPassword(value) {
@@ -1649,6 +3402,176 @@ async function sendSecurityAlertIfPossible(user, title, details = []) {
     await EmailHelper.sendSecurityAlertEmail(email, username, title, details).catch((emailError) => {
         console.error('[SecurityEmail] Failed to send security alert:', emailError?.message || emailError);
     });
+}
+
+function parseTrustedDevices(value) {
+    if (!value) return [];
+    try {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        if (!Array.isArray(parsed)) return [];
+
+        return parsed
+            .map((entry) => ({
+                fingerprint: String(entry?.fingerprint || '').trim(),
+                label: String(entry?.label || '').trim() || 'Unknown Device',
+                firstSeenAt: Number(entry?.firstSeenAt || 0),
+                lastSeenAt: Number(entry?.lastSeenAt || 0),
+                lastIp: String(entry?.lastIp || '').trim() || null,
+                loginCount: Math.max(0, Number(entry?.loginCount || 0)),
+                lastAuthMethod: String(entry?.lastAuthMethod || '').trim() || 'password'
+            }))
+            .filter((entry) => /^[a-f0-9]{64}$/i.test(entry.fingerprint));
+    } catch (_) {
+        return [];
+    }
+}
+
+function getHeaderValue(req, headerName) {
+    const raw = req?.headers?.[headerName];
+    if (Array.isArray(raw)) return String(raw[0] || '').trim();
+    return String(raw || '').trim();
+}
+
+function getDeviceNetworkHint(rawIp) {
+    const parsed = parseSingleIp(rawIp);
+    if (parsed.ipv4) {
+        const parts = parsed.ipv4.split('.');
+        if (parts.length === 4) {
+            return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+        }
+    }
+
+    if (parsed.ipv6) {
+        const normalized = parsed.ipv6.toLowerCase();
+        const groups = normalized.split(':').filter(Boolean);
+        if (groups.length >= 4) {
+            return `${groups.slice(0, 4).join(':')}::/64`;
+        }
+        return `${groups.join(':')}::/64`;
+    }
+
+    return 'unknown';
+}
+
+function buildDeviceBindingFingerprint(req) {
+    const ua = String(req?.userAgent || '').trim().toLowerCase() || 'unknown';
+    const language = getHeaderValue(req, 'accept-language').toLowerCase() || 'unknown';
+    const platform = getHeaderValue(req, 'sec-ch-ua-platform').replace(/"/g, '').toLowerCase() || 'unknown';
+    const ipInfo = parseSingleIp(req?.clientIP);
+    const ipVersion = ipInfo.ipv4 ? 'v4' : (ipInfo.ipv6 ? 'v6' : 'unknown');
+    const networkHint = getDeviceNetworkHint(req?.clientIP);
+
+    const fingerprintSource = [ua, language, platform, ipVersion, networkHint].join('|');
+    return crypto.createHash('sha256').update(fingerprintSource).digest('hex');
+}
+
+function buildDeviceBindingLabel(req) {
+    const parsedUA = parseUserAgent(req?.userAgent || 'Unknown');
+    const browser = String(parsedUA?.browser || 'Unknown').trim();
+    const os = String(parsedUA?.os || 'Unknown').trim();
+    const deviceType = String(parsedUA?.deviceType || 'Unknown').trim();
+    return `${deviceType} • ${browser} on ${os}`;
+}
+
+function sanitizeTrustedDeviceList(devices) {
+    return [...devices]
+        .sort((a, b) => Number(b?.lastSeenAt || 0) - Number(a?.lastSeenAt || 0))
+        .slice(0, DEVICE_BINDING_MAX_DEVICES);
+}
+
+async function evaluateAndBindTrustedDevice(req, user, authMethod = 'password') {
+    const knownDevices = parseTrustedDevices(user?.trusted_devices_json);
+    const fingerprint = buildDeviceBindingFingerprint(req);
+    const deviceLabel = buildDeviceBindingLabel(req);
+    const now = Date.now();
+
+    const existingIndex = knownDevices.findIndex((entry) => String(entry?.fingerprint || '') === fingerprint);
+    const isNewDevice = existingIndex === -1;
+
+    if (!isNewDevice) {
+        const existing = knownDevices[existingIndex];
+        knownDevices[existingIndex] = {
+            ...existing,
+            label: deviceLabel || existing.label || 'Known Device',
+            lastSeenAt: now,
+            lastIp: String(req?.clientIP || existing.lastIp || ''),
+            loginCount: Math.max(1, Number(existing.loginCount || 0) + 1),
+            lastAuthMethod: String(authMethod || 'password')
+        };
+
+        const updated = sanitizeTrustedDeviceList(knownDevices);
+        await MySQLDatabaseManager.connection.pool.execute(
+            `UPDATE admin_users SET trusted_devices_json = ? WHERE id = ?`,
+            [JSON.stringify(updated), user.id]
+        );
+
+        return {
+            allowed: true,
+            isNewDevice: false,
+            trustedDeviceCount: updated.length,
+            deviceLabel
+        };
+    }
+
+    const strictBlock = DEVICE_BINDING_STRICT_MODE && knownDevices.length > 0;
+    if (strictBlock) {
+        emitSecuritySignal(req, 'device-binding-blocked', {
+            username: String(user?.username || ''),
+            authMethod: String(authMethod || 'password'),
+            trustedDeviceCount: knownDevices.length,
+            deviceLabel,
+            fingerprint: fingerprint.slice(0, 12)
+        }, 30 * 1000);
+
+        return {
+            allowed: false,
+            isNewDevice: true,
+            strictMode: true,
+            trustedDeviceCount: knownDevices.length,
+            deviceLabel
+        };
+    }
+
+    const newEntry = {
+        fingerprint,
+        label: deviceLabel,
+        firstSeenAt: now,
+        lastSeenAt: now,
+        lastIp: String(req?.clientIP || ''),
+        loginCount: 1,
+        lastAuthMethod: String(authMethod || 'password')
+    };
+
+    const updated = sanitizeTrustedDeviceList([newEntry, ...knownDevices]);
+    await MySQLDatabaseManager.connection.pool.execute(
+        `UPDATE admin_users SET trusted_devices_json = ? WHERE id = ?`,
+        [JSON.stringify(updated), user.id]
+    );
+
+    emitSecuritySignal(req, 'new-device-login', {
+        username: String(user?.username || ''),
+        authMethod: String(authMethod || 'password'),
+        trustedDeviceCount: updated.length,
+        deviceLabel,
+        fingerprint: fingerprint.slice(0, 12)
+    }, 15 * 1000);
+
+    if (NEW_DEVICE_EMAIL_ALERT_ENABLED) {
+        await sendSecurityAlertIfPossible(user, 'New Device Login Detected', [
+            `Device: ${deviceLabel}`,
+            `IP Address: ${String(req?.clientIP || 'Unknown')}`,
+            `Login Method: ${String(authMethod || 'password')}`,
+            `Time: ${new Date(now).toUTCString()}`,
+            'If this was not you, change your password and revoke all active sessions immediately.'
+        ]);
+    }
+
+    return {
+        allowed: true,
+        isNewDevice: true,
+        trustedDeviceCount: updated.length,
+        deviceLabel
+    };
 }
 
 async function establishLoginSession(req, res, user, options = {}) {
@@ -1699,7 +3622,7 @@ async function establishLoginSession(req, res, user, options = {}) {
 
     res.cookie('csrfToken', initialToken, {
         httpOnly: false,
-        sameSite: 'lax',
+        sameSite: 'strict',
         secure: req.secure || (req.headers['x-forwarded-proto'] === 'https'),
         path: '/'
     });
@@ -2217,12 +4140,44 @@ app.get('/api/stats/today', requireAuth, async (req, res) => {
 // Combined dashboard endpoint - reduces API calls
 app.get('/api/dashboard/all', requireAuth, async (req, res) => {
     try {
-        const [levels, warns, reminders, giveaways, bannedUsers] = await Promise.all([
+        const [levels, warns, reminders, giveaways, bannedUsers, dbHealth] = await Promise.all([
             AdminPanelHelper.getAllLevels(),
             AdminPanelHelper.getAllWarns(),
             AdminPanelHelper.getAllReminders(),
             AdminPanelHelper.getGiveawaysCount(),
-            AdminPanelHelper.getAllBannedUsers()
+            AdminPanelHelper.getAllBannedUsers(),
+            (async () => {
+                try {
+                    if (typeof MySQLDatabaseManager.connection?.healthCheck === 'function') {
+                        const health = await MySQLDatabaseManager.connection.healthCheck();
+                        return {
+                            ok: Boolean(health?.ok),
+                            latencyMs: Number.isFinite(Number(health?.latencyMs)) ? Number(health.latencyMs) : null,
+                            lastCheckedAt: health?.lastHealthCheckAt || null,
+                            error: health?.error || null
+                        };
+                    }
+                } catch (err) {
+                }
+
+                try {
+                    const startedAt = Date.now();
+                    await MySQLDatabaseManager.connection.pool.query('SELECT 1');
+                    return {
+                        ok: true,
+                        latencyMs: Date.now() - startedAt,
+                        lastCheckedAt: Date.now(),
+                        error: null
+                    };
+                } catch (err) {
+                    return {
+                        ok: false,
+                        latencyMs: null,
+                        lastCheckedAt: Date.now(),
+                        error: err?.message || 'Health check failed'
+                    };
+                }
+            })()
         ]);
 
         res.json({
@@ -2240,7 +4195,8 @@ app.get('/api/dashboard/all', requireAuth, async (req, res) => {
             })),
             reminders,
             giveawaysCount: giveaways,
-            bannedUsersCount: bannedUsers.length
+            bannedUsersCount: bannedUsers.length,
+            dbHealth
         });
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -2303,7 +4259,7 @@ app.get('/api/warns/:userId', requireAuth, async (req, res) => {
         const { userId } = req.params;
 
         // Input validation
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -2330,7 +4286,7 @@ app.delete('/api/banned/:userId', requireAuth, async (req, res) => {
         const { userId } = req.params;
 
         // Input validation
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -2475,7 +4431,7 @@ app.delete('/api/warns/:userId/:caseId', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Invalid parameters' });
         }
 
-        if (!/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -2497,18 +4453,18 @@ app.delete('/api/warns/:userId/:caseId', requireAuth, async (req, res) => {
 app.post('/api/moderation/warn', createRateLimiter(10, 60000), requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
         const { userId, reason } = req.body;
 
         // Input validation
-        if (!userId || typeof userId !== 'string' || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
-        if (!reason || typeof reason !== 'string' || reason.trim().length < 3 || reason.trim().length > 500) {
+        if (!isValidModerationReason(reason)) {
             return res.status(400).json({ error: 'Reason must be between 3-500 characters' });
         }
 
@@ -2538,18 +4494,18 @@ app.post('/api/moderation/warn', createRateLimiter(10, 60000), requireAuth, asyn
 app.post('/api/moderation/ban', createRateLimiter(5, 60000), requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
         const { userId, reason } = req.body;
 
         // Input validation
-        if (!userId || typeof userId !== 'string' || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
-        if (!reason || typeof reason !== 'string' || reason.trim().length < 3 || reason.trim().length > 500) {
+        if (!isValidModerationReason(reason)) {
             return res.status(400).json({ error: 'Reason must be between 3-500 characters' });
         }
 
@@ -2578,22 +4534,22 @@ app.post('/api/moderation/ban', createRateLimiter(5, 60000), requireAuth, async 
 app.post('/api/moderation/timeout', createRateLimiter(10, 60000), requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
         const { userId, duration, reason } = req.body;
 
         // Input validation
-        if (!userId || typeof userId !== 'string' || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
-        if (!duration || typeof duration !== 'number' || duration < 60000 || duration > 2419200000) {
+        if (!isValidTimeoutDurationMs(duration)) {
             return res.status(400).json({ error: 'Duration must be between 1 minute and 28 days' });
         }
 
-        if (!reason || typeof reason !== 'string' || reason.trim().length < 3 || reason.trim().length > 500) {
+        if (!isValidModerationReason(reason)) {
             return res.status(400).json({ error: 'Reason must be between 3-500 characters' });
         }
 
@@ -2648,7 +4604,7 @@ app.get('/api/user/:userId', requireAuth, async (req, res) => {
     try {
         const { userId } = req.params;
 
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -2671,12 +4627,12 @@ app.get('/api/admin/users', requireAuth, async (req, res) => {
     try {
         // Check if user has admin role
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
         const users = await AdminPanelHelper.getAllAdminUsers();
-        res.json(users);
+        res.json((Array.isArray(users) ? users : []).map(normalizeAdminUserRecord));
     } catch (error) {
         console.error('Error fetching admin users:', error);
         res.status(500).json({ error: 'Failed to fetch admin users' });
@@ -2687,7 +4643,7 @@ app.post('/api/admin/users', requireAuth, async (req, res) => {
     try {
         // Check if user has admin role
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -2743,15 +4699,15 @@ app.put('/api/admin/users/:userId', requireAuth, async (req, res) => {
     try {
         // Check if user has admin role
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
         const { userId } = req.params;
         const updates = req.body;
 
-        // Validate userId
-        if (!userId || typeof userId !== 'string' || !/^\d+$/.test(userId)) {
+        // Validate admin user id (supports numeric IDs and dashed UUID-style IDs, including UUIDv7)
+        if (!isValidAdminUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -2769,10 +4725,24 @@ app.put('/api/admin/users/:userId', requireAuth, async (req, res) => {
             delete updates.password;
         }
 
+        const targetUser = await AdminPanelHelper.getAdminUserById(userId);
+        const previousRole = String(targetUser?.role || '').toLowerCase();
+
         const success = await AdminPanelHelper.updateAdminUser(userId, updates);
 
         if (success) {
             console.log(`[Admin] ${req.session.username} updated admin user ${userId}`);
+            if (updates.role) {
+                const nextRole = String(updates.role || '').toLowerCase();
+                if (nextRole && nextRole !== previousRole) {
+                    sendBotWebhook('account.role_updated', {
+                        userId,
+                        username: targetUser?.username || null,
+                        previousRole: previousRole || null,
+                        newRole: nextRole
+                    }, req).catch(() => { });
+                }
+            }
             res.json({ success: true, message: 'Admin user updated' });
         } else {
             res.status(500).json({ error: 'Failed to update admin user' });
@@ -2787,14 +4757,14 @@ app.delete('/api/admin/users/:userId', requireAuth, async (req, res) => {
     try {
         // Check if user has admin role
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
         const { userId } = req.params;
 
-        // Validate userId
-        if (!userId || typeof userId !== 'string' || !/^\d+$/.test(userId)) {
+        // Validate admin user id (supports numeric IDs and dashed UUID-style IDs, including UUIDv7)
+        if (!isValidAdminUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -2812,6 +4782,11 @@ app.delete('/api/admin/users/:userId', requireAuth, async (req, res) => {
 
         if (success) {
             console.log(`[Admin] ${req.session.username} deleted admin user ${userId}`);
+            sendBotWebhook('account.deleted', {
+                userId,
+                username: targetUser.username || null,
+                role: targetUser.role || null
+            }, req).catch(() => { });
             res.json({ success: true, message: 'Admin user deleted' });
         } else {
             res.status(500).json({ error: 'Failed to delete admin user' });
@@ -2827,14 +4802,14 @@ app.get('/api/admin/users/:userId/details', requireAuth, async (req, res) => {
     try {
         // Check if user has owner role (only owners can view detailed user info)
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || user.role !== 'owner') {
+        if (!hasOwnerAccess(user)) {
             return res.status(403).json({ error: 'Owner access required' });
         }
 
         const { userId } = req.params;
 
-        // Validate userId
-        if (!userId || typeof userId !== 'string' || !/^\d+$/.test(userId)) {
+        // Validate admin user id (supports numeric IDs and dashed UUID-style IDs, including UUIDv7)
+        if (!isValidAdminUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -2909,15 +4884,11 @@ async function runAdvancedUserSearch(payload = {}) {
             l.username,
             l.level,
             l.xp,
-            u.bio,
-            u.flags,
-            u.status,
             (SELECT COUNT(*) FROM warns WHERE user_id = l.user_id) as warn_count,
             b.banned,
             b.ban_reason,
             b.banned_at
         FROM levels l
-        LEFT JOIN userinfo u ON l.user_id = u.user_id
         LEFT JOIN user_bans b ON l.user_id = b.user_id
         WHERE 1=1
     `;
@@ -3042,7 +5013,7 @@ app.get('/api/admin/system/lookup/:query', requireAuth, async (req, res) => {
         const guild = discordClient.guilds.cache.get(process.env.GUILD_ID);
 
         // Fetch by ID
-        if (/^\d{17,20}$/.test(query)) {
+        if (DISCORD_USER_ID_LIST_REGEX.test(query)) {
             try {
                 user = await discordClient.users.fetch(query).catch(() => null);
                 if (guild && user) {
@@ -3343,7 +5314,7 @@ app.get('/api/admin/system/lookup/:query', requireAuth, async (req, res) => {
 app.post('/api/admin/system/lookup/:userId/notes', requireAuth, async (req, res) => {
     try {
         const userId = String(req.params.userId || '').trim();
-        if (!/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID' });
         }
 
@@ -3451,16 +5422,44 @@ app.get('/register', (req, res) => {
 
 // Register endpoint (requires invite code) - rate limited (2 requests per hour)
 app.post('/api/register', createRateLimiter(2, 3600000), async (req, res) => {
-    const { username, email, password, inviteCode } = req.body;
+    const {
+        username,
+        email,
+        password,
+        inviteCode,
+        captchaChallengeId,
+        captchaAnswer
+    } = req.body;
 
     // Input validation
     if (!username || !email || !password || !inviteCode) {
         return res.status(400).json({ error: 'All fields required' });
     }
 
+    const registerIpReputation = evaluateRequestIpReputation(req, 'register', username);
+    if (registerIpReputation.shouldBlock) {
+        return res.status(403).json({
+            error: 'Access from this network is temporarily blocked. Please try a trusted connection.',
+            reputationBlocked: true
+        });
+    }
+
     // Validate types
     if (typeof username !== 'string' || typeof email !== 'string' || typeof password !== 'string' || typeof inviteCode !== 'string') {
         return res.status(400).json({ error: 'Invalid input format' });
+    }
+
+    const captchaResult = verifyCaptchaChallenge(req, 'register', captchaChallengeId, captchaAnswer);
+    if (!captchaResult.ok) {
+        emitSecuritySignal(req, 'register-captcha-failed', {
+            username: String(username || ''),
+            reason: String(captchaResult.error || 'captcha-failed')
+        }, 10 * 1000);
+        return res.status(captchaResult.status).json({
+            error: captchaResult.error,
+            captchaInvalid: true,
+            captchaRefreshRequired: captchaResult.refreshRequired
+        });
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -3560,6 +5559,11 @@ app.post('/api/register', createRateLimiter(2, 3600000), async (req, res) => {
             }
 
             console.log(`[Admin] New user registered: ${username} with role ${role} using invite ${inviteCode} (${invite.current_uses + 1}/${invite.max_uses})`);
+            sendBotWebhook('account.registered', {
+                username,
+                role,
+                inviteCode
+            }, req).catch(() => { });
             res.json({ success: true, message: 'Account created successfully. Please login.' });
         } else {
             console.error(`[Registration] Failed to create user - createAdminUser returned null/false`);
@@ -4541,6 +6545,19 @@ app.get('/api/account/discord/oauth/callback', async (req, res) => {
             [me.id, discordUsername || null, panelUser.id]
         );
 
+        sendBotWebhook('discord.linked', {
+            username: panelUser.username || null,
+            userId: panelUser.id || null,
+            discordUserId: me.id || null,
+            discordUsername: discordUsername || null
+        }, req).catch(() => { });
+
+        if (req.session) {
+            req.session.discordLinked = true;
+            req.session.discordLinkedVerifiedAt = Date.now();
+            await new Promise((resolve) => req.session.save(() => resolve()));
+        }
+
         return completeDiscordOAuthRequest(req, res, { success: true, message: 'Discord account linked successfully' });
     } catch (error) {
         console.error('Error handling Discord OAuth callback:', error);
@@ -4561,6 +6578,19 @@ app.post('/api/account/discord-unlink', requireAuth, async (req, res) => {
              WHERE id = ?`,
             [user.id]
         );
+
+        sendBotWebhook('discord.unlinked', {
+            username: user.username || null,
+            userId: user.id || null,
+            discordUserId: user.discord_user_id || null,
+            discordUsername: user.discord_username || null
+        }, req).catch(() => { });
+
+        if (req.session) {
+            req.session.discordLinked = false;
+            req.session.discordLinkedVerifiedAt = Date.now();
+            await new Promise((resolve) => req.session.save(() => resolve()));
+        }
 
         return res.json({ success: true });
     } catch (error) {
@@ -4583,10 +6613,12 @@ app.post('/api/security/2fa/setup', requireAuth, async (req, res) => {
         if (!validPassword) return res.status(401).json({ error: 'Invalid current password' });
 
         const secret = TotpHelper.generateBase32Secret(32);
+        // Read issuer from main.json (websiteName)
+        const { websiteName } = require('./Config/main.json');
         const otpauthUri = TotpHelper.buildOtpauthUrl({
             secret,
             accountName: user.username,
-            issuer: 'OA1U Admin Panel'
+            issuer: websiteName || 'Sentinel Panel'
         });
 
         req.session.pendingTwoFactorSetup = {
@@ -4731,15 +6763,12 @@ app.post('/api/account/change-password', requireAuth, async (req, res) => {
         }
 
         // Hash new password
-        const passwordHash = await bcrypt.hash(newPassword, 10);
+        const newPasswordHash = await bcrypt.hash(newPassword, 10);
 
-        // Update password in database
-        const connection = await MySQLConnection.getConnection();
-        await connection.query(
+        await MySQLDatabaseManager.connection.pool.execute(
             'UPDATE admin_users SET password_hash = ?, password_changed_at = NOW() WHERE username = ?',
             [newPasswordHash, req.session.username]
         );
-        connection.release();
 
         console.log(`[Admin] User ${req.session.username} changed their password`);
         logAdminAuthEvent(req.session.username, 'PASSWORD_CHANGED', req, { route: '/api/account/change-password' }).catch(() => { });
@@ -4774,7 +6803,7 @@ app.post('/api/invites/generate', requireAuth, async (req, res) => {
 
         // Check if user is owner
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || user.role !== 'owner') {
+        if (!hasOwnerAccess(user)) {
             return res.status(403).json({ error: 'Only owner can generate invite codes' });
         }
 
@@ -4808,7 +6837,7 @@ app.post('/api/invites/generate', requireAuth, async (req, res) => {
 app.get('/api/invites/list', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -4858,7 +6887,7 @@ app.get('/api/invites/list', requireAuth, async (req, res) => {
 app.get('/api/invites/analytics', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -4936,11 +6965,29 @@ app.post('/api/invites/revoke/:code', requireAuth, async (req, res) => {
 
         // Check if user is owner
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || user.role !== 'owner') {
+        if (!hasOwnerAccess(user)) {
             return res.status(403).json({ error: 'Only owner can revoke invite codes' });
         }
 
         if (permanent === true) {
+            const [inviteRows] = await MySQLDatabaseManager.connection.pool.query(
+                'SELECT code, current_uses, used_by, used_at FROM admin_invite_codes WHERE code = ? LIMIT 1',
+                [code]
+            );
+
+            const invite = Array.isArray(inviteRows) ? inviteRows[0] : null;
+            if (!invite) {
+                return res.status(404).json({ error: 'Invite code not found' });
+            }
+
+            const inviteHasBeenUsed = Number(invite.current_uses || 0) > 0
+                || Boolean(invite.used_by)
+                || Boolean(invite.used_at);
+
+            if (inviteHasBeenUsed) {
+                return res.status(400).json({ error: 'Used invites cannot be permanently deleted' });
+            }
+
             // Permanent deletion
             const [result] = await MySQLDatabaseManager.connection.pool.query(
                 'DELETE FROM admin_invite_codes WHERE code = ?',
@@ -4982,7 +7029,7 @@ app.post('/api/invites/restore/:code', requireAuth, async (req, res) => {
         }
 
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || user.role !== 'owner') {
+        if (!hasOwnerAccess(user)) {
             return res.status(403).json({ error: 'Only owner can restore invite codes' });
         }
 
@@ -5033,7 +7080,7 @@ app.post('/api/invites/extend/:code', requireAuth, async (req, res) => {
         }
 
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || user.role !== 'owner') {
+        if (!hasOwnerAccess(user)) {
             return res.status(403).json({ error: 'Only owner can extend invite codes' });
         }
 
@@ -5176,12 +7223,10 @@ app.post('/api/user/change-password', createRateLimiter(3, 60000), requireAuth, 
         const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
         // Update password in database
-        const connection = await MySQLConnection.getConnection();
-        await connection.query(
+        await MySQLDatabaseManager.connection.pool.execute(
             'UPDATE admin_users SET password_hash = ?, password_changed_at = NOW() WHERE username = ?',
             [newPasswordHash, req.session.username]
         );
-        connection.release();
 
         console.log(`[Admin] User ${req.session.username} changed their password`);
         logAdminAuthEvent(req.session.username, 'PASSWORD_CHANGED', req, { route: '/api/user/change-password' }).catch(() => { });
@@ -5279,7 +7324,7 @@ app.get('/api/admin/top-users', requireAuth, async (req, res) => {
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5355,7 +7400,7 @@ app.get('/api/admin/guild-stats', requireAuth, async (req, res) => {
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5392,7 +7437,7 @@ app.get('/api/admin/tickets', requireAuth, async (req, res) => {
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5433,7 +7478,7 @@ app.get('/api/admin/bot-stats', requireAuth, async (req, res) => {
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5468,7 +7513,7 @@ app.get('/api/admin/member-growth', requireAuth, async (req, res) => {
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5493,7 +7538,7 @@ app.post('/api/admin/clear-warns', createRateLimiter(3, 300000), requireAuth, as
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5518,7 +7563,7 @@ app.post('/api/admin/reset-levels', createRateLimiter(1, 600000), requireAuth, a
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5544,7 +7589,7 @@ app.post('/api/admin/cleanup', requireAuth, async (req, res) => {
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5565,7 +7610,7 @@ app.get('/api/admin/export-database', createRateLimiter(2, 300000), requireAuth,
     try {
         // Check if user is admin
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -5740,7 +7785,7 @@ function parseDurationToMs(input) {
     }
 
     // Discord timeout max is 28 days
-    if (ms > 28 * 24 * 60 * 60 * 1000) {
+    if (ms > TIMEOUT_DURATION_MAX_MS) {
         return null;
     }
 
@@ -5890,7 +7935,7 @@ app.get('/api/admin/user-profile/:userId', requireAuth, async (req, res) => {
         const { userId } = req.params;
 
         // Validate userId
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -5947,13 +7992,13 @@ app.get('/api/admin/automod-violations', requireAuth, async (req, res) => {
         const safeHours = Math.max(1, Math.min(720, parseInt(hours, 10) || 24));
 
         let query = `
-            SELECT id, user_id, guild_id, violation_type, message_content, channel_id, action_taken, timestamp
+            SELECT id, user_id, guild_id, violation_type, message_content, channel_id, action_taken, risk_score, risk_level, signal_count, appeal_notified, metadata_json, timestamp
             FROM automod_violations
             WHERE timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
         `;
         const params = [safeHours];
 
-        if (typeof userId === 'string' && /^\d{17,19}$/.test(userId)) {
+        if (isValidDiscordUserId(userId)) {
             query += ' AND user_id = ?';
             params.push(userId);
         }
@@ -5972,25 +8017,18 @@ app.get('/api/admin/automod-violations', requireAuth, async (req, res) => {
 app.post('/api/admin/bulk-ban', createRateLimiter(1, 600000), requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
         const { userIds, reason } = req.body;
 
-        if (!Array.isArray(userIds) || userIds.length === 0) {
-            return res.status(400).json({ error: 'Invalid user IDs' });
-        }
-
-        // Validate user IDs
-        if (userIds.length > 50) {
-            return res.status(400).json({ error: 'Cannot ban more than 50 users at once' });
-        }
-
-        // Validate each user ID format
-        const invalidIds = userIds.filter(id => !id || typeof id !== 'string' || !/^\d{17,20}$/.test(id));
-        if (invalidIds.length > 0) {
-            return res.status(400).json({ error: 'Invalid Discord ID format in user list' });
+        const userIdsError = validateBulkDiscordUserIds(userIds, {
+            maxCount: 50,
+            maxCountError: 'Cannot ban more than 50 users at once'
+        });
+        if (userIdsError) {
+            return res.status(400).json({ error: userIdsError });
         }
 
         // Validate reason if provided
@@ -6025,7 +8063,7 @@ app.post('/api/admin/bulk-ban', createRateLimiter(1, 600000), requireAuth, async
 app.post('/api/admin/bulk-clear-warnings', createRateLimiter(2, 300000), requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -6063,24 +8101,18 @@ app.post('/api/admin/bulk-clear-warnings', createRateLimiter(2, 300000), require
 app.post('/api/admin/bulk-unban', createRateLimiter(2, 300000), requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasAdminAccess(user)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
         const { userIds } = req.body;
 
-        if (!Array.isArray(userIds) || userIds.length === 0) {
-            return res.status(400).json({ error: 'Invalid user IDs' });
-        }
-
-        if (userIds.length > 50) {
-            return res.status(400).json({ error: 'Cannot unban more than 50 users at once' });
-        }
-
-        // Validate each user ID format
-        const invalidIds = userIds.filter(id => !id || typeof id !== 'string' || !/^\d{17,20}$/.test(id));
-        if (invalidIds.length > 0) {
-            return res.status(400).json({ error: 'Invalid Discord ID format in user list' });
+        const userIdsError = validateBulkDiscordUserIds(userIds, {
+            maxCount: 50,
+            maxCountError: 'Cannot unban more than 50 users at once'
+        });
+        if (userIdsError) {
+            return res.status(400).json({ error: userIdsError });
         }
 
         const results = { success: [], failed: [] };
@@ -6134,30 +8166,24 @@ app.post('/api/admin/bulk-warn', createRateLimiter(2, 300000), requireAuth, asyn
     try {
         const { userIds, reason } = req.body;
 
-        if (!Array.isArray(userIds) || userIds.length === 0) {
-            return res.status(400).json({ error: 'Invalid user IDs' });
-        }
-
-        if (userIds.length > 50) {
-            return res.status(400).json({ error: 'Cannot warn more than 50 users at once' });
+        const userIdsError = validateBulkDiscordUserIds(userIds, {
+            maxCount: 50,
+            maxCountError: 'Cannot warn more than 50 users at once'
+        });
+        if (userIdsError) {
+            return res.status(400).json({ error: userIdsError });
         }
 
         // Validate reason
-        if (!reason || typeof reason !== 'string' || reason.trim().length < 3) {
+        if (!isValidModerationReason(reason)) {
             return res.status(400).json({ error: 'Reason must be between 3-500 characters' });
-        }
-
-        // Validate each user ID format
-        const invalidIds = userIds.filter(id => !id || typeof id !== 'string' || !/^\d{17,20}$/.test(id));
-        if (invalidIds.length > 0) {
-            return res.status(400).json({ error: 'Invalid Discord ID format in user list' });
         }
 
         const results = { success: [], failed: [] };
 
         for (const userId of userIds) {
             try {
-                const caseId = `WARN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const caseId = createPrefixedCaseId('WARN');
                 const success = await AdminPanelHelper.addWarn(userId, reason.trim(), user.id, caseId);
                 if (success) {
                     results.success.push(userId);
@@ -6186,20 +8212,20 @@ app.post('/api/admin/warn-user', requireAuth, async (req, res) => {
         const adminUser = await AdminPanelHelper.getAdminUser(req.session.username);
         console.log('[Warn] Admin user:', adminUser?.username, 'role:', adminUser?.role);
 
-        if (!adminUser || (adminUser.role !== 'moderator' && adminUser.role !== 'admin' && adminUser.role !== 'owner')) {
+        if (!hasModeratorAccess(adminUser)) {
             return res.status(403).json({ error: 'Insufficient permissions' });
         }
 
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID' });
         }
 
-        if (!reason || typeof reason !== 'string' || reason.trim().length < 3) {
+        if (!isValidModerationReason(reason, { maxLength: Number.POSITIVE_INFINITY })) {
             return res.status(400).json({ error: 'Reason is required and must be at least 3 characters' });
         }
 
         // Generate case ID
-        const caseId = `WARN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const caseId = createPrefixedCaseId('WARN');
         console.log('[Warn] Generated case ID:', caseId);
 
         // Add the warning to database
@@ -6243,7 +8269,6 @@ app.post('/api/admin/warn-user', requireAuth, async (req, res) => {
             }
             try {
                 const mainConfig = require('./Config/main.json');
-                const { serverLogChannelId } = require('./Config/constants/channel.json');
                 const guild = await discordClient.guilds.fetch(mainConfig.serverID);
                 const logChannel = guild?.channels.cache.get(serverLogChannelId);
 
@@ -6287,20 +8312,20 @@ app.post('/api/admin/ban-user', requireAuth, async (req, res) => {
         const { userId, reason } = req.body;
         const adminUser = await AdminPanelHelper.getAdminUser(req.session.username);
 
-        if (!adminUser || (adminUser.role !== 'admin' && adminUser.role !== 'owner')) {
+        if (!hasAdminAccess(adminUser)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID' });
         }
 
-        if (!reason || typeof reason !== 'string' || reason.trim().length < 3) {
+        if (!isValidModerationReason(reason, { maxLength: Number.POSITIVE_INFINITY })) {
             return res.status(400).json({ error: 'Reason is required and must be at least 3 characters' });
         }
 
         // Generate case ID
-        const caseId = `BAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const caseId = createPrefixedCaseId('BAN');
 
         // First, send DM to user about the ban BEFORE banning
         if (discordClient) {
@@ -6381,7 +8406,6 @@ app.post('/api/admin/ban-user', requireAuth, async (req, res) => {
         if (discordClient) {
             try {
                 const mainConfig = require('./Config/main.json');
-                const { serverLogChannelId } = require('./Config/constants/channel.json');
                 const guild = await discordClient.guilds.fetch(mainConfig.serverID);
                 const logChannel = guild?.channels.cache.get(serverLogChannelId);
 
@@ -6425,11 +8449,11 @@ app.post('/api/admin/timeout-user', requireAuth, async (req, res) => {
         const { userId, duration, reason } = req.body;
         const adminUser = await AdminPanelHelper.getAdminUser(req.session.username);
 
-        if (!adminUser || (adminUser.role !== 'admin' && adminUser.role !== 'owner')) {
+        if (!hasAdminAccess(adminUser)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID' });
         }
 
@@ -6437,18 +8461,18 @@ app.post('/api/admin/timeout-user', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Duration is required' });
         }
 
-        if (!reason || typeof reason !== 'string' || reason.trim().length < 3) {
+        if (!isValidModerationReason(reason, { maxLength: Number.POSITIVE_INFINITY })) {
             return res.status(400).json({ error: 'Reason is required and must be at least 3 characters' });
         }
 
         // Convert duration string to milliseconds (e.g., "10m" -> 600000, "1h" -> 3600000)
         const durationMs = parseDurationToMs(duration.trim());
-        if (!durationMs || durationMs <= 0) {
+        if (!isValidTimeoutDurationMs(durationMs)) {
             return res.status(400).json({ error: 'Invalid duration format. Use format like "10m", "1h", "7d"' });
         }
 
         // Generate case ID
-        const caseId = `TIMEOUT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const caseId = createPrefixedCaseId('TIMEOUT');
 
         // Timeout the user in Discord
         if (discordClient) {
@@ -6526,7 +8550,6 @@ app.post('/api/admin/timeout-user', requireAuth, async (req, res) => {
             }
             try {
                 const mainConfig = require('./Config/main.json');
-                const { serverLogChannelId } = require('./Config/constants/channel.json');
                 const guild = await discordClient.guilds.fetch(mainConfig.serverID);
                 const logChannel = guild?.channels.cache.get(serverLogChannelId);
 
@@ -6571,11 +8594,11 @@ app.post('/api/admin/remove-timeout', requireAuth, async (req, res) => {
         const { userId } = req.body;
         const adminUser = await AdminPanelHelper.getAdminUser(req.session.username);
 
-        if (!adminUser || (adminUser.role !== 'admin' && adminUser.role !== 'owner')) {
+        if (!hasAdminAccess(adminUser)) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID' });
         }
 
@@ -6593,7 +8616,7 @@ app.post('/api/admin/remove-timeout', requireAuth, async (req, res) => {
         }
 
         // Update database
-        const untimeoutCaseId = `UNTIMEOUT-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const untimeoutCaseId = createPrefixedCaseId('UNTIMEOUT');
         try {
             const cleared = await AdminPanelHelper.clearTimeout(userId, {
                 caseId: untimeoutCaseId,
@@ -6612,7 +8635,6 @@ app.post('/api/admin/remove-timeout', requireAuth, async (req, res) => {
         if (discordClient) {
             try {
                 const mainConfig = require('./Config/main.json');
-                const { serverLogChannelId } = require('./Config/constants/channel.json');
                 const guild = await discordClient.guilds.fetch(mainConfig.serverID);
                 const logChannel = guild?.channels.cache.get(serverLogChannelId);
 
@@ -6656,11 +8678,16 @@ app.get('/owner', requireAuth, requireOwner, (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'owner.html'));
 });
 
+// Serve analytics page (owner-only)
+app.get('/analytics', requireAuth, requireOwner, (req, res) => {
+    res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'analytics.html'));
+});
+
 // Check if user is owner
 function requireOwner(req, res, next) {
     AdminPanelHelper.getAdminUser(req.session.username)
         .then(user => {
-            if (!user || user.role !== 'owner') {
+            if (!hasOwnerAccess(user)) {
                 // Redirect to unauthorized page instead of error
                 return res.redirect('/unauthorized');
             }
@@ -6691,6 +8718,100 @@ app.post('/api/owner/force-logout-all', requireAuth, requireOwner, async (req, r
     }
 });
 
+// Download recent terminal logs (owner only)
+app.get('/api/owner/terminal-logs/download', requireAuth, requireOwner, (req, res) => {
+    const ansiRegex = /\x1B\[[0-9;]*m/g;
+    const requestedLimit = Number(req.query?.limit);
+    const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(Math.floor(requestedLimit), 1), MAX_TERMINAL_LOGS)
+        : MAX_TERMINAL_LOGS;
+    const logs = terminalLogBuffer
+        .slice(-limit)
+        .map((line) => String(line || '').replace(ansiRegex, ''));
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `terminal-logs-${timestamp}.log`;
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(`${logs.join('\n')}\n`);
+});
+
+app.get('/api/owner/backups/tables', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const tables = await listBackupTables();
+        res.json({ tables });
+    } catch (error) {
+        console.error('[Backup] Failed to list tables:', error.message);
+        res.status(500).json({ error: 'Failed to list tables' });
+    }
+});
+
+app.get('/api/owner/backups/status', requireAuth, requireOwner, (req, res) => {
+    const files = listBackupFiles();
+    res.json({
+        config: backupConfig,
+        state: backupState,
+        files
+    });
+});
+
+app.post('/api/owner/backups/config', requireAuth, requireOwner, (req, res) => {
+    try {
+        const next = { ...backupConfig };
+        if (typeof req.body?.enabled === 'boolean') {
+            next.enabled = req.body.enabled;
+        }
+        if (Number.isFinite(Number(req.body?.intervalMinutes))) {
+            next.intervalMinutes = Math.max(15, Math.min(10080, Number(req.body.intervalMinutes)));
+        }
+        if (Number.isFinite(Number(req.body?.retentionCount))) {
+            next.retentionCount = Math.max(1, Math.min(50, Number(req.body.retentionCount)));
+        }
+        if (Array.isArray(req.body?.tables)) {
+            next.tables = req.body.tables.map((table) => String(table || '').trim()).filter(Boolean);
+        }
+        if (typeof req.body?.format === 'string') {
+            next.format = String(req.body.format || 'json').toLowerCase();
+        }
+
+        const saved = saveBackupConfig(next);
+        res.json({ success: true, config: saved, state: backupState });
+    } catch (error) {
+        console.error('[Backup] Failed to update config:', error.message);
+        res.status(500).json({ error: 'Failed to update backup configuration' });
+    }
+});
+
+app.post('/api/owner/backups/run', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const tables = Array.isArray(req.body?.tables)
+            ? req.body.tables.map((table) => String(table || '').trim()).filter(Boolean)
+            : undefined;
+        const format = typeof req.body?.format === 'string' ? String(req.body.format).toLowerCase() : undefined;
+        const result = await runDatabaseBackup('manual', { tables, format });
+        if (!result.success) {
+            return res.status(500).json({ error: result.error || 'Backup failed', state: backupState });
+        }
+        res.json({ success: true, state: backupState });
+    } catch (error) {
+        console.error('[Backup] Manual backup failed:', error.message);
+        res.status(500).json({ error: 'Backup failed', state: backupState });
+    }
+});
+
+app.get('/api/owner/backups/download', requireAuth, requireOwner, (req, res) => {
+    const requested = String(req.query.file || '').trim();
+    const fileName = path.basename(requested);
+    if (!fileName || (!fileName.endsWith('.sql') && !fileName.endsWith('.json'))) {
+        return res.status(400).json({ error: 'Invalid backup file' });
+    }
+    const filePath = path.join(BACKUP_DIR, fileName);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Backup not found' });
+    }
+    res.download(filePath, fileName);
+});
+
 app.get('/api/owner/security/session-policy', requireAuth, requireOwner, async (req, res) => {
     try {
         return res.json({
@@ -6703,6 +8824,24 @@ app.get('/api/owner/security/session-policy', requireAuth, requireOwner, async (
     } catch (error) {
         console.error('Error getting session policy:', error);
         return res.status(500).json({ error: 'Failed to get session policy' });
+    }
+});
+
+app.get('/api/owner/security/captcha-policy', requireAuth, requireOwner, async (req, res) => {
+    try {
+        return res.json({
+            success: true,
+            ...captchaPolicyState,
+            defaults: {
+                ...DEFAULT_CAPTCHA_POLICY
+            },
+            limits: {
+                ...CAPTCHA_POLICY_LIMITS
+            }
+        });
+    } catch (error) {
+        console.error('Error getting captcha policy:', error);
+        return res.status(500).json({ error: 'Failed to get captcha policy' });
     }
 });
 
@@ -6751,6 +8890,98 @@ app.post('/api/owner/security/session-policy', requireAuth, requireOwner, async 
     } catch (error) {
         console.error('Error updating session policy:', error);
         return res.status(500).json({ error: 'Failed to update session policy' });
+    }
+});
+
+app.post('/api/owner/security/captcha-policy', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const incoming = req.body || {};
+
+        if (incoming.loginEnabled !== undefined && typeof incoming.loginEnabled !== 'boolean') {
+            return res.status(400).json({ error: 'loginEnabled must be a boolean' });
+        }
+
+        if (incoming.registerEnabled !== undefined && typeof incoming.registerEnabled !== 'boolean') {
+            return res.status(400).json({ error: 'registerEnabled must be a boolean' });
+        }
+
+        if (incoming.ttlMs !== undefined && !Number.isFinite(Number(incoming.ttlMs))) {
+            return res.status(400).json({ error: 'ttlMs must be a number' });
+        }
+
+        if (incoming.maxAttempts !== undefined && !Number.isFinite(Number(incoming.maxAttempts))) {
+            return res.status(400).json({ error: 'maxAttempts must be a number' });
+        }
+
+        if (incoming.minValue !== undefined && !Number.isFinite(Number(incoming.minValue))) {
+            return res.status(400).json({ error: 'minValue must be a number' });
+        }
+
+        if (incoming.maxValue !== undefined && !Number.isFinite(Number(incoming.maxValue))) {
+            return res.status(400).json({ error: 'maxValue must be a number' });
+        }
+
+        if (incoming.minSolveMs !== undefined && !Number.isFinite(Number(incoming.minSolveMs))) {
+            return res.status(400).json({ error: 'minSolveMs must be a number' });
+        }
+
+        if (incoming.adaptiveDifficultyEnabled !== undefined && typeof incoming.adaptiveDifficultyEnabled !== 'boolean') {
+            return res.status(400).json({ error: 'adaptiveDifficultyEnabled must be a boolean' });
+        }
+
+        if (incoming.failureWindowMs !== undefined && !Number.isFinite(Number(incoming.failureWindowMs))) {
+            return res.status(400).json({ error: 'failureWindowMs must be a number' });
+        }
+
+        if (incoming.failureThreshold !== undefined && !Number.isFinite(Number(incoming.failureThreshold))) {
+            return res.status(400).json({ error: 'failureThreshold must be a number' });
+        }
+
+        if (incoming.failureBlockMs !== undefined && !Number.isFinite(Number(incoming.failureBlockMs))) {
+            return res.status(400).json({ error: 'failureBlockMs must be a number' });
+        }
+
+        const config = loadMiscConfig();
+        if (!config.securitySettings || typeof config.securitySettings !== 'object') {
+            config.securitySettings = {};
+        }
+
+        const nextPolicy = normalizeCaptchaPolicy(incoming, captchaPolicyState);
+        config.securitySettings = {
+            ...(config.securitySettings || {}),
+            captchaPolicy: nextPolicy
+        };
+
+        saveMiscConfig(config);
+        captchaPolicyState = nextPolicy;
+
+        emitSecuritySignal(req, 'captcha-policy-updated', {
+            username: String(req.session?.username || 'owner'),
+            loginEnabled: Boolean(nextPolicy.loginEnabled),
+            registerEnabled: Boolean(nextPolicy.registerEnabled),
+            ttlMs: Number(nextPolicy.ttlMs || 0),
+            maxAttempts: Number(nextPolicy.maxAttempts || 0),
+            minValue: Number(nextPolicy.minValue || 0),
+            maxValue: Number(nextPolicy.maxValue || 0),
+            minSolveMs: Number(nextPolicy.minSolveMs || 0),
+            adaptiveDifficultyEnabled: Boolean(nextPolicy.adaptiveDifficultyEnabled),
+            failureWindowMs: Number(nextPolicy.failureWindowMs || 0),
+            failureThreshold: Number(nextPolicy.failureThreshold || 0),
+            failureBlockMs: Number(nextPolicy.failureBlockMs || 0)
+        }, 5 * 1000);
+
+        await logAdminAuthEvent(req.session.username, 'PASSWORD_CHANGED', req, {
+            mode: 'captcha-policy-updated',
+            ...nextPolicy
+        }).catch(() => { });
+
+        return res.json({
+            success: true,
+            ...captchaPolicyState
+        });
+    } catch (error) {
+        console.error('Error updating captcha policy:', error);
+        return res.status(500).json({ error: 'Failed to update captcha policy' });
     }
 });
 
@@ -6826,7 +9057,7 @@ app.post('/api/owner/wipe-all-data', requireAuth, requireOwner, async (req, res)
 app.get('/api/moderation/recent-actions', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner') {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
@@ -6842,7 +9073,7 @@ app.get('/api/moderation/recent-actions', requireAuth, async (req, res) => {
 app.get('/api/moderation/overview', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner') {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
@@ -6939,7 +9170,7 @@ app.get('/api/moderation/overview', requireAuth, async (req, res) => {
 app.get('/api/moderation/bans', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
@@ -6969,12 +9200,12 @@ app.get('/api/moderation/bans', requireAuth, async (req, res) => {
 app.delete('/api/moderation/bans/:userId', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
         const { userId } = req.params;
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -7037,7 +9268,6 @@ app.delete('/api/moderation/bans/:userId', requireAuth, async (req, res) => {
 
         // Log unban action to moderation log
         const { EmbedBuilder } = require('discord.js');
-        const { serverLogChannelId } = require('./Config/constants/channel.json');
 
         try {
             const targetUser = await resolveDiscordUser(userId);
@@ -7106,7 +9336,7 @@ app.delete('/api/moderation/bans/:userId', requireAuth, async (req, res) => {
 app.get('/api/moderation/timeouts', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
@@ -7121,12 +9351,12 @@ app.get('/api/moderation/timeouts', requireAuth, async (req, res) => {
 app.delete('/api/moderation/timeouts/:userId', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
         const { userId } = req.params;
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -7167,7 +9397,6 @@ app.delete('/api/moderation/timeouts/:userId', requireAuth, async (req, res) => 
         if (success && discordClient) {
             try {
                 const mainConfig = require('./Config/main.json');
-                const { serverLogChannelId } = require('./Config/constants/channel.json');
                 const guild = await discordClient.guilds.fetch(mainConfig.serverID);
                 const logChannel = guild?.channels.cache.get(serverLogChannelId);
 
@@ -7213,7 +9442,7 @@ app.delete('/api/moderation/timeouts/:userId', requireAuth, async (req, res) => 
 app.get('/api/moderation/warnings/search', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
@@ -7441,7 +9670,7 @@ app.get('/api/moderation/warnings/search', requireAuth, async (req, res) => {
 app.get('/api/moderation/actions/search', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
@@ -7624,12 +9853,12 @@ app.get('/api/moderation/actions/search', requireAuth, async (req, res) => {
 app.delete('/api/moderation/warnings/:userId', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Moderator access required' });
         }
 
         const { userId } = req.params;
-        if (!userId || !/^\d{17,19}$/.test(userId)) {
+        if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
@@ -7662,6 +9891,38 @@ app.get('/api/tickets', requireAuth, async (req, res) => {
         })));
     } catch (error) {
         res.status(500).json({ error: 'Failed to get tickets' });
+    }
+});
+
+// Get ticket transcript (moderator and above)
+app.get('/api/tickets/:ticketId/transcript', requireAuth, async (req, res) => {
+    try {
+        const user = await AdminPanelHelper.getAdminUser(req.session.username);
+        if (!hasModeratorAccess(user)) {
+            return res.status(403).json({ error: 'Moderator access required' });
+        }
+
+        const { ticketId } = req.params;
+        if (!ticketId) {
+            return res.status(400).json({ error: 'Invalid ticket id' });
+        }
+
+        const ticket = await MySQLDatabaseManager.getTicket(ticketId);
+        if (!ticket) {
+            return res.status(404).json({ error: 'Ticket not found' });
+        }
+
+        const transcript = ticket.transcript || '';
+        const createdAt = ticket.transcriptCreatedAt || null;
+        res.json({
+            ticketId,
+            hasTranscript: Boolean(transcript),
+            transcript,
+            createdAt
+        });
+    } catch (error) {
+        console.error('Error fetching ticket transcript:', error);
+        res.status(500).json({ error: 'Failed to get ticket transcript' });
     }
 });
 
@@ -7993,8 +10254,7 @@ app.get('/api/owner/system-metrics', requireAuth, requireOwner, async (req, res)
 // Owner database metrics
 app.get('/api/owner/database-metrics', requireAuth, requireOwner, async (req, res) => {
     try {
-        const connection = await MySQLConnection.getConnection();
-        const [tables] = await connection.query(
+        const [tables] = await MySQLDatabaseManager.connection.pool.query(
             `SELECT 
                 table_name,
                 table_rows,
@@ -8003,7 +10263,6 @@ app.get('/api/owner/database-metrics', requireAuth, requireOwner, async (req, re
             WHERE table_schema = DATABASE()
             ORDER BY (data_length + index_length) DESC`
         );
-        connection.release();
 
         res.json({ tables });
     } catch (error) {
@@ -8053,6 +10312,39 @@ app.get('/api/server/level-distribution', requireAuth, async (req, res) => {
 
 // Owner APIs 
 
+async function resolveDatabaseHealthSnapshot() {
+    try {
+        if (typeof MySQLDatabaseManager.connection?.healthCheck === 'function') {
+            const health = await MySQLDatabaseManager.connection.healthCheck();
+            return {
+                ok: Boolean(health?.ok),
+                latencyMs: Number.isFinite(Number(health?.latencyMs)) ? Number(health.latencyMs) : null,
+                checkedAt: Number.isFinite(Number(health?.lastHealthCheckAt)) ? Number(health.lastHealthCheckAt) : Date.now(),
+                error: health?.error || null
+            };
+        }
+    } catch {
+    }
+
+    try {
+        const startedAt = Date.now();
+        await MySQLDatabaseManager.connection.pool.query('SELECT 1');
+        return {
+            ok: true,
+            latencyMs: Date.now() - startedAt,
+            checkedAt: Date.now(),
+            error: null
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            latencyMs: null,
+            checkedAt: Date.now(),
+            error: error?.message || 'Health check failed'
+        };
+    }
+}
+
 // Audit logs
 app.get('/api/audit-logs', requireAuth, requireOwner, async (req, res) => {
     try {
@@ -8086,15 +10378,7 @@ app.get('/api/system/health', requireAuth, requireOwner, async (req, res) => {
         });
         const cpuUsagePercent = Math.round(100 - ~~(100 * totalIdle / totalTick));
 
-        // Measure DB latency
-        let dbLatency = 0;
-        try {
-            const dbStart = Date.now();
-            await MySQLDatabaseManager.connection.pool.query('SELECT 1');
-            dbLatency = Date.now() - dbStart;
-        } catch (err) {
-            dbLatency = -1; // Connection failed
-        }
+        const dbHealth = await resolveDatabaseHealthSnapshot();
 
         const apiLatency = Date.now() - startTime;
 
@@ -8106,7 +10390,9 @@ app.get('/api/system/health', requireAuth, requireOwner, async (req, res) => {
             heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
             heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
             apiLatency: `${apiLatency}ms`,
-            dbPing: dbLatency >= 0 ? `${dbLatency}ms` : 'Failed'
+            dbPing: dbHealth.ok
+                ? (Number.isFinite(dbHealth.latencyMs) ? `${dbHealth.latencyMs}ms` : 'Connected')
+                : 'Failed'
         });
     } catch (error) {
         console.error('Error getting system health:', error);
@@ -8118,29 +10404,15 @@ app.get('/api/system/health', requireAuth, requireOwner, async (req, res) => {
 app.get('/api/system/db-health', requireAuth, requireOwner, async (req, res) => {
     try {
         const services = [];
-        const startTime = Date.now();
+        const dbHealth = await resolveDatabaseHealthSnapshot();
 
-        // Check MySQL connection
-        try {
-            const dbStart = Date.now();
-            await MySQLDatabaseManager.connection.pool.query('SELECT 1');
-            const responseTime = Date.now() - dbStart;
-            services.push({
-                status: '✓ Connected',
-                statusColor: 'green',
-                service: 'MySQL Database',
-                lastCheck: new Date().toLocaleTimeString(),
-                responseTime: `${responseTime}ms`
-            });
-        } catch (err) {
-            services.push({
-                status: '✗ Failed',
-                statusColor: 'red',
-                service: 'MySQL Database',
-                lastCheck: new Date().toLocaleTimeString(),
-                responseTime: 'N/A'
-            });
-        }
+        services.push({
+            status: dbHealth.ok ? '✓ Connected' : '✗ Failed',
+            statusColor: dbHealth.ok ? 'green' : 'red',
+            service: 'MySQL Database',
+            lastCheck: new Date(dbHealth.checkedAt || Date.now()).toLocaleTimeString(),
+            responseTime: Number.isFinite(dbHealth.latencyMs) ? `${dbHealth.latencyMs}ms` : 'N/A'
+        });
 
         // Check tables
         try {
@@ -8285,7 +10557,92 @@ app.get('/api/system/sessions', requireAuth, requireOwner, async (req, res) => {
         const formattedSessions = Array.from(sessionMap.values())
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        res.json(formattedSessions);
+        const usernames = Array.from(
+            new Set(formattedSessions.map((session) => session.username).filter((username) => username && username !== 'Unknown'))
+        );
+
+        const failedLoginCounts = new Map();
+        const loginHistoryByUser = new Map();
+        const newDeviceEventsByUser = new Map();
+
+        if (usernames.length) {
+            const placeholders = usernames.map(() => '?').join(', ');
+            const [authEvents] = await MySQLDatabaseManager.connection.pool.query(
+                `SELECT username, event_type, ip_address, metadata, created_at
+                 FROM admin_auth_events
+                 WHERE username IN (${placeholders})
+                   AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                 ORDER BY created_at DESC`,
+                usernames
+            );
+
+            const nowMs = Date.now();
+            const failedWindowMs = 30 * 60 * 1000;
+
+            (authEvents || []).forEach((row) => {
+                const username = row.username;
+                if (!username) return;
+                const createdAtMs = row.created_at ? new Date(row.created_at).getTime() : 0;
+
+                const eventType = String(row.event_type || '');
+                if (createdAtMs && (nowMs - createdAtMs) <= failedWindowMs) {
+                    if (eventType === 'LOGIN_FAILED' || eventType.includes('FAILED')) {
+                        failedLoginCounts.set(username, (failedLoginCounts.get(username) || 0) + 1);
+                    }
+                }
+
+                if (eventType === 'LOGIN_SUCCESS' || eventType === 'LOGIN_SUCCESS_RECOVERY') {
+                    const history = loginHistoryByUser.get(username) || [];
+                    history.push({
+                        ipAddress: row.ip_address || null,
+                        createdAtMs
+                    });
+                    loginHistoryByUser.set(username, history);
+                }
+
+                let metadata = {};
+                try {
+                    metadata = row.metadata ? JSON.parse(row.metadata) : {};
+                } catch (_) {
+                    metadata = {};
+                }
+
+                if (metadata?.signal === 'new-device-login') {
+                    const events = newDeviceEventsByUser.get(username) || [];
+                    events.push({
+                        createdAtMs,
+                        deviceLabel: metadata.deviceLabel || null
+                    });
+                    newDeviceEventsByUser.set(username, events);
+                }
+            });
+
+            for (const [username, events] of loginHistoryByUser.entries()) {
+                const sorted = events.sort((a, b) => b.createdAtMs - a.createdAtMs);
+                loginHistoryByUser.set(username, sorted);
+            }
+        }
+
+        const riskContext = {
+            failedLoginCounts,
+            loginHistoryByUser,
+            newDeviceEventsByUser
+        };
+
+        const sessionsWithRisk = await Promise.all(
+            formattedSessions.map(async (session) => {
+                const risk = await calculateSessionRisk(session, riskContext);
+                return {
+                    ...session,
+                    riskScore: risk.score,
+                    riskLevel: risk.level,
+                    riskReasons: risk.reasons,
+                    riskSignals: risk.signals
+                };
+            })
+        );
+
+        res.json(sessionsWithRisk);
     } catch (error) {
         console.error('Error getting sessions:', error);
         res.json([]); // Return empty if error
@@ -8374,6 +10731,31 @@ app.get('/api/system/sessions/current', requireAuth, async (req, res) => {
     }
 });
 
+// Socket health metrics (owner only)
+app.get('/api/system/socket-health', requireAuth, requireOwner, (req, res) => {
+    try {
+        const sockets = io?.of('/')?.sockets?.size || 0;
+        const roomEntries = io?.of('/')?.adapter?.rooms ? Array.from(io.of('/').adapter.rooms.entries()) : [];
+        const roomSummary = roomEntries
+            .filter(([roomName, members]) => !io.of('/').sockets.has(roomName))
+            .map(([roomName, members]) => ({
+                room: roomName,
+                connections: members?.size || 0
+            }))
+            .slice(0, 50);
+
+        res.json({
+            ...socketMetrics,
+            sockets,
+            rooms: roomSummary,
+            sampledAt: Date.now()
+        });
+    } catch (error) {
+        console.error('[SocketHealth] Failed to report socket metrics:', error.message);
+        res.status(500).json({ error: 'Failed to load socket metrics' });
+    }
+});
+
 // Security logs endpoint
 app.get('/api/system/security-logs', requireAuth, requireOwner, async (req, res) => {
     try {
@@ -8398,6 +10780,167 @@ app.get('/api/system/security-logs', requireAuth, requireOwner, async (req, res)
     } catch (error) {
         console.error('Error getting security logs:', error);
         res.json([]); // Return empty if error
+    }
+});
+
+// Security signal events endpoint (owner-only)
+app.get('/api/security/events', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const requestedLimit = Number(req.query?.limit);
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.max(1, Math.min(Math.trunc(requestedLimit), 500))
+            : 100;
+
+        const signal = String(req.query?.signal || '').trim().toLowerCase();
+        const username = String(req.query?.username || '').trim().toLowerCase();
+
+        let sql = `
+            SELECT id, username, event_type, ip_address, user_agent, metadata, created_at
+            FROM admin_auth_events
+            WHERE username = 'security'
+        `;
+        const params = [];
+
+        if (signal) {
+            sql += ` AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.signal')) = ?`;
+            params.push(signal);
+        }
+
+        if (username) {
+            sql += ` AND LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.username')), '')) = ?`;
+            params.push(username);
+        }
+
+        sql += ` ORDER BY created_at DESC LIMIT ?`;
+        params.push(limit);
+
+        const [rows] = await MySQLDatabaseManager.connection.pool.query(sql, params);
+
+        const events = (rows || []).map((row) => {
+            let metadata = {};
+            try {
+                metadata = typeof row.metadata === 'string'
+                    ? JSON.parse(row.metadata)
+                    : (row.metadata || {});
+            } catch {
+                metadata = {};
+            }
+
+            return {
+                id: row.id,
+                createdAt: row.created_at,
+                username: row.username,
+                eventType: row.event_type,
+                signal: metadata?.signal || null,
+                ipAddress: row.ip_address || null,
+                userAgent: row.user_agent || null,
+                metadata
+            };
+        });
+
+        return res.json({
+            success: true,
+            count: events.length,
+            events
+        });
+    } catch (error) {
+        console.error('[SecurityEvents] Failed to fetch security events:', error.message);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch security events'
+        });
+    }
+});
+
+// Anti-raid dashboard metrics (owner-only)
+app.get('/api/owner/anti-raid-dashboard', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const requestedDays = Number(req.query?.days);
+        const days = Number.isFinite(requestedDays)
+            ? Math.max(1, Math.min(Math.trunc(requestedDays), 90))
+            : 30;
+        const requestedLimit = Number(req.query?.limit);
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.max(1, Math.min(Math.trunc(requestedLimit), 200))
+            : 20;
+
+        const [summaryRows] = await MySQLDatabaseManager.connection.pool.query(
+            `SELECT
+                COUNT(*) AS total,
+                AVG(risk_score) AS avgRisk,
+                MAX(risk_score) AS peakRisk,
+                SUM(event_type = 'lockdown_start') AS autoLockdowns,
+                SUM(event_type = 'manual_enable') AS manualLockdowns,
+                SUM(event_type IN ('lockdown_end', 'manual_disable')) AS resolved
+             FROM anti_raid_events
+             WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+            [days]
+        );
+
+        const [recentRows] = await MySQLDatabaseManager.connection.pool.query(
+            `SELECT id, event_type, risk_score, trigger_count, details_json, created_at
+             FROM anti_raid_events
+             ORDER BY created_at DESC
+             LIMIT ?`,
+            [limit]
+        );
+
+        const triggerCounts = new Map();
+        const recent = (recentRows || []).map((row) => {
+            let details = null;
+            if (row.details_json) {
+                try {
+                    details = typeof row.details_json === 'string'
+                        ? JSON.parse(row.details_json)
+                        : row.details_json;
+                } catch {
+                    details = null;
+                }
+            }
+
+            const triggers = Array.isArray(details?.triggers) ? details.triggers : [];
+            triggers.forEach((trigger) => {
+                const name = String(trigger?.name || '').trim();
+                if (!name) return;
+                triggerCounts.set(name, (triggerCounts.get(name) || 0) + 1);
+            });
+
+            return {
+                id: row.id,
+                eventType: row.event_type,
+                riskScore: row.risk_score === null ? null : Number(row.risk_score),
+                triggerCount: row.trigger_count === null ? null : Number(row.trigger_count),
+                details,
+                createdAt: row.created_at
+            };
+        });
+
+        const summaryRow = summaryRows?.[0] || {};
+        const topTriggers = Array.from(triggerCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([name, count]) => ({ name, count }));
+
+        res.json({
+            success: true,
+            windowDays: days,
+            summary: {
+                total: Number(summaryRow.total || 0),
+                avgRisk: summaryRow.avgRisk === null ? null : Number(summaryRow.avgRisk),
+                peakRisk: summaryRow.peakRisk === null ? null : Number(summaryRow.peakRisk),
+                autoLockdowns: Number(summaryRow.autoLockdowns || 0),
+                manualLockdowns: Number(summaryRow.manualLockdowns || 0),
+                resolved: Number(summaryRow.resolved || 0)
+            },
+            topTriggers,
+            recent
+        });
+    } catch (error) {
+        console.error('[AntiRaidDashboard] Failed to fetch anti-raid stats:', error.message);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch anti-raid dashboard data'
+        });
     }
 });
 
@@ -8522,13 +11065,221 @@ function getIpIntelligence(rawIp, userAgent = '') {
         ? 'High (Local)'
         : (isPrivate ? 'Medium (Private network)' : 'Medium (Public IP only)');
 
+    const reputation = getIpReputationAssessment(primary, userAgent);
+
     return {
         ipVersion,
         networkTypeLabel,
         addressScope,
         confidence,
-        riskSignals: riskSignals.slice(0, 4)
+        riskSignals: [...new Set([...riskSignals, ...reputation.reasonLabels])].slice(0, 6),
+        reputationScore: reputation.score,
+        reputationRiskLevel: reputation.riskLevel,
+        reputationBlocked: reputation.shouldBlock
     };
+}
+
+function getIpReputationAssessment(rawIp, userAgent = '') {
+    const parsed = parseSingleIp(rawIp);
+    const primary = parsed.primary;
+    const ua = String(userAgent || '').toLowerCase().trim();
+
+    const isLoopback = primary === '127.0.0.1' || primary === '::1';
+    const isPrivateV4 = Boolean(parsed.ipv4 && isPrivateIpv4(parsed.ipv4));
+    const isPrivateV6 = Boolean(parsed.ipv6 && isPrivateIpv6(parsed.ipv6));
+    const isPrivate = isLoopback || isPrivateV4 || isPrivateV6;
+
+    let score = 0;
+    const reasonCodes = [];
+    const reasonLabels = [];
+
+    const addReason = (code, label, amount) => {
+        reasonCodes.push(String(code));
+        reasonLabels.push(String(label));
+        score += Number(amount) || 0;
+    };
+
+    if (!primary || String(primary).toLowerCase() === 'unknown') {
+        addReason('missing-ip', 'Missing IP data', 35);
+    } else if (isLoopback) {
+        addReason('loopback-ip', 'Localhost source', -20);
+    } else if (isPrivate) {
+        addReason('private-network', 'Private network source', 5);
+    } else {
+        addReason('public-network', 'Public network source', 30);
+    }
+
+    if (parsed.ipv6 && !isPrivate) {
+        addReason('public-ipv6', 'Public IPv6 source', 5);
+    }
+
+    if (!ua || ua === 'unknown') {
+        addReason('missing-user-agent', 'Missing user agent', 20);
+    }
+
+    const automatedUaPattern = /(headless|bot|crawler|spider|curl|wget|python-requests|axios|go-http-client|scrapy|selenium|playwright|phantomjs|node-fetch|insomnia|postmanruntime)/i;
+    if (automatedUaPattern.test(ua)) {
+        addReason('automated-client', 'Automated client signature', 35);
+    } else if (/(mozilla|chrome|safari|firefox|edg)/i.test(ua)) {
+        addReason('browser-client', 'Browser-like user agent', -5);
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    let riskLevel = 'low';
+    if (score >= 80) {
+        riskLevel = 'critical';
+    } else if (score >= 65) {
+        riskLevel = 'high';
+    } else if (score >= 45) {
+        riskLevel = 'medium';
+    }
+
+    const shouldBlock = !isLoopback && !isPrivate && score >= IP_REPUTATION_BLOCK_SCORE;
+    const isElevated = !shouldBlock && !isLoopback && score >= IP_REPUTATION_ELEVATED_SCORE;
+
+    return {
+        score,
+        riskLevel,
+        shouldBlock,
+        isElevated,
+        reasonCodes: reasonCodes.slice(0, 6),
+        reasonLabels: reasonLabels.slice(0, 6)
+    };
+}
+
+function toRadians(value) {
+    return (Number(value) * Math.PI) / 180;
+}
+
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+    const radiusKm = 6371;
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return radiusKm * c;
+}
+
+function isLikelyProxyNetwork(networkName = '', asn = '') {
+    const label = `${networkName} ${asn}`.toLowerCase();
+    return /(vpn|proxy|tor|hosting|datacenter|data center|cloud|digitalocean|linode|ovh|aws|amazon|google|gcp|azure|cloudflare|vultr|hetzner|contabo|leaseweb|m247|colo)/i.test(label);
+}
+
+function getSessionRiskLevel(score) {
+    if (score >= 70) return 'high';
+    if (score >= 30) return 'medium';
+    return 'low';
+}
+
+function normalizeLabel(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function matchesDeviceLabel(sessionLabel, eventLabel) {
+    const sessionValue = normalizeLabel(sessionLabel);
+    const eventValue = normalizeLabel(eventLabel);
+    if (!sessionValue || !eventValue) return false;
+    return sessionValue.includes(eventValue) || eventValue.includes(sessionValue);
+}
+
+async function calculateSessionRisk(session, context) {
+    const reasons = [];
+    const signals = [];
+    let score = 0;
+
+    const addReason = (label, amount, signal) => {
+        if (label) reasons.push(label);
+        if (signal) signals.push(signal);
+        score += Number(amount) || 0;
+    };
+
+    if (!session || typeof session !== 'object') {
+        return { score: 0, level: 'low', reasons: [], signals: [] };
+    }
+
+    const reputation = getIpReputationAssessment(session.ipAddress, session.userAgent);
+    if (reputation.shouldBlock) {
+        addReason(`IP reputation blocked (${reputation.score})`, 35, 'ip-reputation-blocked');
+    } else if (reputation.isElevated) {
+        addReason(`IP reputation elevated (${reputation.score})`, 20, 'ip-reputation-elevated');
+    }
+
+    const failedCount = context.failedLoginCounts.get(session.username) || 0;
+    if (failedCount >= 5) {
+        addReason(`Failed logins in last 30m: ${failedCount}`, 30, 'failed-login-streak');
+    } else if (failedCount >= 3) {
+        addReason(`Failed logins in last 30m: ${failedCount}`, 20, 'failed-login-streak');
+    } else if (failedCount >= 1) {
+        addReason(`Failed logins in last 30m: ${failedCount}`, 10, 'failed-login-streak');
+    }
+
+    const loginTimeMs = Number(session.createdAtTimestamp || 0);
+    const newDeviceEvents = context.newDeviceEventsByUser.get(session.username) || [];
+    const newDeviceEvent = newDeviceEvents.find((event) => {
+        if (!event?.createdAtMs || !loginTimeMs) return false;
+        const deltaMs = Math.abs(event.createdAtMs - loginTimeMs);
+        if (deltaMs > 24 * 60 * 60 * 1000) return false;
+        if (event.deviceLabel && session.deviceInfo) {
+            return matchesDeviceLabel(session.deviceInfo, event.deviceLabel);
+        }
+        return true;
+    });
+    if (newDeviceEvent) {
+        addReason('New device login detected', 25, 'new-device-login');
+    }
+
+    const geo = await lookupIpGeolocation(session.ipAddress);
+    if (geo?.network && isLikelyProxyNetwork(geo.network, geo.asn)) {
+        addReason(`Possible VPN/hosting network (${geo.network})`, 20, 'vpn-proxy');
+    }
+
+    const loginHistory = context.loginHistoryByUser.get(session.username) || [];
+    const previousLogin = loginHistory.find((entry) => entry.createdAtMs < loginTimeMs);
+    if (previousLogin?.ipAddress && loginTimeMs) {
+        const previousGeo = await lookupIpGeolocation(previousLogin.ipAddress);
+        if (geo?.latitude && geo?.longitude && previousGeo?.latitude && previousGeo?.longitude) {
+            const distanceKm = getDistanceKm(geo.latitude, geo.longitude, previousGeo.latitude, previousGeo.longitude);
+            const hours = Math.max(0, (loginTimeMs - previousLogin.createdAtMs) / (60 * 60 * 1000));
+            if (distanceKm >= 1500 && hours <= 6) {
+                addReason(`Geo jump ${Math.round(distanceKm)}km in ${Math.round(hours)}h`, 30, 'geo-jump');
+            } else if (distanceKm >= 800 && hours <= 6) {
+                addReason(`Geo jump ${Math.round(distanceKm)}km in ${Math.round(hours)}h`, 20, 'geo-jump');
+            } else if (distanceKm >= 1500 && hours <= 24) {
+                addReason(`Geo jump ${Math.round(distanceKm)}km in ${Math.round(hours)}h`, 20, 'geo-jump');
+            }
+        }
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    return {
+        score,
+        level: getSessionRiskLevel(score),
+        reasons: reasons.slice(0, 6),
+        signals: signals.slice(0, 6)
+    };
+}
+
+function evaluateRequestIpReputation(req, flow = 'auth', username = '') {
+    const assessment = getIpReputationAssessment(req?.clientIP, req?.userAgent);
+    const metadata = {
+        flow: String(flow || 'auth'),
+        username: String(username || ''),
+        reputationScore: assessment.score,
+        riskLevel: assessment.riskLevel,
+        reasons: assessment.reasonCodes
+    };
+
+    if (assessment.shouldBlock) {
+        emitSecuritySignal(req, 'ip-reputation-blocked', metadata, 30 * 1000);
+    } else if (assessment.isElevated) {
+        emitSecuritySignal(req, 'ip-reputation-elevated', metadata, 2 * 60 * 1000);
+    }
+
+    return assessment;
 }
 
 const GEO_LOOKUP_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -8770,29 +11521,6 @@ function sanitizeHtmlText(text) {
         .replace(/'/g, '&#39;');
 }
 
-function sendHtmlStatusPage(res, { title, message, hint = '', statusCode = 200 } = {}) {
-    const safeTitle = sanitizeHtmlText(title || 'Status');
-    const safeMessage = sanitizeHtmlText(message || 'Request completed.');
-    const safeHint = sanitizeHtmlText(hint || '');
-    const code = Number.isInteger(statusCode) ? statusCode : 200;
-
-    return res.status(code).send(`<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${safeTitle}</title>
-</head>
-<body>
-    <main>
-        <h1>${safeTitle}</h1>
-        <p>${safeMessage}</p>
-        ${safeHint ? `<p>${safeHint}</p>` : ''}
-    </main>
-</body>
-</html>`);
-}
-
 function completeDiscordOAuthRequest(req, res, { success, message }) {
     const status = success ? 'success' : 'error';
     const encodedMessage = encodeURIComponent(String(message || 'OAuth request completed'));
@@ -8925,10 +11653,6 @@ function parseUserAgent(userAgent) {
         deviceIcon,
         full: `${browser}${browserVersion ? ' ' + browserVersion.split('.')[0] : ''} on ${os}${osVersion ? ' ' + osVersion : ''}`
     };
-}
-
-function escapeLikeValue(value) {
-    return String(value).replace(/[\\%_]/g, '\\$&');
 }
 
 const TWO_FACTOR_CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -9106,8 +11830,7 @@ app.get('/api/punishment-history/:userId', requireAuth, async (req, res) => {
 // Get server rules (public endpoint)
 app.get('/api/rules', async (req, res) => {
     try {
-        const rulesConfig = require('./Config/constants/rules.json');
-        res.json(rulesConfig.rules);
+        res.json(RULES_CONFIG.rules);
     } catch (error) {
         console.error('Error fetching rules:', error);
         res.status(500).json({ error: 'Failed to fetch rules' });
@@ -9115,6 +11838,28 @@ app.get('/api/rules', async (req, res) => {
 });
 
 // Ban appeals
+
+async function handleValidateBanCaseId(req, res) {
+    try {
+        const caseId = String(req.query?.caseId || '').trim();
+
+        if (!/^BAN-[A-Za-z0-9]{1,50}$/.test(caseId)) {
+            return res.status(400).json({ valid: false, error: 'Invalid case ID format' });
+        }
+
+        const { isValidBanCaseId } = require('./Functions/AppealHelper');
+        const banCheck = await isValidBanCaseId(caseId);
+
+        return res.json({ valid: Boolean(banCheck.valid) });
+    } catch (error) {
+        console.error('Error validating ban case ID:', error);
+        return res.status(500).json({ valid: false, error: 'Failed to validate case ID' });
+    }
+}
+
+// Validate ban case ID against database (public endpoint)
+app.get('/api/appeals/validate-case-id', createRateLimiter(30, 60000), handleValidateBanCaseId);
+app.get('/appeal/api/appeals/validate-case-id', createRateLimiter(30, 60000), handleValidateBanCaseId);
 
 // Submit a ban appeal
 app.post('/api/appeals/submit', createRateLimiter(1, 3600000), async (req, res) => {
@@ -9298,12 +12043,35 @@ app.get('/api/appeals/pending', requireAuth, async (req, res) => {
 // Get all decided appeals (accepted/denied history)
 app.get('/api/appeals/decided', requireAuth, async (req, res) => {
     try {
-        const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
-            `SELECT id, user_id, user_tag, ban_case_id, reason, status, owner_response AS decision_code, created_at, decided_at
-             FROM ban_appeals
-             WHERE status IN ('accepted', 'denied')
-             ORDER BY decided_at DESC, created_at DESC`
-        );
+        let appeals;
+        try {
+            const [rows] = await MySQLDatabaseManager.connection.pool.execute(
+                `SELECT id, user_id, user_tag, ban_case_id, reason, status, owner_response AS decision_code,
+                        created_at, decided_at,
+                        decided_by_id AS moderator_id,
+                        COALESCE(NULLIF(decided_by_name, ''), 'Owner') AS moderator,
+                        COALESCE(NULLIF(decided_by_name, ''), 'Owner') AS moderator_tag
+                 FROM ban_appeals
+                 WHERE status IN ('accepted', 'denied')
+                 ORDER BY decided_at DESC, created_at DESC`
+            );
+            appeals = rows;
+        } catch (queryError) {
+            if (queryError?.code !== 'ER_BAD_FIELD_ERROR') throw queryError;
+
+            // Backward compatibility for older schemas before decided_by_* columns exist.
+            const [rows] = await MySQLDatabaseManager.connection.pool.execute(
+                `SELECT id, user_id, user_tag, ban_case_id, reason, status, owner_response AS decision_code,
+                        created_at, decided_at,
+                        NULL AS moderator_id,
+                        'Owner' AS moderator,
+                        'Owner' AS moderator_tag
+                 FROM ban_appeals
+                 WHERE status IN ('accepted', 'denied')
+                 ORDER BY decided_at DESC, created_at DESC`
+            );
+            appeals = rows;
+        }
         res.json(appeals);
     } catch (error) {
         console.error('Error fetching decided appeals:', error);
@@ -9378,10 +12146,20 @@ app.post('/api/appeals/:id/accept', requireAuth, requireOwner, async (req, res) 
             return res.status(404).json({ error: 'Appeal not found' });
         }
 
-        await MySQLDatabaseManager.connection.pool.execute(
-            'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW() WHERE id = ?',
-            ['accepted', resolvedDecisionCode, id]
-        );
+        try {
+            await MySQLDatabaseManager.connection.pool.execute(
+                'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW(), decided_by_id = ?, decided_by_name = ? WHERE id = ?',
+                ['accepted', resolvedDecisionCode, String(req.session.userId || ''), String(req.session.username || 'Owner'), id]
+            );
+        } catch (updateError) {
+            if (updateError?.code !== 'ER_BAD_FIELD_ERROR') throw updateError;
+
+            // Backward compatibility for older schemas before decided_by_* columns exist.
+            await MySQLDatabaseManager.connection.pool.execute(
+                'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW() WHERE id = ?',
+                ['accepted', resolvedDecisionCode, id]
+            );
+        }
 
         let userEmail = null;
         try {
@@ -9435,10 +12213,20 @@ app.post('/api/appeals/:id/deny', requireAuth, requireOwner, async (req, res) =>
             return res.status(404).json({ error: 'Appeal not found' });
         }
 
-        await MySQLDatabaseManager.connection.pool.execute(
-            'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW() WHERE id = ?',
-            ['denied', resolvedDecisionCode, id]
-        );
+        try {
+            await MySQLDatabaseManager.connection.pool.execute(
+                'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW(), decided_by_id = ?, decided_by_name = ? WHERE id = ?',
+                ['denied', resolvedDecisionCode, String(req.session.userId || ''), String(req.session.username || 'Owner'), id]
+            );
+        } catch (updateError) {
+            if (updateError?.code !== 'ER_BAD_FIELD_ERROR') throw updateError;
+
+            // Backward compatibility for older schemas before decided_by_* columns exist.
+            await MySQLDatabaseManager.connection.pool.execute(
+                'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW() WHERE id = ?',
+                ['denied', resolvedDecisionCode, id]
+            );
+        }
 
         let userEmail = null;
         try {
@@ -9478,6 +12266,15 @@ app.post('/api/appeals/:id/deny', requireAuth, requireOwner, async (req, res) =>
 
 let alertTablesInitialized = false;
 let emailLogTableInitialized = false;
+const ALERT_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const alertMonitorStatus = {
+    running: false,
+    lastRunAt: null,
+    lastSuccessAt: null,
+    lastDurationMs: null,
+    lastError: null,
+    lastErrorAt: null
+};
 
 async function ensureAlertTablesReady() {
     if (alertTablesInitialized) return;
@@ -9562,13 +12359,37 @@ async function ensureEmailDeliveryLogsReady() {
             status ENUM('sent', 'failed', 'blocked') NOT NULL,
             error_message TEXT NULL,
             message_id VARCHAR(255) NULL,
+            correlation_id VARCHAR(128) NULL,
+            source VARCHAR(100) NULL,
+            provider_response TEXT NULL,
+            attempt_count INT DEFAULT 1,
+            latency_ms INT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_created (created_at),
             INDEX idx_status (status),
             INDEX idx_template (template_name),
-            INDEX idx_recipient_domain (recipient_domain)
+            INDEX idx_recipient_domain (recipient_domain),
+            INDEX idx_correlation_id (correlation_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    const columnsToAdd = [
+        { name: 'correlation_id', type: 'VARCHAR(128) DEFAULT NULL' },
+        { name: 'source', type: 'VARCHAR(100) DEFAULT NULL' },
+        { name: 'provider_response', type: 'TEXT' },
+        { name: 'attempt_count', type: 'INT DEFAULT 1' },
+        { name: 'latency_ms', type: 'INT DEFAULT NULL' }
+    ];
+
+    for (const col of columnsToAdd) {
+        try {
+            await pool.execute(`ALTER TABLE email_delivery_logs ADD COLUMN ${col.name} ${col.type}`);
+        } catch (err) {
+            if (err.code !== 'ER_DUP_FIELDNAME') {
+                console.error(`Error adding ${col.name} to email_delivery_logs:`, err.message);
+            }
+        }
+    }
 
     emailLogTableInitialized = true;
 }
@@ -9715,6 +12536,19 @@ app.get('/api/alerts/active', requireAuth, requireOwner, async (req, res) => {
     }
 });
 
+// Alert monitor status (owner only)
+app.get('/api/alerts/status', requireAuth, requireOwner, async (req, res) => {
+    return res.json({
+        running: Boolean(alertMonitorStatus.running),
+        lastRunAt: alertMonitorStatus.lastRunAt,
+        lastSuccessAt: alertMonitorStatus.lastSuccessAt,
+        lastDurationMs: alertMonitorStatus.lastDurationMs,
+        lastError: alertMonitorStatus.lastError,
+        lastErrorAt: alertMonitorStatus.lastErrorAt,
+        checkIntervalMs: ALERT_CHECK_INTERVAL_MS
+    });
+});
+
 // Resolve alert (owner only)
 app.post('/api/alerts/:id/resolve', requireAuth, requireOwner, async (req, res) => {
     try {
@@ -9745,6 +12579,32 @@ app.get('/api/owner/email-analytics', requireAuth, requireOwner, async (req, res
                 SUM(status = 'sent') AS sentTotal,
                 SUM(status = 'failed') AS failedTotal,
                 SUM(status = 'blocked') AS blockedTotal,
+                SUM(status = 'failed' AND (
+                    LOWER(COALESCE(error_message, '')) LIKE '%timeout%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%temporarily%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%try again%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%eai_again%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%econn%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%socket%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%421%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%450%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%451%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%452%'
+                )) AS transientFailedTotal,
+                SUM(status = 'failed' AND NOT (
+                    LOWER(COALESCE(error_message, '')) LIKE '%timeout%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%temporarily%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%try again%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%eai_again%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%econn%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%socket%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%421%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%450%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%451%'
+                    OR LOWER(COALESCE(error_message, '')) LIKE '%452%'
+                )) AS permanentFailedTotal,
+                ROUND(AVG(NULLIF(latency_ms, 0)), 2) AS avgLatencyMs,
+                ROUND(AVG(NULLIF(attempt_count, 0)), 2) AS avgAttemptCount,
                 SUM(created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)) AS last24h,
                 SUM(created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS last7d,
                 SUM(created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) AS last30d,
@@ -9752,6 +12612,43 @@ app.get('/api/owner/email-analytics', requireAuth, requireOwner, async (req, res
                 SUM(status = 'failed' AND created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)) AS failed24h,
                 SUM(status = 'blocked' AND created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)) AS blocked24h
              FROM email_delivery_logs`
+        );
+
+        const [failureCategoryRows] = await pool.execute(
+            `SELECT
+                CASE
+                    WHEN LOWER(COALESCE(error_message, '')) LIKE '%timeout%' THEN 'timeout'
+                    WHEN LOWER(COALESCE(error_message, '')) LIKE '%temporarily%' OR LOWER(COALESCE(error_message, '')) LIKE '%try again%' THEN 'temporary_provider_issue'
+                    WHEN LOWER(COALESCE(error_message, '')) LIKE '%eai_again%' THEN 'dns_retryable'
+                    WHEN LOWER(COALESCE(error_message, '')) LIKE '%econn%' OR LOWER(COALESCE(error_message, '')) LIKE '%socket%' THEN 'connection_issue'
+                    WHEN LOWER(COALESCE(error_message, '')) LIKE '%invalid recipient%' OR LOWER(COALESCE(error_message, '')) LIKE '%mailbox unavailable%' OR LOWER(COALESCE(error_message, '')) LIKE '%550%' THEN 'invalid_recipient'
+                    WHEN LOWER(COALESCE(error_message, '')) LIKE '%rate limit%' THEN 'rate_limited'
+                    ELSE 'other'
+                END AS category,
+                COUNT(*) AS count
+             FROM email_delivery_logs
+             WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+               AND status IN ('failed', 'blocked')
+             GROUP BY category
+             ORDER BY count DESC
+             LIMIT 10`
+        );
+
+        const [failingDomainRows] = await pool.execute(
+            `SELECT
+                recipient_domain,
+                COUNT(*) AS total,
+                SUM(status = 'sent') AS sent,
+                SUM(status = 'failed') AS failed,
+                SUM(status = 'blocked') AS blocked
+             FROM email_delivery_logs
+             WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+               AND recipient_domain IS NOT NULL
+               AND recipient_domain != ''
+             GROUP BY recipient_domain
+                         HAVING (SUM(status = 'failed') + SUM(status = 'blocked')) > 0
+                         ORDER BY (SUM(status = 'failed') + SUM(status = 'blocked')) DESC, COUNT(*) DESC
+             LIMIT 10`
         );
 
         const [templateRows] = await pool.execute(
@@ -9784,10 +12681,15 @@ app.get('/api/owner/email-analytics', requireAuth, requireOwner, async (req, res
         const [recentRows] = await pool.execute(
             `SELECT
                 recipient_email,
+                recipient_domain,
                 template_name,
                 subject,
                 status,
                 error_message,
+                source,
+                attempt_count,
+                latency_ms,
+                correlation_id,
                 created_at
              FROM email_delivery_logs
              ORDER BY created_at DESC
@@ -9799,11 +12701,24 @@ app.get('/api/owner/email-analytics', requireAuth, requireOwner, async (req, res
             summary: summaryRows?.[0] || {},
             templates: templateRows || [],
             trends: trendRows || [],
-            recent: recentRows || []
+            recent: recentRows || [],
+            failureCategories: failureCategoryRows || [],
+            failingDomains: failingDomainRows || []
         });
     } catch (error) {
         console.error('Error fetching email analytics:', error);
         res.status(500).json({ error: 'Failed to fetch email analytics' });
+    }
+});
+
+app.get('/api/owner/verification-analytics', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(365, parseInt(req.query.days, 10) || 30));
+        const analytics = await getVerificationAnalytics({ days });
+        return res.json(analytics);
+    } catch (error) {
+        console.error('Error fetching verification analytics:', error);
+        return res.status(500).json({ error: 'Failed to fetch verification analytics' });
     }
 });
 
@@ -9857,18 +12772,7 @@ app.post('/api/automod/config', requireAuth, requireOwner, async (req, res) => {
 
         if (profileName && profilePatch) {
             const existing = config.autoModProfiles.profiles[profileName] || {};
-            const mergedProfile = {
-                ...existing,
-                ...profilePatch,
-                autoMod: {
-                    ...(existing.autoMod || {}),
-                    ...((profilePatch && profilePatch.autoMod) || {})
-                },
-                autoModAdvanced: {
-                    ...(existing.autoModAdvanced || {}),
-                    ...((profilePatch && profilePatch.autoModAdvanced) || {})
-                }
-            };
+            const mergedProfile = sanitizeAutoModProfileInput(profilePatch, existing);
             config.autoModProfiles.profiles[profileName] = mergedProfile;
         }
 
@@ -9891,25 +12795,34 @@ app.post('/api/automod/config', requireAuth, requireOwner, async (req, res) => {
             delete config.autoModProfiles.profiles[deleteProfileName];
         }
 
-        config.blockExternalInvites = body.blockExternalInvites !== undefined ? Boolean(body.blockExternalInvites) : config.blockExternalInvites;
-        config.maxMentionsBeforeFlag = Number.isFinite(Number(body.maxMentionsBeforeFlag)) ? Number(body.maxMentionsBeforeFlag) : config.maxMentionsBeforeFlag;
-        config.autoMod = config.autoMod || {};
-        if (Number.isFinite(Number(body.spamThreshold))) config.autoMod.spamThreshold = Number(body.spamThreshold);
-        if (Number.isFinite(Number(body.spamTimeout))) config.autoMod.spamTimeout = Number(body.spamTimeout);
-        if (Number.isFinite(Number(body.spamWarningThreshold))) config.autoMod.spamWarningThreshold = Number(body.spamWarningThreshold);
+        const rootPatch = {
+            blockExternalInvites: body.blockExternalInvites,
+            maxMentionsBeforeFlag: body.maxMentionsBeforeFlag,
+            autoMod: {
+                spamThreshold: body.spamThreshold,
+                spamTimeout: body.spamTimeout,
+                spamWarningThreshold: body.spamWarningThreshold
+            },
+            autoModAdvanced: {
+                blockedRegexPatterns: body.blockedRegexPatterns,
+                exemptChannelIds: body.exemptChannelIds,
+                exemptRoleIds: body.exemptRoleIds,
+                escalationThreshold24h: body.escalationThreshold24h,
+                escalationTimeoutMs: body.escalationTimeoutMs
+            }
+        };
 
-        config.autoModAdvanced = config.autoModAdvanced || {};
-        if (Array.isArray(body.blockedRegexPatterns)) {
-            config.autoModAdvanced.blockedRegexPatterns = body.blockedRegexPatterns.slice(0, 100);
-        }
-        if (Array.isArray(body.exemptChannelIds)) {
-            config.autoModAdvanced.exemptChannelIds = body.exemptChannelIds.filter(id => typeof id === 'string').slice(0, 200);
-        }
-        if (Array.isArray(body.exemptRoleIds)) {
-            config.autoModAdvanced.exemptRoleIds = body.exemptRoleIds.filter(id => typeof id === 'string').slice(0, 200);
-        }
-        if (Number.isFinite(Number(body.escalationThreshold24h))) config.autoModAdvanced.escalationThreshold24h = Number(body.escalationThreshold24h);
-        if (Number.isFinite(Number(body.escalationTimeoutMs))) config.autoModAdvanced.escalationTimeoutMs = Number(body.escalationTimeoutMs);
+        const sanitizedRoot = sanitizeAutoModProfileInput(rootPatch, config);
+        config.blockExternalInvites = sanitizedRoot.blockExternalInvites;
+        config.maxMentionsBeforeFlag = sanitizedRoot.maxMentionsBeforeFlag;
+        config.autoMod = {
+            ...(config.autoMod || {}),
+            ...sanitizedRoot.autoMod
+        };
+        config.autoModAdvanced = {
+            ...(config.autoModAdvanced || {}),
+            ...sanitizedRoot.autoModAdvanced
+        };
 
         normalizeAutoModProfiles(config);
         saveAutoModConfig(config);
@@ -9976,6 +12889,8 @@ app.get('/api/automod/advanced', requireAuth, requireOwner, async (req, res) => 
                 SUM(CASE WHEN COALESCE(r.status, 'pending') = 'pending' THEN 1 ELSE 0 END) AS pending,
                 SUM(CASE WHEN COALESCE(r.status, 'pending') = 'approved' THEN 1 ELSE 0 END) AS approved,
                 SUM(CASE WHEN COALESCE(r.status, 'pending') = 'dismissed' THEN 1 ELSE 0 END) AS dismissed,
+                ROUND(AVG(COALESCE(v.risk_score, 0)), 2) AS avgRiskScore,
+                SUM(CASE WHEN COALESCE(v.appeal_notified, 0) = 1 THEN 1 ELSE 0 END) AS appealAwareActions,
                 SUM(CASE WHEN COALESCE(r.severity,
                     CASE
                         WHEN v.action_taken IN ('ban', 'kick') THEN 'critical'
@@ -9988,6 +12903,15 @@ app.get('/api/automod/advanced', requireAuth, requireOwner, async (req, res) => 
              FROM automod_violations v
              LEFT JOIN automod_violation_reviews r ON r.violation_id = v.id
              WHERE v.timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)`,
+            [windowHours]
+        );
+
+        const [actionRows] = await MySQLDatabaseManager.connection.pool.execute(
+            `SELECT v.action_taken AS action, COUNT(*) AS count
+             FROM automod_violations v
+             WHERE v.timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+             GROUP BY v.action_taken
+             ORDER BY count DESC`,
             [windowHours]
         );
 
@@ -10036,6 +12960,11 @@ app.get('/api/automod/advanced', requireAuth, requireOwner, async (req, res) => 
                 v.message_content,
                 v.channel_id,
                 v.action_taken,
+                v.risk_score,
+                v.risk_level,
+                v.signal_count,
+                v.appeal_notified,
+                v.metadata_json,
                 v.timestamp,
                 COALESCE(r.status, 'pending') AS review_status,
                 COALESCE(r.severity,
@@ -10097,10 +13026,16 @@ app.get('/api/automod/advanced', requireAuth, requireOwner, async (req, res) => 
                 pending: Number(summary.pending || 0),
                 approved: Number(summary.approved || 0),
                 dismissed: Number(summary.dismissed || 0),
-                highRisk: Number(summary.highRisk || 0)
+                highRisk: Number(summary.highRisk || 0),
+                avgRiskScore: Number(summary.avgRiskScore || 0),
+                appealAwareActions: Number(summary.appealAwareActions || 0),
+                falsePositiveRate: Number(summary.total || 0) > 0
+                    ? Number(((Number(summary.dismissed || 0) / Number(summary.total || 0)) * 100).toFixed(2))
+                    : 0
             },
             trends: Array.isArray(trendRows) ? trendRows : [],
             types: Array.isArray(typeRows) ? typeRows : [],
+            actions: Array.isArray(actionRows) ? actionRows : [],
             topUsers: Array.isArray(topUsersRows) ? topUsersRows : [],
             queue: Array.isArray(queueRows) ? queueRows : [],
             pagination: {
@@ -10249,9 +13184,9 @@ app.get('/api/moderation/intelligence', requireAuth, async (req, res) => {
 // Websockets
 
 io.on('connection', (socket) => {
-    // Prioritize session from handshake (populated by express-socket.io-session)
-    let role = socket.handshake?.session?.role || socket.request?.session?.role || socket.handshake?.auth?.role || socket.handshake?.query?.role || 'user';
-    let username = socket.handshake?.session?.username || socket.request?.session?.username || socket.handshake?.auth?.username || socket.handshake?.query?.username || 'Unknown';
+    // Trust session data only (populated by express-socket.io-session)
+    let role = socket.handshake?.session?.role || socket.request?.session?.role || 'user';
+    let username = socket.handshake?.session?.username || socket.request?.session?.username || 'Unknown';
     let page = socket.request?.headers?.referer || socket.handshake?.headers?.referer || 'Unknown';
     // Extract just the path from the referer URL and remove leading slash
     if (page && typeof page === 'string') {
@@ -10265,6 +13200,22 @@ io.on('connection', (socket) => {
     // Use the same logic as dropdown: show username or fallback, and role
     const displayUsername = username && username !== 'Unknown' ? username : 'User';
     const displayRole = (role || 'user').toUpperCase();
+    const normalizedRole = String(role || 'user').toLowerCase();
+
+    if (normalizedRole === 'owner') {
+        socket.join('owners');
+    }
+    socket.join(`role:${normalizedRole}`);
+    if (page) {
+        socket.join(`page:${page}`);
+    }
+
+    socketMetrics.active += 1;
+    socketMetrics.connects += 1;
+    socketMetrics.lastConnectAt = Date.now();
+    if (socketMetrics.perRole[normalizedRole] !== undefined) {
+        socketMetrics.perRole[normalizedRole] += 1;
+    }
     // console.log(`User '${displayUsername}' (${displayRole}) connected to WebSocket (Page: ${page})`);
 
     // Send initial stats
@@ -10294,15 +13245,28 @@ io.on('connection', (socket) => {
         }
     };
 
-    // Send stats immediately
-    sendStats();
+    let statsInterval = null;
 
-    // Send stats every 5 seconds for live updates
-    const statsInterval = setInterval(sendStats, 5000);
+    socket.on('subscribe-stats', (payload = {}) => {
+        const requestedInterval = Number(payload?.intervalMs);
+        const intervalMs = Number.isFinite(requestedInterval)
+            ? Math.min(Math.max(Math.floor(requestedInterval), 3000), 30000)
+            : 10000;
+        if (statsInterval) clearInterval(statsInterval);
+        sendStats();
+        statsInterval = setInterval(sendStats, intervalMs);
+    });
+
+    socket.on('unsubscribe-stats', () => {
+        if (statsInterval) {
+            clearInterval(statsInterval);
+            statsInterval = null;
+        }
+    });
 
     socket.on('disconnect', () => {
-        let username = socket.request?.session?.username || socket.handshake?.auth?.username || socket.handshake?.query?.username || 'Unknown';
-        let role = socket.request?.session?.role || socket.handshake?.auth?.role || socket.handshake?.query?.role || 'user';
+        let username = socket.request?.session?.username || 'Unknown';
+        let role = socket.request?.session?.role || 'user';
         let page = socket.request?.headers?.referer || socket.handshake?.headers?.referer || 'Unknown';
         // Extract just the path from the referer URL and remove leading slash
         if (page && typeof page === 'string') {
@@ -10316,23 +13280,47 @@ io.on('connection', (socket) => {
         const displayUsername = username && username !== 'Unknown' ? username : 'User';
         const displayRole = (role || 'user').toUpperCase();
         // console.log(`User '${displayUsername}' (${displayRole}) disconnected from WebSocket (Page: ${page})`);
-        clearInterval(statsInterval);
+        if (statsInterval) clearInterval(statsInterval);
+        socketMetrics.active = Math.max(0, socketMetrics.active - 1);
+        socketMetrics.disconnects += 1;
+        socketMetrics.lastDisconnectAt = Date.now();
+        const normalized = String(role || 'user').toLowerCase();
+        if (socketMetrics.perRole[normalized] !== undefined) {
+            socketMetrics.perRole[normalized] = Math.max(0, socketMetrics.perRole[normalized] - 1);
+        }
     });
 
     socket.on('error', (error) => {
         console.error('WebSocket error:', error);
-        clearInterval(statsInterval);
+        socketMetrics.errors += 1;
+        socketMetrics.lastError = error?.message || String(error || 'unknown');
+        if (statsInterval) clearInterval(statsInterval);
     });
 
     // Handle custom events
     socket.on('request-stats', sendStats);
 
     socket.on('request-terminal-logs', (payload = {}) => {
+        if (String(socket.role || '').toLowerCase() !== 'owner') return;
         const requestedLimit = Number(payload?.limit);
         const limit = Number.isFinite(requestedLimit)
             ? Math.min(Math.max(Math.floor(requestedLimit), 1), 200)
             : 50;
         socket.emit('terminal-logs', terminalLogBuffer.slice(-limit));
+    });
+
+    socket.on('subscribe-terminal', (payload = {}) => {
+        if (String(socket.role || '').toLowerCase() !== 'owner') return;
+        socket.join(TERMINAL_ROOM);
+        const requestedLimit = Number(payload?.limit);
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.min(Math.max(Math.floor(requestedLimit), 1), 200)
+            : 50;
+        socket.emit('terminal-logs', terminalLogBuffer.slice(-limit));
+    });
+
+    socket.on('unsubscribe-terminal', () => {
+        socket.leave(TERMINAL_ROOM);
     });
 });
 
@@ -10378,7 +13366,7 @@ app.post('/api/warn', requireAuth, async (req, res) => {
         const moderatorId = adminUser ? adminUser.id : null;
 
         // Generate Case ID to satisfy unique constraint
-        const caseId = `WARN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const caseId = createPrefixedCaseId('WARN');
 
         // Get current warning count
         const [warns] = await MySQLDatabaseManager.connection.pool.query(
@@ -10447,65 +13435,214 @@ app.post('/api/ban', requireAuth, async (req, res) => {
 
 // ALERT MONITORING 
 
+function calculateCpuUsagePercent() {
+    try {
+        const cpus = os.cpus();
+        if (!Array.isArray(cpus) || cpus.length === 0) return 0;
+
+        let totalTick = 0;
+        let totalIdle = 0;
+
+        cpus.forEach((cpu) => {
+            const times = cpu?.times || {};
+            totalTick += Object.values(times).reduce((sum, value) => sum + Number(value || 0), 0);
+            totalIdle += Number(times.idle || 0);
+        });
+
+        if (totalTick <= 0) return 0;
+        return Math.max(0, Math.min(100, Math.round(100 - ((totalIdle / totalTick) * 100))));
+    } catch (_) {
+        return 0;
+    }
+}
+
+function classifySeverity(currentValue, threshold, criticalMultiplier = 1.25) {
+    if (currentValue >= threshold * criticalMultiplier) return 'critical';
+    if (currentValue >= threshold * 1.1) return 'high';
+    return 'medium';
+}
+
+async function createOrRefreshActiveAlert({ alertType, severity, message, value, threshold, notify = true }) {
+    const pool = MySQLDatabaseManager?.connection?.pool;
+    if (!pool) return;
+
+    const [existing] = await pool.execute(
+        'SELECT id, severity, message, value, threshold FROM active_alerts WHERE alert_type = ? AND resolved = FALSE ORDER BY created_at DESC LIMIT 1',
+        [alertType]
+    );
+
+    let createdNew = false;
+    if (!existing.length) {
+        await pool.execute(
+            'INSERT INTO active_alerts (alert_type, severity, message, value, threshold) VALUES (?, ?, ?, ?, ?)',
+            [alertType, severity, message, value, threshold]
+        );
+        createdNew = true;
+    } else {
+        const row = existing[0];
+        const changed = row.severity !== severity
+            || String(row.message || '') !== String(message || '')
+            || Number(row.value || 0) !== Number(value || 0)
+            || Number(row.threshold || 0) !== Number(threshold || 0);
+
+        if (changed) {
+            await pool.execute(
+                'UPDATE active_alerts SET severity = ?, message = ?, value = ?, threshold = ? WHERE id = ?',
+                [severity, message, value, threshold, row.id]
+            );
+        }
+    }
+
+    await pool.execute(
+        'UPDATE alert_settings SET last_triggered = NOW(), updated_at = NOW() WHERE alert_type = ?',
+        [alertType]
+    );
+
+    if (!notify || !createdNew) return;
+
+    await routeAlertToDiscord({
+        alert_type: alertType,
+        severity,
+        message,
+        value,
+        threshold
+    });
+
+    io.emit('alert', {
+        alert_type: alertType,
+        severity,
+        message,
+        value,
+        threshold
+    });
+}
+
+async function resolveActiveAlert(alertType) {
+    const pool = MySQLDatabaseManager?.connection?.pool;
+    if (!pool) return;
+
+    await pool.execute(
+        'UPDATE active_alerts SET resolved = TRUE, resolved_at = NOW() WHERE alert_type = ? AND resolved = FALSE',
+        [alertType]
+    );
+}
+
 async function checkAndCreateAlerts() {
+    if (alertMonitorStatus.running) return;
+
+    const startedAt = Date.now();
+    alertMonitorStatus.running = true;
+    alertMonitorStatus.lastRunAt = new Date(startedAt).toISOString();
+    const runIssues = [];
+
     try {
         await ensureAlertTablesReady();
+        const pool = MySQLDatabaseManager?.connection?.pool;
+        if (!pool) return;
+
         const memUsage = process.memoryUsage();
-        const memPercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
+        const memPercent = memUsage.heapTotal > 0
+            ? Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100)
+            : 0;
+        const cpuPercent = calculateCpuUsagePercent();
 
         // Get alert settings
-        const [settings] = await MySQLDatabaseManager.connection.pool.execute(
+        const [settings] = await pool.execute(
             'SELECT * FROM alert_settings WHERE enabled = TRUE'
         );
 
         for (const setting of settings) {
-            const { alert_type, threshold } = setting;
-            let currentValue = 0;
-            let severity = 'low';
+            const alertType = setting.alert_type;
+            const threshold = Number(setting.threshold || 0);
 
-            if (alert_type === 'error_rate') {
-                // Get error rate from last hour
-                const [errorStats] = await MySQLDatabaseManager.connection.pool.execute(
-                    'SELECT COUNT(*) as total, SUM(CASE WHEN status IN (\'ERROR\', \'RATE_LIMIT\', \'PERMISSION\') THEN 1 ELSE 0 END) as errors FROM user_interactions WHERE created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)'
-                );
+            try {
+                let currentValue = 0;
+                let message = '';
+                let severity = 'medium';
 
-                const errorRate = errorStats[0].total > 0 ? (errorStats[0].errors / errorStats[0].total) * 100 : 0;
-                currentValue = Math.round(errorRate);
-
-                if (currentValue >= threshold) {
-                    severity = currentValue >= 30 ? 'high' : 'medium';
-
-                    const [existing] = await MySQLDatabaseManager.connection.pool.execute(
-                        'SELECT id FROM active_alerts WHERE alert_type = ? AND resolved = FALSE',
-                        [alert_type]
+                if (alertType === 'memory') {
+                    currentValue = memPercent;
+                    message = `Memory usage is ${currentValue}%`;
+                    severity = classifySeverity(currentValue, threshold, 1.2);
+                } else if (alertType === 'cpu') {
+                    currentValue = cpuPercent;
+                    message = `CPU usage is ${currentValue}%`;
+                    severity = classifySeverity(currentValue, threshold, 1.2);
+                } else if (alertType === 'error_rate') {
+                    const [errorStats] = await pool.execute(
+                        'SELECT COUNT(*) as total, SUM(CASE WHEN status IN (\'ERROR\', \'RATE_LIMIT\', \'PERMISSION\') THEN 1 ELSE 0 END) as errors FROM user_interactions WHERE created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)'
                     );
 
-                    if (existing.length === 0) {
-                        await MySQLDatabaseManager.connection.pool.execute(
-                            'INSERT INTO active_alerts (alert_type, severity, message, value, threshold) VALUES (?, ?, ?, ?, ?)',
-                            [alert_type, severity, `Command error rate is ${currentValue}%`, currentValue, threshold]
-                        );
-                        console.warn(`⚠️ [ALERT] Error rate at ${currentValue}% (threshold: ${threshold}%)`);
-                        await routeAlertToDiscord({
-                            alert_type,
-                            severity,
-                            message: `Command error rate is ${currentValue}%`,
-                            value: currentValue,
-                            threshold
-                        });
-                        io.emit('alert', {
-                            alert_type,
-                            severity,
-                            message: `Command error rate is ${currentValue}%`,
-                            value: currentValue,
-                            threshold
-                        });
-                    }
+                    const total = Number(errorStats?.[0]?.total || 0);
+                    const errors = Number(errorStats?.[0]?.errors || 0);
+                    currentValue = total > 0 ? Math.round((errors / total) * 100) : 0;
+                    message = `Command error rate is ${currentValue}%`;
+                    severity = classifySeverity(currentValue, threshold, 2);
+                } else if (alertType === 'rate_limit') {
+                    const [rateLimitStats] = await pool.execute(
+                        'SELECT COUNT(*) as count FROM user_interactions WHERE status = \'RATE_LIMIT\' AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)'
+                    );
+
+                    currentValue = Number(rateLimitStats?.[0]?.count || 0);
+                    message = `Rate limit hits in last hour: ${currentValue}`;
+                    severity = currentValue >= threshold * 2 ? 'high' : 'medium';
+                } else if (alertType === 'database') {
+                    const started = Date.now();
+                    await pool.query('SELECT 1');
+                    currentValue = Date.now() - started;
+                    message = `Database latency is ${currentValue}ms`;
+                    severity = classifySeverity(currentValue, threshold, 1.5);
+                } else {
+                    continue;
                 }
+
+                if (currentValue >= threshold) {
+                    console.warn(`⚠️ [ALERT] ${alertType} at ${currentValue} (threshold: ${threshold})`);
+                    await createOrRefreshActiveAlert({
+                        alertType,
+                        severity,
+                        message,
+                        value: currentValue,
+                        threshold,
+                        notify: true
+                    });
+                } else {
+                    await resolveActiveAlert(alertType);
+                }
+            } catch (innerError) {
+                if (alertType === 'database') {
+                    const message = 'Database health check failed (query unreachable)';
+                    await createOrRefreshActiveAlert({
+                        alertType,
+                        severity: 'critical',
+                        message,
+                        value: 100,
+                        threshold,
+                        notify: true
+                    });
+                    continue;
+                }
+
+                runIssues.push(`${alertType}: ${innerError?.message || innerError}`);
+                console.error(`Error evaluating ${alertType} alert:`, innerError?.message || innerError);
             }
         }
+
+        alertMonitorStatus.lastSuccessAt = new Date().toISOString();
+        if (runIssues.length > 0) {
+            alertMonitorStatus.lastError = runIssues.slice(0, 3).join(' | ');
+            alertMonitorStatus.lastErrorAt = new Date().toISOString();
+        } else {
+            alertMonitorStatus.lastError = null;
+            alertMonitorStatus.lastErrorAt = null;
+        }
     } catch (error) {
+        alertMonitorStatus.lastError = String(error?.message || error);
+        alertMonitorStatus.lastErrorAt = new Date().toISOString();
         console.error('Error checking alerts:', error);
+    } finally {
+        alertMonitorStatus.lastDurationMs = Date.now() - startedAt;
+        alertMonitorStatus.running = false;
     }
 }
 
@@ -10513,11 +13650,10 @@ async function routeAlertToDiscord(alert) {
     try {
         if (!discordClient) return;
 
-        const misc = require('./Config/constants/misc.json');
-        const alertsConfig = misc.alerts || {};
+        const alertsConfig = MISC_CONFIG.alerts || {};
         if (alertsConfig.discordRoutingEnabled === false) return;
 
-        const preferredChannelId = alertsConfig.discordChannelId || serverLogChannelId;
+        const preferredChannelId = discordChannelId || serverLogChannelId;
         if (!preferredChannelId) return;
 
         const channel = await discordClient.channels.fetch(preferredChannelId).catch(() => null);
@@ -10542,7 +13678,12 @@ async function routeAlertToDiscord(alert) {
 }
 
 // Start alert monitoring (check every 5 minutes)
-setInterval(checkAndCreateAlerts, 5 * 60 * 1000);
+setInterval(checkAndCreateAlerts, ALERT_CHECK_INTERVAL_MS);
+
+// Run once shortly after startup so alert state is visible without waiting 5 minutes.
+setTimeout(() => {
+    void checkAndCreateAlerts();
+}, 10_000);
 
 // Initialize Email System
 (async () => {
@@ -10572,7 +13713,7 @@ setInterval(checkAndCreateAlerts, 5 * 60 * 1000);
 app.get('/api/moderation/analytics', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -10663,7 +13804,7 @@ app.get('/api/moderation/analytics', requireAuth, async (req, res) => {
 app.get('/api/moderation/case/:caseId', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -10726,7 +13867,7 @@ app.get('/api/moderation/case/:caseId', requireAuth, async (req, res) => {
 app.get('/api/moderator/user/:userId', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -10786,7 +13927,7 @@ app.get('/api/moderator/user/:userId', requireAuth, async (req, res) => {
 app.get('/api/moderation/user/:userId/history', requireAuth, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        if (!user || (user.role !== 'moderator' && user.role !== 'admin' && user.role !== 'owner')) {
+        if (!hasModeratorAccess(user)) {
             return res.status(403).json({ error: 'Access denied' });
         }
 

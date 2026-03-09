@@ -12,11 +12,11 @@
         "messageHasLinkXpMultiplier": 1.1
     },
     "levelRoles": {
-        "level5RoleId": "LEVEL_5_ROLE_ID_HERE",
-        "level10RoleId": "LEVEL_10_ROLE_ID_HERE",
-        "level25RoleId": "LEVEL_25_ROLE_ID_HERE",
-        "level50RoleId": "LEVEL_50_ROLE_ID_HERE",
-        "level75RoleId": "LEVEL_75_ROLE_ID_HERE",
-        "level100RoleId": "LEVEL_100_ROLE_ID_HERE"
+        "level5RoleId": "LEVEL_5_ROLE_ID",
+        "level10RoleId": "LEVEL_10_ROLE_ID",
+        "level25RoleId": "LEVEL_25_ROLE_ID",
+        "level50RoleId": "LEVEL_50_ROLE_ID",
+        "level75RoleId": "LEVEL_75_ROLE_ID",
+        "level100RoleId": "LEVEL_100_ROLE_ID"
     }
 }

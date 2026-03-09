@@ -32,6 +32,9 @@ const guildQueues = new Map();
 const pendingAutoLeaveTimers = new Map();
 const AUTO_LEAVE_GRACE_MS = 30_000;
 const MAX_TRACK_FAILURE_ATTEMPTS = 2;
+const STALL_TIMEOUT_MS = 20_000;
+const RECONNECT_ATTEMPTS = 3;
+const RECONNECT_TIMEOUT_MS = 5_000;
 
 function clearAutoLeaveTimer(guildId) {
     const pendingTimer = pendingAutoLeaveTimers.get(guildId);
@@ -55,6 +58,72 @@ function scheduleTrackRetry(queue, track, reasonLabel) {
     queue.tracks.unshift(track);
     console.warn(`[Music] Retrying track (${nextFailures}/${MAX_TRACK_FAILURE_ATTEMPTS - 1} retry): ${track.url} (${reasonLabel})`);
     return true;
+}
+
+function clearStallTimer(queue) {
+    if (!queue?.stallTimer) return;
+    clearTimeout(queue.stallTimer);
+    queue.stallTimer = null;
+}
+
+async function attemptReconnect(queue) {
+    if (!queue?.connection || !queue.voiceChannelId || !queue.adapterCreator) return false;
+
+    for (let attempt = 0; attempt < RECONNECT_ATTEMPTS; attempt += 1) {
+        try {
+            await entersState(queue.connection, VoiceConnectionStatus.Ready, RECONNECT_TIMEOUT_MS);
+            return true;
+        } catch (_) {
+            // continue retries
+        }
+    }
+
+    try {
+        queue.connection.destroy();
+    } catch (_) {
+        // ignore destroy errors
+    }
+
+    try {
+        const connection = joinVoiceChannel({
+            channelId: queue.voiceChannelId,
+            guildId: queue.guildId,
+            adapterCreator: queue.adapterCreator,
+            selfDeaf: true,
+            selfMute: false
+        });
+
+        await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+        connection.subscribe(queue.player);
+        queue.connection = connection;
+        registerConnectionHandlers(queue);
+        return true;
+    } catch (error) {
+        console.error(`[Music] Failed to reconnect in guild ${queue.guildId}:`, error?.message || error);
+        stop(queue.guildId);
+        return false;
+    }
+}
+
+function registerConnectionHandlers(queue) {
+    const connection = queue?.connection;
+    if (!connection || connection._musicHandlersAttached) return;
+
+    connection._musicHandlersAttached = true;
+
+    connection.on('stateChange', async (_, newState) => {
+        if (newState.status === VoiceConnectionStatus.Disconnected) {
+            await attemptReconnect(queue);
+        }
+
+        if (newState.status === VoiceConnectionStatus.Destroyed) {
+            stop(queue.guildId);
+        }
+    });
+
+    connection.on('error', (error) => {
+        console.error(`[Music] Voice connection error in guild ${queue.guildId}:`, error?.message || error);
+    });
 }
 
 function extractYouTubeVideoId(input) {
@@ -247,18 +316,49 @@ function createQueue(guildId) {
         guildId,
         voiceChannelId: null,
         textChannelId: null,
+        adapterCreator: null,
         connection: null,
         player,
         tracks: [],
         currentTrack: null,
         currentResource: null,
+        currentStartedAt: null,
+        currentPausedAt: null,
+        totalPausedMs: 0,
+        stallTimer: null,
         volumePercent: 65
     };
 
     player.on(AudioPlayerStatus.Idle, () => {
+        clearStallTimer(queue);
         queue.currentTrack = null;
         queue.currentResource = null;
+        queue.currentStartedAt = null;
+        queue.currentPausedAt = null;
+        queue.totalPausedMs = 0;
         void playNext(guildId);
+    });
+
+    player.on('stateChange', (_, newState) => {
+        if (newState.status === AudioPlayerStatus.Buffering) {
+            clearStallTimer(queue);
+            queue.stallTimer = setTimeout(() => {
+                if (queue.player.state.status !== AudioPlayerStatus.Buffering) return;
+                const stalledTrack = queue.currentTrack;
+                queue.currentTrack = null;
+                queue.currentResource = null;
+                queue.currentStartedAt = null;
+                queue.currentPausedAt = null;
+                queue.totalPausedMs = 0;
+                scheduleTrackRetry(queue, stalledTrack, 'buffering timeout');
+                queue.player.stop(true);
+            }, STALL_TIMEOUT_MS);
+            return;
+        }
+
+        if (newState.status === AudioPlayerStatus.Playing) {
+            clearStallTimer(queue);
+        }
     });
 
     player.on('error', (error) => {
@@ -308,8 +408,10 @@ async function connectToVoiceChannel(interaction, queue) {
     connection.subscribe(queue.player);
 
     queue.connection = connection;
+    queue.adapterCreator = interaction.guild.voiceAdapterCreator;
     queue.voiceChannelId = memberChannel.id;
     queue.textChannelId = interaction.channelId;
+    registerConnectionHandlers(queue);
     return connection;
 }
 
@@ -403,11 +505,17 @@ async function playNext(guildId) {
 
         queue.currentTrack = track;
         queue.currentResource = resource;
+        queue.currentStartedAt = Date.now();
+        queue.currentPausedAt = null;
+        queue.totalPausedMs = 0;
         queue.player.play(resource);
     } catch (error) {
         console.error(`[Music] Failed to play track ${track.url}:`, error.message);
         queue.currentTrack = null;
         queue.currentResource = null;
+        queue.currentStartedAt = null;
+        queue.currentPausedAt = null;
+        queue.totalPausedMs = 0;
         scheduleTrackRetry(queue, track, 'source/build failure');
         await playNext(guildId);
     }
@@ -454,6 +562,7 @@ function getQueue(guildId) {
 function skip(guildId) {
     const queue = guildQueues.get(guildId);
     if (!queue || queue.tracks.length === 0) return false;
+    clearStallTimer(queue);
     return queue.player.stop(true);
 }
 
@@ -462,9 +571,13 @@ function stop(guildId) {
     if (!queue) return false;
 
     clearAutoLeaveTimer(guildId);
+    clearStallTimer(queue);
     queue.tracks = [];
     queue.currentTrack = null;
     queue.currentResource = null;
+    queue.currentStartedAt = null;
+    queue.currentPausedAt = null;
+    queue.totalPausedMs = 0;
     queue.player.stop(true);
     if (queue.connection) {
         queue.connection.destroy();
@@ -476,12 +589,19 @@ function stop(guildId) {
 function pause(guildId) {
     const queue = guildQueues.get(guildId);
     if (!queue) return false;
+    if (queue.currentTrack && !queue.currentPausedAt) {
+        queue.currentPausedAt = Date.now();
+    }
     return queue.player.pause(true);
 }
 
 function resume(guildId) {
     const queue = guildQueues.get(guildId);
     if (!queue) return false;
+    if (queue.currentPausedAt) {
+        queue.totalPausedMs += Math.max(0, Date.now() - queue.currentPausedAt);
+        queue.currentPausedAt = null;
+    }
     return queue.player.unpause();
 }
 

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const { sendErrorReply } = require('../../Functions/EmbedBuilders');
+const { sendErrorReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,7 +23,7 @@ module.exports = {
             const profile = await DatabaseManager.getUserProfile(target.id);
 
             if (!profile) {
-                return sendErrorReply(interaction, 'No Data Found', 'No audit data was found for this user.');
+                return sendInfoReply(interaction, 'No Data Found', 'No audit data was found for this user.');
             }
 
             const warningCount = Array.isArray(profile.warnings) ? profile.warnings.length : 0;

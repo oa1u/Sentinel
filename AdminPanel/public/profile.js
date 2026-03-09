@@ -11,6 +11,73 @@ let discordOAuthHealthState = 'checking';
 let activeSecurityWorkspaceTab = 'center';
 let activeProfileTab = 'security';
 let securityEventControlsInitialized = false;
+const DISCORD_LINK_BANNER_STORAGE_KEY = 'discord_link_banner_dismissed_v1';
+
+function setDiscordLinkBannerVisible(visible) {
+    const banner = document.getElementById('discordLinkBanner');
+    if (!banner) return;
+    banner.style.display = visible ? 'flex' : 'none';
+}
+
+function getDiscordLinkBannerDismissed() {
+    try {
+        return localStorage.getItem(DISCORD_LINK_BANNER_STORAGE_KEY) === '1';
+    } catch (_) {
+        return false;
+    }
+}
+
+function setDiscordLinkBannerDismissed(value) {
+    try {
+        if (value) {
+            localStorage.setItem(DISCORD_LINK_BANNER_STORAGE_KEY, '1');
+        } else {
+            localStorage.removeItem(DISCORD_LINK_BANNER_STORAGE_KEY);
+        }
+    } catch (_) {
+        // ignore storage errors
+    }
+}
+
+function updateDiscordLinkBanner(linked) {
+    if (linked) {
+        setDiscordLinkBannerDismissed(false);
+        setDiscordLinkBannerVisible(false);
+        return;
+    }
+
+    if (getDiscordLinkBannerDismissed()) {
+        setDiscordLinkBannerVisible(false);
+        return;
+    }
+
+    setDiscordLinkBannerVisible(true);
+}
+
+function initDiscordLinkBanner() {
+    const closeBtn = document.getElementById('discordLinkBannerClose');
+    const actionBtn = document.getElementById('discordLinkBannerAction');
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            setDiscordLinkBannerDismissed(true);
+            setDiscordLinkBannerVisible(false);
+        });
+    }
+
+    if (actionBtn) {
+        actionBtn.addEventListener('click', () => {
+            const discordTab = document.getElementById('profileDiscordTabBtn');
+            if (discordTab) {
+                discordTab.click();
+            } else {
+                applyProfileTab('discord');
+            }
+            const target = document.getElementById('discordLinkCard');
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+}
 
 // Custom Password Modal Logic
 let passwordConfirmResolver = null;
@@ -163,7 +230,12 @@ function formatIpAddressForDisplay(rawIp) {
 
 function getCsrfTokenFromCookie() {
     const match = document.cookie.match(/csrfToken=([^;]+)/);
-    return match ? match[1] : '';
+    if (!match || !match[1]) return '';
+    try {
+        return decodeURIComponent(match[1]);
+    } catch (_) {
+        return match[1];
+    }
 }
 
 async function postWithCsrf(url, body = {}, options = {}) {
@@ -183,10 +255,26 @@ async function postWithCsrf(url, body = {}, options = {}) {
     };
 
     let csrfToken = getCsrfTokenFromCookie();
+    if (!csrfToken) {
+        try {
+            if (window.AdminPanel?.api?.getJson) {
+                await window.AdminPanel.api.getJson('/api/csrf');
+            } else {
+                await fetch('/api/csrf', { credentials: 'include' });
+            }
+        } catch (error) {
+            console.warn('Failed to prefetch CSRF token', error);
+        }
+        csrfToken = getCsrfTokenFromCookie();
+    }
     let response = await sendRequest(csrfToken);
 
     if (response.status === 403 && !options._csrfRetried) {
-        await window.AdminPanel.api.getJson('/api/csrf');
+        if (window.AdminPanel?.api?.getJson) {
+            await window.AdminPanel.api.getJson('/api/csrf');
+        } else {
+            await fetch('/api/csrf', { credentials: 'include' });
+        }
         csrfToken = getCsrfTokenFromCookie();
         response = await sendRequest(csrfToken);
     }
@@ -298,10 +386,9 @@ function updateChangePasswordButtonState() {
     const newPassword = document.getElementById('newPassword')?.value || '';
     const confirmPassword = document.getElementById('confirmPassword')?.value || '';
 
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,100}$/;
     const isValid = Boolean(
-        currentPassword.length >= 8
-        && passwordRegex.test(newPassword)
+        passwordRegex.test(newPassword)
         && newPassword === confirmPassword
         && currentPassword !== newPassword
     );
@@ -843,12 +930,15 @@ async function loadProfile() {
 
             if (!viewUserId) {
                 ensureSecuritySummaryLoaded().catch(() => { });
+                updateDiscordLinkBanner(discordAccountLinked);
+            } else {
+                setDiscordLinkBannerVisible(false);
             }
         } else if (response.status === 401) {
             console.log('Unauthorized - redirecting to login');
             window.location.href = '/login';
         } else {
-            const errorData = await response.json();
+            const errorData = (data && typeof data === 'object') ? data : {};
             console.error('Failed to load profile:', errorData);
             showError('Failed to load profile: ' + (errorData.error || 'Unknown error'));
         }
@@ -1758,6 +1848,7 @@ function renderDiscordLink(discordLink) {
 
     const linked = Boolean(discordLink?.linked);
     discordAccountLinked = linked;
+    updateDiscordLinkBanner(linked);
     const linkedAt = discordLink?.linkedAt ? new Date(discordLink.linkedAt).toLocaleString() : 'Unknown';
     const linkedUserId = discordLink?.discordUserId || '';
     const linkedUsername = discordLink?.discordUsername || '';
@@ -1779,11 +1870,16 @@ function renderDiscordLink(discordLink) {
         authorizeBtn.title = 'This profile is already linked. Unlink first to connect a different Discord account';
     }
 
+    if (authorizeBtn) {
+        authorizeBtn.style.display = linked ? 'none' : 'inline-flex';
+    }
+
     if (unlinkBtn) {
         unlinkBtn.disabled = !linked;
         unlinkBtn.style.opacity = linked ? '1' : '0.6';
         unlinkBtn.style.cursor = linked ? 'pointer' : 'not-allowed';
         unlinkBtn.title = linked ? '' : 'No Discord account is linked';
+        unlinkBtn.style.display = linked ? 'inline-flex' : 'none';
     }
 
     if (refreshMeta) {
@@ -1953,7 +2049,20 @@ async function unlinkDiscordAccount() {
 
     if (discordUnlinkInProgress) return;
 
-    if (!confirm('Unlink your Discord account from this panel profile?')) return;
+    let confirmed = true;
+    if (typeof modalManager !== 'undefined' && modalManager?.showConfirm) {
+        confirmed = await modalManager.showConfirm({
+            title: 'Unlink Discord Account',
+            message: 'Unlink your Discord account from this panel profile?',
+            confirmText: 'Unlink',
+            cancelText: 'Cancel',
+            type: 'warning'
+        });
+    } else {
+        confirmed = confirm('Unlink your Discord account from this panel profile?');
+    }
+
+    if (!confirmed) return;
 
     const previousUnlinkText = unlinkBtn ? unlinkBtn.textContent : '';
     const previousUnlinkTitle = unlinkBtn ? (unlinkBtn.title || '') : '';
@@ -2172,6 +2281,11 @@ bindListenerById('changePasswordForm', 'submit', async function (e) {
     const newPassword = document.getElementById('newPassword').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
 
+    if (!currentPassword) {
+        showError('Please enter your current password');
+        return;
+    }
+
     // Validate passwords match
     if (newPassword !== confirmPassword) {
         showError('New passwords do not match');
@@ -2179,7 +2293,7 @@ bindListenerById('changePasswordForm', 'submit', async function (e) {
     }
 
     // Validate password strength
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,100}$/;
     if (!passwordRegex.test(newPassword)) {
         showError('Password must contain at least 8 characters, including uppercase, lowercase, number, and special character');
         return;
@@ -2423,6 +2537,7 @@ function handleDiscordOAuthFlashMessage() {
 
 // Load profile on page load
 initProfileTabs();
+initDiscordLinkBanner();
 loadProfile();
 handleDiscordOAuthFlashMessage();
 updateChangePasswordButtonState();

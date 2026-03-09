@@ -1,6 +1,70 @@
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const { EmbedBuilder } = require('discord.js');
 const { SlashCommandBuilder } = require('@discordjs/builders');
+const { ROLES: { administratorRoleId: adminRoleId } } = require('../../Config/constants');
+
+function parseMetadataJson(value) {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    if (typeof value !== 'string') return null;
+    try {
+        return JSON.parse(value);
+    } catch (_) {
+        return null;
+    }
+}
+
+function resolveTimestamp(value) {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+        const ms = numeric > 10_000_000_000 ? numeric : numeric * 1000;
+        const fromNumeric = new Date(ms);
+        if (!Number.isNaN(fromNumeric.getTime())) return fromNumeric;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function extractViolationSummary(violation) {
+    const metadata = parseMetadataJson(violation?.metadata_json);
+    const firstSignal = Array.isArray(metadata?.signals) ? metadata.signals[0] : null;
+
+    const caseId = String(
+        metadata?.caseId
+        || metadata?.case_id
+        || violation?.case_id
+        || violation?.id
+        || 'N/A'
+    );
+
+    const reason = String(
+        firstSignal?.reason
+        || violation?.violation_reason
+        || violation?.reason
+        || violation?.violation_type
+        || 'N/A'
+    );
+
+    const action = String(
+        violation?.action_taken
+        || metadata?.appliedAction
+        || 'N/A'
+    );
+
+    const timestamp = resolveTimestamp(violation?.timestamp) || new Date();
+
+    return {
+        caseId,
+        reason,
+        action,
+        timestamp,
+        type: String(violation?.violation_type || firstSignal?.type || 'unknown')
+    };
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -41,7 +105,6 @@ module.exports = {
     category: 'management',
     async execute(interaction) {
         // Require administrator role or permissions
-        const adminRoleId = require('../../Config/constants/roles.json').administratorRoleId;
         const member = interaction.member;
         const hasAdminRole = member.roles.cache.has(adminRoleId);
         const hasAdminPerm = member.permissions.has('Administrator');
@@ -72,13 +135,18 @@ module.exports = {
                     .setColor(0xFF6B6B)
                     .setTitle(`AutoMod Warnings for User ${user.tag}`);
 
-                warnings.forEach(w => {
+                warnings.slice(0, 15).forEach((warning) => {
+                    const summary = extractViolationSummary(warning);
                     embed.addFields({
-                        name: `Case: ${w.case_id || 'N/A'}`,
-                        value: `Reason: ${w.reason || 'N/A'}\nDate: ${w.timestamp ? new Date(w.timestamp).toLocaleString() : 'N/A'}`,
+                        name: `Case: ${summary.caseId}`,
+                        value: `Type: ${summary.type}\nReason: ${summary.reason}\nAction: ${summary.action}\nDate: ${summary.timestamp.toLocaleString()}`,
                         inline: false
                     });
                 });
+
+                if (warnings.length > 15) {
+                    embed.setFooter({ text: `Showing 15 of ${warnings.length} warnings. Use /automodwarns clearone to remove individual entries.` });
+                }
 
                 return interaction.reply({ embeds: [embed], flags: require('discord.js').MessageFlags.Ephemeral });
             } catch (err) {
@@ -111,9 +179,17 @@ module.exports = {
         } else if (subcommand === 'clearone') {
             const caseId = interaction.options.getString('caseid');
             try {
+                const normalizedCaseId = String(caseId || '').trim();
+                const idCandidate = Number.parseInt(normalizedCaseId, 10);
                 const result = await MySQLDatabaseManager.connection.query(
-                    'DELETE FROM automod_violations WHERE user_id = ? AND case_id = ?',
-                    [userId, caseId]
+                    `DELETE FROM automod_violations
+                     WHERE user_id = ?
+                     AND (
+                        id = ?
+                        OR JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.caseId')) = ?
+                        OR JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.case_id')) = ?
+                     )`,
+                    [userId, Number.isNaN(idCandidate) ? -1 : idCandidate, normalizedCaseId, normalizedCaseId]
                 );
                 if (result.affectedRows === 0) {
                     const embed = new EmbedBuilder()

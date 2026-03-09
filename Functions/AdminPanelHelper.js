@@ -435,18 +435,46 @@ class AdminPanelHelper {
             `;
             const [rows] = await MySQLDatabaseManager.connection.pool.query(query, [limit]);
 
-            // Map results to action objects
-            const actions = (rows || []).map(row => ({
-                timestamp: row.timestamp,
-                action: row.action,
-                userId: row.user_id,
-                username: row.user_name,
-                moderatorId: row.moderator_id,
-                moderatorName: row.moderator_name,
-                moderatorSource: row.moderator_source,
-                reason: row.reason,
-                caseId: row.case_id
-            }));
+            // Map results to normalized action objects with both snake_case and camelCase keys
+            // so older/newer callers remain compatible.
+            const actions = (rows || []).map((row) => {
+                let timestampMs = null;
+                if (row.timestamp instanceof Date) {
+                    timestampMs = row.timestamp.getTime();
+                } else {
+                    const raw = row.timestamp;
+                    const numeric = Number(raw);
+                    if (Number.isFinite(numeric) && numeric > 0) {
+                        timestampMs = numeric > 10_000_000_000 ? numeric : numeric * 1000;
+                    } else {
+                        const parsed = Date.parse(raw);
+                        timestampMs = Number.isNaN(parsed) ? null : parsed;
+                    }
+                }
+
+                const action = {
+                    action: row.action,
+                    reason: row.reason,
+                    case_id: row.case_id,
+                    caseId: row.case_id,
+                    timestamp: timestampMs || row.timestamp || null,
+                    timestamp_ms: timestampMs,
+
+                    user_id: row.user_id,
+                    user_name: row.user_name,
+                    moderator_id: row.moderator_id,
+                    moderator_name: row.moderator_name,
+                    moderator_source: row.moderator_source,
+
+                    userId: row.user_id,
+                    username: row.user_name,
+                    moderatorId: row.moderator_id,
+                    moderatorName: row.moderator_name,
+                    moderatorSource: row.moderator_source
+                };
+
+                return action;
+            });
 
             // Results are already sorted by timestamp DESC and limited, return as-is
             return actions;

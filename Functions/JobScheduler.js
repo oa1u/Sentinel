@@ -2,6 +2,9 @@
 // Simple scheduler for running background jobs stored in the database.
 // It claims due jobs, runs registered handlers, and reschedules recurring work.
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
+const { ECONOMY: economyConfigFile } = require('../Config/constants');
+const { generateInactiveChannelReport, resolveConfig } = require('./InactiveChannelReporter');
+const { runChannelRevival, resolveConfig: resolveRevivalConfig } = require('./ChannelRevival');
 
 const DEFAULT_POLL_INTERVAL_MS = 15000;
 const DEFAULT_STALE_LOCK_MS = 10 * 60 * 1000;
@@ -109,6 +112,38 @@ class JobScheduler {
             await MySQLDatabaseManager.deleteInactiveJoinToCreate(7);
         });
 
+        this.register('maintenance.inactive_channel_report', async ({ client }) => {
+            await generateInactiveChannelReport(client);
+        });
+
+        this.register('maintenance.channel_revival', async ({ client }) => {
+            await runChannelRevival(client);
+        });
+
+        this.register('economy.apply_bank_interest', async () => {
+            const config = economyConfigFile?.bankInterest || {};
+            if (config.enabled === false) return;
+
+            let guildIds = [];
+            try {
+                const mainConfig = require('../Config/main.json');
+                const configuredGuildId = String(mainConfig?.serverID || '').trim();
+                if (configuredGuildId) {
+                    guildIds = [configuredGuildId];
+                }
+            } catch (_) {
+                guildIds = [];
+            }
+
+            if (!guildIds.length) {
+                guildIds = await MySQLDatabaseManager.listEconomyGuilds();
+            }
+
+            for (const guildId of guildIds) {
+                await MySQLDatabaseManager.applyBankInterest(guildId);
+            }
+        });
+
         this.register('userinfo.sync_selected_profiles', async ({ client, payload }) => {
             const intervalMs = Math.max(5 * 60 * 1000, Number(payload?.intervalMs) || PROFILE_SYNC_INTERVAL_MS);
             const staleMs = Math.max(5 * 60 * 1000, Number(payload?.staleMs) || intervalMs);
@@ -187,13 +222,32 @@ class JobScheduler {
             console.warn('[JobScheduler] Failed to normalize existing profile sync jobs:', error.message);
         }
 
+        const { intervalMs: inactiveReportIntervalMs } = resolveConfig();
+        const { intervalMs: revivalIntervalMs } = resolveRevivalConfig();
         await this.ensureRecurringJob('maintenance.cleanup_inactive_jtc', { recurring: true, intervalMs: 24 * 60 * 60 * 1000 }, 24 * 60 * 60 * 1000);
+        await this.ensureRecurringJob(
+            'maintenance.inactive_channel_report',
+            { recurring: true, intervalMs: inactiveReportIntervalMs },
+            inactiveReportIntervalMs
+        );
+        await this.ensureRecurringJob(
+            'maintenance.channel_revival',
+            { recurring: true, intervalMs: revivalIntervalMs },
+            revivalIntervalMs
+        );
         await this.ensureRecurringJob('userinfo.sync_selected_profiles', {
             recurring: true,
             intervalMs: PROFILE_SYNC_INTERVAL_MS,
             staleMs: PROFILE_SYNC_INTERVAL_MS,
             batchSize: PROFILE_SYNC_BATCH_SIZE
         }, PROFILE_SYNC_INTERVAL_MS);
+
+        const interestIntervalMs = Math.max(60 * 60 * 1000, Number(economyConfigFile?.bankInterest?.intervalMs) || 24 * 60 * 60 * 1000);
+        await this.ensureRecurringJob(
+            'economy.apply_bank_interest',
+            { recurring: true, intervalMs: interestIntervalMs },
+            interestIntervalMs
+        );
 
         await this.tick();
         this.timer = setInterval(() => {

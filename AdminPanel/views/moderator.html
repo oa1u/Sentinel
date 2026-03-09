@@ -39,6 +39,7 @@
                             <span class="role-badge" id="dropdownRole">moderator</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -289,6 +290,143 @@
                     font-size: 1.01rem;
                     color: var(--text-primary);
                 }
+
+                #bans .card {
+                    margin-bottom: 1.1rem;
+                }
+
+                #bans .card-header {
+                    margin-bottom: 0.85rem;
+                }
+
+                #bans .moderation-list-container {
+                    border: 1px solid rgba(91, 127, 255, 0.2);
+                    border-radius: 14px;
+                    background: linear-gradient(180deg, rgba(24, 28, 38, 0.9) 0%, rgba(15, 17, 24, 0.92) 100%);
+                    padding: 0.45rem;
+                }
+
+                #bans .moderation-list-table {
+                    width: 100%;
+                    border-collapse: separate;
+                    border-spacing: 0 0.45rem;
+                }
+
+                #bans .moderation-list-table th {
+                    color: #8aa2ff;
+                    font-size: 0.92rem;
+                    font-weight: 700;
+                    letter-spacing: 0.01em;
+                    border-bottom: 1px solid rgba(91, 127, 255, 0.2);
+                    padding: 0.62rem 0.62rem 0.72rem;
+                }
+
+                #bans .moderation-list-row {
+                    background: transparent;
+                    box-shadow: none;
+                }
+
+                #bans .moderation-list-row td {
+                    padding: 0.66rem 0.62rem;
+                    vertical-align: top;
+                    color: var(--text-primary);
+                    border-top: 1px solid rgba(255, 255, 255, 0.04);
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+                }
+
+                #bans .moderation-list-row td:first-child {
+                    border-left: 1px solid rgba(255, 255, 255, 0.04);
+                    border-top-left-radius: 10px;
+                    border-bottom-left-radius: 10px;
+                }
+
+                #bans .moderation-list-row td:last-child {
+                    border-right: 1px solid rgba(255, 255, 255, 0.04);
+                    border-top-right-radius: 10px;
+                    border-bottom-right-radius: 10px;
+                }
+
+                #bans .list-id {
+                    color: #a7b6ff;
+                    background: rgba(91, 127, 255, 0.14);
+                    border: 1px solid rgba(91, 127, 255, 0.35);
+                    border-radius: 8px;
+                    padding: 0.18rem 0.4rem;
+                    font-size: 0.84rem;
+                    display: inline-block;
+                }
+
+                #bans .list-reason {
+                    line-height: 1.35;
+                    max-width: 340px;
+                    color: #dbe2ff;
+                    word-break: break-word;
+                }
+
+                #bans .list-actions {
+                    display: flex;
+                    gap: 0.45rem;
+                    flex-wrap: wrap;
+                }
+
+                .ticket-toolbar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 1rem;
+                    padding: 0.8rem 1.2rem 0;
+                }
+
+                .ticket-toolbar-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.6rem;
+                }
+
+                .ticket-filter {
+                    min-width: 160px;
+                }
+
+                .ticket-transcript-panel {
+                    margin-top: 1rem;
+                    border: 1px solid var(--border-color);
+                    border-radius: 12px;
+                    background: var(--bg-secondary);
+                    padding: 0.8rem 1rem;
+                    display: grid;
+                    gap: 0.7rem;
+                }
+
+                .ticket-transcript-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 1rem;
+                }
+
+                .ticket-transcript-meta {
+                    color: var(--text-secondary);
+                    font-size: 0.85rem;
+                    margin-top: 0.25rem;
+                }
+
+                .ticket-transcript-actions {
+                    display: flex;
+                    gap: 0.5rem;
+                    flex-wrap: wrap;
+                }
+
+                .ticket-transcript-body {
+                    background: rgba(12, 14, 20, 0.6);
+                    border-radius: 10px;
+                    padding: 0.8rem;
+                    max-height: 300px;
+                    overflow: auto;
+                    color: var(--text-secondary);
+                    font-size: 0.85rem;
+                    line-height: 1.5;
+                    white-space: pre-wrap;
+                }
             </style>
         </div>
 
@@ -299,6 +437,20 @@
                 <div class="card-header">
                     <span class="card-header-icon">🎫</span>
                     <span>Support Tickets</span>
+                </div>
+                <div class="ticket-toolbar">
+                    <div class="ticket-toolbar-left">
+                        <label for="ticketStatusFilter" class="form-label" style="margin:0;">Status</label>
+                        <select id="ticketStatusFilter" class="form-input ticket-filter">
+                            <option value="all">All</option>
+                            <option value="open">Open</option>
+                            <option value="claimed">Claimed</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                    </div>
+                    <div class="ticket-toolbar-right">
+                        <button class="btn btn-secondary btn-sm" type="button" id="ticketsRefreshBtn">Refresh</button>
+                    </div>
                 </div>
                 <div class="table-container" id="ticketsContainer">
                     <table>
@@ -328,8 +480,8 @@
                     <span class="card-header-icon">🚫</span>
                     <span>Banned Users</span>
                 </div>
-                <div class="table-container" id="bannedUsersContainer">
-                    <table>
+                <div class="table-container moderation-list-container" id="bannedUsersContainer">
+                    <table class="moderation-list-table">
                         <thead>
                             <tr>
                                 <th>User ID</th>
@@ -354,8 +506,8 @@
                     <span class="card-header-icon">⏱️</span>
                     <span>Active Timeouts</span>
                 </div>
-                <div class="table-container" id="timeoutsContainer">
-                    <table>
+                <div class="table-container moderation-list-container" id="timeoutsContainer">
+                    <table class="moderation-list-table">
                         <thead>
                             <tr>
                                 <th>User ID</th>
@@ -385,9 +537,17 @@
                 </div>
                 <div class="form-group">
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select class="form-input" id="warningLookupMode"
+                            onchange="window.setWarningLookupMode(this.value)" style="max-width: 210px;">
+                            <option value="user">User ID Lookup</option>
+                            <option value="case">Case ID Lookup</option>
+                        </select>
                         <input type="text" class="form-input" id="warningSearchInput"
-                            placeholder=" Search by User ID..." onkeyup="searchWarnings()">
+                            placeholder="Search by User ID (17-19 digits)..."
+                            onkeyup="if(event.key==='Enter'){searchWarnings();}">
                         <button class="btn btn-primary" type="button" onclick="searchWarnings()">Search</button>
+                        <button class="btn btn-secondary" type="button"
+                            onclick="window.clearWarningsLookupState()">Clear</button>
                     </div>
                 </div>
                 <div class="table-container" id="warningsContainer">
@@ -395,17 +555,16 @@
                         <thead>
                             <tr>
                                 <th>User ID</th>
-                                <th>Username</th>
-                                <th>Warn Count</th>
-                                <th>Last Moderator</th>
-                                <th>Last Warn Date</th>
-                                <th>Last Case ID</th>
+                                <th>Total Cases</th>
+                                <th>Case IDs</th>
+                                <th>Latest Action</th>
+                                <th>Latest Date</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="warningsTable">
                             <tr>
-                                <td colspan="6" class="text-center text-muted">Waiting for User ID...</td>
+                                <td colspan="6" class="text-center text-muted">Search by User ID or Case ID.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -416,38 +575,150 @@
         <!-- Members Tab -->
         <div id="members" class="tab-content">
             <div class="center-flex">
-                <div class="card">
+                <div class="card member-lookup-card">
                     <div class="card-header">
                         <span class="card-header-icon">👥</span>
-                        <span>Member Information</span>
+                        <span>Advanced Member Lookup</span>
                     </div>
-                    <div class="form-group">
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <div class="member-lookup-toolbar">
+                        <div class="member-lookup-toolbar-main">
                             <input type="text" class="form-input" id="memberSearchInput"
-                                placeholder="Search by User ID..." onkeyup="searchMembers()">
+                                placeholder="Paste a Discord User ID (17-19 digits)"
+                                onkeyup="if(event.key==='Enter'){searchMembers();}">
                             <button class="btn btn-primary" type="button" onclick="searchMembers()">Search</button>
-                            <span id="memberSearchStatus" style="margin-left:1rem;color:#888;font-size:0.95em;"></span>
+                            <button class="btn btn-secondary" type="button" onclick="clearMemberSearch()">Clear</button>
+                        </div>
+                        <div class="member-lookup-toolbar-meta">
+                            <span id="memberSearchStatus" class="member-search-status"></span>
+                        </div>
+                        <div class="member-lookup-overview" id="memberLookupOverview">
+                            <div class="member-overview-card">
+                                <span class="member-overview-label">Results</span>
+                                <strong class="member-overview-value" id="memberLookupResultCount">0</strong>
+                            </div>
+                            <div class="member-overview-card">
+                                <span class="member-overview-label">Selected Member</span>
+                                <strong class="member-overview-value" id="memberLookupActiveMember">None</strong>
+                            </div>
+                            <div class="member-overview-card">
+                                <span class="member-overview-label">Risk Posture</span>
+                                <strong class="member-overview-value" id="memberLookupRiskPosture">No Data</strong>
+                            </div>
                         </div>
                     </div>
-                    <div class="table-container" id="membersContainer">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>User ID</th>
-                                    <th>Username</th>
-                                    <th>Joined</th>
-                                    <th>Level</th>
-                                    <th>Warnings</th>
-                                    <th>Notes</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="membersTable">
-                                <tr>
-                                    <td colspan="8" class="text-center text-muted">Waiting for User ID...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                    <div class="member-lookup-results" id="membersContainer">
+                        <div id="membersTable" class="member-lookup-cards-grid">
+                            <article class="member-welcome-card">
+                                <div class="member-welcome-title">Welcome to Member Lookup</div>
+                                <div class="member-welcome-subtitle">Search a Discord User ID to load profile, risk,
+                                    moderation history, and quick actions.</div>
+                                <div class="member-welcome-hints">
+                                    <span class="member-welcome-chip">User ID: 17-19 digits</span>
+                                    <span class="member-welcome-chip">Press Enter to search</span>
+                                    <span class="member-welcome-chip">Use deep profile actions</span>
+                                </div>
+                            </article>
+                        </div>
+                    </div>
+
+                    <div id="memberDeepProfile" class="member-deep-profile" style="display:none;">
+                        <div class="member-deep-head">
+                            <div class="member-deep-identity-wrap">
+                                <div id="memberDeepAvatar" class="member-avatar member-avatar-lg">?</div>
+                                <div class="member-deep-identity">
+                                    <div class="member-deep-title" id="memberDeepTitle">Member Profile</div>
+                                    <div class="member-deep-subtitle" id="memberDeepSubtitle">No member selected.</div>
+                                    <div id="memberIdentityBadges" class="member-identity-badges"></div>
+                                </div>
+                            </div>
+                            <div class="member-deep-actions">
+                                <button class="btn btn-sm btn-secondary" type="button"
+                                    onclick="quickWarnFromMemberLookup()">Warn</button>
+                                <button class="btn btn-sm btn-secondary" type="button"
+                                    onclick="quickTimeoutFromMemberLookup()">Timeout</button>
+                                <button class="btn btn-sm btn-primary" type="button"
+                                    onclick="refreshCurrentMemberLookup()">Refresh</button>
+                            </div>
+                        </div>
+
+                        <div class="member-metrics-grid">
+                            <div class="member-metric-card"><span class="member-metric-label">Warnings</span><span
+                                    class="member-metric-value" id="memberMetricWarnings">0</span></div>
+                            <div class="member-metric-card"><span class="member-metric-label">Timeouts</span><span
+                                    class="member-metric-value" id="memberMetricTimeouts">0</span></div>
+                            <div class="member-metric-card"><span class="member-metric-label">Bans</span><span
+                                    class="member-metric-value" id="memberMetricBans">0</span></div>
+                            <div class="member-metric-card"><span class="member-metric-label">Kicks</span><span
+                                    class="member-metric-value" id="memberMetricKicks">0</span></div>
+                            <div class="member-metric-card"><span class="member-metric-label">Risk Score</span><span
+                                    class="member-metric-value" id="memberMetricRisk">0</span></div>
+                            <div class="member-metric-card"><span class="member-metric-label">Flags</span><span
+                                    class="member-metric-value" id="memberMetricFlags">None</span></div>
+                        </div>
+
+                        <div class="member-risk-strip" id="memberRiskIndicator"></div>
+
+                        <div class="member-advanced-grid">
+                            <div class="member-advanced-main">
+                                <div class="member-profile-block">
+                                    <div class="member-profile-heading">Profile Details</div>
+                                    <div id="memberProfileFields" class="member-profile-fields">No data loaded.</div>
+                                </div>
+
+                                <div class="member-timeline-block">
+                                    <div class="member-profile-heading">Recent Moderation Timeline</div>
+                                    <div class="table-container">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>Action</th>
+                                                    <th>Case</th>
+                                                    <th>Reason</th>
+                                                    <th>Moderator</th>
+                                                    <th>Timestamp</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="memberTimelineTable">
+                                                <tr>
+                                                    <td colspan="5" class="text-center text-muted">No actions loaded.
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <aside class="member-intel-panel">
+                                <div class="member-profile-heading">Operational Intelligence</div>
+                                <div class="member-intel-list">
+                                    <div class="member-intel-item">
+                                        <span class="member-intel-label">Account Age</span>
+                                        <strong class="member-intel-value" id="memberIntelAccountAge">Unknown</strong>
+                                    </div>
+                                    <div class="member-intel-item">
+                                        <span class="member-intel-label">Recent Action</span>
+                                        <strong class="member-intel-value" id="memberIntelRecentAction">No data</strong>
+                                    </div>
+                                    <div class="member-intel-item">
+                                        <span class="member-intel-label">Enforcement Pressure</span>
+                                        <strong class="member-intel-value"
+                                            id="memberIntelEnforcementPressure">Low</strong>
+                                    </div>
+                                    <div class="member-intel-item">
+                                        <span class="member-intel-label">Signal Quality</span>
+                                        <strong class="member-intel-value"
+                                            id="memberIntelSignalQuality">Pending</strong>
+                                    </div>
+                                    <div class="member-intel-item">
+                                        <span class="member-intel-label">Recommendation</span>
+                                        <strong class="member-intel-value" id="memberIntelRecommendation">Run
+                                            lookup</strong>
+                                    </div>
+                                </div>
+                            </aside>
+                        </div>
                     </div>
                 </div>
 
@@ -503,6 +774,23 @@
                     <div class="form-group">
                         <div class="form-label">Reason</div>
                         <div id="ticketDetailReason" class="form-input" style="background: var(--bg-secondary);"></div>
+                    </div>
+                    <div class="ticket-transcript-panel">
+                        <div class="ticket-transcript-header">
+                            <div>
+                                <div class="form-label" style="margin:0;">Transcript</div>
+                                <div id="ticketTranscriptMeta" class="ticket-transcript-meta">No transcript loaded.
+                                </div>
+                            </div>
+                            <div class="ticket-transcript-actions">
+                                <button class="btn btn-sm btn-secondary" type="button"
+                                    id="ticketTranscriptCopyBtn">Copy</button>
+                                <button class="btn btn-sm btn-primary" type="button"
+                                    id="ticketTranscriptDownloadBtn">Download</button>
+                            </div>
+                        </div>
+                        <pre id="ticketTranscriptBody"
+                            class="ticket-transcript-body">Select a ticket to load the transcript.</pre>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -624,22 +912,21 @@
         </div>
 
         <footer class="page-footer">
-        <div class="footer-links">
-            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
-            <span class="footer-sep">•</span>
-            <a href="/changelog">Changelog</a>
-            <span class="footer-sep">•</span>
-            <a href="/privacy-policy">Privacy Policy</a>
-            <span class="footer-sep">•</span>
-            <a href="/license">License</a>
-        </div>
-    </footer>
+            <div class="footer-links">
+                <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+                <span class="footer-sep">•</span>
+                <a href="/changelog">Changelog</a>
+                <span class="footer-sep">•</span>
+                <a href="/privacy-policy">Privacy Policy</a>
+                <span class="footer-sep">•</span>
+                <a href="/license">License</a>
+            </div>
+        </footer>
 
         <script src="/public/version.js"></script>
 
         <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
         <script src="/public/security.js"></script>
-        <script src="/public/moderator.js"></script>
         <script>
             function toggleUserDropdown() {
                 const menu = document.getElementById('userDropdownMenu');

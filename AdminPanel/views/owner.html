@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Owner View — owner-level controls and high-privilege operations. -->
 <html lang="en">
 
 <head>
@@ -40,6 +39,7 @@
                             <span class="role-badge" id="dropdownRole">OWNER</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
@@ -52,7 +52,6 @@
         </div>
     </div>
 
-    <!-- Main Container -->
     <div class="container">
 
         <script>
@@ -84,10 +83,9 @@
                 <span>Invite Management</span></button>
             <button class="tab" data-tab="security" style="--tab-color:#f44336;"><span class="tab-icon">🔐</span>
                 <span>Security Settings</span></button>
-            <button class="tab" data-tab="email-analytics" style="--tab-color:#5b7fff;"><span class="tab-icon">📧</span>
-                <span>Email Analytics</span></button>
-            <button class="tab" data-tab="alert-analytics" style="--tab-color:#ff5b5b;"><span class="tab-icon">🚨</span>
-                <span>Alert Analytics</span></button>
+            <button class="tab" data-tab="security-events" style="--tab-color:#ff6a6a;"><span
+                    class="tab-icon">🛡️</span>
+                <span>Security Events</span></button>
         </div>
         <style>
             .tabs {
@@ -530,6 +528,128 @@
                 opacity: 1;
             }
 
+            .security-subnav {
+                position: sticky;
+                top: 84px;
+                z-index: 5;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                padding: 0.6rem;
+                margin-bottom: 1rem;
+                border-radius: var(--radius-md);
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                box-shadow: var(--shadow-sm);
+            }
+
+            .security-subnav a {
+                text-decoration: none;
+                color: var(--text-secondary);
+                font-size: 0.85rem;
+                font-weight: 700;
+                padding: 0.35rem 0.75rem;
+                border-radius: 999px;
+                border: 1px solid transparent;
+                background: var(--bg-card);
+                transition: all 0.2s ease;
+            }
+
+            .security-subnav a:hover {
+                color: var(--text-primary);
+                border-color: var(--border-color);
+                background: var(--bg-card-hover);
+                transform: translateY(-1px);
+            }
+
+            .security-section {
+                scroll-margin-top: 120px;
+            }
+
+            .security-policy-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+                gap: 1.2rem;
+            }
+
+            .security-events-controls {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                gap: 0.8rem;
+                margin-bottom: 1rem;
+                align-items: end;
+            }
+
+            .security-events-toggle {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.5rem 0.7rem;
+                border-radius: 999px;
+                border: 1px solid var(--border-color);
+                background: var(--bg-card);
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+
+            .security-events-toggle input {
+                width: 16px;
+                height: 16px;
+            }
+
+            .security-event-row.severity-critical {
+                background: rgba(244, 67, 54, 0.08);
+            }
+
+            .security-event-row.severity-high {
+                background: rgba(255, 152, 0, 0.08);
+            }
+
+            .security-event-row.severity-medium {
+                background: rgba(255, 193, 7, 0.06);
+            }
+
+            .security-event-details-row {
+                display: none;
+            }
+
+            .security-event-details-row.is-open {
+                display: table-row;
+            }
+
+            .security-event-details {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                padding: 0.85rem 1rem;
+                color: var(--text-secondary);
+                font-size: 0.85rem;
+            }
+
+            .security-event-details pre {
+                margin: 0.5rem 0 0;
+                white-space: pre-wrap;
+                word-break: break-word;
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                padding: 0.6rem;
+                font-size: 0.78rem;
+                color: var(--text-secondary);
+            }
+
+            .security-event-toggle-btn {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                color: var(--text-primary);
+                border-radius: 999px;
+                padding: 0.2rem 0.6rem;
+                font-size: 0.75rem;
+                font-weight: 700;
+                cursor: pointer;
+            }
+
             .session-card.current-session {
                 background: linear-gradient(135deg, rgba(40, 167, 69, 0.08) 0%, rgba(40, 167, 69, 0.04) 100%);
                 border-color: rgba(40, 167, 69, 0.3);
@@ -605,6 +725,44 @@
                 font-weight: 700;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+            }
+
+            .session-header-badges {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+
+            .session-risk-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.35rem 0.75rem;
+                border-radius: 999px;
+                font-size: 0.72rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                border: 1px solid transparent;
+            }
+
+            .session-risk-badge.risk-low {
+                background: rgba(40, 167, 69, 0.12);
+                color: #28a745;
+                border-color: rgba(40, 167, 69, 0.4);
+            }
+
+            .session-risk-badge.risk-medium {
+                background: rgba(255, 193, 7, 0.15);
+                color: #c88700;
+                border-color: rgba(255, 193, 7, 0.45);
+            }
+
+            .session-risk-badge.risk-high {
+                background: rgba(220, 53, 69, 0.15);
+                color: #dc3545;
+                border-color: rgba(220, 53, 69, 0.45);
             }
 
             .session-status-badge.active {
@@ -692,489 +850,6 @@
                 background: var(--bg-secondary);
                 border-radius: 6px;
                 border: 1px solid var(--border-color);
-            }
-
-            /* Alert Settings Management Styles */
-            .alert-stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 1rem;
-                margin-bottom: 1.5rem;
-            }
-
-            .alert-stat-card {
-                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-                border: 1px solid var(--border-color);
-                border-radius: 12px;
-                padding: 1.25rem;
-                display: flex;
-                align-items: center;
-                gap: 1rem;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .alert-stat-card:hover {
-                transform: translateY(-4px);
-                box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-                border-color: rgba(91, 127, 255, 0.3);
-            }
-
-            .alert-stat-icon {
-                width: 52px;
-                height: 52px;
-                border-radius: 12px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 1.6rem;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-                flex-shrink: 0;
-            }
-
-            .alert-stat-content {
-                flex: 1;
-            }
-
-            .alert-stat-value {
-                font-size: 1.8rem;
-                font-weight: 800;
-                color: var(--text-primary);
-                line-height: 1;
-                margin-bottom: 0.25rem;
-            }
-
-            .alert-stat-label {
-                font-size: 0.85rem;
-                font-weight: 600;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-filters-bar {
-                background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
-                border: 1px solid var(--border-color);
-                border-radius: 12px;
-                padding: 1.25rem;
-                margin-bottom: 1.5rem;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: 1rem;
-            }
-
-            .alert-filter-group {
-                display: flex;
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-
-            .alert-filter-label {
-                font-size: 0.8rem;
-                font-weight: 700;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-filter-select {
-                padding: 0.75rem 1rem;
-                border: 2px solid var(--border-color);
-                border-radius: 8px;
-                background: var(--bg-card);
-                color: var(--text-primary);
-                font-size: 0.9rem;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                font-weight: 600;
-            }
-
-            .alert-filter-select:focus {
-                outline: none;
-                border-color: #667eea;
-                box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-            }
-
-            .alert-filter-actions {
-                display: flex;
-                gap: 0.75rem;
-            }
-
-            .btn-alert-refresh {
-                padding: 0.75rem 1.25rem;
-                border: 2px solid var(--color-blue);
-                border-radius: 8px;
-                background: linear-gradient(135deg, var(--color-blue) 0%, #5568d3 100%);
-                color: white;
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                white-space: nowrap;
-            }
-
-            .btn-alert-refresh:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 16px rgba(91, 127, 255, 0.4);
-            }
-
-            .btn-alert-export {
-                padding: 0.75rem 1.25rem;
-                border: 2px solid var(--border-color);
-                border-radius: 8px;
-                background: var(--bg-card);
-                color: var(--text-primary);
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                white-space: nowrap;
-            }
-
-            .btn-alert-export:hover {
-                background: var(--bg-secondary);
-                border-color: var(--color-blue);
-                color: var(--color-blue);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            }
-
-            .alert-settings-list {
-                display: grid;
-                gap: 1rem;
-            }
-
-            .alert-setting-card {
-                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-                border: 2px solid var(--border-color);
-                border-radius: 12px;
-                padding: 1.5rem;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .alert-setting-card:hover {
-                border-color: rgba(102, 126, 234, 0.5);
-                transform: translateY(-2px);
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-            }
-
-            .alert-setting-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 1rem;
-            }
-
-            .alert-setting-title {
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
-            }
-
-            .alert-type-badge {
-                display: inline-flex;
-                align-items: center;
-                padding: 0.5rem 1rem;
-                border-radius: 8px;
-                font-size: 0.9rem;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-type-badge.cpu {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-            }
-
-            .alert-type-badge.memory {
-                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                color: white;
-            }
-
-            .alert-type-badge.error_rate {
-                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-                color: white;
-            }
-
-            .alert-type-badge.rate_limit {
-                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-                color: white;
-            }
-
-            .alert-type-badge.database {
-                background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-                color: white;
-            }
-
-            .alert-enabled-badge {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.35rem;
-                padding: 0.4rem 0.85rem;
-                border-radius: 6px;
-                font-size: 0.75rem;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-enabled-badge.enabled {
-                background: rgba(40, 167, 69, 0.15);
-                color: #28a745;
-                border: 1px solid rgba(40, 167, 69, 0.3);
-            }
-
-            .alert-enabled-badge.disabled {
-                background: rgba(108, 117, 125, 0.15);
-                color: #6c757d;
-                border: 1px solid rgba(108, 117, 125, 0.3);
-            }
-
-            .alert-setting-body {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 1rem;
-                padding: 1rem;
-                background: var(--bg-secondary);
-                border-radius: 8px;
-                border: 1px solid var(--border-color);
-                margin-bottom: 1rem;
-            }
-
-            .alert-info-item {
-                display: flex;
-                flex-direction: column;
-                gap: 0.25rem;
-            }
-
-            .alert-info-label {
-                font-size: 0.75rem;
-                font-weight: 700;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-info-value {
-                font-size: 0.9rem;
-                font-weight: 600;
-                color: var(--text-primary);
-            }
-
-            .alert-setting-footer {
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
-            }
-
-            .btn-alert-edit {
-                flex: 1;
-                padding: 0.65rem 1rem;
-                border: 2px solid var(--color-blue);
-                border-radius: 8px;
-                background: linear-gradient(135deg, var(--color-blue) 0%, #5568d3 100%);
-                color: white;
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            .btn-alert-edit:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 16px rgba(91, 127, 255, 0.4);
-            }
-
-            .btn-alert-toggle {
-                padding: 0.65rem 1rem;
-                border: 2px solid var(--border-color);
-                border-radius: 8px;
-                background: var(--bg-card);
-                color: var(--text-primary);
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            .btn-alert-toggle:hover {
-                background: var(--bg-secondary);
-                transform: translateY(-2px);
-            }
-
-            .active-alerts-list {
-                display: grid;
-                gap: 1rem;
-            }
-
-            .active-alert-card {
-                background: linear-gradient(135deg, rgba(220, 53, 69, 0.08) 0%, rgba(220, 53, 69, 0.04) 100%);
-                border: 2px solid rgba(220, 53, 69, 0.3);
-                border-radius: 12px;
-                padding: 1.25rem;
-                position: relative;
-            }
-
-            .active-alert-card::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 3px;
-                background: linear-gradient(90deg, #dc3545, #c82333);
-            }
-
-            .active-alert-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 0.75rem;
-            }
-
-            .active-alert-type {
-                font-size: 1rem;
-                font-weight: 700;
-                color: var(--text-primary);
-            }
-
-            .active-alert-severity {
-                padding: 0.35rem 0.75rem;
-                border-radius: 6px;
-                font-size: 0.75rem;
-                font-weight: 700;
-                text-transform: uppercase;
-            }
-
-            .active-alert-severity.critical {
-                background: #dc3545;
-                color: white;
-            }
-
-            .active-alert-severity.warning {
-                background: #ffc107;
-                color: #222;
-            }
-
-            .active-alert-message {
-                color: var(--text-secondary);
-                margin-bottom: 0.75rem;
-            }
-
-            .active-alert-footer {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                font-size: 0.85rem;
-                color: var(--text-secondary);
-            }
-
-            .btn-resolve-alert {
-                padding: 0.5rem 1rem;
-                border: 2px solid #28a745;
-                border-radius: 8px;
-                background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-                color: white;
-                font-size: 0.8rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            .btn-resolve-alert:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
-            }
-
-            .email-analytics-toolbar {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 0.75rem;
-                margin-bottom: 1rem;
-                padding: 0.9rem 1rem;
-                border: 1px solid var(--border-color);
-                border-radius: 10px;
-                background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
-                flex-wrap: wrap;
-            }
-
-            .email-analytics-toolbar-title {
-                color: var(--text-secondary);
-                font-size: 0.92rem;
-                font-weight: 600;
-            }
-
-            .email-analytics-toolbar-actions {
-                display: flex;
-                gap: 0.6rem;
-                align-items: center;
-            }
-
-            .email-stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 0.85rem;
-                margin-bottom: 1rem;
-            }
-
-            .email-stat-card {
-                border: 1px solid var(--border-color);
-                border-radius: 10px;
-                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-                padding: 0.95rem 1rem;
-                display: grid;
-                gap: 0.3rem;
-            }
-
-            .email-stat-label {
-                color: var(--text-secondary);
-                font-size: 0.78rem;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .email-stat-value {
-                color: var(--text-primary);
-                font-size: 1.5rem;
-                font-weight: 800;
-                line-height: 1;
-            }
-
-            .email-chart-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 1rem;
-                margin-bottom: 1rem;
-            }
-
-            .email-chart-card {
-                border: 1px solid var(--border-color);
-                border-radius: 10px;
-                background: var(--bg-card);
-                padding: 0.8rem 0.9rem 0.9rem;
-            }
-
-            .email-chart-title {
-                color: var(--text-primary);
-                font-weight: 700;
-                font-size: 0.95rem;
-                margin-bottom: 0.35rem;
-            }
-
-            .email-template-legend {
-                margin-top: 0.6rem;
-                color: var(--text-secondary);
-                font-size: 0.88rem;
-                line-height: 1.65;
-            }
-
-            @media (max-width: 1200px) {
-                .email-chart-grid {
-                    grid-template-columns: 1fr;
-                }
             }
 
             @media (max-width: 1200px) {
@@ -1590,6 +1265,50 @@
                 color: var(--text-secondary);
             }
 
+            .socket-health-card {
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-lg);
+                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+                padding: 1.5rem;
+                margin-bottom: 2rem;
+                display: grid;
+                gap: 1rem;
+            }
+
+            .socket-health-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 1rem;
+            }
+
+            .socket-health-item {
+                padding: 0.9rem;
+                border-radius: 12px;
+                background: var(--bg-card-hover);
+                border: 1px solid var(--border-color);
+                display: grid;
+                gap: 0.35rem;
+            }
+
+            .socket-health-label {
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: var(--text-secondary);
+                font-weight: 700;
+            }
+
+            .socket-health-value {
+                font-size: 1.3rem;
+                font-weight: 800;
+                color: var(--text-primary);
+            }
+
+            .socket-health-note {
+                font-size: 0.85rem;
+                color: var(--text-secondary);
+            }
+
             /* Form and Button Enhancements */
             .form-input {
                 background: var(--bg-secondary) !important;
@@ -1604,10 +1323,50 @@
                 background: var(--bg-card) !important;
             }
 
+
+            .form-input[type="number"] {
+                -moz-appearance: textfield;
+                appearance: textfield;
+                padding-right: 0.85rem !important;
+            }
+
+            .form-input[type="number"]::-webkit-outer-spin-button,
+            .form-input[type="number"]::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+
             .form-label {
                 color: var(--text-primary) !important;
                 font-weight: 600 !important;
                 margin-bottom: 0.6rem !important;
+            }
+
+            /* Invite table actions polish */
+            #invites .invite-actions-cell {
+                min-width: 210px;
+            }
+
+            #invites .invite-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.45rem;
+                align-items: center;
+                justify-content: flex-start;
+            }
+
+            #invites .invite-action-btn {
+                min-height: 34px;
+                padding: 0.42rem 0.62rem;
+                border-radius: 10px;
+                font-size: 0.82rem;
+                line-height: 1;
+                white-space: nowrap;
+            }
+
+            #invites .invite-action-btn[disabled] {
+                opacity: 0.65;
+                cursor: not-allowed;
             }
 
             @media (max-width: 980px) {
@@ -1640,6 +1399,444 @@
                 }
 
                 .system-health-insights-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            .backup-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+                gap: 1rem;
+                margin-bottom: 1rem;
+            }
+
+            .backup-card {
+                background: linear-gradient(155deg, rgba(26, 27, 30, 0.96), rgba(18, 19, 22, 0.92));
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                box-shadow: 0 16px 36px rgba(0, 0, 0, 0.38);
+            }
+
+            .backup-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+                flex-wrap: wrap;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                padding-bottom: 0.9rem;
+            }
+
+            .backup-header-title {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.65rem;
+                font-size: 1.05rem;
+                font-weight: 700;
+            }
+
+            .backup-header-text {
+                display: grid;
+                gap: 0.15rem;
+            }
+
+            .backup-header-subtitle {
+                font-size: 0.78rem;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+            }
+
+            .backup-header-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.6rem;
+                flex-wrap: wrap;
+            }
+
+            .backup-header-note {
+                font-size: 0.8rem;
+                color: var(--text-secondary);
+            }
+
+            .backup-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.22rem 0.65rem;
+                border-radius: 999px;
+                font-size: 0.7rem;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--text-primary);
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.18);
+            }
+
+            .backup-pill--running {
+                color: #f5f5f5;
+                background: linear-gradient(120deg, rgba(120, 120, 120, 0.9), rgba(92, 92, 92, 0.85));
+                border-color: rgba(140, 140, 140, 0.6);
+            }
+
+            .backup-pill--success {
+                color: #ffffff;
+                background: linear-gradient(120deg, rgba(55, 190, 130, 0.95), rgba(75, 220, 140, 0.9));
+                border-color: rgba(70, 215, 145, 0.65);
+            }
+
+            .backup-pill--idle {
+                color: var(--text-primary);
+                background: rgba(255, 255, 255, 0.08);
+                border-color: rgba(255, 255, 255, 0.14);
+            }
+
+            .backup-pill--warning {
+                color: #111;
+                background: linear-gradient(120deg, rgba(248, 192, 92, 0.9), rgba(255, 216, 121, 0.9));
+                border-color: rgba(248, 192, 92, 0.6);
+            }
+
+            .backup-pill--error {
+                color: #ffffff;
+                background: linear-gradient(120deg, rgba(234, 82, 105, 0.95), rgba(255, 120, 140, 0.9));
+                border-color: rgba(234, 82, 105, 0.6);
+            }
+
+            .backup-controls {
+                display: grid;
+                gap: 0.9rem;
+                padding: 0.95rem 1rem;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: var(--radius-md);
+                background: linear-gradient(180deg, rgba(28, 30, 34, 0.9), rgba(24, 25, 28, 0.65));
+            }
+
+            .backup-body {
+                display: grid;
+                grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+                gap: 1.2rem;
+                margin-bottom: 1rem;
+            }
+
+            .backup-panel {
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: var(--radius-lg);
+                background: rgba(22, 23, 26, 0.95);
+                padding: 1.1rem 1.1rem 1rem;
+                display: grid;
+                gap: 0.85rem;
+            }
+
+            .backup-panel--settings {
+                background: var(--bg-primary);
+            }
+
+            .backup-panel--status {
+                background: var(--bg-primary);
+            }
+
+            .backup-panel-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.75rem;
+                flex-wrap: wrap;
+                padding-bottom: 0.4rem;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            }
+
+            .backup-panel-title {
+                font-size: 0.8rem;
+                font-weight: 700;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--text-primary);
+            }
+
+            .backup-panel-subtitle {
+                font-size: 0.78rem;
+                color: var(--text-secondary);
+            }
+
+            .backup-controls-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.9rem;
+            }
+
+            .backup-field {
+                display: grid;
+                gap: 0.35rem;
+            }
+
+            .backup-field--inline {
+                grid-template-columns: 1fr auto;
+                align-items: center;
+                gap: 0.75rem;
+            }
+
+            .backup-label {
+                font-size: 0.75rem;
+                font-weight: 700;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+            }
+
+            .backup-input {
+                min-height: 42px;
+                background: rgba(20, 21, 24, 0.9);
+            }
+
+            .backup-help {
+                font-size: 0.78rem;
+                color: var(--text-secondary);
+            }
+
+            .backup-actions {
+                display: flex;
+                gap: 0.6rem;
+                flex-wrap: wrap;
+            }
+
+            .backup-status {
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: var(--radius-md);
+                background: linear-gradient(180deg, rgba(26, 27, 30, 0.85), rgba(20, 21, 24, 0.7));
+                padding: 1rem;
+                display: grid;
+                gap: 0.75rem;
+            }
+
+            .backup-status-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.7rem;
+            }
+
+            .backup-status-card {
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                background: rgba(18, 19, 22, 0.85);
+                padding: 0.75rem 0.8rem;
+                display: grid;
+                gap: 0.35rem;
+            }
+
+            .backup-status-label {
+                font-size: 0.7rem;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--text-secondary);
+            }
+
+            .backup-status-value {
+                font-size: 0.95rem;
+                font-weight: 700;
+                color: var(--text-primary);
+            }
+
+            .backup-status-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.5rem;
+                font-size: 0.9rem;
+                color: var(--text-secondary);
+            }
+
+            .backup-status-row strong {
+                color: var(--text-primary);
+                font-weight: 700;
+            }
+
+            .backup-status-note {
+                font-size: 0.82rem;
+                color: var(--text-secondary);
+            }
+
+            .backup-files {
+                border-top: 1px solid var(--border-color);
+                padding-top: 1rem;
+                display: grid;
+                gap: 0.6rem;
+            }
+
+            .backup-files-header {
+                font-weight: 700;
+                color: var(--text-primary);
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                font-size: 0.78rem;
+            }
+
+            .backup-files-list {
+                display: grid;
+                gap: 0.5rem;
+            }
+
+            .backup-table-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.5rem;
+                background: var(--bg-primary);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                padding: 0.55rem 0.7rem;
+            }
+
+            .backup-table-select {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                font-size: 0.85rem;
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+
+            .backup-table-select input {
+                width: 16px;
+                height: 16px;
+                accent-color: var(--color-green);
+            }
+
+            .backup-table-count {
+                font-size: 0.8rem;
+                color: var(--text-secondary);
+            }
+
+            .backup-table-list {
+                max-height: 210px;
+                overflow: auto;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.45rem 0.7rem;
+                padding: 0.65rem 0.65rem;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                background: var(--bg-primary);
+            }
+
+            .backup-table-item {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                font-size: 0.82rem;
+                color: var(--text-secondary);
+                padding: 0.3rem 0.45rem;
+                border-radius: 10px;
+                border: 1px solid transparent;
+                transition: 0.15s ease;
+            }
+
+            .backup-table-item:hover {
+                border-color: rgba(91, 255, 184, 0.3);
+                background: rgba(91, 255, 184, 0.08);
+                color: var(--text-primary);
+            }
+
+            .backup-file-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 0.8rem;
+                padding: 0.65rem 0.9rem;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                background: rgba(18, 19, 22, 0.9);
+            }
+
+            .backup-file-meta {
+                display: grid;
+                gap: 0.2rem;
+                color: var(--text-secondary);
+                font-size: 0.85rem;
+            }
+
+            .backup-file-name {
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .backup-file-actions {
+                display: flex;
+                gap: 0.4rem;
+            }
+
+            .backup-switch {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                width: 50px;
+                height: 28px;
+            }
+
+            .backup-switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+            .backup-slider {
+                position: absolute;
+                cursor: pointer;
+                inset: 0;
+                background: rgba(20, 21, 24, 0.9);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 999px;
+                transition: 0.2s ease;
+            }
+
+            .backup-slider::before {
+                content: '';
+                position: absolute;
+                height: 22px;
+                width: 22px;
+                left: 3px;
+                top: 2px;
+                background: var(--bg-card);
+                border-radius: 50%;
+                transition: 0.2s ease;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            }
+
+            .backup-switch input:checked+.backup-slider {
+                background: rgba(55, 190, 130, 0.2);
+                border-color: rgba(70, 215, 145, 0.55);
+            }
+
+            .backup-switch input:checked+.backup-slider::before {
+                transform: translateX(22px);
+                background: var(--color-green);
+            }
+
+            .backup-run-btn {
+                background: linear-gradient(135deg, rgba(55, 190, 130, 0.95), rgba(75, 220, 140, 0.9));
+                border: 1px solid rgba(70, 215, 145, 0.65);
+                color: #0b1b13;
+                box-shadow: 0 10px 24px rgba(55, 190, 130, 0.3);
+            }
+
+            .backup-run-btn:hover {
+                filter: brightness(1.05);
+                transform: translateY(-1px);
+            }
+
+            @media (max-width: 900px) {
+                .backup-body {
+                    grid-template-columns: 1fr;
+                }
+
+                .backup-controls-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .backup-status-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .backup-table-list {
                     grid-template-columns: 1fr;
                 }
             }
@@ -1747,6 +1944,36 @@
                 </div>
             </div>
 
+            <div class="socket-health-card" id="socketHealthCard">
+                <div class="card-header" style="margin-bottom: 0;">
+                    <span class="card-header-icon">🛰️</span>
+                    WebSocket Health
+                </div>
+                <div class="socket-health-grid">
+                    <div class="socket-health-item">
+                        <div class="socket-health-label">Active Connections</div>
+                        <div class="socket-health-value" id="socketActiveCount">-</div>
+                        <div class="socket-health-note" id="socketActiveMeta">Tracked live sockets</div>
+                    </div>
+                    <div class="socket-health-item">
+                        <div class="socket-health-label">Rejected</div>
+                        <div class="socket-health-value" id="socketRejectedCount">-</div>
+                        <div class="socket-health-note">Rejected handshakes</div>
+                    </div>
+                    <div class="socket-health-item">
+                        <div class="socket-health-label">Errors</div>
+                        <div class="socket-health-value" id="socketErrorCount">-</div>
+                        <div class="socket-health-note" id="socketLastError">No recent errors</div>
+                    </div>
+                    <div class="socket-health-item">
+                        <div class="socket-health-label">Rooms</div>
+                        <div class="socket-health-value" id="socketRoomCount">-</div>
+                        <div class="socket-health-note">Active room subscriptions</div>
+                    </div>
+                </div>
+                <div class="socket-health-note" id="socketHealthUpdated">Updated: --</div>
+            </div>
+
             <!-- Advanced Statistics -->
             <div class="card">
                 <div class="card-header">
@@ -1799,10 +2026,125 @@
                 </div>
             </div>
 
+            <div class="card backup-card" id="databaseBackupsCard">
+                <div class="card-header backup-header">
+                    <div class="backup-header-title">
+                        <span class="card-header-icon">🗄️</span>
+                        <div class="backup-header-text">
+                            <span>Database Backups</span>
+                            <span class="backup-header-subtitle">Schedule, export, and monitor backups</span>
+                        </div>
+                    </div>
+                    <div class="backup-header-actions">
+                        <span class="backup-pill" id="backupHeaderStatus">Idle</span>
+                        <span class="backup-header-note" id="backupHeaderLastRun">Last run: --</span>
+                        <button class="btn btn-sm btn-primary backup-run-btn" id="runBackupBtn" type="button">Run
+                            Backup</button>
+                    </div>
+                </div>
+                <div class="backup-body">
+                    <div class="backup-panel backup-panel--settings">
+                        <div class="backup-panel-header">
+                            <div>
+                                <div class="backup-panel-title">Backup Settings</div>
+                                <div class="backup-panel-subtitle">Control schedules, retention, and export format.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="backup-controls-grid">
+                            <div class="backup-field backup-field--inline">
+                                <div>
+                                    <label class="backup-label" for="backupEnabledToggle">Automatic Backups</label>
+                                    <div class="backup-help">Enable scheduled backups for this server.</div>
+                                </div>
+                                <label class="backup-switch">
+                                    <input type="checkbox" id="backupEnabledToggle" />
+                                    <span class="backup-slider"></span>
+                                </label>
+                            </div>
+                            <div class="backup-field">
+                                <label class="backup-label" for="backupIntervalSelect">Interval</label>
+                                <select id="backupIntervalSelect" class="form-input backup-input">
+                                    <option value="30">Every 30 minutes</option>
+                                    <option value="60">Hourly</option>
+                                    <option value="360">Every 6 hours</option>
+                                    <option value="720">Every 12 hours</option>
+                                    <option value="1440">Daily</option>
+                                    <option value="10080">Weekly</option>
+                                </select>
+                            </div>
+                            <div class="backup-field">
+                                <label class="backup-label" for="backupRetentionInput">Retention</label>
+                                <input id="backupRetentionInput" class="form-input backup-input" type="number" min="1"
+                                    max="50" value="10" />
+                                <div class="backup-help">Number of backup files to keep.</div>
+                            </div>
+                            <div class="backup-field">
+                                <label class="backup-label" for="backupFormatSelect">Format</label>
+                                <select id="backupFormatSelect" class="form-input backup-input">
+                                    <option value="json">JSON export</option>
+                                </select>
+                                <div class="backup-help">Exports selected tables for download.</div>
+                            </div>
+                        </div>
+                        <div class="backup-field">
+                            <label class="backup-label">Tables</label>
+                            <div class="backup-table-toolbar">
+                                <label class="backup-table-select">
+                                    <input type="checkbox" id="backupTablesSelectAll" />
+                                    <span>Select all tables</span>
+                                </label>
+                                <span class="backup-table-count" id="backupTableCount">0 selected</span>
+                            </div>
+                            <div id="backupTablesList" class="backup-table-list">Loading tables...</div>
+                            <div class="backup-help">Choose which tables to include.</div>
+                        </div>
+                        <div class="backup-actions">
+                            <button class="btn btn-secondary btn-sm" id="saveBackupConfigBtn" type="button">Save
+                                Settings</button>
+                        </div>
+                    </div>
+                    <div class="backup-panel backup-panel--status">
+                        <div class="backup-panel-header">
+                            <div>
+                                <div class="backup-panel-title">Status Overview</div>
+                                <div class="backup-panel-subtitle">Latest schedule and results.</div>
+                            </div>
+                        </div>
+                        <div class="backup-status-grid">
+                            <div class="backup-status-card">
+                                <div class="backup-status-label">Current Status</div>
+                                <div class="backup-status-value" id="backupStatusValue">Idle</div>
+                            </div>
+                            <div class="backup-status-card">
+                                <div class="backup-status-label">Last Run</div>
+                                <div class="backup-status-value" id="backupLastRunValue">--</div>
+                            </div>
+                            <div class="backup-status-card">
+                                <div class="backup-status-label">Next Run</div>
+                                <div class="backup-status-value" id="backupNextRunValue">--</div>
+                            </div>
+                            <div class="backup-status-card">
+                                <div class="backup-status-label">Last Result</div>
+                                <div class="backup-status-value" id="backupLastResultValue">--</div>
+                            </div>
+                        </div>
+                        <div class="backup-status-note" id="backupStatusNote">Backups use the server-side MySQL tools.
+                        </div>
+                    </div>
+                </div>
+                <div class="backup-files">
+                    <div class="backup-files-header">Recent Backups</div>
+                    <div id="backupFilesList" class="backup-files-list">No backups yet.</div>
+                </div>
+            </div>
+
             <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">🖥️</span>
-                    Live Terminal (Last 50 Logs)
+                <div class="card-header"
+                    style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
+                    <span><span class="card-header-icon">🖥️</span> Live Terminal (Last 50 Logs)</span>
+                    <button class="btn btn-sm btn-secondary" id="downloadTerminalLogsBtn" type="button"
+                        title="Download recent terminal logs">Download Logs</button>
                 </div>
                 <div id="terminalContainer"
                     style="background: var(--bg-secondary); border-radius: 0.75rem; padding: 1rem; height: 400px; overflow-y: auto; border: 1px solid var(--border-color); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);">
@@ -1979,8 +2321,6 @@
             </div>
         </div>
 
-        <!-- Alerts Tab -->
-        <!-- Metrics Tab -->
         <!-- Account Management Tab -->
         <div id="users" class="tab-content">
             <div class="card">
@@ -2195,6 +2535,88 @@
                 <div id="inviteStatsMeta"
                     style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.8rem;">Loading invite
                     metrics...</div>
+                <style>
+                    #inviteStatsContainer {
+                        background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+                        border: 1px solid var(--border-color);
+                        border-radius: 16px;
+                        padding: 0.35rem 0.75rem 0.6rem;
+                    }
+
+                    #inviteStatsContainer .invite-stats-table {
+                        width: 100%;
+                        border-collapse: separate;
+                        border-spacing: 0 0.7rem;
+                    }
+
+                    #inviteStatsContainer thead th {
+                        position: sticky;
+                        top: 0;
+                        background: var(--bg-secondary);
+                        color: var(--text-primary);
+                        text-transform: uppercase;
+                        font-size: 0.75rem;
+                        letter-spacing: 0.06em;
+                        padding: 0.7rem 0.75rem;
+                        border-bottom: 1px solid var(--border-color);
+                    }
+
+                    #inviteStatsContainer tbody tr {
+                        background: var(--bg-card);
+                        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+                        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+                    }
+
+                    #inviteStatsContainer tbody tr:hover {
+                        transform: translateY(-2px);
+                        background: var(--bg-card-hover);
+                        box-shadow: 0 14px 26px rgba(0, 0, 0, 0.22);
+                    }
+
+                    #inviteStatsContainer tbody td {
+                        padding: 0.9rem 0.75rem;
+                        border-top: 1px solid var(--border-color);
+                        border-bottom: 1px solid var(--border-color);
+                        vertical-align: middle;
+                        color: var(--text-secondary);
+                    }
+
+                    #inviteStatsContainer tbody td:first-child {
+                        border-left: 1px solid var(--border-color);
+                        border-top-left-radius: 14px;
+                        border-bottom-left-radius: 14px;
+                    }
+
+                    #inviteStatsContainer tbody td:last-child {
+                        border-right: 1px solid var(--border-color);
+                        border-top-right-radius: 14px;
+                        border-bottom-right-radius: 14px;
+                        text-align: right;
+                    }
+
+                    #inviteStatsContainer tbody td code {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 0.3rem;
+                        background: rgba(91, 127, 255, 0.12);
+                        border: 1px solid rgba(91, 127, 255, 0.4);
+                        color: var(--text-primary);
+                        padding: 0.25rem 0.55rem;
+                        border-radius: 999px;
+                        font-size: 0.82rem;
+                    }
+
+                    #inviteStatsContainer tbody td:nth-child(1) {
+                        font-weight: 600;
+                    }
+
+                    #inviteStatsContainer tbody td:nth-child(6) {
+                        max-width: 220px;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    }
+                </style>
                 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
                     <input type="text" id="inviteSearch" class="form-input"
                         placeholder="Search by code, username, or description..." onkeyup="filterInviteStats()">
@@ -2217,7 +2639,7 @@
                     <button class="btn btn-secondary" onclick="clearInviteFilters()">🧹 Clear Filters</button>
                 </div>
                 <div class="table-container" id="inviteStatsContainer">
-                    <table>
+                    <table class="invite-stats-table">
                         <thead>
                             <tr>
                                 <th>Code</th>
@@ -2243,7 +2665,14 @@
 
         <!-- Security Settings Tab -->
         <div id="security" class="tab-content">
-            <div class="card security-center-card">
+            <div class="security-subnav">
+                <a href="#security-overview">Overview</a>
+                <a href="#security-sessions">Sessions</a>
+                <a href="#security-policies">Policies</a>
+                <a href="#security-captcha">Captcha</a>
+            </div>
+
+            <div class="card security-center-card security-section" id="security-overview">
                 <div class="card-header">
                     <span class="card-header-icon">🔐</span>
                     Security Overview
@@ -2268,7 +2697,7 @@
                 </div>
             </div>
 
-            <div class="card security-sessions-card">
+            <div class="card security-sessions-card security-section" id="security-sessions">
                 <div class="card-header">
                     <span class="card-header-icon">&#128274;</span>
                     Active Sessions Management
@@ -2276,7 +2705,6 @@
                 <p class="security-sessions-note">Monitor and manage all active user sessions with real-time device
                     intelligence and security controls.</p>
 
-                <!-- Session Statistics -->
                 <div class="session-stats-grid">
                     <div class="session-stat-card">
                         <div class="session-stat-icon"
@@ -2310,9 +2738,32 @@
                             <div class="session-stat-label">Mobile</div>
                         </div>
                     </div>
+                    <div class="session-stat-card">
+                        <div class="session-stat-icon"
+                            style="background: linear-gradient(135deg, #ff6a6a 0%, #d7263d 100%);">&#9888;</div>
+                        <div class="session-stat-content">
+                            <div class="session-stat-value" id="totalHighRiskSessions">0</div>
+                            <div class="session-stat-label">High Risk</div>
+                        </div>
+                    </div>
+                    <div class="session-stat-card">
+                        <div class="session-stat-icon"
+                            style="background: linear-gradient(135deg, #ffd166 0%, #f4a261 100%);">&#9889;</div>
+                        <div class="session-stat-content">
+                            <div class="session-stat-value" id="totalMediumRiskSessions">0</div>
+                            <div class="session-stat-label">Medium Risk</div>
+                        </div>
+                    </div>
+                    <div class="session-stat-card">
+                        <div class="session-stat-icon"
+                            style="background: linear-gradient(135deg, #6ad7a0 0%, #2a9d8f 100%);">&#9989;</div>
+                        <div class="session-stat-content">
+                            <div class="session-stat-value" id="totalLowRiskSessions">0</div>
+                            <div class="session-stat-label">Low Risk</div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Filters -->
                 <div class="session-filters-bar">
                     <div class="session-filter-group">
                         <label for="sessionUsernameFilter" class="session-filter-label">&#128269; Search</label>
@@ -2351,551 +2802,324 @@
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">⚙️</span>
-                    Session Hardening Policy
+            <div class="security-policy-grid security-section" id="security-policies">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-header-icon">⚙️</span>
+                        Session Hardening Policy
+                    </div>
+                    <div class="form-group" style="margin-bottom:0.8rem;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+                            <label for="singleSessionModeToggle" class="form-label" style="margin:0; flex:1;">Enable
+                                Single
+                                Session Mode (one active session per admin account)</label>
+                            <label class="toggle-switch"
+                                style="position:relative; display:inline-block; width:54px; height:28px; flex-shrink:0;">
+                                <input type="checkbox" id="singleSessionModeToggle"
+                                    style="opacity:0; width:0; height:0;">
+                                <span class="toggle-slider"
+                                    style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-secondary); border:1px solid var(--border-color); transition:0.3s; border-radius:28px;"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <style>
+                        .toggle-switch input:checked+.toggle-slider {
+                            background-color: var(--color-green);
+                            border-color: var(--color-green);
+                        }
+
+                        .toggle-slider:before {
+                            position: absolute;
+                            content: "";
+                            height: 20px;
+                            width: 20px;
+                            left: 3px;
+                            bottom: 3px;
+                            background-color: white;
+                            transition: 0.3s;
+                            border-radius: 50%;
+                            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+                        }
+
+                        .toggle-switch input:checked+.toggle-slider:before {
+                            transform: translateX(26px);
+                        }
+
+                        .toggle-switch:hover .toggle-slider {
+                            box-shadow: 0 0 0 3px rgba(91, 127, 255, 0.2);
+                        }
+                    </style>
+                    <div class="form-group">
+                        <label class="form-label" for="idleTimeoutMinutesInput">Idle Timeout (minutes)</label>
+                        <input type="number" id="idleTimeoutMinutesInput" class="form-input" min="5" max="720" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="absoluteTimeoutHoursInput">Absolute Timeout (hours)</label>
+                        <input type="number" id="absoluteTimeoutHoursInput" class="form-input" min="1" max="168"
+                            step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="singleSessionCheckSecondsInput">Single-Session Enforcement Check
+                            (seconds)</label>
+                        <input type="number" id="singleSessionCheckSecondsInput" class="form-input" min="15" max="1800"
+                            step="5">
+                    </div>
+                    <div id="sessionPolicyMeta" class="text-secondary" style="margin-bottom:1rem;">Loading session
+                        policy...
+                    </div>
+                    <button id="sessionPolicySaveBtn" class="btn btn-primary" onclick="saveSessionSecurityPolicy()">🛡️
+                        Update Session Policy</button>
                 </div>
-                <div class="form-group" style="margin-bottom:0.8rem;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
-                        <label for="singleSessionModeToggle" class="form-label" style="margin:0; flex:1;">Enable Single
-                            Session Mode (one active session per admin account)</label>
-                        <label class="toggle-switch"
-                            style="position:relative; display:inline-block; width:54px; height:28px; flex-shrink:0;">
-                            <input type="checkbox" id="singleSessionModeToggle" style="opacity:0; width:0; height:0;">
-                            <span class="toggle-slider"
-                                style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-secondary); border:1px solid var(--border-color); transition:0.3s; border-radius:28px;"></span>
-                        </label>
+
+                <div class="card security-section" id="security-captcha">
+                    <div class="card-header">
+                        <span class="card-header-icon">🧩</span>
+                        Captcha Policy
+                    </div>
+                    <p class="text-secondary" style="margin-top:0; margin-bottom:0.9rem;">Tune captcha difficulty and
+                        lifespan for login/register challenges.</p>
+                    <div class="form-group" style="margin-bottom:0.8rem;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+                            <label for="captchaLoginEnabledToggle" class="form-label" style="margin:0; flex:1;">Enable
+                                Captcha for Login</label>
+                            <label class="toggle-switch"
+                                style="position:relative; display:inline-block; width:54px; height:28px; flex-shrink:0;">
+                                <input type="checkbox" id="captchaLoginEnabledToggle"
+                                    style="opacity:0; width:0; height:0;">
+                                <span class="toggle-slider"
+                                    style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-secondary); border:1px solid var(--border-color); transition:0.3s; border-radius:28px;"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0.8rem;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+                            <label for="captchaRegisterEnabledToggle" class="form-label"
+                                style="margin:0; flex:1;">Enable Captcha for Register</label>
+                            <label class="toggle-switch"
+                                style="position:relative; display:inline-block; width:54px; height:28px; flex-shrink:0;">
+                                <input type="checkbox" id="captchaRegisterEnabledToggle"
+                                    style="opacity:0; width:0; height:0;">
+                                <span class="toggle-slider"
+                                    style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-secondary); border:1px solid var(--border-color); transition:0.3s; border-radius:28px;"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaMinValueInput">Math Minimum Value</label>
+                        <input type="number" id="captchaMinValueInput" class="form-input" min="1" max="100" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaMaxValueInput">Math Maximum Value</label>
+                        <input type="number" id="captchaMaxValueInput" class="form-input" min="2" max="200" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaTtlSecondsInput">Challenge Lifetime (seconds)</label>
+                        <input type="number" id="captchaTtlSecondsInput" class="form-input" min="60" max="900" step="5">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaMaxAttemptsInput">Max Attempts per Challenge</label>
+                        <input type="number" id="captchaMaxAttemptsInput" class="form-input" min="1" max="10" step="1">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0.8rem;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+                            <label for="captchaAdaptiveDifficultyToggle" class="form-label"
+                                style="margin:0; flex:1;">Enable Adaptive Difficulty</label>
+                            <label class="toggle-switch"
+                                style="position:relative; display:inline-block; width:54px; height:28px; flex-shrink:0;">
+                                <input type="checkbox" id="captchaAdaptiveDifficultyToggle"
+                                    style="opacity:0; width:0; height:0;">
+                                <span class="toggle-slider"
+                                    style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-secondary); border:1px solid var(--border-color); transition:0.3s; border-radius:28px;"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaMinSolveMsInput">Minimum Solve Time (ms)</label>
+                        <input type="number" id="captchaMinSolveMsInput" class="form-input" min="300" max="5000"
+                            step="50">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaFailureWindowSecondsInput">Failure Window
+                            (seconds)</label>
+                        <input type="number" id="captchaFailureWindowSecondsInput" class="form-input" min="60"
+                            max="3600" step="10">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaFailureThresholdInput">Failure Threshold</label>
+                        <input type="number" id="captchaFailureThresholdInput" class="form-input" min="3" max="50"
+                            step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="captchaFailureBlockSecondsInput">Block Duration (seconds)</label>
+                        <input type="number" id="captchaFailureBlockSecondsInput" class="form-input" min="60" max="3600"
+                            step="10">
+                    </div>
+                    <div id="captchaPolicyMeta" class="text-secondary" style="margin-bottom:1rem;">Loading captcha
+                        policy...</div>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <button id="captchaPolicySaveBtn" class="btn btn-primary"
+                            onclick="saveCaptchaSecurityPolicy()">🧠 Update Captcha Policy</button>
+                        <button id="captchaPolicyResetBtn" class="btn btn-secondary"
+                            onclick="resetCaptchaSecurityPolicy()">↩️ Reset to Defaults</button>
                     </div>
                 </div>
-                <style>
-                    .toggle-switch input:checked+.toggle-slider {
-                        background-color: var(--color-green);
-                        border-color: var(--color-green);
-                    }
-
-                    .toggle-slider:before {
-                        position: absolute;
-                        content: "";
-                        height: 20px;
-                        width: 20px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-                    }
-
-                    .toggle-switch input:checked+.toggle-slider:before {
-                        transform: translateX(26px);
-                    }
-
-                    .toggle-switch:hover .toggle-slider {
-                        box-shadow: 0 0 0 3px rgba(91, 127, 255, 0.2);
-                    }
-                </style>
-                <div class="form-group">
-                    <label class="form-label" for="idleTimeoutMinutesInput">Idle Timeout (minutes)</label>
-                    <input type="number" id="idleTimeoutMinutesInput" class="form-input" min="5" max="720" step="1">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="absoluteTimeoutHoursInput">Absolute Timeout (hours)</label>
-                    <input type="number" id="absoluteTimeoutHoursInput" class="form-input" min="1" max="168" step="1">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="singleSessionCheckSecondsInput">Single-Session Enforcement Check
-                        (seconds)</label>
-                    <input type="number" id="singleSessionCheckSecondsInput" class="form-input" min="15" max="1800"
-                        step="5">
-                </div>
-                <div id="sessionPolicyMeta" class="text-secondary" style="margin-bottom:1rem;">Loading session policy...
-                </div>
-                <button id="sessionPolicySaveBtn" class="btn btn-primary" onclick="saveSessionSecurityPolicy()">🛡️
-                    Update Session Policy</button>
             </div>
 
         </div>
 
-        <!-- Email Analytics Tab -->
-        <div id="email-analytics" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📧</span>
-                    Email Analytics (30d Delivery Intelligence)
+        <div id="security-events" class="tab-content">
+            <div class="card" style="margin-bottom:1.2rem;">
+                <div class="card-header"
+                    style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+                    <span><span class="card-header-icon">🚨</span>Anti-Raid Risk Dashboard</span>
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="loadAntiRaidDashboard()">🔄
+                        Refresh</button>
                 </div>
-
-                <div class="email-analytics-toolbar">
-                    <div class="email-analytics-toolbar-title">Advanced delivery performance and template engagement
-                        metrics</div>
-                    <div class="email-analytics-toolbar-actions">
-                        <button class="btn-alert-refresh" onclick="loadEmailAnalyticsPie()"
-                            title="Refresh email analytics">🔄 Refresh</button>
-                        <button class="btn-alert-export" onclick="exportEmailRecentCsv()"
-                            title="Export recent deliveries">📄 Export Recent</button>
+                <p class="text-secondary" style="margin-top:0; margin-bottom:1rem;">
+                    Signals and risk scoring summary for anti-raid detections. Pulls from recent anti-raid events.
+                </p>
+                <div class="security-overview-grid" id="antiRaidOverviewGrid">
+                    <div class="security-overview-item">
+                        <div class="security-overview-title">Total Events (30d)</div>
+                        <div class="security-overview-text" id="antiRaidEventsTotal">--</div>
                     </div>
-                </div>
-
-                <div class="email-stats-grid">
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Total Sent (30d)</div>
-                        <div class="email-stat-value" id="emailSummaryTotal">0</div>
+                    <div class="security-overview-item">
+                        <div class="security-overview-title">Average Risk</div>
+                        <div class="security-overview-text" id="antiRaidAvgRisk">--</div>
                     </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Success Rate</div>
-                        <div class="email-stat-value" id="emailSummarySuccessRate">0%</div>
+                    <div class="security-overview-item">
+                        <div class="security-overview-title">Peak Risk</div>
+                        <div class="security-overview-text" id="antiRaidPeakRisk">--</div>
                     </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Last 24h</div>
-                        <div class="email-stat-value" id="emailSummaryLast24h">0</div>
+                    <div class="security-overview-item">
+                        <div class="security-overview-title">Auto Lockdowns</div>
+                        <div class="security-overview-text" id="antiRaidAutoLockdowns">--</div>
                     </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Failures + Blocks</div>
-                        <div class="email-stat-value" id="emailSummaryFailures">0</div>
+                    <div class="security-overview-item">
+                        <div class="security-overview-title">Manual Lockdowns</div>
+                        <div class="security-overview-text" id="antiRaidManualLockdowns">--</div>
                     </div>
-                </div>
-
-                <div class="email-chart-grid">
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Template Distribution (30d)</div>
-                        <div style="margin: 1rem auto; max-width: 460px;">
-                            <canvas id="emailAnalyticsPieChart" style="max-height: 330px;"></canvas>
-                        </div>
-                        <div id="emailAnalyticsPieLegend" class="email-template-legend"></div>
+                    <div class="security-overview-item">
+                        <div class="security-overview-title">Resolved</div>
+                        <div class="security-overview-text" id="antiRaidResolved">--</div>
                     </div>
-
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Delivery Trend (14d)</div>
-                        <div style="margin: 1rem auto; max-width: 100%;">
-                            <canvas id="emailAnalyticsTrendChart" style="max-height: 330px;"></canvas>
-                        </div>
+                    <div class="security-overview-item" style="grid-column: 1 / -1;">
+                        <div class="security-overview-title">Top Triggers</div>
+                        <div class="security-overview-text" id="antiRaidTopTriggers">--</div>
                     </div>
                 </div>
-
-                <div class="card" style="margin-top: 1rem;">
-                    <div class="card-header">
-                        <span class="card-header-icon">📊</span>
-                        Template Performance Breakdown
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Template</th>
-                                    <th>Total</th>
-                                    <th>Sent</th>
-                                    <th>Failed</th>
-                                    <th>Blocked</th>
-                                    <th>Success %</th>
-                                </tr>
-                            </thead>
-                            <tbody id="emailTemplateBreakdownBody">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">Loading template breakdown...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                <div id="antiRaidEventsMeta" class="text-secondary" style="margin-top:1rem;">No data loaded yet.</div>
+                <div class="table-container" style="margin-top:0.75rem;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Risk</th>
+                                <th>Triggers</th>
+                                <th>Summary</th>
+                            </tr>
+                        </thead>
+                        <tbody id="antiRaidEventsTable">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Open the Security Events tab and press
+                                    Refresh to load anti-raid stats.</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-
-                <div class="card" style="margin-top: 1rem;">
-                    <div class="card-header">
-                        <span class="card-header-icon">🕒</span>
-                        Recent Email Deliveries
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Recipient</th>
-                                    <th>Template</th>
-                                    <th>Status</th>
-                                    <th>Subject</th>
-                                    <th>Error</th>
-                                </tr>
-                            </thead>
-                            <tbody id="emailRecentTableBody">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">Loading recent deliveries...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div id="emailAnalyticsPieLastUpdated" class="text-secondary"
-                    style="margin-top: 0.75rem; margin-bottom: 0.1rem; text-align: center;">Last updated: --</div>
             </div>
-        </div>
-
-        <!-- Alert Settings Analytics & Management Tab -->
-        <div id="alert-analytics" class="tab-content">
             <div class="card">
                 <div class="card-header">
-                    <span class="card-header-icon">&#128680;</span>
-                    Alert Settings Management & Analytics
+                    <span class="card-header-icon">🛡️</span>
+                    Security Events Feed
                 </div>
-                <p class="security-sessions-note">Monitor and configure system alert settings with real-time analytics
-                    and active alert tracking.</p>
+                <p class="text-secondary" style="margin-top:0; margin-bottom:1rem;">
+                    Live security signals from backend protections (origin blocks, CSRF failures, rate-limit hits,
+                    brute-force indicators).
+                </p>
 
-                <!-- Alert Statistics -->
-                <div class="alert-stats-grid">
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">&#9881;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="totalAlertSettings">0</div>
-                            <div class="alert-stat-label">Total Settings</div>
-                        </div>
-                    </div>
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">&#9989;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="enabledAlertSettings">0</div>
-                            <div class="alert-stat-label">Enabled</div>
-                        </div>
-                    </div>
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);">&#128683;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="activeAlertsCount">0</div>
-                            <div class="alert-stat-label">Active Alerts</div>
-                        </div>
-                    </div>
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">&#128200;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="recentAlertsCount">0</div>
-                            <div class="alert-stat-label">Recent (30d)</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Alert Settings Filter & Actions -->
-                <div class="alert-filters-bar">
-                    <div class="alert-filter-group">
-                        <label for="alertStatusFilter" class="alert-filter-label">&#128269; Filter</label>
-                        <select id="alertStatusFilter" class="alert-filter-select" onchange="filterAlertSettings()">
-                            <option value="all">All Settings</option>
-                            <option value="enabled">Enabled Only</option>
-                            <option value="disabled">Disabled Only</option>
+                <div class="security-events-controls">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="securityEventsSignalFilter">Signal</label>
+                        <select id="securityEventsSignalFilter" class="form-input"
+                            onchange="applySecurityEventsFilters()">
+                            <option value="">All Signals</option>
+                            <option value="api-origin-blocked">API Origin Blocked</option>
+                            <option value="csrf-origin-failed">CSRF Origin Failed</option>
+                            <option value="csrf-token-failed">CSRF Token Failed</option>
+                            <option value="rate-limit-hit">Rate Limit Hit</option>
+                            <option value="login-ip-locked">Login IP Locked</option>
+                            <option value="login-bruteforce-threshold">Brute Force Threshold</option>
+                            <option value="new-device-login">New Device Login</option>
+                            <option value="device-binding-blocked">Device Binding Blocked</option>
+                            <option value="ip-reputation-elevated">IP Reputation Elevated</option>
+                            <option value="ip-reputation-blocked">IP Reputation Blocked</option>
+                            <option value="login-captcha-failed">Login Captcha Failed</option>
+                            <option value="register-captcha-failed">Register Captcha Failed</option>
+                            <option value="captcha-failed">Captcha Failed</option>
+                            <option value="captcha-challenge-mismatch">Captcha Challenge Mismatch</option>
+                            <option value="captcha-expired">Captcha Expired</option>
+                            <option value="captcha-solve-too-fast">Captcha Solve Too Fast</option>
+                            <option value="captcha-ip-blocked">Captcha IP Blocked</option>
+                            <option value="suspicious-activity-detected">Suspicious Activity Detected</option>
+                            <option value="captcha-policy-updated">Captcha Policy Updated</option>
                         </select>
                     </div>
-                    <div class="alert-filter-actions">
-                        <button class="btn-alert-refresh" onclick="loadAlertAnalytics()"
-                            title="Refresh alert data">&#128472; Refresh</button>
-                        <button class="btn-alert-export" onclick="exportAlertSettings()"
-                            title="Export settings">&#128196; Export</button>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="securityEventsUserFilter">Username</label>
+                        <input id="securityEventsUserFilter" class="form-input" type="text" placeholder="optional"
+                            oninput="applySecurityEventsFilters()">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="securityEventsLimit">Limit</label>
+                        <input id="securityEventsLimit" class="form-input" type="number" min="1" max="500" value="100">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="securityEventsAutoRefreshToggle">Live</label>
+                        <label class="security-events-toggle">
+                            <input type="checkbox" id="securityEventsAutoRefreshToggle" checked>
+                            Auto-refresh
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="securityEventsRefreshInterval">Interval</label>
+                        <select id="securityEventsRefreshInterval" class="form-input">
+                            <option value="15000">15s</option>
+                            <option value="30000" selected>30s</option>
+                            <option value="60000">60s</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:0.5rem; justify-content:flex-end; flex-wrap:wrap;">
+                        <button class="btn btn-secondary" onclick="loadSecurityEventsFeed(true)">🔄 Refresh</button>
+                        <button class="btn btn-secondary" onclick="clearSecurityEventsFilters()">🧹 Clear</button>
                     </div>
                 </div>
 
-                <!-- Alert Settings List -->
-                <div class="alert-settings-list" id="alertSettingsContainer">
-                    <div class="loading show">Loading alert settings...</div>
+                <div id="securityEventsMeta" class="text-secondary" style="margin-bottom:0.8rem;">No data loaded yet.
                 </div>
-
-                <!-- Active Alerts Section -->
-                <div class="card" style="margin-top: 2rem; border: 2px solid rgba(220, 53, 69, 0.3);">
-                    <div class="card-header"
-                        style="background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%);">
-                        <span class="card-header-icon">&#128165;</span>
-                        Active Alerts Requiring Attention
-                    </div>
-                    <div class="active-alerts-list" id="activeAlertsContainer">
-                        <div class="loading show">Loading active alerts...</div>
-                    </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Signal</th>
+                                <th>User</th>
+                                <th>IP</th>
+                                <th>Path</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="securityEventsTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Open the Security Events tab and press
+                                    Refresh to load events.</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-        <script>
-            // Alert Settings Management & Analytics
-            let allAlertSettings = [];
-            let allActiveAlerts = [];
-
-            async function loadAlertAnalytics() {
-                try {
-                    const { response, data } = await window.AdminPanel.api.getJson('/api/owner/alert-settings-analytics');
-                    if (!response.ok) {
-                        showNotification('Failed to load alert analytics', 'error');
-                        return;
-                    }
-
-                    // Store data globally
-                    allAlertSettings = data.settings || [];
-
-                    // Update statistics
-                    updateAlertStats(data.summary);
-
-                    // Render alert settings
-                    filterAlertSettings();
-
-                    // Load active alerts
-                    await loadActiveAlerts();
-                } catch (error) {
-                    console.error('Error loading alert analytics:', error);
-                    showNotification('Failed to load alert analytics', 'error');
-                }
-            }
-
-            function updateAlertStats(summary) {
-                document.getElementById('totalAlertSettings').textContent = summary?.total || 0;
-                document.getElementById('enabledAlertSettings').textContent = summary?.enabled || 0;
-                document.getElementById('activeAlertsCount').textContent = summary?.activeAlerts || 0;
-                document.getElementById('recentAlertsCount').textContent = summary?.recentAlerts || 0;
-            }
-
-            function filterAlertSettings() {
-                const filter = document.getElementById('alertStatusFilter')?.value || 'all';
-
-                let filtered = allAlertSettings;
-                if (filter === 'enabled') {
-                    filtered = allAlertSettings.filter(s => s.enabled);
-                } else if (filter === 'disabled') {
-                    filtered = allAlertSettings.filter(s => !s.enabled);
-                }
-
-                renderAlertSettings(filtered);
-            }
-
-            function renderAlertSettings(settings) {
-                const container = document.getElementById('alertSettingsContainer');
-
-                if (!settings || settings.length === 0) {
-                    container.innerHTML = `
-                            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                                <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">&#128269;</div>
-                                <div style="font-size: 1.1rem; font-weight: 600;">No alert settings found</div>
-                                <div style="font-size: 0.9rem; margin-top: 0.5rem;">Try adjusting your filters</div>
-                            </div>`;
-                    return;
-                }
-
-                let html = '';
-                settings.forEach(setting => {
-                    const lastTriggered = setting.last_triggered ? new Date(setting.last_triggered).toLocaleString() : 'Never';
-                    const alertTypeDisplay = setting.alert_type.replace('_', ' ').toUpperCase();
-
-                    html += `
-                            <div class="alert-setting-card">
-                                <div class="alert-setting-header">
-                                    <div class="alert-setting-title">
-                                        <span class="alert-type-badge ${setting.alert_type}">${alertTypeDisplay}</span>
-                                    </div>
-                                    <span class="alert-enabled-badge ${setting.enabled ? 'enabled' : 'disabled'}">
-                                        ${setting.enabled ? '&#9989; Enabled' : '&#128683; Disabled'}
-                                    </span>
-                                </div>
-                                
-                                <div class="alert-setting-body">
-                                    <div class="alert-info-item">
-                                        <div class="alert-info-label">&#128200; Threshold</div>
-                                        <div class="alert-info-value">${setting.threshold}%</div>
-                                    </div>
-                                    <div class="alert-info-item">
-                                        <div class="alert-info-label">&#128680; Active Alerts</div>
-                                        <div class="alert-info-value">${setting.active_alerts}</div>
-                                    </div>
-                                    <div class="alert-info-item">
-                                        <div class="alert-info-label">&#128202; Recent (30d)</div>
-                                        <div class="alert-info-value">${setting.recent_triggered}</div>
-                                    </div>
-                                    <div class="alert-info-item">
-                                        <div class="alert-info-label">&#128347; Last Triggered</div>
-                                        <div class="alert-info-value">${lastTriggered}</div>
-                                    </div>
-                                </div>
-                                
-                                <div class="alert-setting-footer">
-                                    <button class="btn-alert-edit" onclick="editAlertSetting('${setting.alert_type}', ${setting.threshold}, ${setting.enabled})">
-                                        &#9881; Edit Settings
-                                    </button>
-                                    <button class="btn-alert-toggle" onclick="toggleAlertEnabled('${setting.alert_type}', ${!setting.enabled})">
-                                        ${setting.enabled ? '&#128683; Disable' : '&#9989; Enable'}
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                });
-
-                container.innerHTML = html;
-            }
-
-            async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
-                const newThreshold = prompt(`Enter new threshold for ${alertType} (current: ${currentThreshold}%):`, currentThreshold);
-                if (newThreshold === null) return;
-
-                const threshold = parseFloat(newThreshold);
-                if (isNaN(threshold) || threshold < 0 || threshold > 100) {
-                    showNotification('Invalid threshold value. Must be between 0 and 100.', 'error');
-                    return;
-                }
-
-                try {
-                    const { response } = await window.AdminPanel.api.postJson(`/api/alerts/settings/${alertType}`, {
-                        threshold: threshold,
-                        enabled: currentEnabled
-                    });
-
-                    if (response.ok) {
-                        showNotification(`Updated ${alertType} threshold to ${threshold}%`, 'success');
-                        await loadAlertAnalytics();
-                    } else {
-                        showNotification('Failed to update alert settings', 'error');
-                    }
-                } catch (error) {
-                    console.error('Error updating alert settings:', error);
-                    showNotification('Failed to update alert settings', 'error');
-                }
-            }
-
-            async function toggleAlertEnabled(alertType, newEnabled) {
-                try {
-                    // Get current settings first
-                    const setting = allAlertSettings.find(s => s.alert_type === alertType);
-                    if (!setting) return;
-
-                    const { response } = await window.AdminPanel.api.postJson(`/api/alerts/settings/${alertType}`, {
-                        threshold: setting.threshold,
-                        enabled: newEnabled
-                    });
-
-                    if (response.ok) {
-                        showNotification(`${alertType} alert ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
-                        await loadAlertAnalytics();
-                    } else {
-                        showNotification('Failed to toggle alert status', 'error');
-                    }
-                } catch (error) {
-                    console.error('Error toggling alert:', error);
-                    showNotification('Failed to toggle alert status', 'error');
-                }
-            }
-
-            async function loadActiveAlerts() {
-                try {
-                    const { response, data } = await window.AdminPanel.api.getJson('/api/alerts/active');
-                    if (!response.ok) {
-                        renderActiveAlerts([]);
-                        return;
-                    }
-
-                    allActiveAlerts = data || [];
-                    renderActiveAlerts(allActiveAlerts);
-                } catch (error) {
-                    console.error('Error loading active alerts:', error);
-                    renderActiveAlerts([]);
-                }
-            }
-
-            function renderActiveAlerts(alerts) {
-                const container = document.getElementById('activeAlertsContainer');
-
-                if (!alerts || alerts.length === 0) {
-                    container.innerHTML = `
-                            <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                                <div style="font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.5;">&#9989;</div>
-                                <div style="font-size: 1rem; font-weight: 600;">No active alerts</div>
-                                <div style="font-size: 0.85rem; margin-top: 0.35rem;">All systems operating normally</div>
-                            </div>`;
-                    return;
-                }
-
-                let html = '';
-                alerts.forEach(alert => {
-                    const createdAt = new Date(alert.created_at).toLocaleString();
-
-                    html += `
-                            <div class="active-alert-card">
-                                <div class="active-alert-header">
-                                    <div class="active-alert-type">${alert.alert_type.replace('_', ' ').toUpperCase()}</div>
-                                    <span class="active-alert-severity ${alert.severity}">${alert.severity.toUpperCase()}</span>
-                                </div>
-                                <div class="active-alert-message">${alert.message}</div>
-                                <div class="active-alert-footer">
-                                    <span>Value: <strong>${alert.value}</strong> / Threshold: <strong>${alert.threshold}</strong></span>
-                                    <span>${createdAt}</span>
-                                    <button class="btn-resolve-alert" onclick="resolveAlert(${alert.id})">
-                                        &#10004; Resolve
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                });
-
-                container.innerHTML = html;
-            }
-
-            async function resolveAlert(alertId) {
-                if (!confirm('Are you sure you want to resolve this alert?')) return;
-
-                try {
-                    const { response } = await window.AdminPanel.api.postJson(`/api/alerts/${alertId}/resolve`, {});
-                    if (response.ok) {
-                        showNotification('Alert resolved successfully', 'success');
-                        await loadAlertAnalytics();
-                    } else {
-                        showNotification('Failed to resolve alert', 'error');
-                    }
-                } catch (error) {
-                    console.error('Error resolving alert:', error);
-                    showNotification('Failed to resolve alert', 'error');
-                }
-            }
-
-            function exportAlertSettings() {
-                if (allAlertSettings.length === 0) {
-                    showNotification('No alert settings to export', 'warning');
-                    return;
-                }
-
-                const csvHeaders = ['Alert Type', 'Threshold (%)', 'Enabled', 'Active Alerts', 'Recent Triggered', 'Last Triggered'];
-                const csvRows = allAlertSettings.map(setting => [
-                    setting.alert_type,
-                    setting.threshold,
-                    setting.enabled ? 'Yes' : 'No',
-                    setting.active_alerts,
-                    setting.recent_triggered,
-                    setting.last_triggered ? new Date(setting.last_triggered).toLocaleString() : 'Never'
-                ]);
-
-                const csv = [csvHeaders.join(',')].concat(
-                    csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-                ).join('\n');
-
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `alert-settings-${new Date().toISOString().split('T')[0]}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-
-                showNotification('Alert settings exported successfully', 'success');
-            }
-
-            // Auto-load alert settings when tab is activated
-            document.addEventListener('DOMContentLoaded', function () {
-                const tabs = document.querySelectorAll('#ownerTabs .tab');
-                tabs.forEach(tab => {
-                    tab.addEventListener('click', function () {
-                        const tabName = tab.getAttribute('data-tab');
-                        if (tabName === 'alert-analytics') {
-                            loadAlertAnalytics();
-                        }
-                    });
-                });
-
-                // If page loads with alert analytics tab active, load it
-                const alertTab = document.getElementById('alert-analytics');
-                if (alertTab && alertTab.classList.contains('active')) {
-                    loadAlertAnalytics();
-                }
-            });
-        </script>
 
         <script src="/public/security.js"></script>
         <script>
@@ -2908,387 +3132,12 @@
                 await loadDatabaseHealthDetails();
                 await loadResourceUsage();
                 await loadSessionSecurityPolicy();
+                await loadCaptchaSecurityPolicy();
                 await loadSessions();
                 await loadAdminUsers();
                 await loadInviteStats();
                 await loadUserInfo();
                 updateInviteGeneratorPreview();
-
-                startEmailAnalyticsAutoRefresh();
-                startEmailAnalyticsLastUpdatedTicker();
-            });
-
-            let emailAnalyticsTrendChart = null;
-            let emailAnalyticsRefreshIntervalId = null;
-            let emailAnalyticsLastUpdatedAt = null;
-            let emailAnalyticsLastUpdatedTickerId = null;
-            let emailAnalyticsPieChart = null;
-            let latestEmailRecentRows = [];
-
-            function formatRelativeTime(dateValue) {
-                if (!(dateValue instanceof Date) || Number.isNaN(dateValue.getTime())) return 'unknown';
-                const diffMs = Date.now() - dateValue.getTime();
-                const seconds = Math.max(0, Math.floor(diffMs / 1000));
-                if (seconds < 10) return 'just now';
-                if (seconds < 60) return `${seconds}s ago`;
-                const minutes = Math.floor(seconds / 60);
-                if (minutes < 60) return `${minutes}m ago`;
-                const hours = Math.floor(minutes / 60);
-                if (hours < 24) return `${hours}h ago`;
-                const days = Math.floor(hours / 24);
-                return `${days}d ago`;
-            }
-
-            function sanitizeHtml(value) {
-                return String(value ?? '')
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#39;');
-            }
-
-            function renderEmailAnalyticsLastUpdated() {
-                const lastUpdatedEl = document.getElementById('emailAnalyticsPieLastUpdated');
-                if (!lastUpdatedEl) return;
-
-                if (!emailAnalyticsLastUpdatedAt) {
-                    lastUpdatedEl.textContent = 'Last updated: --';
-                    lastUpdatedEl.style.color = 'var(--text-secondary)';
-                    return;
-                }
-
-                const ageMs = Date.now() - emailAnalyticsLastUpdatedAt.getTime();
-                if (ageMs < 60 * 1000) {
-                    lastUpdatedEl.style.color = 'var(--color-green)';
-                } else if (ageMs < 5 * 60 * 1000) {
-                    lastUpdatedEl.style.color = 'var(--color-orange)';
-                } else {
-                    lastUpdatedEl.style.color = 'var(--color-red)';
-                }
-
-                const absolute = emailAnalyticsLastUpdatedAt.toLocaleString();
-                const relative = formatRelativeTime(emailAnalyticsLastUpdatedAt);
-                lastUpdatedEl.textContent = `Last updated: ${absolute} (${relative})`;
-            }
-
-            function startEmailAnalyticsLastUpdatedTicker() {
-                if (emailAnalyticsLastUpdatedTickerId) {
-                    clearInterval(emailAnalyticsLastUpdatedTickerId);
-                }
-
-                emailAnalyticsLastUpdatedTickerId = setInterval(() => {
-                    const tab = document.getElementById('email-analytics');
-                    const isActive = Boolean(tab && tab.classList.contains('active'));
-                    if (isActive && !document.hidden) {
-                        renderEmailAnalyticsLastUpdated();
-                    }
-                }, 15000);
-            }
-
-            function startEmailAnalyticsAutoRefresh() {
-                if (emailAnalyticsRefreshIntervalId) {
-                    clearInterval(emailAnalyticsRefreshIntervalId);
-                }
-
-                emailAnalyticsRefreshIntervalId = setInterval(() => {
-                    const tab = document.getElementById('email-analytics');
-                    const isActive = Boolean(tab && tab.classList.contains('active'));
-                    if (isActive && !document.hidden) {
-                        loadEmailAnalyticsPie();
-                    }
-                }, 45000);
-            }
-
-            function renderEmailSummary(summary) {
-                const total30d = Number(summary?.last30d || 0);
-                const sentTotal = Number(summary?.sentTotal || 0);
-                const failedTotal = Number(summary?.failedTotal || 0);
-                const blockedTotal = Number(summary?.blockedTotal || 0);
-                const successRate = total30d > 0 ? ((sentTotal / total30d) * 100).toFixed(1) : '0.0';
-
-                const totalEl = document.getElementById('emailSummaryTotal');
-                const successEl = document.getElementById('emailSummarySuccessRate');
-                const last24El = document.getElementById('emailSummaryLast24h');
-                const failEl = document.getElementById('emailSummaryFailures');
-
-                if (totalEl) totalEl.textContent = total30d.toLocaleString();
-                if (successEl) successEl.textContent = `${successRate}%`;
-                if (last24El) last24El.textContent = Number(summary?.last24h || 0).toLocaleString();
-                if (failEl) failEl.textContent = (failedTotal + blockedTotal).toLocaleString();
-            }
-
-            function renderEmailTemplatePie(templates) {
-                const pieCanvas = document.getElementById('emailAnalyticsPieChart');
-                const legendEl = document.getElementById('emailAnalyticsPieLegend');
-                if (!pieCanvas || !legendEl) return;
-
-                if (!Array.isArray(templates) || templates.length === 0) {
-                    legendEl.innerHTML = '<div class="text-muted">No template analytics available yet</div>';
-                    if (emailAnalyticsPieChart) {
-                        emailAnalyticsPieChart.destroy();
-                        emailAnalyticsPieChart = null;
-                    }
-                    return;
-                }
-
-                const labels = templates.map(row => row.template_name || 'generic');
-                const values = templates.map(row => Number(row.total || 0));
-                const colors = [
-                    '#5b7fff', '#5bffb8', '#ffd45b', '#ff5b5b', '#ffb84d', '#a78bfa', '#f472b6', '#34d399', '#f87171', '#facc15'
-                ];
-
-                if (emailAnalyticsPieChart) emailAnalyticsPieChart.destroy();
-                emailAnalyticsPieChart = new Chart(pieCanvas, {
-                    type: 'pie',
-                    data: {
-                        labels,
-                        datasets: [{
-                            data: values,
-                            backgroundColor: colors.slice(0, labels.length),
-                            borderColor: '#222c37',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (context) {
-                                        const label = context.label || '';
-                                        const value = context.parsed || 0;
-                                        const total = values.reduce((a, b) => a + b, 0);
-                                        const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                                        return `${label}: ${value} (${percent}%)`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-
-                const total = values.reduce((a, b) => a + b, 0);
-                legendEl.innerHTML = labels.map((label, i) => {
-                    const value = values[i];
-                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                    return `<span style="display:inline-block;width:12px;height:12px;background:${colors[i]};border-radius:3px;margin-right:7px;vertical-align:middle;"></span><span style="font-weight:600;">${sanitizeHtml(label)}</span>: <span>${value} (${percent}%)</span>`;
-                }).join('<br>');
-            }
-
-            function renderEmailTemplateBreakdown(templates) {
-                const tbody = document.getElementById('emailTemplateBreakdownBody');
-                if (!tbody) return;
-
-                if (!Array.isArray(templates) || templates.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No template breakdown available</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = templates.map((row) => {
-                    const total = Number(row.total || 0);
-                    const sent = Number(row.sent || 0);
-                    const failed = Number(row.failed || 0);
-                    const blocked = Number(row.blocked || 0);
-                    const successRate = total > 0 ? ((sent / total) * 100).toFixed(1) : '0.0';
-                    return `<tr>
-                    <td>${sanitizeHtml(row.template_name || 'generic')}</td>
-                    <td>${total}</td>
-                    <td style="color: var(--color-green);">${sent}</td>
-                    <td style="color: var(--color-red);">${failed}</td>
-                    <td style="color: var(--color-orange);">${blocked}</td>
-                    <td>${successRate}%</td>
-                </tr>`;
-                }).join('');
-            }
-
-            function renderEmailTrend(trends) {
-                const canvas = document.getElementById('emailAnalyticsTrendChart');
-                if (!canvas) return;
-
-                if (emailAnalyticsTrendChart) {
-                    emailAnalyticsTrendChart.destroy();
-                    emailAnalyticsTrendChart = null;
-                }
-
-                if (!Array.isArray(trends) || trends.length === 0) {
-                    return;
-                }
-
-                const labels = trends.map(row => new Date(row.day).toLocaleDateString());
-                const sent = trends.map(row => Number(row.sent || 0));
-                const failed = trends.map(row => Number(row.failed || 0));
-                const blocked = trends.map(row => Number(row.blocked || 0));
-
-                emailAnalyticsTrendChart = new Chart(canvas, {
-                    type: 'line',
-                    data: {
-                        labels,
-                        datasets: [
-                            {
-                                label: 'Sent',
-                                data: sent,
-                                borderColor: '#34d399',
-                                backgroundColor: 'rgba(52, 211, 153, 0.2)',
-                                tension: 0.35,
-                                fill: true
-                            },
-                            {
-                                label: 'Failed',
-                                data: failed,
-                                borderColor: '#f87171',
-                                backgroundColor: 'rgba(248, 113, 113, 0.15)',
-                                tension: 0.35,
-                                fill: true
-                            },
-                            {
-                                label: 'Blocked',
-                                data: blocked,
-                                borderColor: '#facc15',
-                                backgroundColor: 'rgba(250, 204, 21, 0.15)',
-                                tension: 0.35,
-                                fill: true
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'top'
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
-                        }
-                    }
-                });
-            }
-
-            function renderEmailRecentRows(recentRows) {
-                const tbody = document.getElementById('emailRecentTableBody');
-                if (!tbody) return;
-
-                if (!Array.isArray(recentRows) || recentRows.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No recent deliveries found</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = recentRows.map((row) => {
-                    const status = String(row.status || '').toLowerCase();
-                    let statusColor = 'var(--text-secondary)';
-                    if (status === 'sent') statusColor = 'var(--color-green)';
-                    if (status === 'failed') statusColor = 'var(--color-red)';
-                    if (status === 'blocked') statusColor = 'var(--color-orange)';
-
-                    return `<tr>
-                    <td>${new Date(row.created_at).toLocaleString()}</td>
-                    <td>${sanitizeHtml(row.recipient_email || '-')}</td>
-                    <td>${sanitizeHtml(row.template_name || 'generic')}</td>
-                    <td style="color: ${statusColor}; font-weight: 700; text-transform: uppercase;">${sanitizeHtml(status || '-')}</td>
-                    <td>${sanitizeHtml(row.subject || '-')}</td>
-                    <td>${sanitizeHtml(row.error_message || '-')}</td>
-                </tr>`;
-                }).join('');
-            }
-
-            function exportEmailRecentCsv() {
-                if (!Array.isArray(latestEmailRecentRows) || latestEmailRecentRows.length === 0) {
-                    showNotification('No recent email deliveries to export', 'warning');
-                    return;
-                }
-
-                const headers = ['Created At', 'Recipient', 'Template', 'Status', 'Subject', 'Error'];
-                const rows = latestEmailRecentRows.map((row) => [
-                    new Date(row.created_at).toLocaleString(),
-                    row.recipient_email || '',
-                    row.template_name || '',
-                    row.status || '',
-                    row.subject || '',
-                    row.error_message || ''
-                ]);
-
-                const csv = [headers.join(',')]
-                    .concat(rows.map(cols => cols.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')))
-                    .join('\n');
-
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `email-analytics-recent-${new Date().toISOString().slice(0, 10)}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-
-            async function loadEmailAnalyticsPie() {
-                const legendEl = document.getElementById('emailAnalyticsPieLegend');
-                if (!legendEl) return;
-
-                try {
-                    const { response, data } = await window.AdminPanel.api.getJson('/api/owner/email-analytics');
-                    if (!response.ok) {
-                        legendEl.innerHTML = '<div class="message error">Failed to load email analytics</div>';
-                        return;
-                    }
-
-                    const summary = data?.summary || {};
-                    const templates = Array.isArray(data?.templates) ? data.templates : [];
-                    const trends = Array.isArray(data?.trends) ? data.trends : [];
-                    const recent = Array.isArray(data?.recent) ? data.recent : [];
-
-                    latestEmailRecentRows = recent;
-                    renderEmailSummary(summary);
-                    renderEmailTemplatePie(templates);
-                    renderEmailTemplateBreakdown(templates);
-                    renderEmailTrend(trends);
-                    renderEmailRecentRows(recent);
-
-                    emailAnalyticsLastUpdatedAt = new Date();
-                    renderEmailAnalyticsLastUpdated();
-                } catch (error) {
-                    legendEl.innerHTML = '<div class="message error">Failed to load email analytics</div>';
-                    emailAnalyticsLastUpdatedAt = null;
-                    renderEmailAnalyticsLastUpdated();
-                }
-            }
-
-            async function loadEmailAnalytics() {
-                await loadEmailAnalyticsPie();
-            }
-
-            // Auto-load email analytics when tab is activated
-            document.addEventListener('DOMContentLoaded', function () {
-                const tabs = document.querySelectorAll('#ownerTabs .tab');
-                tabs.forEach(tab => {
-                    tab.addEventListener('click', function () {
-                        const tabName = tab.getAttribute('data-tab');
-                        if (tabName === 'email-analytics') {
-                            loadEmailAnalyticsPie();
-                        }
-                    });
-                });
-
-                const emailTab = document.getElementById('email-analytics');
-                if (emailTab && emailTab.classList.contains('active')) {
-                    loadEmailAnalyticsPie();
-                }
-            });
-
-            window.addEventListener('beforeunload', () => {
-                if (emailAnalyticsRefreshIntervalId) {
-                    clearInterval(emailAnalyticsRefreshIntervalId);
-                    emailAnalyticsRefreshIntervalId = null;
-                }
-                if (emailAnalyticsLastUpdatedTickerId) {
-                    clearInterval(emailAnalyticsLastUpdatedTickerId);
-                    emailAnalyticsLastUpdatedTickerId = null;
-                }
             });
 
             async function loadSessionSecurityPolicy() {
@@ -3375,6 +3224,178 @@
                 }
             }
 
+            async function loadCaptchaSecurityPolicy() {
+                const loginToggle = document.getElementById('captchaLoginEnabledToggle');
+                const registerToggle = document.getElementById('captchaRegisterEnabledToggle');
+                const adaptiveToggle = document.getElementById('captchaAdaptiveDifficultyToggle');
+                const minInput = document.getElementById('captchaMinValueInput');
+                const maxInput = document.getElementById('captchaMaxValueInput');
+                const ttlInput = document.getElementById('captchaTtlSecondsInput');
+                const attemptsInput = document.getElementById('captchaMaxAttemptsInput');
+                const minSolveInput = document.getElementById('captchaMinSolveMsInput');
+                const failureWindowInput = document.getElementById('captchaFailureWindowSecondsInput');
+                const failureThresholdInput = document.getElementById('captchaFailureThresholdInput');
+                const failureBlockInput = document.getElementById('captchaFailureBlockSecondsInput');
+                const meta = document.getElementById('captchaPolicyMeta');
+                if (!loginToggle || !registerToggle || !adaptiveToggle || !minInput || !maxInput || !ttlInput || !attemptsInput || !minSolveInput || !failureWindowInput || !failureThresholdInput || !failureBlockInput || !meta) return;
+
+                try {
+                    const { response, data } = await window.AdminPanel.api.getJson('/api/owner/security/captcha-policy');
+                    if (!response.ok) {
+                        meta.textContent = 'Failed to load captcha policy.';
+                        return;
+                    }
+
+                    const limits = (data && typeof data.limits === 'object') ? data.limits : {};
+                    window._captchaPolicyDefaults = (data && typeof data.defaults === 'object') ? { ...data.defaults } : null;
+                    if (Number.isFinite(Number(limits.minSolveMinMs))) minSolveInput.min = String(Number(limits.minSolveMinMs));
+                    if (Number.isFinite(Number(limits.minSolveMaxMs))) minSolveInput.max = String(Number(limits.minSolveMaxMs));
+                    if (Number.isFinite(Number(limits.failureWindowMinMs))) failureWindowInput.min = String(Math.round(Number(limits.failureWindowMinMs) / 1000));
+                    if (Number.isFinite(Number(limits.failureWindowMaxMs))) failureWindowInput.max = String(Math.round(Number(limits.failureWindowMaxMs) / 1000));
+                    if (Number.isFinite(Number(limits.failureThresholdMin))) failureThresholdInput.min = String(Number(limits.failureThresholdMin));
+                    if (Number.isFinite(Number(limits.failureThresholdMax))) failureThresholdInput.max = String(Number(limits.failureThresholdMax));
+                    if (Number.isFinite(Number(limits.failureBlockMinMs))) failureBlockInput.min = String(Math.round(Number(limits.failureBlockMinMs) / 1000));
+                    if (Number.isFinite(Number(limits.failureBlockMaxMs))) failureBlockInput.max = String(Math.round(Number(limits.failureBlockMaxMs) / 1000));
+
+                    loginToggle.checked = Boolean(data.loginEnabled);
+                    registerToggle.checked = Boolean(data.registerEnabled);
+                    adaptiveToggle.checked = Boolean(data.adaptiveDifficultyEnabled);
+                    minInput.value = Number(data.minValue) || 1;
+                    maxInput.value = Number(data.maxValue) || 20;
+                    ttlInput.value = Math.round((Number(data.ttlMs) || 0) / 1000);
+                    attemptsInput.value = Number(data.maxAttempts) || 3;
+                    minSolveInput.value = Number(data.minSolveMs) || 900;
+                    failureWindowInput.value = Math.round((Number(data.failureWindowMs) || 0) / 1000) || 900;
+                    failureThresholdInput.value = Number(data.failureThreshold) || 10;
+                    failureBlockInput.value = Math.round((Number(data.failureBlockMs) || 0) / 1000) || 600;
+
+                    meta.textContent = `Login: ${loginToggle.checked ? 'ON' : 'OFF'} • Register: ${registerToggle.checked ? 'ON' : 'OFF'} • Adaptive: ${adaptiveToggle.checked ? 'ON' : 'OFF'} • Math: ${minInput.value}-${maxInput.value} • TTL: ${ttlInput.value}s • Min solve: ${minSolveInput.value}ms • Attempts: ${attemptsInput.value} • Window: ${failureWindowInput.value}s • Threshold: ${failureThresholdInput.value} • Block: ${failureBlockInput.value}s`;
+                } catch (error) {
+                    console.error('Error loading captcha policy:', error);
+                    meta.textContent = 'Failed to load captcha policy.';
+                }
+            }
+
+            function applyCaptchaPolicyToInputs(policy = {}) {
+                const loginToggle = document.getElementById('captchaLoginEnabledToggle');
+                const registerToggle = document.getElementById('captchaRegisterEnabledToggle');
+                const adaptiveToggle = document.getElementById('captchaAdaptiveDifficultyToggle');
+                const minInput = document.getElementById('captchaMinValueInput');
+                const maxInput = document.getElementById('captchaMaxValueInput');
+                const ttlInput = document.getElementById('captchaTtlSecondsInput');
+                const attemptsInput = document.getElementById('captchaMaxAttemptsInput');
+                const minSolveInput = document.getElementById('captchaMinSolveMsInput');
+                const failureWindowInput = document.getElementById('captchaFailureWindowSecondsInput');
+                const failureThresholdInput = document.getElementById('captchaFailureThresholdInput');
+                const failureBlockInput = document.getElementById('captchaFailureBlockSecondsInput');
+
+                if (!loginToggle || !registerToggle || !adaptiveToggle || !minInput || !maxInput || !ttlInput || !attemptsInput || !minSolveInput || !failureWindowInput || !failureThresholdInput || !failureBlockInput) {
+                    return;
+                }
+
+                loginToggle.checked = Boolean(policy.loginEnabled);
+                registerToggle.checked = Boolean(policy.registerEnabled);
+                adaptiveToggle.checked = Boolean(policy.adaptiveDifficultyEnabled);
+                minInput.value = Number(policy.minValue) || 1;
+                maxInput.value = Number(policy.maxValue) || 20;
+                ttlInput.value = Math.round((Number(policy.ttlMs) || 0) / 1000);
+                attemptsInput.value = Number(policy.maxAttempts) || 3;
+                minSolveInput.value = Number(policy.minSolveMs) || 900;
+                failureWindowInput.value = Math.round((Number(policy.failureWindowMs) || 0) / 1000) || 900;
+                failureThresholdInput.value = Number(policy.failureThreshold) || 10;
+                failureBlockInput.value = Math.round((Number(policy.failureBlockMs) || 0) / 1000) || 600;
+            }
+
+            async function resetCaptchaSecurityPolicy() {
+                const defaults = (window._captchaPolicyDefaults && typeof window._captchaPolicyDefaults === 'object')
+                    ? window._captchaPolicyDefaults
+                    : null;
+
+                if (!defaults) {
+                    showError('Captcha defaults are not loaded yet. Please refresh this tab and try again.');
+                    return;
+                }
+
+                const confirmed = confirm('Reset captcha policy to backend defaults and save now?');
+                if (!confirmed) return;
+
+                applyCaptchaPolicyToInputs(defaults);
+                await saveCaptchaSecurityPolicy();
+            }
+
+            async function saveCaptchaSecurityPolicy() {
+                const loginToggle = document.getElementById('captchaLoginEnabledToggle');
+                const registerToggle = document.getElementById('captchaRegisterEnabledToggle');
+                const adaptiveToggle = document.getElementById('captchaAdaptiveDifficultyToggle');
+                const minInput = document.getElementById('captchaMinValueInput');
+                const maxInput = document.getElementById('captchaMaxValueInput');
+                const ttlInput = document.getElementById('captchaTtlSecondsInput');
+                const attemptsInput = document.getElementById('captchaMaxAttemptsInput');
+                const minSolveInput = document.getElementById('captchaMinSolveMsInput');
+                const failureWindowInput = document.getElementById('captchaFailureWindowSecondsInput');
+                const failureThresholdInput = document.getElementById('captchaFailureThresholdInput');
+                const failureBlockInput = document.getElementById('captchaFailureBlockSecondsInput');
+                const saveBtn = document.getElementById('captchaPolicySaveBtn');
+                if (!loginToggle || !registerToggle || !adaptiveToggle || !minInput || !maxInput || !ttlInput || !attemptsInput || !minSolveInput || !failureWindowInput || !failureThresholdInput || !failureBlockInput || !saveBtn) return;
+
+                const minValue = Math.round(Number(minInput.value || 0));
+                const maxValue = Math.round(Number(maxInput.value || 0));
+                const ttlMs = Math.round(Number(ttlInput.value || 0) * 1000);
+                const maxAttempts = Math.round(Number(attemptsInput.value || 0));
+                const minSolveMs = Math.round(Number(minSolveInput.value || 0));
+                const failureWindowMs = Math.round(Number(failureWindowInput.value || 0) * 1000);
+                const failureThreshold = Math.round(Number(failureThresholdInput.value || 0));
+                const failureBlockMs = Math.round(Number(failureBlockInput.value || 0) * 1000);
+
+                if (!Number.isFinite(minValue) || !Number.isFinite(maxValue) || !Number.isFinite(ttlMs) || !Number.isFinite(maxAttempts) || !Number.isFinite(minSolveMs) || !Number.isFinite(failureWindowMs) || !Number.isFinite(failureThreshold) || !Number.isFinite(failureBlockMs)) {
+                    showError('Please enter valid numeric values for captcha policy.');
+                    return;
+                }
+
+                if (maxValue <= minValue) {
+                    showError('Captcha maximum value must be greater than minimum value.');
+                    return;
+                }
+
+                const originalBtnText = saveBtn.textContent;
+                saveBtn.disabled = true;
+                saveBtn.textContent = '⏳ Updating...';
+
+                try {
+                    const { response, data } = await window.AdminPanel.api.requestJson('/api/owner/security/captcha-policy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            loginEnabled: Boolean(loginToggle.checked),
+                            registerEnabled: Boolean(registerToggle.checked),
+                            adaptiveDifficultyEnabled: Boolean(adaptiveToggle.checked),
+                            minValue,
+                            maxValue,
+                            ttlMs,
+                            maxAttempts,
+                            minSolveMs,
+                            failureWindowMs,
+                            failureThreshold,
+                            failureBlockMs
+                        })
+                    });
+
+                    if (!response.ok) {
+                        showError(data?.error || 'Failed to save captcha policy');
+                        return;
+                    }
+
+                    showSuccess('Captcha policy saved successfully');
+                    await loadCaptchaSecurityPolicy();
+                } catch (error) {
+                    console.error('Error saving captcha policy:', error);
+                    showError('Failed to save captcha policy');
+                } finally {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalBtnText;
+                }
+            }
+
             async function loadUserInfo() {
                 try {
                     const { response, data } = await window.AdminPanel.api.getJson('/api/account/info');
@@ -3434,11 +3455,6 @@
                 document.getElementById(tabName).classList.add('active');
                 e.target.classList.add('active');
 
-                if (tabName === 'security') {
-                    if (typeof loadEmailAnalytics === 'function') {
-                        loadEmailAnalytics();
-                    }
-                }
             }
 
             function escapeHtml(text) {
@@ -3633,11 +3649,18 @@
                 const uniqueUsers = new Set(sessions.map(s => s.username)).size;
                 const desktopCount = sessions.filter(s => s.deviceType === 'Desktop').length;
                 const mobileCount = sessions.filter(s => s.deviceType === 'Mobile').length;
+                const normalizeRisk = (level) => ['low', 'medium', 'high'].includes(level) ? level : 'low';
+                const highRiskCount = sessions.filter(s => normalizeRisk(String(s.riskLevel || '').toLowerCase()) === 'high').length;
+                const mediumRiskCount = sessions.filter(s => normalizeRisk(String(s.riskLevel || '').toLowerCase()) === 'medium').length;
+                const lowRiskCount = sessions.filter(s => normalizeRisk(String(s.riskLevel || '').toLowerCase()) === 'low').length;
 
                 document.getElementById('totalActiveSessions').textContent = sessions.length;
                 document.getElementById('totalUniqueUsers').textContent = uniqueUsers;
                 document.getElementById('totalDesktopSessions').textContent = desktopCount;
                 document.getElementById('totalMobileSessions').textContent = mobileCount;
+                document.getElementById('totalHighRiskSessions').textContent = highRiskCount;
+                document.getElementById('totalMediumRiskSessions').textContent = mediumRiskCount;
+                document.getElementById('totalLowRiskSessions').textContent = lowRiskCount;
             }
 
             function filterSessions() {
@@ -3654,6 +3677,15 @@
                 });
 
                 renderSessionsTable(filteredSessions);
+            }
+
+            function escapeHtml(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
             }
 
             function renderSessionsTable(sessions) {
@@ -3673,6 +3705,12 @@
                 sessions.forEach(session => {
                     const isCurrent = session.sessionId === window.currentSessionId;
                     const ipDisplay = session.ipAddressV4 || session.ipAddressV6 || 'Unknown';
+                    const riskScore = Number(session.riskScore || 0);
+                    const riskLevel = String(session.riskLevel || 'low').toLowerCase();
+                    const normalizedRiskLevel = ['low', 'medium', 'high'].includes(riskLevel) ? riskLevel : 'low';
+                    const riskLabel = normalizedRiskLevel === 'high' ? 'High' : (normalizedRiskLevel === 'medium' ? 'Medium' : 'Low');
+                    const riskReasons = Array.isArray(session.riskReasons) ? session.riskReasons.join(' • ') : '';
+                    const riskTitle = escapeHtml(riskReasons ? `Score ${riskScore}. ${riskReasons}` : `Score ${riskScore}.`);
 
                     html += `
                     <div class="session-card ${isCurrent ? 'current-session' : ''}">
@@ -3688,9 +3726,14 @@
                                     ${session.os}${session.osVersion ? ' ' + session.osVersion : ''}
                                 </div>
                             </div>
-                            <span class="session-status-badge ${session.isActive ? 'active' : 'expired'}">
-                                ${session.isActive ? '&#9679; Active' : '&#9675; Expired'}
-                            </span>
+                            <div class="session-header-badges">
+                                <span class="session-risk-badge risk-${normalizedRiskLevel}" title="${riskTitle}">
+                                    Risk ${riskLabel} ${riskScore}
+                                </span>
+                                <span class="session-status-badge ${session.isActive ? 'active' : 'expired'}">
+                                    ${session.isActive ? '&#9679; Active' : '&#9675; Expired'}
+                                </span>
+                            </div>
                         </div>
                         
                         <div class="session-card-body">
@@ -3738,7 +3781,14 @@
             }
 
             async function revokeSession(sessionId, username) {
-                if (!confirm(`Are you sure you want to revoke the session for ${username}?\n\nThis will immediately log them out.`)) {
+                const confirmed = await window.modalManager?.showConfirm({
+                    title: 'Revoke Session',
+                    message: `Are you sure you want to revoke the session for ${username}? This will immediately log them out.`,
+                    confirmText: 'Revoke Session',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!confirmed) {
                     return;
                 }
 
@@ -3757,7 +3807,21 @@
             }
 
             async function revokeAllSessionsConfirm() {
-                const userInput = prompt('⚠️ WARNING: This will revoke ALL active sessions except your current session.\n\nType "REVOKE ALL" to confirm:');
+                if (typeof window.showPromptModal !== 'function') {
+                    showNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
+                    return;
+                }
+
+                const userInput = await window.showPromptModal({
+                    title: 'Revoke All Sessions',
+                    label: 'Type "REVOKE ALL" to confirm revoking every active session except your current one.',
+                    placeholder: 'REVOKE ALL',
+                    defaultValue: '',
+                    confirmText: 'Revoke All',
+                    cancelText: 'Cancel',
+                    inputType: 'text',
+                    validate: (value) => value === 'REVOKE ALL' ? true : 'You must type REVOKE ALL exactly.'
+                });
                 if (userInput !== 'REVOKE ALL') {
                     return;
                 }
@@ -3969,7 +4033,14 @@
             }
 
             async function forceLogoutAll() {
-                if (!confirm('⚠️ This will logout ALL users. Continue?')) return;
+                const confirmed = await window.modalManager?.showConfirm({
+                    title: 'Force Logout All',
+                    message: 'This will logout ALL users. Continue?',
+                    confirmText: 'Logout All',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!confirmed) return;
 
                 try {
                     const { response } = await window.AdminPanel.api.requestJson('/api/owner/force-logout-all', { method: 'POST' });
@@ -4003,8 +4074,23 @@
             }
 
             async function purgeBans() {
-                if (!confirm('⚠️⚠️ Are you ABSOLUTELY sure? This will DELETE ALL BAN RECORDS. This cannot be undone!')) return;
-                if (!confirm('Final confirmation: Delete all bans?')) return;
+                const firstConfirm = await window.modalManager?.showConfirm({
+                    title: 'Purge Ban Records',
+                    message: 'Are you absolutely sure? This will delete ALL ban records and cannot be undone.',
+                    confirmText: 'Continue',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!firstConfirm) return;
+
+                const finalConfirm = await window.modalManager?.showConfirm({
+                    title: 'Final Confirmation',
+                    message: 'Delete all bans now?',
+                    confirmText: 'Delete All Bans',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!finalConfirm) return;
 
                 try {
                     const { response } = await window.AdminPanel.api.requestJson('/api/owner/purge-bans', { method: 'POST' });
@@ -4019,8 +4105,23 @@
             }
 
             async function purgeWarnings() {
-                if (!confirm('⚠️⚠️ Are you ABSOLUTELY sure? This will DELETE ALL WARNING RECORDS. This cannot be undone!')) return;
-                if (!confirm('Final confirmation: Delete all warnings?')) return;
+                const firstConfirm = await window.modalManager?.showConfirm({
+                    title: 'Purge Warning Records',
+                    message: 'Are you absolutely sure? This will delete ALL warning records and cannot be undone.',
+                    confirmText: 'Continue',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!firstConfirm) return;
+
+                const finalConfirm = await window.modalManager?.showConfirm({
+                    title: 'Final Confirmation',
+                    message: 'Delete all warnings now?',
+                    confirmText: 'Delete All Warnings',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!finalConfirm) return;
 
                 try {
                     const { response } = await window.AdminPanel.api.requestJson('/api/owner/purge-warnings', { method: 'POST' });
@@ -4035,8 +4136,23 @@
             }
 
             async function resetAllLevels() {
-                if (!confirm('⚠️⚠️ Are you ABSOLUTELY sure? All users will be reset to level 1! This cannot be undone!')) return;
-                if (!confirm('Final confirmation: Reset all user levels?')) return;
+                const firstConfirm = await window.modalManager?.showConfirm({
+                    title: 'Reset All Levels',
+                    message: 'Are you absolutely sure? All users will be reset to level 1 and this cannot be undone.',
+                    confirmText: 'Continue',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!firstConfirm) return;
+
+                const finalConfirm = await window.modalManager?.showConfirm({
+                    title: 'Final Confirmation',
+                    message: 'Reset all user levels now?',
+                    confirmText: 'Reset Levels',
+                    cancelText: 'Cancel',
+                    type: 'danger'
+                });
+                if (!finalConfirm) return;
 
                 try {
                     const { response } = await window.AdminPanel.api.requestJson('/api/admin/reset-levels', { method: 'POST' });
@@ -4051,7 +4167,21 @@
             }
 
             async function wipeAllData() {
-                const confirmText = prompt('⚠️ TYPE "DELETE ALL" to confirm wiping ALL user data. This action is IRREVERSIBLE!');
+                if (typeof window.showPromptModal !== 'function') {
+                    showError('Prompt modal unavailable. Please refresh and try again.');
+                    return;
+                }
+
+                const confirmText = await window.showPromptModal({
+                    title: 'Wipe All Data',
+                    label: 'TYPE "DELETE ALL" to confirm wiping ALL user data. This action is irreversible.',
+                    placeholder: 'DELETE ALL',
+                    defaultValue: '',
+                    confirmText: 'Wipe Data',
+                    cancelText: 'Cancel',
+                    inputType: 'text',
+                    validate: (value) => value === 'DELETE ALL' ? true : 'You must type DELETE ALL exactly.'
+                });
                 if (confirmText !== 'DELETE ALL') {
                     showError('Confirmation failed. Data not wiped.');
                     return;
@@ -4084,8 +4214,15 @@
                 setTimeout(() => { successEl.classList.add('hidden'); }, 5000);
             }
 
-            function logout() {
-                if (confirm('Logout?')) {
+            async function logout() {
+                const confirmed = await window.modalManager?.showConfirm({
+                    title: 'Logout',
+                    message: 'Logout now?',
+                    confirmText: 'Logout',
+                    cancelText: 'Cancel',
+                    type: 'warning'
+                });
+                if (confirmed) {
                     window.AdminPanel.api.logout();
                 }
             }
@@ -4233,16 +4370,16 @@
         </script>
 
         <footer class="page-footer">
-        <div class="footer-links">
-            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
-            <span class="footer-sep">•</span>
-            <a href="/changelog">Changelog</a>
-            <span class="footer-sep">•</span>
-            <a href="/privacy-policy">Privacy Policy</a>
-            <span class="footer-sep">•</span>
-            <a href="/license">License</a>
-        </div>
-    </footer>
+            <div class="footer-links">
+                <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+                <span class="footer-sep">•</span>
+                <a href="/changelog">Changelog</a>
+                <span class="footer-sep">•</span>
+                <a href="/privacy-policy">Privacy Policy</a>
+                <span class="footer-sep">•</span>
+                <a href="/license">License</a>
+            </div>
+        </footer>
 
         <script src="/public/version.js"></script>
 </body>

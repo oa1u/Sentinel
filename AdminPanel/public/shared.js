@@ -101,6 +101,104 @@
         return message.includes('csrf');
     }
 
+    function isPublicAuthPage() {
+        const pathName = String(window.location?.pathname || '').toLowerCase();
+        return pathName === '/login'
+            || pathName === '/register'
+            || pathName === '/recovery'
+            || pathName === '/appeal'
+            || pathName === '/unauthorized';
+    }
+
+    function isPublicApiPath(url) {
+        const normalized = normalizeApiPath(url);
+        const publicPaths = new Set([
+            '/api/login',
+            '/api/login/recovery',
+            '/api/logout',
+            '/api/register',
+            '/api/account/password-reset/request',
+            '/api/account/password-reset/confirm',
+            '/api/account/password-reset/recovery',
+            '/api/email/verify',
+            '/api/csrf',
+            '/api/appeals/submit',
+            '/api/appeals/validate-case-id',
+            '/api/appeals/check-status',
+            '/api/appeals/my-history',
+            '/api/rules'
+        ]);
+        return publicPaths.has(normalized);
+    }
+
+    function normalizeApiPath(url) {
+        const raw = String(url || '').trim();
+        if (!raw) return '';
+
+        let pathOnly = raw;
+        try {
+            if (/^https?:\/\//i.test(raw)) {
+                const parsed = new URL(raw);
+                pathOnly = parsed.pathname;
+            }
+        } catch {
+            pathOnly = raw;
+        }
+
+        pathOnly = pathOnly.split('?')[0].trim();
+        if (!pathOnly) return '';
+
+        if (pathOnly.startsWith('api/')) {
+            return `/${pathOnly}`;
+        }
+
+        return pathOnly;
+    }
+
+    function normalizeRequestUrl(url) {
+        const raw = String(url || '').trim();
+        if (!raw) return raw;
+        if (/^https?:\/\//i.test(raw)) return raw;
+        if (raw.startsWith('api/')) return `/${raw}`;
+        return raw;
+    }
+
+    function isSessionExpiredResponse(response, data) {
+        if (!response || response.status !== 401) return false;
+        const message = String(data?.error || data?.message || '').toLowerCase();
+        return message.includes('session expired')
+            || message.includes('session invalidated')
+            || message.includes('unauthorized')
+            || message.includes('please sign in again');
+    }
+
+    function showSessionExpiryNotice() {
+        const title = 'Session Expired';
+        const message = 'Your session expired. Redirecting...';
+
+        if (typeof window.showWarning === 'function') {
+            window.showWarning(title, message, 1200);
+            return;
+        }
+
+        if (typeof window.showToast === 'function') {
+            window.showToast('warning', title, message, 1200);
+        }
+    }
+
+    function handleSessionExpired(url, response, data) {
+        if (!isSessionExpiredResponse(response, data)) return;
+        if (isPublicAuthPage()) return;
+        if (isPublicApiPath(url)) return;
+        if (window.__adminPanelSessionRedirecting) return;
+
+        window.__adminPanelSessionRedirecting = true;
+        showSessionExpiryNotice();
+        window.setTimeout(() => {
+            window.location.href = '/unauthorized';
+        }, 900);
+    }
+
     function decodeCookieValue(value) {
         if (typeof value !== 'string') return '';
         const trimmed = value.trim().replace(/^"|"$/g, '');
@@ -109,6 +207,18 @@
         } catch {
             return trimmed;
         }
+    }
+
+    function cacheCsrfToken(token) {
+        if (!token || typeof token !== 'string') return '';
+        window._cachedCsrfToken = token;
+        try {
+            document.cookie = `csrfToken=${encodeURIComponent(token)}; path=/; SameSite=Strict`;
+        } catch {
+        }
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) meta.setAttribute('content', token);
+        return token;
     }
 
     function isTokenFormatValid(token) {
@@ -132,6 +242,7 @@
     }
 
     async function requestJson(url, options = {}) {
+        const requestUrl = normalizeRequestUrl(url);
         const fetchOptions = { ...options, credentials: 'include' };
         const method = String(fetchOptions.method || 'GET').toUpperCase();
 
@@ -153,8 +264,9 @@
             }
         }
 
-        const response = await fetch(url, fetchOptions);
+        const response = await fetch(requestUrl, fetchOptions);
         const data = await response.json().catch(() => null);
+        handleSessionExpired(requestUrl, response, data);
 
         if (isMutatingMethod(method) && !fetchOptions._csrfRetried && isCsrfFailure(response, data)) {
             const refreshedToken = await getCsrfToken(true);
@@ -163,7 +275,7 @@
                     ...(fetchOptions.headers || {}),
                     'x-csrf-token': refreshedToken
                 };
-                return requestJson(url, {
+                return requestJson(requestUrl, {
                     ...fetchOptions,
                     headers: retryHeaders,
                     _csrfRetried: true
@@ -186,8 +298,7 @@
             if (match && match[1]) {
                 const tokenFromCookie = decodeCookieValue(match[1]);
                 if (isTokenFormatValid(tokenFromCookie) && !isTokenLikelyExpired(tokenFromCookie)) {
-                    window._cachedCsrfToken = tokenFromCookie;
-                    return tokenFromCookie;
+                    return cacheCsrfToken(tokenFromCookie);
                 }
             }
         }
@@ -195,8 +306,7 @@
         const res = await fetch('/api/csrf', { credentials: 'include' });
         const data = await res.json().catch(() => null);
         if (data?.csrfToken) {
-            window._cachedCsrfToken = data.csrfToken;
-            return data.csrfToken;
+            return cacheCsrfToken(data.csrfToken);
         }
         return '';
     }
@@ -236,13 +346,17 @@
             moderatorLinkId = 'moderatorLink',
             adminLinkId = 'adminLink',
             ownerLinkId = 'ownerLink',
-            ownerNavLinkId = 'ownerNavLink'
+            ownerNavLinkId = 'ownerNavLink',
+            analyticsLinkId = 'analyticsLink'
         } = options;
 
         const moderatorLink = moderatorLinkId ? document.getElementById(moderatorLinkId) : null;
         const adminLink = adminLinkId ? document.getElementById(adminLinkId) : null;
         const ownerLink = ownerLinkId ? document.getElementById(ownerLinkId) : null;
         const ownerNavLink = ownerNavLinkId ? document.getElementById(ownerNavLinkId) : null;
+        const analyticsLink = analyticsLinkId ? document.getElementById(analyticsLinkId) : null;
+        const allAnalyticsLinks = Array.from(document.querySelectorAll('a[href="/analytics"], a[href="/analytics/"]'));
+        const dropdownAnalyticsLinks = Array.from(document.querySelectorAll('.user-dropdown-menu a[href="/analytics"], .user-dropdown-menu a[href="/analytics/"]'));
 
         if (moderatorLink) {
             moderatorLink.style.display = (role === 'moderator' || role === 'admin' || role === 'owner') ? 'block' : 'none';
@@ -256,6 +370,15 @@
         if (ownerNavLink) {
             ownerNavLink.style.display = (role === 'owner') ? 'block' : 'none';
         }
+        if (analyticsLink) {
+            analyticsLink.style.display = (role === 'owner') ? 'block' : 'none';
+        }
+        allAnalyticsLinks.forEach((linkEl) => {
+            linkEl.style.display = (role === 'owner') ? '' : 'none';
+        });
+        dropdownAnalyticsLinks.forEach((linkEl) => {
+            linkEl.style.display = (role === 'owner') ? 'block' : 'none';
+        });
     }
 
     async function logout() {
@@ -272,11 +395,64 @@
             requestJson,
             postJson,
             getJson,
+            getCsrfToken,
             getAccountInfo,
             applyRoleVisibility,
             logout
         }
     };
+
+    const syncRoleVisibility = () => {
+        const hasDropdownMenu = Boolean(document.querySelector('.user-dropdown-menu'));
+        if (!hasDropdownMenu) return;
+
+        getAccountInfo()
+            .then((accountInfo) => {
+                applyRoleVisibility(accountInfo || {});
+            })
+            .catch(() => {
+                applyRoleVisibility({ role: 'user' });
+            });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncRoleVisibility);
+    } else {
+        syncRoleVisibility();
+    }
+
+    const AUTO_REFRESH_MS = 30 * 1000;
+    function shouldAutoRefresh() {
+        if (isPublicAuthPage()) return false;
+        if (window.__disableAutoRefresh) return false;
+        return true;
+    }
+
+    function triggerVisibleDataRefresh() {
+        if (!shouldAutoRefresh()) return;
+        if (document.hidden) return;
+
+        if (typeof window.AdminPanel?.refreshVisibleData === 'function') {
+            try {
+                window.AdminPanel.refreshVisibleData();
+            } catch (error) {
+                console.warn('Auto refresh handler failed:', error);
+            }
+        }
+
+        try {
+            document.dispatchEvent(new CustomEvent('adminpanel:refresh-visible-data'));
+        } catch (error) {
+            console.warn('Auto refresh event failed:', error);
+        }
+    }
+
+    function scheduleAutoRefresh() {
+        if (!shouldAutoRefresh()) return;
+        window.setInterval(triggerVisibleDataRefresh, AUTO_REFRESH_MS);
+    }
+
+    scheduleAutoRefresh();
 
     window.logout = logout;
 })();

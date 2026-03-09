@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags, PermissionFlagsBits } = require('discord.js');
-const { sendErrorReply, sendSuccessReply, createModerationEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendWarningReply, sendInfoReply } = require("../../Functions/EmbedBuilders");
 const { logModerationAction } = require("../../Functions/ModerationHelper");
 
 // Lets you delete a bunch of messages at once
@@ -35,7 +35,7 @@ module.exports = {
 
     // Only let people with Manage Messages permission use this
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-      await sendErrorReply(
+      await sendWarningReply(
         interaction,
         'No Permission',
         'You need **Manage Messages** permission!'
@@ -61,7 +61,7 @@ module.exports = {
       toDelete = toDelete.filter(msg => msg.createdTimestamp > twoWeeksAgo);
 
       if (toDelete.size === 0) {
-        await sendErrorReply(
+        await sendInfoReply(
           interaction,
           'Clear Failed',
           'No messages to delete.\n\n**Note:** Messages older than 2 weeks can\'t be bulk deleted.'
@@ -75,8 +75,8 @@ module.exports = {
       // Create logging embed
       const logFields = [
         { name: '📊 Messages Deleted', value: `**${deleted.size}**`, inline: true },
-        { name: '📍 Channel', value: `${interaction.channel}`, inline: true },
-        { name: '👤 Moderator', value: `${interaction.user}\n\`${interaction.user.id}\``, inline: true },
+        { name: '🧰 Scope', value: targetUser ? 'Targeted user messages' : 'Recent channel messages', inline: true },
+        { name: '📝 Requested Amount', value: `**${amount}**`, inline: true },
         { name: '💬 Reason', value: `\`\`\`${reason}\`\`\``, inline: false }
       ];
 
@@ -86,7 +86,8 @@ module.exports = {
 
       const logEmbed = new EmbedBuilder()
         .setColor(0x43B581)
-        .setTitle('🧹 Messages cleared')
+        .setTitle('🧹 Messages Cleared')
+        .setDescription('Bulk message cleanup action completed.')
         .addFields(...logFields)
         .setFooter({ text: `Logged at ${new Date().toLocaleTimeString()}` })
         .setTimestamp();

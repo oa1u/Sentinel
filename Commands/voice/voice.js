@@ -1,11 +1,10 @@
 const { SlashCommandBuilder, ChannelType, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const { sendErrorReply, sendSuccessReply } = require('../../Functions/EmbedBuilders');
-const blockedWordsList = require('../../Config/constants/blockedWords.json');
+const { BLOCKED_WORDS: blockedWordsList } = require('../../Config/constants');
+const { createProfanityMatcher } = require('../../Functions/ProfanityFilter');
 
-const blockedWords = Array.isArray(blockedWordsList)
-    ? blockedWordsList.map(word => String(word || '').toLowerCase().trim()).filter(Boolean)
-    : [];
+const blockedWordMatcher = createProfanityMatcher(blockedWordsList);
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -126,13 +125,12 @@ module.exports = {
             if (subcommand === 'name') {
                 const newName = interaction.options.getString('name', true).trim();
 
-                const lowerName = newName.toLowerCase();
-                const matchedBlockedWord = blockedWords.find(word => lowerName.includes(word));
+                const matchedBlockedWord = blockedWordMatcher.findMatch(newName);
                 if (matchedBlockedWord) {
                     return sendErrorReply(
                         interaction,
                         'Blocked Channel Name',
-                        'That channel name contains a blocked word from the server filter list. Please choose a different name.'
+                        `That channel name contains blocked language (${matchedBlockedWord.term}). Please choose a different name.`
                     );
                 }
 

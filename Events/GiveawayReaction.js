@@ -4,6 +4,7 @@ const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 // React with 🎉 to enter — this adds the user to the persistent entries table.
 module.exports = {
     name: 'messageReactionAdd',
+    disabled: true,
     runOnce: false,
     call: async (client, args) => {
         const [reaction, user] = args;
@@ -41,7 +42,7 @@ module.exports = {
             }
 
             // Add user to giveaway entries
-            await MySQLDatabaseManager.addGiveawayEntry(message.id, user.id);
+            await giveawayDB.addEntry(message.id, user.id);
             console.log(`[Giveaway Reaction] User ${user.username} (${user.id}) entered giveaway ${giveaway.caseId || message.id}`);
 
         } catch (error) {

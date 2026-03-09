@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const moment = require("moment");
 require("moment-duration-format");
 const { generateCaseId } = require("../../Events/caseId");
-const { sendErrorReply, sendSuccessReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
+const { sendErrorReply, sendSuccessReply, sendWarningReply, sendInfoReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const AdminPanelHelper = require('../../Functions/AdminPanelHelper');
@@ -41,7 +41,7 @@ module.exports = {
 
     // You have to give either a user or a case ID
     if (!targetUser && !caseId) {
-      return sendErrorReply(
+      return sendWarningReply(
         interaction,
         'Missing Parameter',
         'You must provide either a **user** or a **case ID**!'
@@ -56,7 +56,7 @@ module.exports = {
         const [rows] = await DatabaseManager.connection.pool.query(query, [caseId]);
 
         if (!rows || rows.length === 0) {
-          return sendErrorReply(
+          return sendInfoReply(
             interaction,
             'Case Not Found',
             `No timeout case found with ID \`${caseId}\``
@@ -70,7 +70,7 @@ module.exports = {
         try {
           targetUser = await interaction.client.users.fetch(foundUserId);
         } catch (err) {
-          return sendErrorReply(
+          return sendInfoReply(
             interaction,
             'User Not Found',
             `Could not fetch user from case \`${caseId}\``
@@ -94,7 +94,7 @@ module.exports = {
     // Fetch member to verify they exist in guild
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
-      await sendErrorReply(
+      await sendWarningReply(
         interaction,
         'Invalid User',
         `**${targetUser.tag}** is not in this server!`
@@ -104,7 +104,7 @@ module.exports = {
 
     // Check if member is actually timed out
     if (!targetMember.isCommunicationDisabled()) {
-      await sendErrorReply(
+      await sendInfoReply(
         interaction,
         'Not Timed Out',
         `**${targetUser.tag}** is not currently timed out!`

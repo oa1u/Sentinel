@@ -12,54 +12,141 @@ try {
 
 const serverName = config.serverName || 'Our Server';
 const websiteLink = config.WebsiteLink || '#';
+const serverInvite = config.ServerInvite || '';
 const botName = config.botName || 'Sentinel';
 const supportHost = websiteLink.replace(/^https?:\/\//, '').split('/')[0] || 'example.com';
-const supportEmail = `support@${supportHost}`;
+const supportEmail = String(process.env.ADMIN_EMAIL || '').trim() || `support@${supportHost}`;
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function sanitizeUrl(value, fallback = '#') {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return fallback;
+}
+
+function hasValidServerInvite(inviteUrl) {
+    const raw = String(inviteUrl || '').trim();
+    if (!raw || !/^https?:\/\//i.test(raw)) return false;
+
+    // Block obvious placeholders to avoid sending broken invite links.
+    const lowered = raw.toLowerCase();
+    if (lowered.includes('your_invite_code')) return false;
+    if (lowered.includes('example.com')) return false;
+
+    return true;
+}
+
+function formatRole(value, fallback = 'Moderator') {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return fallback;
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function listItems(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return '';
+    const safeItems = items
+        .filter(Boolean)
+        .map((item) => `<li>${escapeHtml(String(item))}</li>`)
+        .join('');
+
+    if (!safeItems) return '';
+    return `<ul class="item-list">${safeItems}</ul>`;
+}
+
+function detailsBlock(title, rows = []) {
+    const validRows = Array.isArray(rows) ? rows.filter((row) => row && row.label) : [];
+    if (validRows.length === 0) return '';
+
+    const body = validRows
+        .map((row) => `
+            <div class="kv-row">
+                <span class="kv-label">${escapeHtml(row.label)}</span>
+                <span class="kv-value">${escapeHtml(row.value ?? '')}</span>
+            </div>
+        `)
+        .join('');
+
+    return `
+        <div class="details-block">
+            <h3>${escapeHtml(title)}</h3>
+            ${body}
+        </div>
+    `;
+}
+
+function actionButton(url, label) {
+    const safeUrl = sanitizeUrl(url);
+    const safeLabel = escapeHtml(label || 'Open Dashboard');
+    return `<a href="${safeUrl}" class="btn">${safeLabel}</a>`;
+}
 
 // Core Email Wrapper for Consistent Styling Structure
-const BaseTemplate = (content, headerTitle = '') => `
+const BaseTemplate = (content, headerTitle = '', footerHelpText) => {
+    const helpLine = footerHelpText || `Need help? Visit the <a href="${sanitizeUrl(websiteLink)}">Admin Dashboard</a> or contact <a href="mailto:${escapeHtml(supportEmail)}">${escapeHtml(supportEmail)}</a>.`;
+
+    return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6fb; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
-        .wrapper { width: 100%; table-layout: fixed; background-color: #f4f6fb; padding-bottom: 60px; }
-        .webkit { max-width: 600px; margin: 0 auto; }
-        .outer-table { width: 100%; max-width: 600px; margin: 0 auto; border-spacing: 0; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); margin-top: 40px; }
-        .header { background: linear-gradient(135deg, #1e2028 0%, #2a2d39 100%); padding: 30px 40px; text-align: center; border-bottom: 4px solid #5b7fff; }
-        .header h2 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
-        .main { padding: 40px; }
-        .content p { font-size: 16px; line-height: 1.6; color: #4b5563; margin-top: 0; margin-bottom: 16px; }
-        .content strong { color: #1f2937; }
-        .btn { display: inline-block; background-color: #5b7fff; color: #ffffff !important; font-weight: 600; text-decoration: none; padding: 14px 28px; border-radius: 8px; margin: 10px 0 20px 0; font-size: 16px; transition: background-color 0.2s ease; text-align: center; }
-        .btn:hover { background-color: #4f6be0; }
-        .alert { border-radius: 8px; padding: 18px 20px; margin-bottom: 24px; font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
-        .alert-info { background-color: #eff6ff; border-left: 4px solid #5b7fff; color: #1e40af; }
-        .alert-success { background-color: #f0fdf4; border-left: 4px solid #22c55e; color: #166534; }
-        .alert-warning { background-color: #fffbeb; border-left: 4px solid #f59e0b; color: #92400e; }
-        .alert-danger { background-color: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; }
-        .data-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin-bottom: 24px; }
-        .data-row { margin-bottom: 16px; }
-        .data-row:last-child { margin-bottom: 0; }
-        .data-label { font-size: 13px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
-        .data-value { font-size: 16px; color: #1e293b; }
-        .badge { display: inline-block; padding: 6px 12px; border-radius: 9999px; font-size: 14px; font-weight: 600; background-color: #e0e7ff; color: #3730a3; }
-        .footer { background-color: #f8fafc; padding: 30px 40px; text-align: center; border-top: 1px solid #e2e8f0; }
-        .footer p { margin: 0 0 10px 0; font-size: 13px; color: #64748b; line-height: 1.5; }
-        .footer a { color: #5b7fff; text-decoration: none; }
-        .footer a:hover { text-decoration: underline; }
-        @media screen and (max-width: 600px) { .outer-table { margin-top: 20px !important; border-radius: 0 !important; } .header, .main, .footer { padding: 20px !important; } }
+        body { margin: 0; padding: 0; background: #f2f5fa; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; color: #1f2937; }
+        .wrapper { width: 100%; table-layout: fixed; background: #f2f5fa; padding: 28px 0 40px 0; }
+        .shell { max-width: 680px; margin: 0 auto; }
+        .card { background: #ffffff; border: 1px solid #dbe4f0; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 26px rgba(17, 24, 39, 0.08); }
+        .header { padding: 26px 32px; background: linear-gradient(135deg, #0f2b52 0%, #1d4e89 100%); color: #ffffff; }
+        .brand { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.86; margin-bottom: 8px; }
+        .header h2 { margin: 0; font-size: 24px; line-height: 1.3; font-weight: 700; }
+        .main { padding: 28px 32px; }
+        .content p { margin: 0 0 14px 0; font-size: 15px; line-height: 1.7; color: #344054; }
+        .content strong { color: #0b1320; }
+        .status { border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; font-size: 14px; font-weight: 700; border: 1px solid transparent; }
+        .status.info { background: #eaf2ff; border-color: #c4d8ff; color: #0f4ea3; }
+        .status.success { background: #e9f8ef; border-color: #b9ebca; color: #13653c; }
+        .status.warning { background: #fff5e7; border-color: #ffddb0; color: #8a5100; }
+        .status.danger { background: #ffecec; border-color: #ffc9c9; color: #8f1f1f; }
+        .details-block { background: #f8fbff; border: 1px solid #deebfb; border-radius: 10px; padding: 16px 18px; margin: 16px 0 18px 0; }
+        .details-block h3 { margin: 0 0 10px 0; font-size: 15px; color: #1e3a5f; }
+        .kv-row { margin-bottom: 10px; }
+        .kv-row:last-child { margin-bottom: 0; }
+        .kv-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 3px; font-weight: 700; }
+        .kv-value { font-size: 15px; color: #0f172a; display: block; word-break: break-word; }
+        .item-list { margin: 10px 0 14px 20px; padding: 0; color: #1f2937; }
+        .item-list li { margin-bottom: 8px; line-height: 1.6; }
+        .btn-wrap { text-align: center; margin: 18px 0 12px 0; }
+        .btn { display: inline-block; text-decoration: none; background: #0f4ea3; color: #ffffff !important; font-size: 14px; font-weight: 700; padding: 12px 22px; border-radius: 8px; }
+        .inline-link { color: #0f4ea3; text-decoration: none; word-break: break-all; }
+        .chip { display: inline-block; background: #eef4ff; color: #234372; border: 1px solid #cfe0ff; border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 700; }
+        .note { font-size: 13px; color: #52607a; background: #f7fafc; border-left: 3px solid #9bb6de; padding: 10px 12px; border-radius: 6px; margin-top: 12px; }
+        .footer { padding: 18px 32px 24px 32px; background: #fbfdff; border-top: 1px solid #e3edf7; }
+        .footer p { margin: 0 0 8px 0; font-size: 12px; line-height: 1.6; color: #64748b; }
+        .footer a { color: #0f4ea3; text-decoration: none; }
+        @media screen and (max-width: 680px) {
+            .wrapper { padding: 12px 0 0 0; }
+            .card { border-radius: 0; border-left: 0; border-right: 0; }
+            .header, .main, .footer { padding-left: 20px; padding-right: 20px; }
+            .header { padding-top: 22px; padding-bottom: 22px; }
+        }
     </style>
 </head>
 <body>
     <center class="wrapper">
-        <div class="webkit">
-            <table class="outer-table" role="presentation">
+        <div class="shell">
+            <table class="card" role="presentation">
                 <tr>
                     <td class="header">
-                        <h2>${headerTitle || botName}</h2>
+                        <div class="brand">${escapeHtml(serverName)} Administration</div>
+                        <h2>${escapeHtml(headerTitle || botName)}</h2>
                     </td>
                 </tr>
                 <tr>
@@ -71,8 +158,9 @@ const BaseTemplate = (content, headerTitle = '') => `
                 </tr>
                 <tr>
                     <td class="footer">
-                        <p>This is an automated message from <strong>${serverName}</strong>. Please do not reply directly to this email.</p>
-                        <p>For assistance, visit our <a href="${websiteLink}">Dashboard</a> or email <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
+                        <p>This is an automated message sent by <strong>${escapeHtml(serverName)}</strong>. Replies to this address are not monitored.</p>
+                        <p>${helpLine}</p>
+                        <p>Powered by ${escapeHtml(botName)}</p>
                     </td>
                 </tr>
             </table>
@@ -81,175 +169,243 @@ const BaseTemplate = (content, headerTitle = '') => `
 </body>
 </html>
 `;
+};
 
 const templates = {
     appealResponse: ({ userName, appealStatus, response, statusEmoji, statusText }) => {
         const isAccepted = appealStatus === 'accepted';
-        const alertClass = isAccepted ? 'alert-success' : 'alert-danger';
-        const textColor = isAccepted ? '#22c55e' : '#ef4444';
-        
+        const statusClass = isAccepted ? 'success' : 'danger';
+        const inviteIsValid = hasValidServerInvite(serverInvite);
+        const safeServerInvite = inviteIsValid ? sanitizeUrl(serverInvite, '') : '';
+        const inviteSection = isAccepted && inviteIsValid
+            ? `
+            <p><strong>Server Invite:</strong></p>
+            <div class="btn-wrap">${actionButton(safeServerInvite, 'Join Server')}</div>
+            <p>If the button does not open, use this direct link:<br><a href="${safeServerInvite}" class="inline-link">${escapeHtml(safeServerInvite)}</a></p>
+            <div class="note">Use this invite link to rejoin the server. If it has expired, contact support for a new one.</div>
+            `
+            : isAccepted
+                ? `<div class="note">Your appeal was accepted. Contact support for a fresh invite.</div>`
+                : '';
+        const nextSteps = isAccepted
+            ? [
+                'You may rejoin the server immediately if no additional restrictions are active.',
+                'Review the community rules and available guidance before messaging again.',
+                'Future violations may result in stricter penalties or permanent action.'
+            ]
+            : [
+                'This decision applies to the current appeal and does not change prior moderation records.',
+                'You may submit a new appeal after 7 days if new context becomes available.',
+                'Repeated or abusive submissions may be ignored.'
+            ];
+
         const content = `
-            <div class="alert ${alertClass}">
-                ${statusEmoji} <strong>Appeal ${statusText}</strong>
+            <div class="status ${statusClass}">
+                ${escapeHtml(statusEmoji || '')} Appeal Decision: ${escapeHtml(statusText || (isAccepted ? 'Accepted' : 'Denied'))}
             </div>
-            <p>Hello <strong>${userName}</strong>,</p>
-            <p>Your ban appeal has been reviewed by the server administration team. The final decision is below:</p>
+            <p>Hello <strong>${escapeHtml(userName)}</strong>,</p>
+            <p>Your appeal has been reviewed by the moderation team. The outcome and reviewer response are provided below for your records.</p>
             
-            <div class="data-box">
-                <div class="data-row">
-                    <span class="data-label">Administrator Response</span>
-                    <div class="data-value" style="font-style: italic; border-left: 3px solid #cbd5e1; padding-left: 12px; margin-top: 8px;">
-                        ${response}
-                    </div>
-                </div>
-            </div>
+            ${detailsBlock('Review Summary', [
+            { label: 'Decision', value: statusText || (isAccepted ? 'Accepted' : 'Denied') },
+            { label: 'Status', value: appealStatus || 'Unknown' },
+            { label: 'Reference', value: 'Appeal response notification' }
+        ])}
+
+            ${detailsBlock('Administrator Response', [
+            { label: 'Message', value: response || 'No additional details were provided.' }
+        ])}
             
-            <p>
-                ${isAccepted 
-                    ? `<strong style="color: ${textColor};">You are now able to rejoin the server. Welcome back!</strong>` 
-                    : `<strong style="color: ${textColor};">If you believe this decision is unfair, you may submit another appeal after 7 days.</strong>`}
-            </p>
+            <p><strong>What happens next:</strong></p>
+            ${listItems(nextSteps)}
+                        ${inviteSection}
+
+            <div class="note">If you have additional evidence that was not included in your original submission, contact support and include relevant proof.</div>
         `;
-        return BaseTemplate(content, 'Ban Appeal Response');
+        return BaseTemplate(
+            content,
+            'Appeal Decision Update',
+            `Need help? Contact <a href="mailto:${escapeHtml(supportEmail)}">${escapeHtml(supportEmail)}</a>.`
+        );
     },
 
     appealReceived: ({ userName, caseId }) => {
         const content = `
-            <div class="alert alert-info">
-                📨 <strong>Appeal Received</strong>
+            <div class="status info">
+                Appeal Submitted Successfully
             </div>
-            <p>Hello <strong>${userName}</strong>,</p>
-            <p>Your ban appeal has been successfully submitted and added to the administrative review queue. Our team will review your case as soon as possible.</p>
+            <p>Hello <strong>${escapeHtml(userName)}</strong>,</p>
+            <p>We received your appeal and added it to the moderation review queue. This message confirms the submission was recorded successfully.</p>
             
-            <div class="data-box">
-                <div class="data-row">
-                    <span class="data-label">Case ID</span>
-                    <span class="data-value" style="font-family: monospace; font-weight: 600; color: #5b7fff;">${caseId}</span>
-                </div>
-            </div>
+            ${detailsBlock('Submission Details', [
+            { label: 'Case ID', value: caseId },
+            { label: 'Estimated review window', value: '24 to 48 hours' },
+            { label: 'Queue', value: 'Administrative review' }
+        ])}
             
-            <p>Estimated review time is typically <strong>24-48 hours</strong>. You will receive another notification email once a final decision has been formulated.</p>
+            <p><strong>What to expect next:</strong></p>
+            ${listItems([
+            'A moderator will evaluate your appeal content and account history.',
+            'You may receive a follow-up request if additional context is needed.',
+            'You will receive a final decision by email once the review is complete.'
+        ])}
+
+            <div class="note">Please keep your case ID for reference when contacting support.</div>
         `;
-        return BaseTemplate(content, 'Appeal Review Queue');
+        return BaseTemplate(
+            content,
+            'Appeal Confirmation',
+            `Need help? Contact <a href="mailto:${escapeHtml(supportEmail)}">${escapeHtml(supportEmail)}</a>.`
+        );
     },
 
     registrationWelcome: ({ userName, role }) => {
-        const safeRole = String(role || 'moderator').trim().toLowerCase();
-        const roleLabel = safeRole.charAt(0).toUpperCase() + safeRole.slice(1);
-        
+        const roleLabel = formatRole(role);
+
         const content = `
-            <div class="alert alert-success">
-                ✅ <strong>Account Created Successfully</strong>
+            <div class="status success">
+                Account Created
             </div>
-            <p>Hello <strong>${userName}</strong>,</p>
-            <p>Your administration panel account has been activated. You can now log into your dashboard using your registered credentials.</p>
+            <p>Hello <strong>${escapeHtml(userName)}</strong>,</p>
+            <p>Your administration panel account has been created and is now active.</p>
             
-            <p>Your current access tier is: <span class="badge">${roleLabel}</span></p>
+            ${detailsBlock('Access Summary', [
+            { label: 'Display name', value: userName },
+            { label: 'Assigned role', value: roleLabel },
+            { label: 'Portal', value: sanitizeUrl(`${websiteLink}/login`) }
+        ])}
+
+            <p>Your current permission tier is: <span class="chip">${escapeHtml(roleLabel)}</span></p>
+
+            <p><strong>Recommended first steps:</strong></p>
+            ${listItems([
+            'Sign in and verify your profile details.',
+            'Enable Two-Factor Authentication (2FA) in account settings.',
+            'Review moderation and escalation procedures before taking action.'
+        ])}
             
-            <p style="margin-top: 24px;">For maximum security, we highly recommend setting up <strong>Two-Factor Authentication (2FA)</strong> inside your profile settings immediately.</p>
-            <center>
-                <a href="${websiteLink}/login" class="btn">Log In to Dashboard</a>
-            </center>
+            <div class="btn-wrap">${actionButton(`${websiteLink}/login`, 'Sign In to Dashboard')}</div>
         `;
-        return BaseTemplate(content, 'Welcome to ' + botName);
+        return BaseTemplate(content, 'Welcome to ' + botName + ' Admin');
     },
 
     emailVerification: ({ userName, verifyUrl }) => {
+        const safeVerifyUrl = sanitizeUrl(verifyUrl);
         const content = `
-            <div class="alert alert-info">
-                📧 <strong>Email Verification Required</strong>
+            <div class="status info">
+                Email Verification Required
             </div>
-            <p>Hello <strong>${userName}</strong>,</p>
-            <p>To finalize your account setup and ensure your console access remains secure, we need to verify your email address. Please click the secure link below to verify.</p>
+            <p>Hello <strong>${escapeHtml(userName)}</strong>,</p>
+            <p>To complete account setup and enable full platform access, please verify your email address.</p>
             
-            <center>
-                <a href="${verifyUrl}" class="btn">Verify Email Address</a>
-            </center>
+            <div class="btn-wrap">${actionButton(safeVerifyUrl, 'Verify Email Address')}</div>
+
+            ${detailsBlock('Verification Details', [
+            { label: 'Recipient', value: userName },
+            { label: 'Link validity', value: '24 hours from the time of this email' },
+            { label: 'Action required', value: 'Confirm your email to activate login features' }
+        ])}
             
-            <p style="font-size: 14px; color: #6b7280; text-align: center;">
-                If the button above does not work, copy and paste this link into your browser:<br>
-                <a href="${verifyUrl}" style="word-break: break-all;">${verifyUrl}</a>
+            <p>
+                If the button does not open, use this direct link:<br>
+                <a href="${safeVerifyUrl}" class="inline-link">${escapeHtml(safeVerifyUrl)}</a>
             </p>
             
-            <p style="margin-top: 24px; text-align: center;"><small><em>Note: This verification link will automatically expire in 24 hours. If you did not request this, please ignore it.</em></small></p>
+            <div class="note">If you did not request this verification, no action is needed. The link expires automatically.</div>
         `;
         return BaseTemplate(content, 'Verify Your Email');
     },
 
     passwordReset: ({ userName, resetUrl }) => {
+        const safeResetUrl = sanitizeUrl(resetUrl);
         const content = `
-            <div class="alert alert-warning">
-                🔑 <strong>Password Reset Request</strong>
+            <div class="status warning">
+                Password Reset Request
             </div>
-            <p>Hello <strong>${userName}</strong>,</p>
-            <p>We received a secure request to reset the password associated with your account. If you initiated this, you can proceed by clicking the button below:</p>
+            <p>Hello <strong>${escapeHtml(userName)}</strong>,</p>
+            <p>We received a request to reset the password for your account.</p>
             
-            <center>
-                <a href="${resetUrl}" class="btn">Reset My Password</a>
-            </center>
+            <div class="btn-wrap">${actionButton(safeResetUrl, 'Reset Password')}</div>
+
+            ${detailsBlock('Reset Request Details', [
+            { label: 'Requested for', value: userName },
+            { label: 'Link expiration', value: '30 minutes' },
+            { label: 'Recommended action', value: 'Complete the reset and sign out of older sessions' }
+        ])}
             
-            <p style="font-size: 14px; color: #6b7280; text-align: center;">
-                If the button does not work, use this direct link:<br>
-                <a href="${resetUrl}" style="word-break: break-all;">${resetUrl}</a>
+            <p>
+                Direct reset link:<br>
+                <a href="${safeResetUrl}" class="inline-link">${escapeHtml(safeResetUrl)}</a>
             </p>
             
-            <p style="margin-top: 24px; text-align: center;"><small><em>Note: This link will expire in 30 minutes for security purposes. If you did not request a reset, you can safely ignore this email and your password will remain unchanged.</em></small></p>
+            <div class="note">If you did not request this, ignore this email. Your current password will remain unchanged unless the reset link is used.</div>
         `;
         return BaseTemplate(content, 'Reset Your Password');
     },
 
     securityAlert: ({ userName, alertTitle, details }) => {
-        const detailItems = Array.isArray(details)
-            ? details.filter(Boolean).map((item) => `<li style="margin-bottom: 8px;">${String(item)}</li>`).join('')
-            : '';
-            
+        const safeAlertTitle = String(alertTitle || 'Unusual security event detected').trim();
+        const detailList = listItems(Array.isArray(details) ? details : []);
+
         const content = `
-            <div class="alert alert-danger">
-                🚨 <strong>Critical Security Alert</strong>
+            <div class="status danger">
+                Security Alert
             </div>
-            <p>Hello <strong>${userName}</strong>,</p>
-            <p>We noticed a critical security event related to your administration account:</p>
+            <p>Hello <strong>${escapeHtml(userName)}</strong>,</p>
+            <p>We detected activity that requires your immediate attention.</p>
             
-            <div class="data-box" style="border-left: 4px solid #ef4444;">
-                <h3 style="margin-top: 0; color: #991b1b; font-size: 18px;">${alertTitle}</h3>
-                ${detailItems ? `<ul style="color: #1e293b; padding-left: 20px; margin-bottom: 0;">${detailItems}</ul>` : ''}
-            </div>
+            ${detailsBlock('Event Summary', [
+            { label: 'Alert', value: safeAlertTitle },
+            { label: 'Account', value: userName },
+            { label: 'Priority', value: 'High' }
+        ])}
+
+            ${detailList ? `<p><strong>Observed indicators:</strong></p>${detailList}` : ''}
             
-            <p><strong>If this wasn't you:</strong> Please reset your password immediately and contact server ownership for emergency assistance to secure your permissions.</p>
+            <p><strong>Immediate steps:</strong></p>
+            ${listItems([
+            'Reset your password and revoke active sessions if available.',
+            'Enable or reconfigure Two-Factor Authentication.',
+            'Notify server ownership or security staff for incident follow-up.'
+        ])}
+
+            <div class="btn-wrap">${actionButton(`${websiteLink}/security`, 'Open Security Settings')}</div>
         `;
         return BaseTemplate(content, 'Security Event Detected');
     },
 
     newAppealNotification: ({ userName, userId, reason, date }) => {
         const content = `
-            <div class="alert alert-warning">
-                ⚠️ <strong>Awaiting Administrative Review</strong>
+            <div class="status warning">
+                New Appeal Awaiting Review
             </div>
             <p>Hello Administration Team,</p>
-            <p>A new ban appeal has been recently submitted on the dashboard and is awaiting your review.</p>
+            <p>A new ban appeal was submitted and requires moderation review.</p>
             
-            <div class="data-box">
-                <div class="data-row">
-                    <span class="data-label">User Information</span>
-                    <span class="data-value"><strong>${userName}</strong> (${userId})</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Appeal Submitted At</span>
-                    <span class="data-value">${date}</span>
-                </div>
-                <div class="data-row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
-                    <span class="data-label">Appeal Argument / Reason</span>
-                    <div class="data-value" style="font-style: italic; color: #475569;">
-                        "${reason}"
-                    </div>
-                </div>
-            </div>
+            ${detailsBlock('Appeal Details', [
+            { label: 'User', value: `${userName} (${userId})` },
+            { label: 'Submitted at', value: date },
+            { label: 'Queue', value: 'Pending administrative decision' }
+        ])}
+
+            ${detailsBlock('Appeal Statement', [
+            { label: 'Reason provided', value: reason || 'No reason provided.' }
+        ])}
+
+            <p><strong>Recommended handling:</strong></p>
+            ${listItems([
+            'Confirm historical moderation context before deciding.',
+            'Respond with a concise, policy-based rationale.',
+            'Record action outcomes for audit and analytics.'
+        ])}
             
-            <center>
-                <a href="${websiteLink}/admin" class="btn">Open Admin Console</a>
-            </center>
+            <div class="btn-wrap">${actionButton(`${websiteLink}/admin`, 'Open Admin Console')}</div>
         `;
-        return BaseTemplate(content, 'New Ban Appeal Submitted');
+        return BaseTemplate(
+            content,
+            'New Ban Appeal Submitted',
+            `Need help? Contact <a href="mailto:${escapeHtml(supportEmail)}">${escapeHtml(supportEmail)}</a>.`
+        );
     }
 };
 

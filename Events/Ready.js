@@ -1,8 +1,9 @@
 const { ActivityType, EmbedBuilder } = require('discord.js');
 const presenceConfig = require('../Config/presence.json');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
+const InviteTracker = require('../Functions/InviteTracker');
 const { serverID } = require('../Config/main.json');
-const { birthdayChannelId } = require('../Config/constants/channel.json');
+const { CHANNELS: { birthdayChannelId } } = require('../Config/constants');
 
 // Fired when the bot is ready: set presence, start periodic tasks and background cleaners.
 module.exports = {
@@ -25,6 +26,9 @@ module.exports = {
 
         // Start the daily birthday announcer (runs hourly checks internally).
         startBirthdayAnnouncements(client);
+
+        // Cache existing invites for invite tracking.
+        InviteTracker.primeAllGuildInvites(client).catch(() => {});
     }
 };
 

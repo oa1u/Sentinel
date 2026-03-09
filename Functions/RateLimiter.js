@@ -2,7 +2,7 @@
 // Lightweight in-memory rate limiter to help prevent command spam. It tracks
 // usage per-user and per-command and exposes helpers to check limits and
 // record usage.
-const misc = require('../Config/constants/misc.json');
+const { MISC: misc } = require('../Config/constants');
 
 class RateLimiter {
     constructor() {

@@ -1,5 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
+const { CHANNELS: { leaveChannelId } } = require('../Config/constants');
+const AntiRaid = require('../Functions/AntiRaid');
 
 // When someone leaves the server, log the event and send a polite goodbye message (if configured).
 // We persist the leave event so admins can review member activity later.
@@ -7,6 +9,7 @@ module.exports = {
   name: 'guildMemberRemove',
   async execute(member) {
     try {
+      await AntiRaid.handleMemberLeave(member).catch(() => { });
       // Log that this member left the server, so we can track activity.
       await MySQLDatabaseManager.logMemberActivity(
         member.id,
@@ -14,8 +17,6 @@ module.exports = {
         'leave',
         member.guild.id
       );
-
-      const { leaveChannelId } = require('../Config/constants/channel.json');
 
       // If no leave channel is configured, warn and skip sending a message.
       if (!leaveChannelId || leaveChannelId === '') {

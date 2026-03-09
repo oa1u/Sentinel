@@ -14,6 +14,8 @@ window.currentAdminRole = window.currentAdminRole || '';
 window._appealsPending = [];
 window._appealsHistory = [];
 window._autoModConfig = null; // AutoMod full config
+window._appealsLoadNonce = 0;
+window._appealHistoryLoadNonce = 0;
 
 // --- Utility Functions ---
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({
@@ -41,6 +43,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (dropdownUsername) dropdownUsername.textContent = accountInfo.username || 'User';
                 const dropdownRole = document.getElementById('dropdownRole');
                 if (dropdownRole) dropdownRole.textContent = (accountInfo.role || 'User').toUpperCase();
+
+                if (typeof api.applyRoleVisibility === 'function') {
+                    api.applyRoleVisibility(accountInfo || {});
+                }
             }
         }
     } catch (err) { console.error("Account sync failed", err); }
@@ -60,7 +66,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Run main logic
     await runAdminPanel();
+
+    setupAppealsQueueInteractions();
+
+    // Ensure the currently active tab performs its initial data load.
+    const activeTabName = document.querySelector('.tab.active')?.dataset?.tab;
+    if (activeTabName) {
+        switchTab(null, activeTabName);
+    }
 });
+
+async function getAdminApiClient(timeoutMs = 3000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+        const api = window?.AdminPanel?.api || window?.api;
+        if (api && typeof api.getJson === 'function') return api;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return null;
+}
 
 // --- Tab Logic ---
 function switchTab(e, tabName, btn) {
@@ -88,12 +112,78 @@ function switchTab(e, tabName, btn) {
     if (tabName === 'banned-users' && typeof loadBannedUsers === 'function') loadBannedUsers();
     else if (tabName === 'appeals') loadAppeals();
     else if (tabName === 'appeals-history') loadAppealHistory();
+    else if (tabName === 'xp-leaderboard') loadAdminXpLeaderboard();
     else if (tabName === 'automod') {
         if (isOwner()) loadAutoModConfig(); // Load profiles first
         else {
             const statusEl = document.getElementById('automodStatusMessage');
             if (statusEl) statusEl.textContent = 'AutoMod settings are owner-only.';
         }
+    }
+}
+
+async function loadAdminXpLeaderboard() {
+    const container = document.getElementById('adminXpLeaderboardContainer');
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading show">Loading leaderboard...</div>';
+
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/admin/search-users-advanced');
+        if (!response?.ok) {
+            throw new Error(data?.error || 'Failed to load leaderboard');
+        }
+
+        const rows = Array.isArray(data?.results) ? data.results : [];
+        const ranked = rows
+            .map((item) => ({
+                userId: String(item?.userId || ''),
+                username: String(item?.username || 'Unknown'),
+                level: Number(item?.level || 0),
+                xp: Number(item?.xp || 0)
+            }))
+            .filter((item) => item.userId)
+            .sort((a, b) => (b.level - a.level) || (b.xp - a.xp))
+            .slice(0, 10);
+
+        if (!ranked.length) {
+            container.innerHTML = '<p class="text-center text-muted" style="padding: 1rem;">No XP data available yet.</p>';
+            return;
+        }
+
+        let html = `
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:72px;">Rank</th>
+                        <th>User</th>
+                        <th>User ID</th>
+                        <th style="width:100px;">Level</th>
+                        <th style="width:140px;">XP</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        ranked.forEach((entry, index) => {
+            const rank = index + 1;
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+            html += `
+                <tr>
+                    <td><strong>#${rank}</strong> ${medal}</td>
+                    <td>${esc(entry.username)}</td>
+                    <td>${esc(entry.userId)}</td>
+                    <td>${entry.level.toLocaleString()}</td>
+                    <td>${entry.xp.toLocaleString()}</td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load XP leaderboard:', error);
+        container.innerHTML = '<p class="text-center text-danger" style="padding: 1rem;">Failed to load XP leaderboard.</p>';
     }
 }
 
@@ -110,9 +200,17 @@ async function loadAppeals() {
     if (!list) return;
     list.innerHTML = `<div class="appeals-queue-empty">Loading pending appeals...</div>`;
 
+    const loadNonce = ++window._appealsLoadNonce;
+
     try {
-        const { response, data } = await window.AdminPanel.api.getJson('/api/appeals/pending');
+        const api = await getAdminApiClient();
+        if (!api) throw new Error('Admin API is not ready');
+
+        const { response, data } = await api.getJson('/api/appeals/pending', { cache: 'no-store' });
         if (!response?.ok) throw new Error("Failed to fetch");
+
+        // Ignore stale responses from older in-flight loads.
+        if (loadNonce !== window._appealsLoadNonce) return;
 
         window._appealsPending = Array.isArray(data) ? data : (data?.appeals || []);
         renderAppealsPage(window.currentAppealsPendingPage);
@@ -327,7 +425,7 @@ function renderAppealsPage(page = 1) {
             const isSelected = globalIndex === Number(window._appealsPendingSelectedIndex);
 
             return `
-            <article class="appeals-queue-item ${isSelected ? 'appeals-queue-row-selected' : ''}" data-appeal-index="${globalIndex}" onclick="openAppealPendingDetails(${globalIndex})">
+            <article class="appeals-queue-item ${isSelected ? 'appeals-queue-row-selected' : ''}" data-appeal-index="${globalIndex}" role="button" tabindex="0">
                 <div class="appeals-queue-item-head">
                     <div class="appeals-queue-user-cell">
                         <strong>${esc(a.user_tag || a.user || 'Unknown')}</strong>
@@ -353,10 +451,48 @@ function renderAppealsPage(page = 1) {
 
     if (controls) {
         controls.innerHTML = `
-            <button class="btn btn-sm btn-secondary" ${page <= 1 ? 'disabled' : ''} onclick="renderAppealsPage(${page - 1})">Prev</button>
+            <button class="btn btn-sm btn-secondary" ${page <= 1 ? 'disabled' : ''} data-appeals-page="${page - 1}">Prev</button>
             <span class="mx-2">Page ${page} / ${pages}</span>
-            <button class="btn btn-sm btn-secondary" ${page >= pages ? 'disabled' : ''} onclick="renderAppealsPage(${page + 1})">Next</button>
+            <button class="btn btn-sm btn-secondary" ${page >= pages ? 'disabled' : ''} data-appeals-page="${page + 1}">Next</button>
         `;
+    }
+}
+
+function setupAppealsQueueInteractions() {
+    const list = document.getElementById('appealsQueueList');
+    const controls = document.getElementById('appealsControls');
+    if (list && !list.dataset.appealsBound) {
+        list.dataset.appealsBound = 'true';
+        list.addEventListener('click', (event) => {
+            const row = event.target.closest('.appeals-queue-item[data-appeal-index]');
+            if (!row) return;
+            const index = Number(row.getAttribute('data-appeal-index'));
+            if (Number.isFinite(index)) {
+                window.openAppealPendingDetails(index);
+            }
+        });
+        list.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const row = event.target.closest('.appeals-queue-item[data-appeal-index]');
+            if (!row) return;
+            event.preventDefault();
+            const index = Number(row.getAttribute('data-appeal-index'));
+            if (Number.isFinite(index)) {
+                window.openAppealPendingDetails(index);
+            }
+        });
+    }
+
+    if (controls && !controls.dataset.appealsBound) {
+        controls.dataset.appealsBound = 'true';
+        controls.addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-appeals-page]');
+            if (!button || button.disabled) return;
+            const page = Number(button.getAttribute('data-appeals-page'));
+            if (Number.isFinite(page)) {
+                renderAppealsPage(page);
+            }
+        });
     }
 }
 
@@ -365,9 +501,17 @@ async function loadAppealHistory() {
     if (!list) return;
     list.innerHTML = `<div class="appeal-history-empty">Loading appeal history...</div>`;
 
+    const loadNonce = ++window._appealHistoryLoadNonce;
+
     try {
-        const { response, data } = await window.AdminPanel.api.getJson('/api/appeals/decided');
+        const api = await getAdminApiClient();
+        if (!api) throw new Error('Admin API is not ready');
+
+        const { response, data } = await api.getJson('/api/appeals/decided', { cache: 'no-store' });
         if (!response?.ok) throw new Error("Failed to fetch");
+
+        // Ignore stale responses from older in-flight loads.
+        if (loadNonce !== window._appealHistoryLoadNonce) return;
 
         window._appealsHistory = Array.isArray(data) ? data : [];
         renderAppealHistoryPage(window.currentAppealsHistoryPage);
@@ -406,6 +550,19 @@ function formatAppealRelativeTime(value) {
     return `${Math.floor(diffMs / day)}d ago`;
 }
 
+function resolveAppealHistoryModerator(record) {
+    const raw = record?.moderator_tag
+        || record?.moderator
+        || record?.moderator_name
+        || record?.decided_by_name
+        || record?.decidedByName
+        || record?.moderator_id
+        || record?.decided_by_id
+        || '';
+    const cleaned = String(raw).trim();
+    return cleaned || 'Owner';
+}
+
 function getFilteredAppealHistory() {
     const all = window._appealsHistory || [];
     const q = (document.getElementById('appealHistorySearchInput')?.value || '').trim().toLowerCase();
@@ -417,7 +574,7 @@ function getFilteredAppealHistory() {
     return all.filter((a) => {
         const username = String(a.user_tag || a.user || '').toLowerCase();
         const caseId = String(a.ban_case_id || '').toLowerCase();
-        const moderator = String(a.moderator_tag || a.moderator || '').toLowerCase();
+        const moderator = resolveAppealHistoryModerator(a).toLowerCase();
         const userId = String(a.user_id || '').toLowerCase();
         const status = String(a.status || '').toLowerCase();
         const createdAtMs = new Date(a.created_at || a.submitted_at || a.updated_at || 0).getTime();
@@ -507,7 +664,7 @@ function renderAppealHistoryDetails(item) {
     setText('appealHistoryDetailUser', `${record.user_tag || record.user || 'Unknown'} (${record.user_id || 'N/A'})`);
     setText('appealHistoryDetailCase', record.ban_case_id || 'N/A');
     setText('appealHistoryDetailSubmitted', record.created_at ? new Date(record.created_at).toLocaleString() : '-');
-    setText('appealHistoryDetailModerator', record.moderator_tag || record.moderator || 'N/A');
+    setText('appealHistoryDetailModerator', resolveAppealHistoryModerator(record));
     setText('appealHistoryDetailReason', normalizedReason || 'No reason provided.');
     setText('appealHistoryDetailOutcome', decisionResponse || 'No decision response available.');
 
@@ -564,7 +721,7 @@ function renderAppealHistoryPage(page = 1) {
     } else if (sortMode === 'status') {
         rows.sort((a, b) => String(a.status || '').localeCompare(String(b.status || '')));
     } else if (sortMode === 'moderator') {
-        rows.sort((a, b) => String(a.moderator_tag || a.moderator || '').localeCompare(String(b.moderator_tag || b.moderator || '')));
+        rows.sort((a, b) => resolveAppealHistoryModerator(a).localeCompare(resolveAppealHistoryModerator(b)));
     } else {
         rows.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
     }
@@ -597,6 +754,8 @@ function renderAppealHistoryPage(page = 1) {
             const created = a.created_at ? new Date(a.created_at).toLocaleString() : '-';
             const createdRelative = formatAppealRelativeTime(a.created_at || a.submitted_at || a.updated_at);
             const globalIndex = start + idx;
+            const displayName = String(a.user_tag || a.user || 'Unknown');
+            const moderatorLabel = resolveAppealHistoryModerator(a);
             const reason = String(a.reason || 'No reason provided').replace(/\r\n/g, '\n').trim();
             const reasonPreview = reason.length > 145 ? `${reason.slice(0, 145)}...` : reason;
             const isSelected = globalIndex === Number(window._appealHistorySelectedIndex);
@@ -605,13 +764,22 @@ function renderAppealHistoryPage(page = 1) {
                 <article class="appeal-history-item appeal-history-item-enter ${isSelected ? 'appeal-history-row-selected' : ''}" style="animation-delay:${Math.min(idx * 45, 320)}ms" data-history-index="${globalIndex}" onclick="openAppealHistoryDetails(${globalIndex})">
                     <div class="appeal-history-item-head">
                         <div class="appeal-history-user-cell">
-                            <strong>${esc(a.user_tag || a.user || 'Unknown')}</strong>
-                            <small class="text-muted">${esc(a.user_id || 'N/A')}</small>
+                            <div class="appeal-history-user-heading">
+                                <span class="appeal-history-avatar" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                        <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5z"></path>
+                                    </svg>
+                                </span>
+                                <div class="appeal-history-user-ident">
+                                    <strong>${esc(displayName)}</strong>
+                                    <small class="text-muted">User ID: ${esc(a.user_id || 'N/A')}</small>
+                                </div>
+                            </div>
                         </div>
                         <div class="appeal-history-item-meta">
-                            <code>${esc(a.ban_case_id || 'N/A')}</code>
-                            <span class="text-muted">${esc(a.moderator_tag || a.moderator || 'N/A')}</span>
-                            <span class="text-muted">${createdRelative}</span>
+                            <span class="appeal-history-meta-chip">Case ${esc(a.ban_case_id || 'N/A')}</span>
+                            <span class="appeal-history-meta-chip appeal-history-meta-chip-mod">Mod ${esc(moderatorLabel)}</span>
+                            <span class="appeal-history-meta-chip appeal-history-meta-chip-time">${createdRelative}</span>
                         </div>
                     </div>
                     <div class="appeal-history-item-body">
@@ -619,7 +787,7 @@ function renderAppealHistoryPage(page = 1) {
                             ${esc(reasonPreview)}
                         </div>
                         <div class="appeal-history-action-row">
-                            <span class="text-muted">${created}</span>
+                            <span class="text-muted appeal-history-submitted">Submitted ${created}</span>
                             ${statusBadge}
                         </div>
                     </div>
@@ -936,6 +1104,26 @@ async function denyAppeal(appealId, username) {
     }
 }
 
+function createSocketConnection(options = {}) {
+    if (typeof io === 'undefined') return null;
+    if (window.socket) return window.socket;
+
+    const socket = io({
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 20,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5,
+        timeout: 10000,
+        ...options
+    });
+
+    window.socket = socket;
+    return socket;
+}
+
 async function runAdminPanel() {
     // Basic access check
     if (!window.currentAdminRole) {
@@ -944,28 +1132,33 @@ async function runAdminPanel() {
     }
 
     // Socket.IO initialization
-    if (typeof io !== 'undefined' && !window.socket) {
-        window.socket = io(); // Initialize Socket.IO client
+    if (typeof io !== 'undefined') {
+        const socket = createSocketConnection();
+        if (!socket) return;
 
-        window.socket.on('connect', () => {
+        socket.on('connect', () => {
             console.log('Connected to WebSocket server');
             showNotification('Connected to real-time updates', 'success');
         });
 
-        window.socket.on('disconnect', () => {
+        socket.on('disconnect', () => {
             console.warn('Disconnected from WebSocket server');
             showNotification('Disconnected from real-time updates', 'warning');
         });
 
+        socket.on('connect_error', () => {
+            showNotification('Realtime connection failed. Retrying...', 'warning');
+        });
+
         // Listen for appeal updates
-        window.socket.on('admin:appealUpdated', (data) => {
+        socket.on('admin:appealUpdated', (data) => {
             showNotification(`Appeal for ${data.username} was ${data.status}`, 'info');
             loadAppeals(); // Refresh pending appeals
             loadAppealHistory(); // Refresh history
         });
 
         // Listen for new appeals
-        window.socket.on('admin:newAppeal', (data) => {
+        socket.on('admin:newAppeal', (data) => {
             showNotification(`New appeal from ${data.username}`, 'info');
             loadAppeals(); // Refresh pending appeals
         });
@@ -975,6 +1168,8 @@ async function runAdminPanel() {
         initAdvancedLookup();
         window._adminLookupInitialized = true;
     }
+
+    loadAdminXpLeaderboard();
 }
 
 window._lookupState = window._lookupState || {
@@ -1659,6 +1854,8 @@ function renderAutoModUI() {
             spamThreshold=<strong>${effectiveAutoMod.spamThreshold ?? '-'}</strong>,
             warnThreshold=<strong>${effectiveAutoMod.spamWarningThreshold ?? '-'}</strong>,
             timeoutMs=<strong>${effectiveAutoMod.spamTimeout ?? '-'}</strong>,
+            similarity=<strong>${effectiveAutoMod.similarityThreshold ?? '-'}</strong>,
+            riskTimeout=<strong>${effectiveAutoMod.riskTimeoutThreshold ?? '-'}</strong>,
             maxMentions=<strong>${effective.maxMentionsBeforeFlag ?? '-'}</strong>,
             escalation24h=<strong>${effectiveAdvanced.escalationThreshold24h ?? '-'}</strong>
         `;
@@ -1695,11 +1892,32 @@ function renderAutoModForm(profileName) {
     setVal('automodSpamWarningThreshold', am.spamWarningThreshold);
     setVal('automodSpamTimeoutMs', am.spamTimeout);
     setVal('automodCapsThreshold', am.capsThreshold);
+    setVal('automodSimilarityWindowMs', am.similarityWindowMs);
+    setVal('automodSimilarityThreshold', am.similarityThreshold);
+    setVal('automodSimilarityMinLength', am.similarityMinLength);
+    setVal('automodSimilarityRepeatThreshold', am.similarityRepeatThreshold);
+    setVal('automodRiskWarnThreshold', am.riskWarnThreshold);
+    setVal('automodRiskDeleteThreshold', am.riskDeleteThreshold);
+    setVal('automodRiskTimeoutThreshold', am.riskTimeoutThreshold);
+    setVal('automodBaseTimeoutMs', am.baseTimeoutMs);
+    setVal('automodMaxTimeoutMs', am.maxTimeoutMs);
 
     // Advanced
     const adv = profile.autoModAdvanced || {};
     setVal('automodEscalationThreshold', adv.escalationThreshold24h);
     setVal('automodEscalationTimeoutMs', adv.escalationTimeoutMs);
+    setVal('automodProgressiveTimeoutMultiplier', adv.progressiveTimeoutMultiplier);
+    setVal('automodKickThreshold24h', adv.kickThreshold24h);
+    setVal('automodRegexMaxPatternLength', adv.regexMaxPatternLength);
+
+    const rw = adv.riskWeights || {};
+    setVal('automodRiskWeightSpam', rw.spam);
+    setVal('automodRiskWeightSimilarity', rw.similarity);
+    setVal('automodRiskWeightCaps', rw.caps);
+    setVal('automodRiskWeightProfanity', rw.profanity);
+    setVal('automodRiskWeightRegex', rw.regex);
+    setVal('automodRiskWeightInvites', rw.invites);
+    setVal('automodRiskWeightMentions', rw.mentions);
 
     // Text Areas (Arrays -> Newline separated strings)
     setVal('automodRegexPatterns', (adv.blockedRegexPatterns || []).join('\n'));
@@ -1810,6 +2028,12 @@ async function saveSelectedAutoModProfileSettings() {
     const getNum = (id) => Number(document.getElementById(id)?.value);
     const getBool = (id) => document.getElementById(id)?.value === 'true';
     const getList = (id) => (document.getElementById(id)?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const getOptionalNum = (id) => {
+        const raw = document.getElementById(id)?.value;
+        if (raw === undefined || raw === null || raw === '') return undefined;
+        const numeric = Number(raw);
+        return Number.isFinite(numeric) ? numeric : undefined;
+    };
 
     const payload = {
         profileName: profileName,
@@ -1821,14 +2045,35 @@ async function saveSelectedAutoModProfileSettings() {
                 spamWindow: getNum('automodSpamWindowMs'),
                 spamWarningThreshold: getNum('automodSpamWarningThreshold'),
                 spamTimeout: getNum('automodSpamTimeoutMs'),
-                capsThreshold: parseFloat(getVal('automodCapsThreshold'))
+                capsThreshold: parseFloat(getVal('automodCapsThreshold')),
+                similarityWindowMs: getNum('automodSimilarityWindowMs'),
+                similarityThreshold: parseFloat(getVal('automodSimilarityThreshold')),
+                similarityMinLength: getNum('automodSimilarityMinLength'),
+                similarityRepeatThreshold: getNum('automodSimilarityRepeatThreshold'),
+                riskWarnThreshold: getNum('automodRiskWarnThreshold'),
+                riskDeleteThreshold: getNum('automodRiskDeleteThreshold'),
+                riskTimeoutThreshold: getNum('automodRiskTimeoutThreshold'),
+                baseTimeoutMs: getNum('automodBaseTimeoutMs'),
+                maxTimeoutMs: getNum('automodMaxTimeoutMs')
             },
             autoModAdvanced: {
                 escalationThreshold24h: getNum('automodEscalationThreshold'),
                 escalationTimeoutMs: getNum('automodEscalationTimeoutMs'),
+                progressiveTimeoutMultiplier: getOptionalNum('automodProgressiveTimeoutMultiplier'),
+                kickThreshold24h: getNum('automodKickThreshold24h'),
+                regexMaxPatternLength: getNum('automodRegexMaxPatternLength'),
                 blockedRegexPatterns: getList('automodRegexPatterns'),
                 exemptChannelIds: getList('automodExemptChannels'),
-                exemptRoleIds: getList('automodExemptRoles')
+                exemptRoleIds: getList('automodExemptRoles'),
+                riskWeights: {
+                    spam: getNum('automodRiskWeightSpam'),
+                    similarity: getNum('automodRiskWeightSimilarity'),
+                    caps: getNum('automodRiskWeightCaps'),
+                    profanity: getNum('automodRiskWeightProfanity'),
+                    regex: getNum('automodRiskWeightRegex'),
+                    invites: getNum('automodRiskWeightInvites'),
+                    mentions: getNum('automodRiskWeightMentions')
+                }
             }
         }
     };
@@ -1873,6 +2118,12 @@ async function runAutoModSimulation() {
         const getNum = (id) => Number(document.getElementById(id)?.value);
         const getBool = (id) => document.getElementById(id)?.value === 'true';
         const getList = (id) => (document.getElementById(id)?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+        const getOptionalNum = (id) => {
+            const raw = document.getElementById(id)?.value;
+            if (raw === undefined || raw === null || raw === '') return undefined;
+            const numeric = Number(raw);
+            return Number.isFinite(numeric) ? numeric : undefined;
+        };
 
         payload.draftConfig = {
             blockExternalInvites: getBool('automodBlockInvites'),
@@ -1882,14 +2133,35 @@ async function runAutoModSimulation() {
                 spamWindow: getNum('automodSpamWindowMs'),
                 spamWarningThreshold: getNum('automodSpamWarningThreshold'),
                 spamTimeout: getNum('automodSpamTimeoutMs'),
-                capsThreshold: parseFloat(getVal('automodCapsThreshold'))
+                capsThreshold: parseFloat(getVal('automodCapsThreshold')),
+                similarityWindowMs: getNum('automodSimilarityWindowMs'),
+                similarityThreshold: parseFloat(getVal('automodSimilarityThreshold')),
+                similarityMinLength: getNum('automodSimilarityMinLength'),
+                similarityRepeatThreshold: getNum('automodSimilarityRepeatThreshold'),
+                riskWarnThreshold: getNum('automodRiskWarnThreshold'),
+                riskDeleteThreshold: getNum('automodRiskDeleteThreshold'),
+                riskTimeoutThreshold: getNum('automodRiskTimeoutThreshold'),
+                baseTimeoutMs: getNum('automodBaseTimeoutMs'),
+                maxTimeoutMs: getNum('automodMaxTimeoutMs')
             },
             autoModAdvanced: {
                 escalationThreshold24h: getNum('automodEscalationThreshold'),
                 escalationTimeoutMs: getNum('automodEscalationTimeoutMs'),
+                progressiveTimeoutMultiplier: getOptionalNum('automodProgressiveTimeoutMultiplier'),
+                kickThreshold24h: getNum('automodKickThreshold24h'),
+                regexMaxPatternLength: getNum('automodRegexMaxPatternLength'),
                 blockedRegexPatterns: getList('automodRegexPatterns'),
                 exemptChannelIds: getList('automodExemptChannels'),
-                exemptRoleIds: getList('automodExemptRoles')
+                exemptRoleIds: getList('automodExemptRoles'),
+                riskWeights: {
+                    spam: getNum('automodRiskWeightSpam'),
+                    similarity: getNum('automodRiskWeightSimilarity'),
+                    caps: getNum('automodRiskWeightCaps'),
+                    profanity: getNum('automodRiskWeightProfanity'),
+                    regex: getNum('automodRiskWeightRegex'),
+                    invites: getNum('automodRiskWeightInvites'),
+                    mentions: getNum('automodRiskWeightMentions')
+                }
             }
         };
     }
@@ -1910,8 +2182,13 @@ async function runAutoModSimulation() {
             const isFlagged = r.verdict === 'flagged';
             const findings = Array.isArray(r.findings) ? r.findings : [];
             const actions = Array.isArray(r.actions) ? r.actions : [];
+            const riskScore = Number(r.riskScore || 0);
+            const riskLevel = String(r.riskLevel || 'low').toUpperCase();
+            const predictedAction = String(r.predictedAction || 'warn').toUpperCase();
 
             let html = `<strong>Verdict:</strong> <span class="${isFlagged ? 'text-danger' : 'text-success'}">${esc(String(r.verdict || 'unknown').toUpperCase())}</span>`;
+            html += `<br><strong>Risk:</strong> ${esc(String(riskScore))} (${esc(riskLevel)})`;
+            html += `<br><strong>Predicted Action:</strong> ${esc(predictedAction)}${r.predictedTimeoutMs ? ` (${esc(String(r.predictedTimeoutMs))}ms)` : ''}`;
             html += `<br><strong>Findings:</strong> ${findings.length ? findings.map(esc).join('; ') : 'None'}`;
             html += `<br><strong>Predicted Actions:</strong> ${actions.length ? actions.map(esc).join('; ') : 'None'}`;
 
@@ -1967,6 +2244,11 @@ function renderAutoModAdvancedData(data) {
     setTextContent('automodMetricPending', formatCount(summary.pending));
     setTextContent('automodMetricHighRisk', formatCount(summary.highRisk));
     setTextContent('automodMetricResolved', formatCount((summary.approved || 0) + (summary.dismissed || 0)));
+
+    const avgRisk = Number(summary.avgRiskScore || 0).toFixed(2);
+    const falsePositiveRate = Number(summary.falsePositiveRate || 0).toFixed(2);
+    const appealAware = formatCount(summary.appealAwareActions || 0);
+    setAutoModStatus(`Analytics updated: avg risk ${avgRisk}, false-positive proxy ${falsePositiveRate}%, appeal-aware actions ${appealAware}.`);
 
     const trendBody = document.getElementById('automodTrendRows');
     if (trendBody) {
@@ -2168,6 +2450,7 @@ window.handleLookupInput = handleLookupInput;
 window.performLookup = performLookup;
 window.switchLookupTab = switchLookupTab;
 window.saveLookupNote = saveLookupNote;
+window.loadAdminXpLeaderboard = loadAdminXpLeaderboard;
 
 window.loadAutoModProfiles = loadAutoModConfig; // Alias for compatibility with switchTab
 window.loadAutoModConfig = loadAutoModConfig;
@@ -2182,3 +2465,35 @@ window.updateAutoModWorkflow = updateAutoModWorkflow;
 window.setAutoModWorkflowTarget = setAutoModWorkflowTarget;
 window.saveAutoModWorkflowNote = saveAutoModWorkflowNote;
 window.bulkResolveAutoModPending = bulkResolveAutoModPending;
+
+function refreshAdminVisibleData() {
+    const activeTab = document.querySelector('.tab.active')?.dataset?.tab || '';
+
+    if (activeTab === 'banned-users' && typeof loadBannedUsers === 'function') {
+        loadBannedUsers();
+        return;
+    }
+    if (activeTab === 'appeals' && typeof loadAppeals === 'function') {
+        loadAppeals();
+        return;
+    }
+    if (activeTab === 'appeals-history' && typeof loadAppealHistory === 'function') {
+        loadAppealHistory();
+        return;
+    }
+    if (activeTab === 'xp-leaderboard' && typeof loadAdminXpLeaderboard === 'function') {
+        loadAdminXpLeaderboard();
+        return;
+    }
+    if (activeTab === 'automod' && typeof loadAutoModConfig === 'function') {
+        if (typeof isOwner === 'function' && !isOwner()) return;
+        loadAutoModConfig();
+        return;
+    }
+}
+
+if (window.AdminPanel) {
+    window.AdminPanel.refreshVisibleData = refreshAdminVisibleData;
+}
+
+document.addEventListener('adminpanel:refresh-visible-data', refreshAdminVisibleData);

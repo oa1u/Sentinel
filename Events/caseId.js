@@ -24,6 +24,7 @@ function generateCaseId(caseType = 'CASE', randomLength = 8) {
 }
 
 module.exports = {
+  disabled: true,
   makeid,
   generateCaseId,
   CHARSET

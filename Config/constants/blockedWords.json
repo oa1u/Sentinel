@@ -1,4 +1,87 @@
 [
-  "badword1",
-  "badword2"
+  {
+    "term": "fuck",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "term": "fucking",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "term": "fucker",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "term": "motherfucker",
+    "severity": "critical",
+    "action": "timeout"
+  },
+  {
+    "term": "shit",
+    "severity": "medium",
+    "action": "warn"
+  },
+  {
+    "term": "bitch",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "term": "asshole",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "term": "dumbass",
+    "severity": "medium",
+    "action": "warn"
+  },
+  {
+    "term": "stfu",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "term": "kys",
+    "severity": "critical",
+    "action": "timeout"
+  },
+  {
+    "term": "go kill yourself",
+    "severity": "critical",
+    "action": "timeout"
+  },
+  {
+    "mode": "regex",
+    "pattern": "\\bf+\\s*u+\\s*c+\\s*k+\\b",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "mode": "regex",
+    "pattern": "\\bsh+\\s*i+\\s*t+\\b",
+    "severity": "medium",
+    "action": "warn"
+  },
+  {
+    "mode": "regex",
+    "pattern": "\\bb+i+t+c+h+\\b",
+    "severity": "high",
+    "action": "delete"
+  },
+  {
+    "mode": "regex",
+    "pattern": "\\b(mother\\s*fu+\\s*c+\\s*k+e?r?)\\b",
+    "severity": "critical",
+    "action": "timeout"
+  },
+  {
+    "mode": "regex",
+    "pattern": "\\b(k+\\s*y+\\s*s+)\\b",
+    "severity": "critical",
+    "action": "timeout"
+  }
 ]

@@ -1,0 +1,4 @@
+{
+	"weatherapikey": "##REPLACE-WITH-YOUR-OWN-KEY##",
+	"riddleApiUrl": "https://riddles-api.vercel.app/random"
+}

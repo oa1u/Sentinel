@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const { administratorRoleId } = require('../../Config/constants/roles.json');
+const { ROLES: { administratorRoleId } } = require('../../Config/constants');
 
 // Admins can handle suggestions—approve, deny, or mark as implemented.
 module.exports = {

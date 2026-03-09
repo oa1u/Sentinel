@@ -2,6 +2,8 @@ const { isModOrAdmin, getMemberFromMention } = require('./GetMemberFromMention')
 const { sendErrorReply } = require('./EmbedBuilders');
 const DatabaseManager = require('./MySQLDatabaseManager');
 const { getMember, getUser } = require('./Helpers');
+const { EmbedBuilder } = require('discord.js');
+const { CHANNELS: { serverLogChannelId } } = require('../Config/constants');
 
 // Helper functions for moderation commands.
 // Checks permissions, logs actions, and sends DM notifications for mod actions.
@@ -107,9 +109,59 @@ async function sendModerationDM(user, embed) {
 }
 
 // Log moderation action to the server log channel
+function moderationEmbedHasField(embed, needle) {
+    const fields = Array.isArray(embed?.data?.fields) ? embed.data.fields : [];
+    const normalizedNeedle = String(needle || '').toLowerCase();
+    return fields.some((field) => String(field?.name || '').toLowerCase().includes(normalizedNeedle));
+}
+
+function appendModerationContext(embed, interaction) {
+    const prepared = EmbedBuilder.from(embed);
+
+    const commandName = interaction?.commandName ? `/${interaction.commandName}` : 'Unknown';
+    const channelLabel = interaction?.channel ? `${interaction.channel}` : 'Unknown';
+    const moderatorLabel = interaction?.user
+        ? `${interaction.user}\n\`${interaction.user.id}\``
+        : 'Unknown';
+
+    const extraFields = [];
+
+    if (!moderationEmbedHasField(prepared, 'command')) {
+        extraFields.push({ name: '🧭 Command', value: commandName, inline: true });
+    }
+    if (!moderationEmbedHasField(prepared, 'channel')) {
+        extraFields.push({ name: '📍 Channel', value: channelLabel, inline: true });
+    }
+    if (!moderationEmbedHasField(prepared, 'moderator')) {
+        extraFields.push({ name: '👮 Moderator', value: moderatorLabel, inline: true });
+    }
+
+    if (extraFields.length) {
+        const existingCount = Array.isArray(prepared.data?.fields) ? prepared.data.fields.length : 0;
+        const remaining = Math.max(0, 25 - existingCount);
+        if (remaining > 0) prepared.addFields(...extraFields.slice(0, remaining));
+    }
+
+    if (!prepared.data?.timestamp) {
+        prepared.setTimestamp(new Date());
+    }
+
+    const footerText = String(prepared.data?.footer?.text || '').trim();
+    if (!footerText) {
+        prepared.setFooter({ text: 'Moderation • Server Log' });
+    } else if (!footerText.toLowerCase().includes('server log')) {
+        prepared.setFooter({ text: `${footerText} • Server Log` });
+    }
+
+    return prepared;
+}
+
 async function logModerationAction(interaction, embed) {
-    const { serverLogChannelId } = require('../Config/constants/channel.json');
-    const loggingChannel = interaction.guild.channels.cache.get(serverLogChannelId);
+    let loggingChannel = interaction.guild.channels.cache.get(serverLogChannelId);
+
+    if (!loggingChannel && serverLogChannelId) {
+        loggingChannel = await interaction.guild.channels.fetch(serverLogChannelId).catch(() => null);
+    }
 
     if (!loggingChannel) {
         console.warn('Logging channel not found or not configured');
@@ -117,7 +169,8 @@ async function logModerationAction(interaction, embed) {
     }
 
     try {
-        await loggingChannel.send({ embeds: [embed] });
+        const preparedEmbed = appendModerationContext(embed, interaction);
+        await loggingChannel.send({ embeds: [preparedEmbed] });
         return true;
     } catch (err) {
         console.error(`Error logging action: ${err.message}`);

@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
-const { ServerInvite } = require("../../Config/main.json");
-const { administratorRoleId, moderatorRoleId } = require("../../Config/constants/roles.json");
+const { ROLES: { administratorRoleId, moderatorRoleId } } = require("../../Config/constants");
 
 // The help command shows a categorized list of all available commands—easy to find what you need.
 // Note to self: Remember to update categories when adding new commands!
@@ -42,7 +41,7 @@ module.exports = {
       moderation: '🛡️',
       voice: '🎤',
       utility: '🔧',
-      leveling: '📈',
+      levels: '📈',
       fun: '🎮',
       ticket: '🎫',
       verification: '🔐'
@@ -144,6 +143,57 @@ module.exports = {
       .setFooter({ text: `${count} commands • Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ size: 128 }) })
       .setTimestamp();
 
+
+    if (category === 'utility') {
+      const economyUserLines = [
+        '• `/economy balance [user]` — wallet, bank, totals',
+        '• `/economy daily` and `/economy weekly` — timed rewards',
+        '• `/economy work` — work payouts with cooldowns',
+        '• `/economy deposit|withdraw <amount|%|all>` — move funds',
+        '• `/economy gamble <amount|%|all>` — risk/reward',
+        '• `/economy quests` and `/economy quest-claim <quest>` — quests + rewards',
+        '• `/economy shop`, `/economy buy`, `/economy inventory`, `/economy use` — items + boosts',
+        '• `/economy leaderboard` and `/economy stats [user]` — rankings + analytics',
+        '• `/weather <city>` — get the weather'
+      ];
+
+      categoryEmbed.addFields({
+        name: '💰 Economy & Utility',
+        value: economyUserLines.join('\n'),
+        inline: false
+      });
+
+      if (hasAdminRole) {
+        categoryEmbed.addFields({
+          name: '🛠️ Economy Admin Tools',
+          value: [
+            '• `/economy admin set <user> <wallet|bank> <amount> [reason]`',
+            '• `/economy admin add <user> <wallet|bank> <amount> [reason]`',
+            '• `/economy admin remove <user> <wallet|bank> <amount> [reason]`',
+            '• `/economy bounty list|create|award|close` — manage bounties'
+          ].join('\n'),
+          inline: false
+        });
+      }
+    }
+
+    if (category === 'fun') {
+      const funLines = [
+        '• `/trivia` — answer a trivia question',
+        '• `/riddle` — solve a riddle for XP',
+        '• `/8ball` — magic 8-ball',
+        '• `/coinflip` — flip a coin',
+        '• `/fact` — get a random fact',
+        '• `/roast` — get roasted',
+        '• `/pickup` — pickup lines'
+      ];
+      categoryEmbed.addFields({
+        name: '🎮 Fun Quick Guide',
+        value: funLines.join('\n'),
+        inline: false
+      });
+    }
+
     return interaction.reply({ embeds: [categoryEmbed], flags: MessageFlags.Ephemeral });
   }
 };
@@ -153,14 +203,15 @@ function getCommandEmoji(commandName) {
   const emojiMap = {
     // Management commands
     'announce': '📢',
-    'eannounce': '📢',
     'checkban': '🔍',
     'unban': '🚫',
-    'clearwarning': '🧹',
     'clearwarns': '🧹',
     'giveaway': '🎉',
-    'manage': '🛠️',
     'automodwarns': '⚠️',
+  'rules': '📜',
+  'suggestion': '🧾',
+  'setlevel': '⚡',
+  'health': '🩺',
     // Moderation commands
     'warn': '⚠️',
     'warning': '📋',
@@ -174,15 +225,23 @@ function getCommandEmoji(commandName) {
     'slowmode': '🐢',
     'moderations': '📄',
     'note': '📝',
+    'incident': '📁',
     'modlogs': '📚',
     'audit': '🧠',
     // Utility commands
     'help': '❓',
+    'ping': '🏓',
     'userinfo': '👤',
     'avatar': '🖼️',
     'banner': '🧵',
     'serverinfo': '🏰',
     'inviteinfo': '🔎',
+    'activity': '📊',
+    'afk': '💤',
+    'suggest': '💡',
+    'snipe': '🎯',
+    'rep': '🤝',
+    'economy': '🪙',
     'joke': '😂',
     'define': '📖',
     'poll': '📊',
@@ -194,23 +253,25 @@ function getCommandEmoji(commandName) {
     // Leveling commands
     'rank': '🏆',
     'leaderboard': '🥇',
-    'setlevel': '⚡',
     // Fun commands
     '8ball': '🎱',
     'trivia': '🧠',
     'coinflip': '🎲',
+    'riddle': '🧩',
     'fact': '💡',
     'roast': '🔥',
     'pickup': '💘',
     // Ticket commands
     'ticket': '🎫',
-    'close': '🔒',
-    'markhandled': '✅',
-    'claim': '👤',
-    'adduser': '➕',
-    'removeuser': '➖',
+    'ticketclose': '🔒',
+    'ticketmarkhandled': '✅',
+    'ticketclaim': '👤',
+    'ticketadduser': '➕',
+    'ticketremoveuser': '➖',
+    'tickettransfer': '🔁',
     // Verification commands
-    'verify': '🔐'
+    'verify': '🔐',
+    'verify-override': '🛂'
   };
 
   return emojiMap[commandName] || '❯';
