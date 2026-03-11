@@ -1,124 +1,124 @@
 {
-	"shopItems": [
-		{
-			"id": "work_boost",
-			"name": "Work Boost",
-			"description": "Boost your next work payout by 50%.",
-			"price": 1500,
-			"type": "work_boost",
-			"meta": {
-				"multiplier": 1.5,
-				"uses": 1,
-				"expiresMs": 21600000
-			}
-		},
-		{
-			"id": "daily_boost",
-			"name": "Daily Boost",
-			"description": "Boost your next daily reward by 40%.",
-			"price": 2500,
-			"type": "daily_boost",
-			"meta": {
-				"multiplier": 1.4,
-				"uses": 1,
-				"expiresMs": 21600000
-			}
-		},
-		{
-			"id": "streak_freeze",
-			"name": "Streak Freeze",
-			"description": "Protect your daily streak from one missed day.",
-			"price": 3500,
-			"type": "streak_freeze",
-			"meta": {
-				"uses": 1,
-				"expiresMs": 2592000000
-			}
-		}
-	],
-	"quests": {
-		"daily": [
-			{
-				"key": "daily_claim",
-				"title": "Daily Check-In",
-				"description": "Claim your daily reward once.",
-				"type": "daily_claim",
-				"target": 1,
-				"reward": 250
-			},
-			{
-				"key": "work_twice",
-				"title": "Double Shift",
-				"description": "Use /economy work two times.",
-				"type": "work",
-				"target": 2,
-				"reward": 300
-			},
-			{
-				"key": "activity_rewards",
-				"title": "Active Citizen",
-				"description": "Earn activity rewards 5 times.",
-				"type": "activity",
-				"target": 5,
-				"reward": 200
-			}
-		],
-		"weekly": [
-			{
-				"key": "weekly_work",
-				"title": "Weekly Hustle",
-				"description": "Use /economy work 10 times.",
-				"type": "work",
-				"target": 10,
-				"reward": 1500
-			},
-			{
-				"key": "weekly_gamble",
-				"title": "Calculated Risk",
-				"description": "Wager a total of 5,000 coins.",
-				"type": "gamble_wager",
-				"target": 5000,
-				"reward": 1200
-			},
-			{
-				"key": "weekly_pay",
-				"title": "Community Support",
-				"description": "Pay out 2,000 coins to others.",
-				"type": "pay_amount",
-				"target": 2000,
-				"reward": 1000
-			}
-		]
-	},
-	"bankInterest": {
-		"enabled": true,
-		"intervalMs": 86400000,
-		"minBalance": 500,
-		"maxInterestPerRun": 50000,
-		"tiers": [
-			{
-				"min": 0,
-				"rate": 0.002
-			},
-			{
-				"min": 10000,
-				"rate": 0.003
-			},
-			{
-				"min": 50000,
-				"rate": 0.004
-			},
-			{
-				"min": 200000,
-				"rate": 0.005
-			}
-		]
-	},
-	"fraud": {
-		"enabled": true,
-		"largeTransferAmount": 150000,
-		"rapidTransferWindowMs": 900000,
-		"rapidTransferCount": 5,
-		"flagCooldownMs": 3600000
-	}
+    "shopItems": [
+        {
+            "id": "work_boost",
+            "name": "Work Boost",
+            "description": "Boost your next work payout by 50%.",
+            "price": 1500,
+            "type": "work_boost",
+            "meta": {
+                "multiplier": 1.5,
+                "uses": 1,
+                "expiresMs": 21600000
+            }
+        },
+        {
+            "id": "daily_boost",
+            "name": "Daily Boost",
+            "description": "Boost your next daily reward by 40%.",
+            "price": 2500,
+            "type": "daily_boost",
+            "meta": {
+                "multiplier": 1.4,
+                "uses": 1,
+                "expiresMs": 21600000
+            }
+        },
+        {
+            "id": "streak_freeze",
+            "name": "Streak Freeze",
+            "description": "Protect your daily streak from one missed day.",
+            "price": 3500,
+            "type": "streak_freeze",
+            "meta": {
+                "uses": 1,
+                "expiresMs": 2592000000
+            }
+        }
+    ],
+    "quests": {
+        "daily": [
+            {
+                "key": "daily_claim",
+                "title": "Daily Check-In",
+                "description": "Claim your daily reward once.",
+                "type": "daily_claim",
+                "target": 1,
+                "reward": 250
+            },
+            {
+                "key": "work_twice",
+                "title": "Double Shift",
+                "description": "Use /economy work two times.",
+                "type": "work",
+                "target": 2,
+                "reward": 300
+            },
+            {
+                "key": "activity_rewards",
+                "title": "Active Citizen",
+                "description": "Earn activity rewards 5 times.",
+                "type": "activity",
+                "target": 5,
+                "reward": 200
+            }
+        ],
+        "weekly": [
+            {
+                "key": "weekly_work",
+                "title": "Weekly Hustle",
+                "description": "Use /economy work 10 times.",
+                "type": "work",
+                "target": 10,
+                "reward": 1500
+            },
+            {
+                "key": "weekly_gamble",
+                "title": "Calculated Risk",
+                "description": "Wager a total of 5,000 coins.",
+                "type": "gamble_wager",
+                "target": 5000,
+                "reward": 1200
+            },
+            {
+                "key": "weekly_pay",
+                "title": "Community Support",
+                "description": "Pay out 2,000 coins to others.",
+                "type": "pay_amount",
+                "target": 2000,
+                "reward": 1000
+            }
+        ]
+    },
+    "bankInterest": {
+        "enabled": true,
+        "intervalMs": 86400000,
+        "minBalance": 500,
+        "maxInterestPerRun": 50000,
+        "tiers": [
+            {
+                "min": 0,
+                "rate": 0.002
+            },
+            {
+                "min": 10000,
+                "rate": 0.003
+            },
+            {
+                "min": 50000,
+                "rate": 0.004
+            },
+            {
+                "min": 200000,
+                "rate": 0.005
+            }
+        ]
+    },
+    "fraud": {
+        "enabled": true,
+        "largeTransferAmount": 150000,
+        "rapidTransferWindowMs": 900000,
+        "rapidTransferCount": 5,
+        "flagCooldownMs": 3600000
+    }
 }
