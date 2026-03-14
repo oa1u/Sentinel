@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status</title>
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 60vh;">
+        <div class="card" style="max-width: 420px; margin: 2rem auto; text-align: center;">
+            <div id="status-icon" style="font-size: 48px; margin-bottom: 16px;">🔔</div>
+            <h1 id="status-title" style="margin-bottom: 12px; color: var(--text-primary);">Status</h1>
+            <p id="status-message" style="color: var(--text-secondary);"></p>
+            <p id="status-hint" style="color: var(--text-secondary); display:none;"></p>
+            <a href="/admin" class="btn" id="status-action" style="display:none;">Go to Admin Panel</a>
+        </div>
+    </div>
+    <script>
+        // window.statusPageData should be set by the backend or inline script
+        if (window.statusPageData) {
+            document.getElementById('status-title').textContent = window.statusPageData.title || 'Status';
+            document.getElementById('status-message').innerHTML = window.statusPageData.message || '';
+            document.getElementById('status-icon').textContent = window.statusPageData.icon || '🔔';
+            if (window.statusPageData.hint) {
+                document.getElementById('status-hint').textContent = window.statusPageData.hint;
+                document.getElementById('status-hint').style.display = '';
+            }
+            if (window.statusPageData.action) {
+                var actionBtn = document.getElementById('status-action');
+                actionBtn.textContent = window.statusPageData.action.text || 'Continue';
+                actionBtn.href = window.statusPageData.action.href || '/admin';
+                actionBtn.style.display = '';
+            }
+        }
+    </script>
+    <script src="/public/shared.js"></script>
+</body>
+
+</html>

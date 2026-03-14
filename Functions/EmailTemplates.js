@@ -369,7 +369,7 @@ const templates = {
             'Notify server ownership or security staff for incident follow-up.'
         ])}
 
-            <div class="btn-wrap">${actionButton(`${websiteLink}/security`, 'Open Security Settings')}</div>
+            <div class="btn-wrap">${actionButton(`${websiteLink}/profile`, 'Open Security Settings')}</div>
         `;
         return BaseTemplate(content, 'Security Event Detected');
     },

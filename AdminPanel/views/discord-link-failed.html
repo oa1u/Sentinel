@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Link Failed</title>
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 60vh;">
+        <div class="card" style="max-width: 420px; margin: 2rem auto; text-align: center;">
+            <div style="font-size: 48px; color: #e74c3c; margin-bottom: 16px;">⚠️</div>
+            <h1 style="margin-bottom: 12px; color: var(--text-primary);">Discord Link Failed</h1>
+            <p id="error-message" style="color: var(--text-secondary);"></p>
+            <script>
+                // Map error codes to user-friendly messages
+                const errorMessages = {
+                    already_linked: "That Discord account is already linked to another admin panel account.<br>Return to your admin panel tab, refresh, and try again.",
+                    session_expired: "Your session expired before the Discord link could complete. Please try again.",
+                    user_not_found: "The admin panel user could not be found.",
+                    oauth_failed: "Discord OAuth failed. Please try again.",
+                    default: "The Discord link was unsuccessful. Please try again."
+                };
+                // Get the reason from the URL
+                const params = new URLSearchParams(window.location.search);
+                const reason = params.get('reason');
+                document.getElementById('error-message').innerHTML =
+                    errorMessages[reason] || errorMessages.default;
+            </script>
+            <a href="/admin" class="btn">Go to Admin Panel</a>
+        </div>
+    </div>
+    <script src="/public/shared.js"></script>
+</body>
+
+</html>

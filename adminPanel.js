@@ -1,6 +1,5 @@
 // Admin Panel server — backend for the dashboard
 // Serves the admin UI, manages sessions, and applies security protections.
-
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
@@ -2537,6 +2536,16 @@ app.get('/recovery', (req, res) => {
 });
 
 app.get('/unauthorized', (req, res) => {
+    // Log unauthorized access attempt for admin review
+    try {
+        const user = req.session?.username || 'Guest';
+        const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+        const route = req.originalUrl || req.url;
+        const logMsg = `[${new Date().toISOString()}] Unauthorized access attempt by ${user} from ${ip} to ${route}`;
+        // Simple file log (append to a log file)
+        const fs = require('fs');
+        fs.appendFile(path.join(__dirname, 'AdminPanel', 'unauthorized.log'), logMsg + '\n', () => { });
+    } catch (e) { /* ignore logging errors */ }
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'unauthorized.html'));
 });
 
@@ -5575,13 +5584,20 @@ app.post('/api/register', createRateLimiter(2, 3600000), async (req, res) => {
     }
 });
 
-function sendVerifyEmailStatusPage(res, { title, message, hint = '', statusCode = 200 } = {}) {
+
+function sendVerifyEmailStatusPage(res, { title, message, hint = '', statusCode = 200, icon = '🔔' } = {}) {
+    // Sanitize for HTML injection safety
     const safeTitle = sanitizeHtmlText(title || 'Status');
     const safeMessage = sanitizeHtmlText(message || 'Request completed.');
     const safeHint = sanitizeHtmlText(hint || '');
+    const safeIcon = typeof icon === 'string' ? icon : '🔔';
     const code = Number.isInteger(statusCode) ? statusCode : 200;
 
-    return res.status(code).send(`<!doctype html>
+    const statusPagePath = path.join(__dirname, 'AdminPanel', 'views', 'status.html');
+    fs.readFile(statusPagePath, 'utf8', (err, html) => {
+        if (err) {
+            // fallback to legacy HTML if file not found
+            return res.status(code).send(`<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -5596,6 +5612,17 @@ function sendVerifyEmailStatusPage(res, { title, message, hint = '', statusCode 
     </main>
 </body>
 </html>`);
+        }
+        // Inject window.statusPageData as a script right after <body>
+        const script = `<script>window.statusPageData = ${JSON.stringify({
+            title: safeTitle,
+            message: safeMessage,
+            hint: safeHint,
+            icon: safeIcon
+        })};</script>`;
+        const injected = html.replace(/<body>/i, '<body>' + script);
+        res.status(code).send(injected);
+    });
 }
 
 app.get('/verify-email', async (req, res) => {
@@ -11529,27 +11556,11 @@ function completeDiscordOAuthRequest(req, res, { success, message }) {
         return res.redirect(`/profile?discord_oauth=${status}&message=${encodedMessage}`);
     }
 
-    const safeMessage = sanitizeHtmlText(message || (success ? 'OAuth completed.' : 'OAuth failed.'));
-    const title = success ? 'Discord Link Complete' : 'Discord Link Failed';
-    const hint = success
-        ? 'Return to your admin panel tab and refresh the profile page.'
-        : 'Return to your admin panel tab, refresh, and try again.';
-
-    return res.status(success ? 200 : 400).send(`<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${sanitizeHtmlText(title)}</title>
-</head>
-<body>
-    <main>
-        <h1>${sanitizeHtmlText(title)}</h1>
-        <p>${safeMessage}</p>
-        <p>${sanitizeHtmlText(hint)}</p>
-    </main>
-</body>
-</html>`);
+    // Serve custom HTML files for unauthenticated users
+    const filePath = success
+        ? path.join(__dirname, 'AdminPanel', 'views', 'discord-link-complete.html')
+        : path.join(__dirname, 'AdminPanel', 'views', 'discord-link-failed.html');
+    return res.status(success ? 200 : 400).sendFile(filePath);
 }
 
 // Helper function to extract device from user agent
