@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Unauthorized — shown when a user lacks access to the requested Admin Panel page. -->
 <html lang="en">
 
 <head>
@@ -12,7 +11,6 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/shared.js"></script>
     <script>
-        // Hide sign in/register and show dashboard if already authenticated
         document.addEventListener('DOMContentLoaded', () => {
             const authState = document.getElementById('authStateValue');
             const routeValue = document.getElementById('routeValue');

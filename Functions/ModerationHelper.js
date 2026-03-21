@@ -11,7 +11,7 @@ const { CHANNELS: { serverLogChannelId } } = require('../Config/constants');
 // Moderation helpers
 // A small collection of helper functions used by moderation commands.
 // They handle permission checks, role-hierarchy validation, logging to the
-// moderation channel, and sending DMs to users — keeping command files
+// moderation channel, and sending DMs to users - keeping command files
 // focused on the actual moderation workflow.
 
 // Check whether the command executor is allowed to act on the target user.

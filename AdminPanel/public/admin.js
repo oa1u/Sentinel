@@ -1,43 +1,43 @@
-/* Admin UI helpers — small utilities used across admin pages (non-functional comments only). */
-// Fill all .websiteName spans with the websiteName from config
 fetch('/Config/main.json')
-    .then(response => response.json())
-    .then(config => {
-        document.querySelectorAll('.websiteName').forEach(el => {
+    .then((response) => {
+        if (!response.ok) throw new Error(`Config request failed with status ${response.status}`);
+        return response.json();
+    })
+    .then((config) => {
+        document.querySelectorAll('.websiteName').forEach((el) => {
             el.textContent = config.websiteName;
         });
+    })
+    .catch((error) => {
+        console.warn('Failed to load panel config:', error);
     });
-// Robust admin panel tab system
 
-// --- Global Variables ---
 window.currentAdminRole = window.currentAdminRole || '';
 window._appealsPending = [];
 window._appealsHistory = [];
-window._autoModConfig = null; // AutoMod full config
+window._autoModConfig = null;
 window._appealsLoadNonce = 0;
 window._appealHistoryLoadNonce = 0;
 
-// --- Utility Functions ---
-const esc = (t) => String(t).replace(/[&<>"']/g, c => ({
+
+const safeHtml = (t) => String(t).replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": "&#039;"
 })[c]);
 
 const getCurrentRole = () => String(window.currentAdminRole || '').toLowerCase();
 const isOwner = () => getCurrentRole() === 'owner';
 
-// --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
     if (window.setWebsiteNameTitle) window.setWebsiteNameTitle();
-    // User info sync
     try {
         let api = window.api || (window.AdminPanel && window.AdminPanel.api);
         if (api && typeof api.getAccountInfo === 'function') {
             const accountInfo = await api.getAccountInfo();
             if (accountInfo) {
                 window.currentAdminRole = String(accountInfo.role || '').toLowerCase();
-                const userDisplay = document.getElementById('userDisplay');
+                const userDisplay = document.getElementById('headerUsername');
                 if (userDisplay) userDisplay.textContent = accountInfo.username || 'User';
-                const roleBadge = document.getElementById('roleBadge');
+                const roleBadge = document.getElementById('headerRole');
                 if (roleBadge) roleBadge.textContent = (accountInfo.role || 'User').toUpperCase();
                 const dropdownUsername = document.getElementById('dropdownUsername');
                 if (dropdownUsername) dropdownUsername.textContent = accountInfo.username || 'User';
@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         automodTabButton.style.display = 'none';
     }
 
-    // Attach tab event listeners
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const tabName = btn.dataset.tab;
@@ -64,12 +63,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Run main logic
     await runAdminPanel();
 
     setupAppealsQueueInteractions();
 
-    // Ensure the currently active tab performs its initial data load.
+    loadDashboardStats();
+
     const activeTabName = document.querySelector('.tab.active')?.dataset?.tab;
     if (activeTabName) {
         switchTab(null, activeTabName);
@@ -86,7 +85,6 @@ async function getAdminApiClient(timeoutMs = 3000) {
     return null;
 }
 
-// --- Tab Logic ---
 function switchTab(e, tabName, btn) {
     if (e && e.preventDefault) e.preventDefault();
 
@@ -108,13 +106,14 @@ function switchTab(e, tabName, btn) {
         content.style.display = '';
     }
 
-    // Dynamic Loading
     if (tabName === 'banned-users' && typeof loadBannedUsers === 'function') loadBannedUsers();
     else if (tabName === 'appeals') loadAppeals();
     else if (tabName === 'appeals-history') loadAppealHistory();
     else if (tabName === 'xp-leaderboard') loadAdminXpLeaderboard();
+    else if (tabName === 'ghostpings') loadGhostPings();
+    else if (tabName === 'suggestions') loadSuggestions();
     else if (tabName === 'automod') {
-        if (isOwner()) loadAutoModConfig(); // Load profiles first
+        if (isOwner()) loadAutoModConfig();
         else {
             const statusEl = document.getElementById('automodStatusMessage');
             if (statusEl) statusEl.textContent = 'AutoMod settings are owner-only.';
@@ -171,8 +170,8 @@ async function loadAdminXpLeaderboard() {
             html += `
                 <tr>
                     <td><strong>#${rank}</strong> ${medal}</td>
-                    <td>${esc(entry.username)}</td>
-                    <td>${esc(entry.userId)}</td>
+                    <td>${safeHtml(entry.username)}</td>
+                    <td>${safeHtml(entry.userId)}</td>
                     <td>${entry.level.toLocaleString()}</td>
                     <td>${entry.xp.toLocaleString()}</td>
                 </tr>
@@ -187,7 +186,6 @@ async function loadAdminXpLeaderboard() {
     }
 }
 
-// --- Appeals System ---
 window.currentAppealsPendingPage = 1;
 window.currentAppealsHistoryPage = 1;
 window._appealHistoryRenderRows = [];
@@ -198,7 +196,7 @@ window._appealsPendingSelectedIndex = -1;
 async function loadAppeals() {
     const list = document.getElementById('appealsQueueList');
     if (!list) return;
-    list.innerHTML = `<div class="appeals-queue-empty">Loading pending appeals...</div>`;
+    list.innerHTML = `<div class="appeals-queue-empty">Loading appeals...</div>`;
 
     const loadNonce = ++window._appealsLoadNonce;
 
@@ -209,15 +207,14 @@ async function loadAppeals() {
         const { response, data } = await api.getJson('/api/appeals/pending', { cache: 'no-store' });
         if (!response?.ok) throw new Error("Failed to fetch");
 
-        // Ignore stale responses from older in-flight loads.
         if (loadNonce !== window._appealsLoadNonce) return;
 
         window._appealsPending = Array.isArray(data) ? data : (data?.appeals || []);
         renderAppealsPage(window.currentAppealsPendingPage);
     } catch (err) {
         console.error("Error loading pending appeals:", err);
-        showNotification('Error loading pending appeals', 'error');
-        list.innerHTML = `<div class="appeals-queue-empty text-danger">Could not load pending appeals. Try reloading.</div>`;
+        adminShowNotification('Could not load appeals', 'error');
+        list.innerHTML = `<div class="appeals-queue-empty text-danger">Could not load appeals. Try refreshing.</div>`;
     }
 }
 
@@ -275,10 +272,13 @@ function renderAppealsMetrics(rows) {
     setVal('appealsMetricRecent', recent24h);
     setVal('appealsMetricUsers', uniqueUsers);
 
-    const summaryEl = document.getElementById('appealsSummaryText');
+    const summaryEl = document.getElementById('appealsQueueStats');
     if (summaryEl) {
-        const queueLoad = total > 0 ? `${Math.round((recent24h / total) * 100)}%` : '0%';
-        summaryEl.textContent = `${total.toLocaleString()} pending • ${recent24h.toLocaleString()} in 24h • Queue activity ${queueLoad}`;
+        const queueLoad = total > 0 ? `${Math.round((recent24h / total) * 100)}` : '0';
+        summaryEl.innerHTML = `
+            <span class="stat-pill">${total.toLocaleString()} Pending</span>
+            <span class="stat-pill text-muted">${recent24h.toLocaleString()} New (24h)</span>
+        `;
     }
 }
 
@@ -302,7 +302,7 @@ function renderAppealPendingDetails(item) {
     setText('appealsDetailCaseId', record.ban_case_id || 'N/A');
     setText('appealsDetailSubmitted', record.created_at ? new Date(record.created_at).toLocaleString() : '-');
     setText('appealsDetailReason', reason || 'No reason provided.');
-    setText('appealsDetailResponse', responseGiven || 'No response has been given yet.');
+    setText('appealsDetailResponse', responseGiven || 'No response yet.');
 
     const acceptBtn = document.getElementById('appealsDetailAcceptBtn');
     const denyBtn = document.getElementById('appealsDetailDenyBtn');
@@ -373,7 +373,7 @@ function renderAppealsPage(page = 1) {
     const controls = document.getElementById('appealsControls');
     if (!list) return;
 
-    window.currentAppealsPendingPage = page; // Update current page
+    window.currentAppealsPendingPage = page;
 
     const pageSize = parseInt(document.getElementById('appealsPageSize')?.value) || 10;
     const sortMode = document.getElementById('appealsSort')?.value || 'newest';
@@ -398,13 +398,22 @@ function renderAppealsPage(page = 1) {
     window._appealsPendingRenderRows = rows;
 
     const pages = Math.max(1, Math.ceil(rows.length / pageSize));
-    if (page > pages) page = pages; // Correct page if out of bounds
+    if (page > pages) page = pages;
 
     const start = (page - 1) * pageSize;
     const slice = rows.slice(start, start + pageSize);
 
     if (!slice.length) {
-        list.innerHTML = `<div class="appeals-queue-empty">${hasActiveFilters ? 'No pending appeals match the current filters.' : 'No pending appeals found.'}</div>`;
+        const message = hasActiveFilters ? 'No appeals match the current filters.' : 'No pending appeals right now.';
+        const subMessage = hasActiveFilters ? 'Try adjusting your search terms.' : "Great job! You're all caught up.";
+
+        list.innerHTML = `
+        <div class="appeals-queue-empty">
+            <div class="icon">📭</div>
+            <div class="message">${message}</div> 
+            <div class="sub-message">${subMessage}</div>
+        </div>`;
+
         window._appealsPendingSelectedIndex = -1;
         renderAppealPendingDetails(null);
     } else {
@@ -428,15 +437,15 @@ function renderAppealsPage(page = 1) {
             <article class="appeals-queue-item ${isSelected ? 'appeals-queue-row-selected' : ''}" data-appeal-index="${globalIndex}" role="button" tabindex="0">
                 <div class="appeals-queue-item-head">
                     <div class="appeals-queue-user-cell">
-                        <strong>${esc(a.user_tag || a.user || 'Unknown')}</strong>
-                        <small class="text-muted">${esc(a.user_id || 'N/A')}</small>
+                        <strong>${safeHtml(a.user_tag || a.user || 'Unknown')}</strong>
+                        <small class="text-muted">${safeHtml(a.user_id || 'N/A')}</small>
                     </div>
                     <div class="appeals-queue-item-meta">
-                        <code>${esc(a.ban_case_id || 'N/A')}</code>
+                        <code>${safeHtml(a.ban_case_id || 'N/A')}</code>
                         <span class="text-muted">${submittedRelative}</span>
                     </div>
                 </div>
-                <div class="appeals-queue-item-reason" title="${esc(reason)}">${esc(reasonPreview)}</div>
+                <div class="appeals-queue-item-reason" title="${safeHtml(reason)}">${safeHtml(reasonPreview)}</div>
                 <div class="appeals-queue-item-foot">
                     <span class="text-muted">${submitted}</span>
                     <span class="appeals-pending-badge">Pending</span>
@@ -451,9 +460,9 @@ function renderAppealsPage(page = 1) {
 
     if (controls) {
         controls.innerHTML = `
-            <button class="btn btn-sm btn-secondary" ${page <= 1 ? 'disabled' : ''} data-appeals-page="${page - 1}">Prev</button>
-            <span class="mx-2">Page ${page} / ${pages}</span>
-            <button class="btn btn-sm btn-secondary" ${page >= pages ? 'disabled' : ''} data-appeals-page="${page + 1}">Next</button>
+            <button class="btn" ${page <= 1 ? 'disabled' : ''} data-appeals-page="${page - 1}" title="Previous">◀</button>
+            <span>${page} / ${pages}</span>
+            <button class="btn" ${page >= pages ? 'disabled' : ''} data-appeals-page="${page + 1}" title="Next">▶</button>
         `;
     }
 }
@@ -510,15 +519,14 @@ async function loadAppealHistory() {
         const { response, data } = await api.getJson('/api/appeals/decided', { cache: 'no-store' });
         if (!response?.ok) throw new Error("Failed to fetch");
 
-        // Ignore stale responses from older in-flight loads.
         if (loadNonce !== window._appealHistoryLoadNonce) return;
 
         window._appealsHistory = Array.isArray(data) ? data : [];
         renderAppealHistoryPage(window.currentAppealsHistoryPage);
     } catch (err) {
         console.error("Error loading appeal history:", err);
-        showNotification('Error loading appeal history', 'error');
-        list.innerHTML = `<div class="appeal-history-empty text-danger">Could not load appeal history. Try reloading.</div>`;
+        adminShowNotification('Could not load appeal history', 'error');
+        list.innerHTML = `<div class="appeal-history-empty text-danger">Could not load appeal history. Try refreshing.</div>`;
     }
 }
 
@@ -648,7 +656,7 @@ function resolveAppealHistoryDecisionText(record) {
 
     if (normalizedStatus === 'accepted') return APPEAL_HISTORY_DECISION_TEXT.accepted_standard;
     if (normalizedStatus === 'denied') return APPEAL_HISTORY_DECISION_TEXT.denied_standard;
-    return 'No decision response available.';
+    return 'No decision note was saved.';
 }
 
 function renderAppealHistoryDetails(item) {
@@ -666,7 +674,7 @@ function renderAppealHistoryDetails(item) {
     setText('appealHistoryDetailSubmitted', record.created_at ? new Date(record.created_at).toLocaleString() : '-');
     setText('appealHistoryDetailModerator', resolveAppealHistoryModerator(record));
     setText('appealHistoryDetailReason', normalizedReason || 'No reason provided.');
-    setText('appealHistoryDetailOutcome', decisionResponse || 'No decision response available.');
+    setText('appealHistoryDetailOutcome', decisionResponse || 'No decision note was saved.');
 
     const statusEl = document.getElementById('appealHistoryDetailStatus');
     if (statusEl) {
@@ -693,19 +701,25 @@ window.openAppealHistoryDetails = function (index) {
 
 function syncAppealHistorySelectedRow() {
     const selected = Number(window._appealHistorySelectedIndex);
-    document.querySelectorAll('#appealsHistoryList .appeal-history-item[data-history-index]').forEach((row) => {
+    document.querySelectorAll('#appealsHistoryList .appeal-card').forEach((row) => {
         const rowIndex = Number(row.getAttribute('data-history-index'));
-        if (rowIndex === selected) row.classList.add('appeal-history-row-selected');
-        else row.classList.remove('appeal-history-row-selected');
+        if (rowIndex === selected) {
+            row.classList.add('active');
+            row.style.borderLeftColor = '#6366f1';
+        } else {
+            row.classList.remove('active');
+            row.style.borderLeftColor = 'transparent';
+        }
     });
 }
 
 function renderAppealHistoryPage(page = 1) {
     const list = document.getElementById('appealsHistoryList');
     const controls = document.getElementById('appealsHistoryControls');
+    const summaryText = document.getElementById('appealHistorySummaryText');
     if (!list) return;
 
-    window.currentAppealsHistoryPage = page; // Update current page
+    window.currentAppealsHistoryPage = page;
 
     const pageSize = parseInt(document.getElementById('appealHistoryPageSize')?.value) || 10;
     const sortMode = document.getElementById('appealHistorySort')?.value || 'newest';
@@ -715,6 +729,10 @@ function renderAppealHistoryPage(page = 1) {
     const dateValue = document.getElementById('appealHistoryDateFilter')?.value || 'all';
     const hasActiveFilters = Boolean(searchValue || moderatorValue || statusValue !== 'all' || dateValue !== 'all');
     let rows = getFilteredAppealHistory();
+
+    if (summaryText) {
+        summaryText.innerText = `${rows.length} records`;
+    }
 
     if (sortMode === 'oldest') {
         rows.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
@@ -726,7 +744,6 @@ function renderAppealHistoryPage(page = 1) {
         rows.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
     }
 
-    renderAppealHistoryMetrics(rows);
     window._appealHistoryRenderRows = rows;
 
     const pages = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -736,7 +753,7 @@ function renderAppealHistoryPage(page = 1) {
     const slice = rows.slice(start, start + pageSize);
 
     if (!slice.length) {
-        list.innerHTML = `<div class="appeal-history-empty">${hasActiveFilters ? 'No appeal history matches the current filters.' : 'No decided appeals found yet.'}</div>`;
+        list.innerHTML = `<div class="appeals-queue-empty"><div class="icon">📭</div><div class="message">${hasActiveFilters ? 'No matching records found.' : 'No appeal history yet.'}</div></div>`;
         window._appealHistorySelectedIndex = -1;
         renderAppealHistoryDetails(null);
     } else {
@@ -750,124 +767,73 @@ function renderAppealHistoryPage(page = 1) {
 
         list.innerHTML = slice.map((a, idx) => {
             const normalizedStatus = String(a.status || 'unknown').toLowerCase();
-            const statusBadge = `<span class="appeal-history-status-badge ${esc(normalizedStatus)}">${esc(normalizedStatus === 'accepted' ? 'Accepted' : normalizedStatus === 'denied' ? 'Denied' : (a.status || 'Unknown'))}</span>`;
+            const badgeStyle = normalizedStatus === 'accepted'
+                ? 'background:rgba(34,197,94,0.1); color:#4ade80; border:1px solid rgba(34,197,94,0.2);'
+                : normalizedStatus === 'denied'
+                    ? 'background:rgba(239,68,68,0.1); color:#f87171; border:1px solid rgba(239,68,68,0.2);'
+                    : 'background:rgba(255,255,255,0.1); color:#9ca3af;';
+
+            const statusBadge = `<span style="padding:0.2rem 0.6rem; border-radius:6px; font-size:0.7rem; font-weight:700; text-transform:uppercase; ${badgeStyle}">${safeHtml(normalizedStatus)}</span>`;
+
             const created = a.created_at ? new Date(a.created_at).toLocaleString() : '-';
             const createdRelative = formatAppealRelativeTime(a.created_at || a.submitted_at || a.updated_at);
             const globalIndex = start + idx;
             const displayName = String(a.user_tag || a.user || 'Unknown');
             const moderatorLabel = resolveAppealHistoryModerator(a);
             const reason = String(a.reason || 'No reason provided').replace(/\r\n/g, '\n').trim();
-            const reasonPreview = reason.length > 145 ? `${reason.slice(0, 145)}...` : reason;
+            const reasonPreview = reason.length > 120 ? `${reason.slice(0, 120)}...` : reason;
             const isSelected = globalIndex === Number(window._appealHistorySelectedIndex);
 
             return `
-                <article class="appeal-history-item appeal-history-item-enter ${isSelected ? 'appeal-history-row-selected' : ''}" style="animation-delay:${Math.min(idx * 45, 320)}ms" data-history-index="${globalIndex}" onclick="openAppealHistoryDetails(${globalIndex})">
-                    <div class="appeal-history-item-head">
-                        <div class="appeal-history-user-cell">
-                            <div class="appeal-history-user-heading">
-                                <span class="appeal-history-avatar" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                        <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5z"></path>
-                                    </svg>
-                                </span>
-                                <div class="appeal-history-user-ident">
-                                    <strong>${esc(displayName)}</strong>
-                                    <small class="text-muted">User ID: ${esc(a.user_id || 'N/A')}</small>
-                                </div>
+                <div class="appeal-card ${isSelected ? 'active' : ''}" 
+                     data-history-index="${globalIndex}"
+                     style="margin-bottom:0.75rem; background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:1rem; cursor:pointer; border-left:3px solid ${isSelected ? '#6366f1' : 'transparent'}; transition:all 0.2s;"
+                     onclick="openAppealHistoryDetails(${globalIndex})">
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem;">
+                        <div style="display:flex; gap:0.75rem; align-items:center;">
+                            <div style="width:36px; height:36px; background:rgba(255,255,255,0.05); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">
+                                👤
+                            </div>
+                            <div>
+                                <div style="font-weight:600; font-size:0.95rem; color:var(--text-primary);">${safeHtml(displayName)}</div>
+                                <div style="font-size:0.75rem; color:var(--text-muted);">Case ${safeHtml(a.ban_case_id || '#?')} • ${createdRelative}</div>
                             </div>
                         </div>
-                        <div class="appeal-history-item-meta">
-                            <span class="appeal-history-meta-chip">Case ${esc(a.ban_case_id || 'N/A')}</span>
-                            <span class="appeal-history-meta-chip appeal-history-meta-chip-mod">Mod ${esc(moderatorLabel)}</span>
-                            <span class="appeal-history-meta-chip appeal-history-meta-chip-time">${createdRelative}</span>
-                        </div>
+                        ${statusBadge}
                     </div>
-                    <div class="appeal-history-item-body">
-                        <div class="appeal-history-reason" title="${esc(reason)}">
-                            ${esc(reasonPreview)}
-                        </div>
-                        <div class="appeal-history-action-row">
-                            <span class="text-muted appeal-history-submitted">Submitted ${created}</span>
-                            ${statusBadge}
-                        </div>
+
+                    <div style="font-size:0.9rem; color:var(--text-secondary); line-height:1.5; margin-bottom:0.5rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
+                        ${safeHtml(reasonPreview)}
                     </div>
-                </article>
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-color); font-size:0.75rem; color:var(--text-muted);">
+                         <span>Reviewed by <strong>${safeHtml(moderatorLabel)}</strong></span>
+                         <span>${safeHtml(created.split(',')[0])}</span>
+                    </div>
+                </div>
             `;
         }).join('');
 
         renderAppealHistoryDetails(window._appealHistoryRenderRows[Number(window._appealHistorySelectedIndex)] || slice[0]);
-        syncAppealHistorySelectedRow();
     }
 
     if (controls) {
         controls.innerHTML = `
-            <button class="btn btn-sm btn-secondary" ${page <= 1 ? 'disabled' : ''} onclick="renderAppealHistoryPage(${page - 1})">Prev</button>
-            <span class="mx-2">Page ${page} / ${pages}</span>
-            <button class="btn btn-sm btn-secondary" ${page >= pages ? 'disabled' : ''} onclick="renderAppealHistoryPage(${page + 1})">Next</button>
+            <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="renderAppealHistoryPage(${page - 1})">◀</button>
+            <span>${page} / ${pages}</span>
+            <button class="btn" ${page >= pages ? 'disabled' : ''} onclick="renderAppealHistoryPage(${page + 1})">▶</button>
         `;
     }
 }
 
-// --- Moderation Actions ---
-// --- Notifications (Improved Toast Style) ---
-function showNotification(message, type = 'info') {
-    // If notifications.js is loaded, use showToast
-    if (typeof window.showToast === 'function') {
-        const titleMap = {
-            success: 'Success',
-            error: 'Error',
-            warning: 'Warning',
-            info: 'Info'
-        };
-        return window.showToast(type, titleMap[type] || 'Info', message);
+
+function adminShowNotification(message, type = 'info') {
+    if (typeof window.showNotification === 'function') {
+        return window.showNotification(message, type);
     }
 
-    // Fallback: Reimplement showToast logic using css from style.css
-    // Ensure container exists
-    let container = document.getElementById('toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'toast-container';
-        document.body.appendChild(container); // Container handles its own CSS
-    }
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-
-    const icons = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
-    };
-
-    const titleMap = {
-        success: 'Success',
-        error: 'Error',
-        warning: 'Warning',
-        info: 'Info'
-    };
-
-    const title = titleMap[type] || 'Notification';
-
-    toast.innerHTML = `
-        <div class="toast-icon">${icons[type] || icons.info}</div>
-        <div class="toast-content">
-            <div class="toast-title">${title}</div>
-            ${message ? `<div class="toast-message">${message}</div>` : ''}
-        </div>
-        <button class="toast-close" onclick="this.parentElement.remove()">×</button>
-    `;
-
-    // Add to container (toasts usually stack bottom-up or top-down, CSS handles it)
-    container.appendChild(toast);
-
-    // Auto-remove
-    setTimeout(() => {
-        toast.classList.add('removing');
-        setTimeout(() => toast.remove(), 300);
-    }, 5000);
+    console.log(`[${type}] ${message}`);
 }
 
 const APPEAL_DECISION_TEMPLATES = {
@@ -944,13 +910,13 @@ function openAppealDecisionModal(action, username) {
     return new Promise((resolve) => {
         const modal = document.createElement('div');
         modal.className = 'appeal-decision-modal';
-        const safeUser = esc(username || 'Unknown');
+        const safeUser = safeHtml(username || 'Unknown');
         modal.innerHTML = `
             <div class="appeal-decision-modal-backdrop"></div>
             <div class="appeal-decision-modal-card" role="dialog" aria-modal="true" aria-label="${title}">
                 <div class="appeal-decision-modal-header">
                     <h3>${title}</h3>
-                    <button type="button" class="appeal-decision-modal-close" aria-label="Close">×</button>
+                    <button type="button" class="appeal-decision-modal-close" aria-label="Close">&times;</button>
                 </div>
                 <p class="appeal-decision-modal-subtitle">User: <strong>${safeUser}</strong></p>
                 <div class="appeal-decision-modal-field">
@@ -1021,7 +987,6 @@ function openAppealDecisionModal(action, username) {
                 localStorage.setItem(templateStorageKey, selectedTemplate);
                 if (!selectedTemplate) localStorage.setItem(customMessageStorageKey, message);
             } catch (_) {
-                // ignore persistence errors
             }
             cleanup();
             resolve({
@@ -1062,18 +1027,17 @@ async function acceptAppeal(appealId, username) {
             })
         });
         if (res.ok) {
-            showNotification('Appeal accepted successfully', 'success');
-            loadAppeals(); // Reload pending appeals
-            loadAppealHistory(); // Reload history to show updated status
-            // Potentially emit socket event for real-time update
+            adminShowNotification('Appeal accepted successfully', 'success');
+            loadAppeals();
+            loadAppealHistory();
             if (window.socket) window.socket.emit('admin:appealAccepted', { appealId, username });
         } else {
             const errorData = await res.json();
-            showNotification(errorData.message || 'Failed to accept appeal', 'error');
+            adminShowNotification(errorData.message || 'Failed to accept appeal', 'error');
         }
     } catch (err) {
         console.error(err);
-        showNotification('An error occurred while accepting appeal', 'error');
+        adminShowNotification('An error occurred while accepting appeal', 'error');
     }
 }
 
@@ -1089,18 +1053,17 @@ async function denyAppeal(appealId, username) {
             })
         });
         if (res.ok) {
-            showNotification('Appeal denied successfully', 'success');
-            loadAppeals(); // Reload pending appeals
-            loadAppealHistory(); // Reload history to show updated status
-            // Potentially emit socket event for real-time update
+            adminShowNotification('Appeal denied successfully', 'success');
+            loadAppeals();
+            loadAppealHistory();
             if (window.socket) window.socket.emit('admin:appealDenied', { appealId, username });
         } else {
             const errorData = await res.json();
-            showNotification(errorData.message || 'Failed to deny appeal', 'error');
+            adminShowNotification(errorData.message || 'Failed to deny appeal', 'error');
         }
     } catch (err) {
         console.error(err);
-        showNotification('An error occurred while denying appeal', 'error');
+        adminShowNotification('An error occurred while denying appeal', 'error');
     }
 }
 
@@ -1125,42 +1088,38 @@ function createSocketConnection(options = {}) {
 }
 
 async function runAdminPanel() {
-    // Basic access check
     if (!window.currentAdminRole) {
         console.warn("Role missing");
         return;
     }
 
-    // Socket.IO initialization
     if (typeof io !== 'undefined') {
         const socket = createSocketConnection();
         if (!socket) return;
 
         socket.on('connect', () => {
             console.log('Connected to WebSocket server');
-            showNotification('Connected to real-time updates', 'success');
+            adminShowNotification('Live updates connected', 'success');
         });
 
         socket.on('disconnect', () => {
             console.warn('Disconnected from WebSocket server');
-            showNotification('Disconnected from real-time updates', 'warning');
+            adminShowNotification('Live updates disconnected', 'warning');
         });
 
         socket.on('connect_error', () => {
-            showNotification('Realtime connection failed. Retrying...', 'warning');
+            adminShowNotification('Live updates failed. Retrying...', 'warning');
         });
 
-        // Listen for appeal updates
         socket.on('admin:appealUpdated', (data) => {
-            showNotification(`Appeal for ${data.username} was ${data.status}`, 'info');
-            loadAppeals(); // Refresh pending appeals
-            loadAppealHistory(); // Refresh history
+            adminShowNotification(`Appeal for ${data.username} was ${data.status}`, 'info');
+            loadAppeals();
+            loadAppealHistory();
         });
 
-        // Listen for new appeals
         socket.on('admin:newAppeal', (data) => {
-            showNotification(`New appeal from ${data.username}`, 'info');
-            loadAppeals(); // Refresh pending appeals
+            adminShowNotification(`New appeal submitted by ${data.username}`, 'info');
+            loadAppeals();
         });
     }
 
@@ -1258,11 +1217,12 @@ function renderLookupSearchResults(results = []) {
         if (item.banned) flags.push('Banned');
         if (item.isTimedOut) flags.push('Timed Out');
         if (!item.inServer) flags.push('Not In Server');
+        const userId = safeJsString(String(item.userId || ''));
 
         return `
-            <button class="lookup-recent-badge" onclick="performLookup('${esc(String(item.userId || ''))}')">
-                ${esc(String(item.username || 'Unknown'))}
-                <span class="text-muted">• Lv${Number(item.level || 0)} • W${Number(item.warnCount || 0)}${flags.length ? ` • ${esc(flags.join(', '))}` : ''}</span>
+            <button class="lookup-recent-badge" onclick="performLookup('${userId}')">
+                ${safeHtml(String(item.username || 'Unknown'))}
+                <span class="text-muted">• Lv${Number(item.level || 0)} • W${Number(item.warnCount || 0)}${flags.length ? ` • ${safeHtml(flags.join(', '))}` : ''}</span>
             </button>
         `;
     }).join('');
@@ -1279,13 +1239,13 @@ function renderLookupSuggestions(suggestions = []) {
     }
 
     box.innerHTML = suggestions.map((item) => {
-        const userId = esc(String(item.userId || ''));
-        const username = esc(String(item.username || 'Unknown'));
+        const userId = safeJsString(String(item.userId || ''));
+        const username = safeHtml(String(item.username || 'Unknown'));
         const level = Number(item.level || 0);
         return `
             <div class="lookup-suggestion-item" onclick="performLookup('${userId}')">
                 <div class="lookup-suggestion-username">${username}</div>
-                <div class="lookup-suggestion-details">ID: ${userId} • Level ${level}</div>
+                <div class="lookup-suggestion-details">ID: ${safeHtml(String(item.userId || ''))} • Level ${level}</div>
             </div>
         `;
     }).join('');
@@ -1332,7 +1292,7 @@ function renderLookupProfile(user) {
     panel.classList.add('show');
 
     if (!user) {
-        container.innerHTML = '<div class="lookup-recent-section">No user profile loaded.</div>';
+        container.innerHTML = '<div class="lookup-recent-section">No member selected yet.</div>';
         return;
     }
 
@@ -1341,7 +1301,7 @@ function renderLookupProfile(user) {
     const badgeClass = getRiskBadgeClass(riskLevel, riskScore);
 
     const avatarUrl = String(user.avatar || '').trim();
-    const initial = esc(String(user.username || '?').charAt(0).toUpperCase());
+    const initial = safeHtml(String(user.username || '?').charAt(0).toUpperCase());
 
     const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleString() : '-';
     const joinedDate = user.member?.joinedAt ? new Date(user.member.joinedAt).toLocaleString() : 'Not in server';
@@ -1356,15 +1316,15 @@ function renderLookupProfile(user) {
     const bans = Array.isArray(user.db?.banHistory) ? user.db.banHistory : [];
 
     const rolesHtml = roles.length
-        ? roles.map((role) => `<span class="lookup-mini-badge">@${esc(String(role.name || 'Unknown'))}</span>`).join('')
+        ? roles.map((role) => `<span class="lookup-mini-badge">@${safeHtml(String(role.name || 'Unknown'))}</span>`).join('')
         : '<span class="text-muted">No roles found</span>';
 
     const warningsHtml = warnings.length
         ? warnings.slice(0, 12).map((row) => `
             <div class="lookup-info-item lookup-info-item-full">
-                <span class="lookup-info-label">${esc(String(row.caseId || 'No Case ID'))} • ${row.timestamp ? new Date(row.timestamp).toLocaleString() : 'Unknown date'}</span>
-                <span class="lookup-info-value">${esc(String(row.reason || 'No reason provided'))}</span>
-                <span class="lookup-info-label">Moderator: ${esc(String(row.moderatorName || 'Unknown'))}</span>
+                <span class="lookup-info-label">${safeHtml(String(row.caseId || 'No Case ID'))} • ${row.timestamp ? new Date(row.timestamp).toLocaleString() : 'Unknown date'}</span>
+                <span class="lookup-info-value">${safeHtml(String(row.reason || 'No reason provided'))}</span>
+                <span class="lookup-info-label">Moderator: ${safeHtml(String(row.moderatorName || 'Unknown'))}</span>
             </div>
         `).join('')
         : '<div class="lookup-info-item lookup-info-item-full"><span class="lookup-info-value">No warning history.</span></div>';
@@ -1372,9 +1332,9 @@ function renderLookupProfile(user) {
     const timeoutHtml = timeouts.length
         ? timeouts.slice(0, 10).map((row) => `
             <div class="lookup-info-item lookup-info-item-full">
-                <span class="lookup-info-label">${esc(String(row.caseId || 'No Case ID'))} • ${row.timestamp ? new Date(row.timestamp).toLocaleString() : 'Unknown date'}</span>
-                <span class="lookup-info-value">${esc(String(row.reason || 'No reason provided'))}</span>
-                <span class="lookup-info-label">Moderator: ${esc(String(row.moderatorName || 'Unknown'))} • ${row.active ? 'Active' : 'Inactive'}</span>
+                <span class="lookup-info-label">${safeHtml(String(row.caseId || 'No Case ID'))} • ${row.timestamp ? new Date(row.timestamp).toLocaleString() : 'Unknown date'}</span>
+                <span class="lookup-info-value">${safeHtml(String(row.reason || 'No reason provided'))}</span>
+                <span class="lookup-info-label">Moderator: ${safeHtml(String(row.moderatorName || 'Unknown'))} • ${row.active ? 'Active' : 'Inactive'}</span>
             </div>
         `).join('')
         : '<div class="lookup-info-item lookup-info-item-full"><span class="lookup-info-value">No timeout history.</span></div>';
@@ -1382,9 +1342,9 @@ function renderLookupProfile(user) {
     const bansHtml = bans.length
         ? bans.slice(0, 10).map((row) => `
             <div class="lookup-info-item lookup-info-item-full">
-                <span class="lookup-info-label">${esc(String(row.caseId || 'No Case ID'))} • ${row.bannedAt ? new Date(row.bannedAt).toLocaleString() : 'Unknown date'}</span>
-                <span class="lookup-info-value">${esc(String(row.reason || 'No reason provided'))}</span>
-                <span class="lookup-info-label">Moderator: ${esc(String(row.moderatorName || 'Unknown'))} • ${row.active ? 'Active Ban' : 'Historical Ban'}</span>
+                <span class="lookup-info-label">${safeHtml(String(row.caseId || 'No Case ID'))} • ${row.bannedAt ? new Date(row.bannedAt).toLocaleString() : 'Unknown date'}</span>
+                <span class="lookup-info-value">${safeHtml(String(row.reason || 'No reason provided'))}</span>
+                <span class="lookup-info-label">Moderator: ${safeHtml(String(row.moderatorName || 'Unknown'))} • ${row.active ? 'Active Ban' : 'Historical Ban'}</span>
             </div>
         `).join('')
         : '<div class="lookup-info-item lookup-info-item-full"><span class="lookup-info-value">No ban history.</span></div>';
@@ -1392,8 +1352,8 @@ function renderLookupProfile(user) {
     const notesHtml = notes.length
         ? notes.slice(0, 15).map((row) => `
             <div class="lookup-info-item lookup-info-item-full">
-                <span class="lookup-info-label">${row.createdAt ? new Date(row.createdAt).toLocaleString() : 'Unknown date'} • ${esc(String(row.createdBy || 'Unknown'))}</span>
-                <span class="lookup-info-value">${esc(String(row.note || ''))}</span>
+                <span class="lookup-info-label">${row.createdAt ? new Date(row.createdAt).toLocaleString() : 'Unknown date'} • ${safeHtml(String(row.createdBy || 'Unknown'))}</span>
+                <span class="lookup-info-value">${safeHtml(String(row.note || ''))}</span>
             </div>
         `).join('')
         : '<div class="lookup-info-item lookup-info-item-full"><span class="lookup-info-value">No moderator notes yet.</span></div>';
@@ -1403,19 +1363,19 @@ function renderLookupProfile(user) {
             <div class="lookup-profile-header">
                 <div class="lookup-risk-badge ${badgeClass}">
                     <span>⚠</span>
-                    <span>${esc(riskLevel)} RISK • ${riskScore}</span>
+                    <span>${safeHtml(riskLevel)} RISK • ${riskScore}</span>
                 </div>
                 <div class="lookup-identity-section">
                     <div class="lookup-avatar-wrapper">
                         ${avatarUrl
-            ? `<img class="lookup-avatar-image" src="${esc(avatarUrl)}" alt="${esc(String(user.username || 'User'))}">`
+            ? `<img class="lookup-avatar-image" src="${safeHtml(avatarUrl)}" alt="${safeHtml(String(user.username || 'User'))}">`
             : `<div class="lookup-avatar-initial">${initial}</div>`}
                     </div>
                     <div class="lookup-identity-info">
-                        <h2 class="lookup-username">${esc(String(user.globalName || user.username || 'Unknown User'))}</h2>
+                        <h2 class="lookup-username">${safeHtml(String(user.globalName || user.username || 'Unknown User'))}</h2>
                         <div class="lookup-metadata-badges">
-                            <span class="lookup-mini-badge">🆔 ${esc(String(user.id || 'N/A'))}</span>
-                            <span class="lookup-mini-badge">👤 @${esc(String(user.username || 'unknown'))}</span>
+                            <span class="lookup-mini-badge">🆔 ${safeHtml(String(user.id || 'N/A'))}</span>
+                            <span class="lookup-mini-badge">👤 @${safeHtml(String(user.username || 'unknown'))}</span>
                             ${user.bot ? '<span class="lookup-mini-badge lookup-badge-bot">🤖 Bot</span>' : ''}
                             ${user.db?.ban?.banned ? '<span class="lookup-mini-badge lookup-badge-status">🚫 Banned</span>' : ''}
                         </div>
@@ -1471,10 +1431,10 @@ function renderLookupProfile(user) {
                                 <h3 class="lookup-section-title">Identity & Account</h3>
                             </div>
                             <div class="lookup-info-grid">
-                                <div class="lookup-info-item"><span class="lookup-info-label">Created</span><span class="lookup-info-value">${esc(createdDate)}</span></div>
-                                <div class="lookup-info-item"><span class="lookup-info-label">Joined Server</span><span class="lookup-info-value">${esc(joinedDate)}</span></div>
-                                <div class="lookup-info-item"><span class="lookup-info-label">Timeout Until</span><span class="lookup-info-value">${esc(timeoutUntil)}</span></div>
-                                <div class="lookup-info-item lookup-info-item-full"><span class="lookup-info-label">Bio</span><span class="lookup-info-value">${esc(String(user.bio || user.db?.bio || 'No bio available'))}</span></div>
+                                <div class="lookup-info-item"><span class="lookup-info-label">Created</span><span class="lookup-info-value">${safeHtml(createdDate)}</span></div>
+                                <div class="lookup-info-item"><span class="lookup-info-label">Joined Server</span><span class="lookup-info-value">${safeHtml(joinedDate)}</span></div>
+                                <div class="lookup-info-item"><span class="lookup-info-label">Timeout Until</span><span class="lookup-info-value">${safeHtml(timeoutUntil)}</span></div>
+                                <div class="lookup-info-item lookup-info-item-full"><span class="lookup-info-label">Bio</span><span class="lookup-info-value">${safeHtml(String(user.bio || user.db?.bio || 'No bio available'))}</span></div>
                                 <div class="lookup-info-item lookup-info-item-full"><span class="lookup-info-label">Roles</span><div class="lookup-roles-list">${rolesHtml}</div></div>
                             </div>
                         </section>
@@ -1567,13 +1527,13 @@ function renderRecentLookups(users = []) {
     if (!list) return;
 
     if (!users.length) {
-        list.innerHTML = '<div class="empty-state" style="padding: 1rem;"><span style="font-size: 0.9rem;">No recent lookups</span></div>';
+        list.innerHTML = '<div class="empty-state" style="padding: 1rem;"><span style="font-size: 0.9rem;">No recent searches</span></div>';
         return;
     }
 
     list.innerHTML = users.slice(0, 10).map((item) => {
-        const userId = esc(String(item.userId || item.id || ''));
-        const username = esc(String(item.username || item.globalName || 'Unknown'));
+        const userId = safeJsString(String(item.userId || item.id || ''));
+        const username = safeHtml(String(item.username || item.globalName || 'Unknown'));
         const level = Number(item.level || 0);
         return `<button class="lookup-recent-badge" onclick="performLookup('${userId}')">${username}<span class="text-muted"> • Lv${level}</span></button>`;
     }).join('');
@@ -1662,7 +1622,7 @@ async function performLookup(prefillQuery = '') {
 
     const query = String(prefillQuery || inputEl.value || '').trim();
     if (!query) {
-        showNotification('Enter a username or user ID', 'warning');
+        adminShowNotification('Enter a username or user ID', 'warning');
         return;
     }
 
@@ -1703,8 +1663,8 @@ async function performLookup(prefillQuery = '') {
         addRecentLookup(profile);
     } catch (error) {
         window._lookupState.currentUser = null;
-        profileContainer.innerHTML = `<div class="lookup-recent-section">${esc(error.message || 'User lookup failed')}</div>`;
-        showNotification(error.message || 'Lookup failed', 'error');
+        profileContainer.innerHTML = `<div class="lookup-recent-section">${safeHtml(error.message || 'User lookup failed')}</div>`;
+        adminShowNotification(error.message || 'Lookup failed', 'error');
     } finally {
         showLookupLoading(false);
     }
@@ -1716,13 +1676,13 @@ async function saveLookupNote() {
     const api = getLookupApi();
 
     if (!user?.id || !noteEl || !api) {
-        showNotification('No selected user for note save', 'warning');
+        adminShowNotification('No selected user for note save', 'warning');
         return;
     }
 
     const note = String(noteEl.value || '').trim();
     if (!note) {
-        showNotification('Write a note before saving', 'warning');
+        adminShowNotification('Write a note before saving', 'warning');
         return;
     }
 
@@ -1730,17 +1690,16 @@ async function saveLookupNote() {
         const { response, data } = await api.postJson(`/api/admin/system/lookup/${encodeURIComponent(String(user.id))}/notes`, { note });
         if (!response?.ok) throw new Error(data?.error || 'Failed to save note');
         noteEl.value = '';
-        showNotification('Moderator note saved', 'success');
+        adminShowNotification('Moderator note saved', 'success');
         const refreshedProfile = await fetchLookupProfile(String(user.id));
         window._lookupState.currentUser = refreshedProfile;
         renderLookupProfile(refreshedProfile);
     } catch (error) {
         console.error('Failed to save lookup note:', error);
-        showNotification(error.message || 'Failed to save note', 'error');
+        adminShowNotification(error.message || 'Failed to save note', 'error');
     }
 }
 
-// --- AutoMod System ---
 window._autoModAdvanced = null;
 window._autoModQueuePage = 1;
 window._autoModQueueIndex = {};
@@ -1757,10 +1716,10 @@ async function loadAutoModConfig() {
         window._autoModConfig = data;
         renderAutoModUI();
         await loadAutoModAdvancedData(1);
-        showNotification('AutoMod command center loaded', 'success');
+        adminShowNotification('AutoMod settings loaded', 'success');
     } catch (err) {
         console.error("Error loading AutoMod config:", err);
-        showNotification('Failed to load AutoMod config', 'error');
+        adminShowNotification('Failed to load AutoMod config', 'error');
     }
 }
 
@@ -1791,57 +1750,54 @@ function formatCount(value) {
     return numeric.toLocaleString();
 }
 
+function safeJsString(str) {
+    return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+window._autoModSelectedProfile = null;
+
 function renderAutoModUI() {
     if (!window._autoModConfig) return;
 
     const config = window._autoModConfig;
     const profiles = Object.keys(config.autoModProfiles?.profiles || {});
-    // If activeProfile is "custom" or something not in the list, handle gracefully, but usually it's one of them.
     const activeProfile = config.autoModProfiles?.activeProfile || 'balanced';
 
-    // update profile state text
-    const stateEl = document.getElementById('automodProfileState');
-    if (stateEl) {
-        stateEl.innerHTML = `Active Profile: <strong>${esc(activeProfile)}</strong><br>
-        <small class="text-muted">Effective settings are applied from this profile.</small>`;
+    if (!window._autoModSelectedProfile || !profiles.includes(window._autoModSelectedProfile)) {
+        window._autoModSelectedProfile = activeProfile;
     }
 
-    // Populate Active Profile Selector
-    const activeSelect = document.getElementById('automodActiveProfile');
-    if (activeSelect) {
-        activeSelect.innerHTML = profiles.map(p =>
-            `<option value="${esc(p)}" ${p === activeProfile ? 'selected' : ''}>${esc(p)}</option>`
-        ).join('');
-        // Ensure the active profile is selected
-        activeSelect.value = activeProfile;
+    const listEl = document.getElementById('automodProfileList');
+    if (listEl) {
+        const itemsInfo = profiles.map(p => {
+            const isActive = p === activeProfile;
+            const isSelected = p === window._autoModSelectedProfile;
+            return { name: p, isActive, isSelected };
+        });
+
+        let html = `
+            <div class="user-list-item special-create-btn" onclick="promptCreateAutoModProfile()" style="border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:0.5rem;">
+                <div class="user-item-info">
+                    <span style="font-size:1.2em; font-weight:bold; color:var(--primary); margin-right:0.5rem;">+</span>
+                    <span class="user-item-name" style="color:var(--primary);">New Profile</span>
+                </div>
+            </div>
+        `;
+
+        html += itemsInfo.map(item => `
+            <div class="user-list-item ${item.isSelected ? 'active' : ''}" onclick="selectAutoModProfile('${safeJsString(item.name)}', true)">
+                <div class="user-item-info">
+                    ${item.isActive ? '<span class="status-indicator status-active" title="Active Policy"></span>' : ''}
+                    <span class="user-item-name">${safeHtml(item.name)}</span>
+                    ${item.isActive ? '<span class="role-badge" style="margin-left:auto; font-size:0.7em;">ACTIVE</span>' : ''}
+                </div>
+            </div>
+        `).join('');
+
+        listEl.innerHTML = html;
     }
 
-    // Populate Selected Profile Selector (for editing)
-    const editSelect = document.getElementById('automodSelectedProfile');
-    if (editSelect) {
-        // preserve selection if possible, else default to active
-        const currentSelection = editSelect.value;
-        const exists = profiles.includes(currentSelection);
-
-        editSelect.innerHTML = profiles.map(p =>
-            `<option value="${esc(p)}">${esc(p)}</option>`
-        ).join('');
-
-        if (exists && currentSelection) {
-            editSelect.value = currentSelection;
-        } else {
-            editSelect.value = activeProfile;
-        }
-
-        // Add event listener to re-render form when selection changes
-        // Using onclick ensures we don't stack up listeners if we re-render UI often, 
-        // though typically renderAutoModUI is called only on load or save.
-        editSelect.onchange = () => renderAutoModForm(editSelect.value);
-    }
-
-    // Render the form for the currently selected profile to edit
-    const currentEditProfile = editSelect ? editSelect.value : activeProfile;
-    renderAutoModForm(currentEditProfile);
+    selectAutoModProfile(window._autoModSelectedProfile, false);
 
     const effective = config.effectiveAutoMod || {};
     const effectiveAutoMod = effective.autoMod || {};
@@ -1849,17 +1805,41 @@ function renderAutoModUI() {
     const summaryEl = document.getElementById('automodSummary');
     if (summaryEl) {
         summaryEl.innerHTML = `
-            <strong>Effective Runtime Policy:</strong>
-            invites=<strong>${effective.blockExternalInvites ? 'on' : 'off'}</strong>,
-            spamThreshold=<strong>${effectiveAutoMod.spamThreshold ?? '-'}</strong>,
-            warnThreshold=<strong>${effectiveAutoMod.spamWarningThreshold ?? '-'}</strong>,
-            timeoutMs=<strong>${effectiveAutoMod.spamTimeout ?? '-'}</strong>,
-            similarity=<strong>${effectiveAutoMod.similarityThreshold ?? '-'}</strong>,
-            riskTimeout=<strong>${effectiveAutoMod.riskTimeoutThreshold ?? '-'}</strong>,
-            maxMentions=<strong>${effective.maxMentionsBeforeFlag ?? '-'}</strong>,
-            escalation24h=<strong>${effectiveAdvanced.escalationThreshold24h ?? '-'}</strong>
+            <strong>Active settings (${safeHtml(activeProfile)}):</strong>
+            Wait=${effectiveAutoMod.baseTimeoutMs / 1000}s,
+            Spam=${effectiveAutoMod.spamThreshold},
+            Sim=${effectiveAutoMod.similarityThreshold},
+            Kick24h=${effectiveAdvanced.kickThreshold24h ?? '-'}
         `;
     }
+}
+
+function selectAutoModProfile(profileName, refreshList = false) {
+    if (!profileName) return;
+    window._autoModSelectedProfile = profileName;
+
+    if (refreshList) {
+        renderAutoModUI();
+        return;
+    }
+
+    const titleEl = document.getElementById('automodSelectedProfileTitle');
+    if (titleEl) titleEl.textContent = profileName.charAt(0).toUpperCase() + profileName.slice(1);
+
+    const badgeEl = document.getElementById('automodProfileStatusBadge');
+    if (badgeEl) {
+        const isActive = (window._autoModConfig?.autoModProfiles?.activeProfile === profileName);
+        if (isActive) {
+            badgeEl.innerHTML = '✅ <strong>Active Runtime Policy</strong>';
+            badgeEl.className = 'text-success';
+        } else {
+            badgeEl.textContent = 'Editing this profile';
+            badgeEl.className = 'text-muted';
+        }
+        badgeEl.style.display = 'block';
+    }
+
+    renderAutoModForm(profileName);
 }
 
 function renderAutoModForm(profileName) {
@@ -1869,11 +1849,6 @@ function renderAutoModForm(profileName) {
     const profile = config.autoModProfiles.profiles[profileName];
     if (!profile) return;
 
-    // Update Title
-    const titleEl = document.getElementById('automodSelectedProfileTitle');
-    if (titleEl) titleEl.textContent = `🛠️ Selected Profile Settings: ${profileName}`;
-
-    // Helper to safely set value
     const setVal = (id, val) => {
         const el = document.getElementById(id);
         if (el) {
@@ -1882,10 +1857,7 @@ function renderAutoModForm(profileName) {
         }
     };
 
-    setVal('automodBlockInvites', profile.blockExternalInvites?.toString()); // Select uses string "true"/"false"
-    setVal('automodMaxMentions', profile.maxMentionsBeforeFlag);
 
-    // Core Rules
     const am = profile.autoMod || {};
     setVal('automodSpamThreshold', am.spamThreshold);
     setVal('automodSpamWindowMs', am.spamWindow);
@@ -1902,7 +1874,6 @@ function renderAutoModForm(profileName) {
     setVal('automodBaseTimeoutMs', am.baseTimeoutMs);
     setVal('automodMaxTimeoutMs', am.maxTimeoutMs);
 
-    // Advanced
     const adv = profile.autoModAdvanced || {};
     setVal('automodEscalationThreshold', adv.escalationThreshold24h);
     setVal('automodEscalationTimeoutMs', adv.escalationTimeoutMs);
@@ -1919,86 +1890,75 @@ function renderAutoModForm(profileName) {
     setVal('automodRiskWeightInvites', rw.invites);
     setVal('automodRiskWeightMentions', rw.mentions);
 
-    // Text Areas (Arrays -> Newline separated strings)
     setVal('automodRegexPatterns', (adv.blockedRegexPatterns || []).join('\n'));
     setVal('automodExemptChannels', (adv.exemptChannelIds || []).join('\n'));
     setVal('automodExemptRoles', (adv.exemptRoleIds || []).join('\n'));
 }
 
 async function setActiveAutoModProfile() {
-    const select = document.getElementById('automodActiveProfile');
-    if (!select) return;
-    const newActive = select.value;
+    const target = window._autoModSelectedProfile;
+    if (!target) return adminShowNotification('No profile selected', 'warning');
 
     try {
         const res = await fetchWithCsrf('/api/automod/config', {
             method: 'POST',
-            body: JSON.stringify({ activeProfile: newActive })
+            body: JSON.stringify({ activeProfile: target })
         });
         const data = await res.json();
 
         if (res.ok) {
-            showNotification(`Active profile changed to ${newActive}`, 'success');
-            await loadAutoModConfig(); // Refresh
+            adminShowNotification(`Active profile set to: ${target}`, 'success');
+            await loadAutoModConfig();
         } else {
-            showNotification(data.error || 'Failed to set active profile', 'error');
+            adminShowNotification(data.error || 'Failed to set active profile', 'error');
         }
     } catch (err) {
         console.error(err);
-        showNotification('Error setting active profile', 'error');
+        adminShowNotification('Error setting active profile', 'error');
     }
 }
 
-async function createAutoModProfile() {
-    const input = document.getElementById('automodNewProfileName');
-    if (!input) return;
-    const name = input.value.trim();
-    if (!name) return showNotification('Please enter a profile name', 'warning');
+async function promptCreateAutoModProfile() {
+    const name = await window.showConfirmModal("New AutoMod Profile", "Enter a name for the new AutoMod profile:", true, "Profile Name (e.g. Strict Mode)");
+    if (!name) return;
+    if (name.length < 3) return adminShowNotification('Name too short', 'warning');
 
-    // To create, we effectively save a new profile key with default or current active settings
-    // Let's copy the currently "Editing" profile as a base
-    const currentEditProfile = document.getElementById('automodSelectedProfile')?.value;
-    const baseProfile = window._autoModConfig.autoModProfiles?.profiles[currentEditProfile] || {};
+    const currentName = window._autoModSelectedProfile || 'balanced';
+    const baseProfile = window._autoModConfig.autoModProfiles?.profiles[currentName] || {};
 
     try {
         const res = await fetchWithCsrf('/api/automod/config', {
             method: 'POST',
             body: JSON.stringify({
                 profileName: name,
-                profileConfig: baseProfile // Clone existing
+                profileConfig: baseProfile
             })
         });
         const data = await res.json();
 
         if (res.ok) {
-            showNotification(`Profile ${name} created`, 'success');
-            input.value = '';
+            adminShowNotification(`Profile ${name} created`, 'success');
             await loadAutoModConfig();
-            // Switch edit view to new profile
-            const editSelect = document.getElementById('automodSelectedProfile');
-            if (editSelect) {
-                editSelect.value = name;
-                renderAutoModForm(name);
-            }
+            selectAutoModProfile(name, true);
         } else {
-            showNotification(data.error || 'Failed to create profile', 'error');
+            adminShowNotification(data.error || 'Failed to create profile', 'error');
         }
     } catch (err) {
         console.error(err);
-        showNotification('Error creating profile', 'error');
+        adminShowNotification('Error creating profile', 'error');
     }
 }
 
 async function deleteAutoModProfile() {
-    const editSelect = document.getElementById('automodSelectedProfile');
-    if (!editSelect) return;
-    const name = editSelect.value;
+    const name = window._autoModSelectedProfile;
+    if (!name) return;
 
     if (['balanced', 'strict', 'relaxed'].includes(name)) {
-        return showNotification('Cannot delete default profiles', 'warning');
+        return adminShowNotification('Cannot delete default system profiles', 'warning');
     }
 
-    if (!confirm(`Are you sure you want to delete profile "${name}"?`)) return;
+    const confirmed = await window.showConfirmModal("Delete AutoMod Profile", `Are you sure you want to delete profile "${name}"? This action cannot be undone.`);
+    if (!confirmed) return;
 
     try {
         const res = await fetchWithCsrf('/api/automod/config', {
@@ -2008,21 +1968,21 @@ async function deleteAutoModProfile() {
         const data = await res.json();
 
         if (res.ok) {
-            showNotification(`Profile ${name} deleted`, 'success');
+            adminShowNotification(`Profile ${name} deleted`, 'success');
+            window._autoModSelectedProfile = null;
             await loadAutoModConfig();
         } else {
-            showNotification(data.error || 'Failed to delete profile', 'error');
+            adminShowNotification(data.error || 'Failed to delete profile', 'error');
         }
     } catch (err) {
         console.error(err);
-        showNotification('Error deleting profile', 'error');
+        adminShowNotification('Error deleting profile', 'error');
     }
 }
 
 async function saveSelectedAutoModProfileSettings() {
-    const editSelect = document.getElementById('automodSelectedProfile');
-    if (!editSelect) return;
-    const profileName = editSelect.value;
+    const profileName = window._autoModSelectedProfile;
+    if (!profileName) return adminShowNotification('No profile selected', 'warning');
 
     const getVal = (id) => document.getElementById(id)?.value;
     const getNum = (id) => Number(document.getElementById(id)?.value);
@@ -2086,20 +2046,20 @@ async function saveSelectedAutoModProfileSettings() {
         const data = await res.json();
 
         if (res.ok) {
-            showNotification(`Settings saved for ${profileName}`, 'success');
+            adminShowNotification(`Settings saved for ${profileName}`, 'success');
             await loadAutoModConfig();
         } else {
-            showNotification(data.error || 'Failed to save settings', 'error');
+            adminShowNotification(data.error || 'Failed to save settings', 'error');
         }
     } catch (err) {
         console.error(err);
-        showNotification('Error saving settings', 'error');
+        adminShowNotification('Error saving settings', 'error');
     }
 }
 
 async function runAutoModSimulation() {
     const message = document.getElementById('automodSimMessage')?.value;
-    if (!message) return showNotification('Please enter a message to test', 'warning');
+    if (!message) return adminShowNotification('Please enter a message to test', 'warning');
 
     const recentCount = Number(document.getElementById('automodSimRecentCount')?.value) || 1;
     const priorViolations = Number(document.getElementById('automodSimPriorViolations')?.value) || 0;
@@ -2112,8 +2072,6 @@ async function runAutoModSimulation() {
     };
 
     if (!useSaved) {
-        // Construct draft config from current form values to test "what-if"
-        // We reuse the logic from saveSelectedAutoModProfileSettings but put it in 'draftConfig'
         const getVal = (id) => document.getElementById(id)?.value;
         const getNum = (id) => Number(document.getElementById(id)?.value);
         const getBool = (id) => document.getElementById(id)?.value === 'true';
@@ -2168,7 +2126,7 @@ async function runAutoModSimulation() {
 
     const resultBox = document.getElementById('automodSimResult');
     resultBox.innerHTML = 'Running simulation...';
-    resultBox.className = 'automod-result-box'; // Reset classes
+    resultBox.className = 'automod-result-box';
 
     try {
         const res = await fetchWithCsrf('/api/automod/simulate', {
@@ -2186,17 +2144,17 @@ async function runAutoModSimulation() {
             const riskLevel = String(r.riskLevel || 'low').toUpperCase();
             const predictedAction = String(r.predictedAction || 'warn').toUpperCase();
 
-            let html = `<strong>Verdict:</strong> <span class="${isFlagged ? 'text-danger' : 'text-success'}">${esc(String(r.verdict || 'unknown').toUpperCase())}</span>`;
-            html += `<br><strong>Risk:</strong> ${esc(String(riskScore))} (${esc(riskLevel)})`;
-            html += `<br><strong>Predicted Action:</strong> ${esc(predictedAction)}${r.predictedTimeoutMs ? ` (${esc(String(r.predictedTimeoutMs))}ms)` : ''}`;
-            html += `<br><strong>Findings:</strong> ${findings.length ? findings.map(esc).join('; ') : 'None'}`;
-            html += `<br><strong>Predicted Actions:</strong> ${actions.length ? actions.map(esc).join('; ') : 'None'}`;
+            let html = `<strong>Verdict:</strong> <span class="${isFlagged ? 'text-danger' : 'text-success'}">${safeHtml(String(r.verdict || 'unknown').toUpperCase())}</span>`;
+            html += `<br><strong>Risk:</strong> ${safeHtml(String(riskScore))} (${safeHtml(riskLevel)})`;
+            html += `<br><strong>Predicted Action:</strong> ${safeHtml(predictedAction)}${r.predictedTimeoutMs ? ` (${safeHtml(String(r.predictedTimeoutMs))}ms)` : ''}`;
+            html += `<br><strong>Findings:</strong> ${findings.length ? findings.map(safeHtml).join('; ') : 'None'}`;
+            html += `<br><strong>Predicted Actions:</strong> ${actions.length ? actions.map(safeHtml).join('; ') : 'None'}`;
 
             resultBox.innerHTML = html;
             resultBox.classList.add(isFlagged ? 'border-danger' : 'border-success');
         } else {
             resultBox.textContent = 'Simulation failed.';
-            showNotification(data.error || 'Simulation failed', 'error');
+            adminShowNotification(data.error || 'Simulation failed', 'error');
         }
     } catch (err) {
         console.error(err);
@@ -2256,13 +2214,13 @@ function renderAutoModAdvancedData(data) {
         trendBody.innerHTML = trendRows.length
             ? trendRows.map((row) => `
                 <tr>
-                    <td>${esc(String(row.day || '-'))}</td>
+                    <td>${safeHtml(String(row.day || '-'))}</td>
                     <td>${formatCount(row.total)}</td>
                     <td>${formatCount(row.pending)}</td>
                     <td>${formatCount((row.approved || 0) + (row.dismissed || 0))}</td>
                 </tr>
             `).join('')
-            : '<tr><td colspan="4" class="text-center text-muted">No trend data.</td></tr>';
+            : '<tr><td colspan="4" class="text-center text-muted">No trend data yet.</td></tr>';
     }
 
     const typesBody = document.getElementById('automodTypeRows');
@@ -2271,11 +2229,11 @@ function renderAutoModAdvancedData(data) {
         typesBody.innerHTML = typeRows.length
             ? typeRows.map((row) => `
                 <tr>
-                    <td>${esc(String(row.type || 'unknown'))}</td>
+                    <td>${safeHtml(String(row.type || 'unknown'))}</td>
                     <td>${formatCount(row.count)}</td>
                 </tr>
             `).join('')
-            : '<tr><td colspan="2" class="text-center text-muted">No type data.</td></tr>';
+            : '<tr><td colspan="2" class="text-center text-muted">No type data yet.</td></tr>';
     }
 
     const topUsersBody = document.getElementById('automodTopUsersRows');
@@ -2284,11 +2242,11 @@ function renderAutoModAdvancedData(data) {
         topUsersBody.innerHTML = users.length
             ? users.map((row) => `
                 <tr>
-                    <td>${esc(String(row.user_id || '-'))}</td>
+                    <td>${safeHtml(String(row.user_id || '-'))}</td>
                     <td>${formatCount(row.count)}</td>
                 </tr>
             `).join('')
-            : '<tr><td colspan="2" class="text-center text-muted">No user data.</td></tr>';
+            : '<tr><td colspan="2" class="text-center text-muted">No user data yet.</td></tr>';
     }
 
     renderAutoModQueue(data);
@@ -2311,13 +2269,13 @@ function renderAutoModQueue(data) {
             const status = String(item.review_status || 'pending').toLowerCase();
             const snippet = String(item.message_content || '').slice(0, 85);
             return `
-                <tr title="${esc(String(item.message_content || ''))}">
+                <tr title="${safeHtml(String(item.message_content || ''))}">
                     <td>${id}</td>
-                    <td><code>${esc(String(item.user_id || '-'))}</code></td>
-                    <td>${esc(String(item.violation_type || '-'))}</td>
-                    <td>${esc(String(item.action_taken || '-'))}</td>
+                    <td><code>${safeHtml(String(item.user_id || '-'))}</code></td>
+                    <td>${safeHtml(String(item.violation_type || '-'))}</td>
+                    <td>${safeHtml(String(item.action_taken || '-'))}</td>
                     <td>
-                        <span class="automod-severity-chip ${esc(severity)}">${esc(severity)}</span>
+                        <span class="automod-severity-chip ${safeHtml(severity)}">${safeHtml(severity)}</span>
                         <select id="automodRowSeverity-${id}" class="form-input" style="margin-top:0.35rem; min-width: 120px;">
                             <option value="critical" ${severity === 'critical' ? 'selected' : ''}>Critical</option>
                             <option value="high" ${severity === 'high' ? 'selected' : ''}>High</option>
@@ -2325,7 +2283,7 @@ function renderAutoModQueue(data) {
                             <option value="low" ${severity === 'low' ? 'selected' : ''}>Low</option>
                         </select>
                     </td>
-                    <td><span class="automod-status-chip ${esc(status)}">${esc(status)}</span></td>
+                    <td><span class="automod-status-chip ${safeHtml(status)}">${safeHtml(status)}</span></td>
                     <td>${formatLocalTime(item.timestamp)}</td>
                     <td>
                         <div class="automod-inline-actions" style="gap:0.4rem;">
@@ -2334,12 +2292,12 @@ function renderAutoModQueue(data) {
                             <button class="btn btn-sm btn-success" onclick="updateAutoModWorkflow(${id}, 'approved')">Approve</button>
                             <button class="btn btn-sm btn-danger" onclick="updateAutoModWorkflow(${id}, 'dismissed')">Dismiss</button>
                         </div>
-                        <div class="text-muted" style="margin-top:0.35rem; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(snippet || '-')}</div>
+                        <div class="text-muted" style="margin-top:0.35rem; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${safeHtml(snippet || '-')}</div>
                     </td>
                 </tr>
             `;
         }).join('')
-        : '<tr><td colspan="8" class="text-center text-muted">No queue incidents for the selected filters.</td></tr>';
+        : '<tr><td colspan="8" class="text-center text-muted">No incidents match the current filters.</td></tr>';
 
     const page = Number(data?.pagination?.page || 1);
     const pages = Number(data?.pagination?.pages || 1);
@@ -2367,7 +2325,7 @@ function setAutoModWorkflowTarget(violationId) {
 async function updateAutoModWorkflow(violationId, status = null, severity = null, note = null) {
     const id = Number(violationId);
     if (!Number.isFinite(id) || id <= 0) {
-        showNotification('Invalid incident id', 'error');
+        adminShowNotification('Invalid incident id', 'error');
         return;
     }
 
@@ -2377,7 +2335,7 @@ async function updateAutoModWorkflow(violationId, status = null, severity = null
     if (note !== null && note !== undefined) payload.note = String(note);
 
     if (!Object.keys(payload).length) {
-        showNotification('Nothing to update', 'warning');
+        adminShowNotification('Nothing to update', 'warning');
         return;
     }
 
@@ -2389,12 +2347,12 @@ async function updateAutoModWorkflow(violationId, status = null, severity = null
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || 'Workflow update failed');
 
-        showNotification(`Incident #${id} updated`, 'success');
+        adminShowNotification(`Incident #${id} updated`, 'success');
         const activePage = Number(window._autoModAdvanced?.pagination?.page || 1);
         await loadAutoModAdvancedData(activePage);
     } catch (error) {
         console.error('Error updating workflow item:', error);
-        showNotification(error.message || 'Failed to update incident workflow', 'error');
+        adminShowNotification(error.message || 'Failed to update incident workflow', 'error');
     }
 }
 
@@ -2402,7 +2360,7 @@ async function saveAutoModWorkflowNote() {
     const id = Number(document.getElementById('automodWorkflowSelectedId')?.value);
     const note = String(document.getElementById('automodWorkflowNote')?.value || '');
     if (!Number.isFinite(id) || id <= 0) {
-        showNotification('Select an incident from the queue first', 'warning');
+        adminShowNotification('Select an incident first', 'warning');
         return;
     }
     await updateAutoModWorkflow(id, null, null, note);
@@ -2412,7 +2370,7 @@ async function bulkResolveAutoModPending() {
     const queue = Array.isArray(window._autoModAdvanced?.queue) ? window._autoModAdvanced.queue : [];
     const pending = queue.filter((item) => String(item.review_status || 'pending').toLowerCase() === 'pending').slice(0, 15);
     if (!pending.length) {
-        showNotification('No visible pending incidents to resolve', 'info');
+        adminShowNotification('There are no visible pending incidents to resolve', 'info');
         return;
     }
 
@@ -2426,15 +2384,14 @@ async function bulkResolveAutoModPending() {
             method: 'POST',
             body: JSON.stringify({ status: 'approved' })
         })));
-        showNotification(`Resolved ${pending.length} incidents`, 'success');
+        adminShowNotification(`Resolved ${pending.length} incidents`, 'success');
         await loadAutoModAdvancedData(Number(window._autoModAdvanced?.pagination?.page || 1));
     } catch (error) {
         console.error('Bulk resolve failed:', error);
-        showNotification('Bulk resolve failed', 'error');
+        adminShowNotification('Bulk resolve failed', 'error');
     }
 }
 
-// Global Exports
 window.switchTab = switchTab;
 window.renderAppealsPage = renderAppealsPage;
 window.loadAppeals = loadAppeals;
@@ -2444,18 +2401,44 @@ window.loadAppealHistory = loadAppealHistory;
 window.renderAppealHistoryPage = renderAppealHistoryPage;
 window.getFilteredAppeals = getFilteredAppeals;
 window.getFilteredAppealHistory = getFilteredAppealHistory;
-window.showNotification = showNotification;
+window.adminShowNotification = adminShowNotification;
 window.toggleFilters = toggleFilters;
 window.handleLookupInput = handleLookupInput;
 window.performLookup = performLookup;
 window.switchLookupTab = switchLookupTab;
 window.saveLookupNote = saveLookupNote;
+
+
+
+async function loadGhostPings() {
+    try {
+        const api = window.api || (window.AdminPanel && window.AdminPanel.api);
+        if (!api || typeof api.getJson !== 'function') throw new Error('API client not available');
+
+        const { response, data } = await api.getJson('/api/admin/ghost-pings?limit=100', { cache: 'no-store' });
+        if (!response?.ok || !data?.data) throw new Error(data?.error || 'Failed to fetch ghost pings');
+
+        window._allGhostPings = Array.isArray(data.data) ? data.data : [];
+        renderGhostPingMetrics(window._allGhostPings);
+        filterGhostPings();
+    } catch (err) {
+        console.error('Failed to load ghost pings:', err);
+        window._allGhostPings = [];
+        renderGhostPingMetrics([]);
+        filterGhostPings();
+        adminShowNotification('Could not load ghost ping data', 'error');
+    }
+}
+
+
+window.loadSuggestions = loadSuggestions;
+window.loadGhostPings = loadGhostPings;
 window.loadAdminXpLeaderboard = loadAdminXpLeaderboard;
 
-window.loadAutoModProfiles = loadAutoModConfig; // Alias for compatibility with switchTab
+window.loadAutoModProfiles = loadAutoModConfig;
 window.loadAutoModConfig = loadAutoModConfig;
 window.setActiveAutoModProfile = setActiveAutoModProfile;
-window.createAutoModProfile = createAutoModProfile;
+window.promptCreateAutoModProfile = promptCreateAutoModProfile;
 window.deleteAutoModProfile = deleteAutoModProfile;
 window.saveSelectedAutoModProfileSettings = saveSelectedAutoModProfileSettings;
 window.runAutoModSimulation = runAutoModSimulation;
@@ -2497,3 +2480,652 @@ if (window.AdminPanel) {
 }
 
 document.addEventListener('adminpanel:refresh-visible-data', refreshAdminVisibleData);
+
+let _confirmResolve = null;
+
+window.closeConfirmModal = function () {
+    const modal = document.getElementById('universalConfirmModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+    }
+    if (_confirmResolve) {
+        _confirmResolve(null);
+        _confirmResolve = null;
+    }
+};
+
+
+window.showConfirmModal = function (title, message, isPrompt = false, placeholder = '') {
+    return new Promise((resolve) => {
+        _confirmResolve = resolve;
+
+        const modal = document.getElementById('universalConfirmModal');
+        const titleEl = document.getElementById('universalConfirmTitle');
+        const msgEl = document.getElementById('universalConfirmMessage');
+        const promptContainer = document.getElementById('universalPromptContainer');
+        const promptInput = document.getElementById('universalPromptInput');
+        const confirmBtn = document.getElementById('universalConfirmBtn');
+
+        if (!modal) {
+            console.error('Universal Confirm Modal not found in DOM');
+            return resolve(isPrompt ? null : false);
+        }
+
+        titleEl.textContent = title;
+        msgEl.textContent = message;
+
+        if (isPrompt) {
+            promptContainer.style.display = 'block';
+            promptInput.value = '';
+            promptInput.placeholder = placeholder || 'Enter details...';
+            setTimeout(() => promptInput.focus(), 100);
+        } else {
+            promptContainer.style.display = 'none';
+        }
+
+        confirmBtn.onclick = () => {
+            if (isPrompt) {
+                const val = promptInput.value.trim();
+                if (!val && isPrompt) {
+                }
+                resolve(val);
+            } else {
+                resolve(true);
+            }
+            _confirmResolve = null;
+            modal.style.display = 'none';
+            modal.classList.remove('show');
+        };
+
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('show'), 10);
+    });
+};
+
+
+
+
+
+
+
+function renderGhostPingMetrics(pings) {
+    if (!Array.isArray(pings)) return;
+
+    const total = pings.length;
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const recent = pings.filter(p => (now - new Date(p.createdAt).getTime()) < oneDay).length;
+
+    const userCounts = {};
+    const channelCounts = {};
+
+    pings.forEach(p => {
+        const u = String(p.userTag || p.userId || 'Unknown');
+        const c = String(p.channelName ? `#${p.channelName}` : (p.channelId || 'Unknown'));
+        userCounts[u] = (userCounts[u] || 0) + 1;
+        channelCounts[c] = (channelCounts[c] || 0) + 1;
+    });
+
+    const getTop = (obj) => {
+        let topKey = '-';
+        let topVal = 0;
+        for (const [k, v] of Object.entries(obj)) {
+            if (v > topVal) {
+                topKey = k;
+                topVal = v;
+            }
+        }
+        return topKey;
+    };
+
+    const topUser = getTop(userCounts);
+    const topChannel = getTop(channelCounts);
+
+    const setTxt = (id, txt) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = txt;
+    };
+
+    setTxt('ghostMetricTotal', total.toLocaleString());
+    setTxt('ghostMetric24h', recent.toLocaleString());
+    setTxt('ghostMetricTopUser', topUser.length > 20 ? topUser.substring(0, 18) + '..' : topUser);
+    setTxt('ghostMetricTopChannel', topChannel);
+}
+
+function filterGhostPings() {
+    const list = document.getElementById('ghostPingList');
+    if (!list) {
+        const tbody = document.getElementById('ghostPingTableBody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Please hard-refresh (Ctrl+F5) to see the new UI.</td></tr>';
+        return;
+    }
+
+    const allPings = window._allGhostPings || [];
+
+    const searchInput = document.getElementById('ghostPingSearchInput');
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
+
+    const pings = allPings.filter(p => {
+        const q = query.replaceAll('@', '');
+        if (!q) return true;
+        return (
+            (p.userTag && p.userTag.toLowerCase().includes(q)) ||
+            (p.content && p.content.toLowerCase().includes(q)) ||
+            (p.userId && p.userId.includes(q)) ||
+            (p.channelId && p.channelId.includes(q)) ||
+            (p.channelName && p.channelName.toLowerCase().includes(q))
+        );
+    });
+
+    list.innerHTML = '';
+
+    if (pings.length === 0) {
+        list.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-muted);">No ghost pings found for the current filter.</div>';
+        return;
+    }
+
+    pings.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'ghost-ping-card';
+
+        let channelDisplay = p.channelName ? `#${safeHtml(p.channelName)}` : `<span style="opacity:0.6;">${safeHtml(p.channelId)}</span>`;
+        let contentDisplay = p.resolvedContent ? safeHtml(p.resolvedContent) : safeHtml(p.content);
+
+        contentDisplay = contentDisplay.replace(/&lt;@!?(\d+)&gt;/g, '<span class="mention-tag">@$1</span>');
+        contentDisplay = contentDisplay.replace(/@(\d{17,19})/g, '<span class="mention-tag">@$1</span>');
+        contentDisplay = contentDisplay.replace(new RegExp(`@(${p.userTag?.split('#')[0]}|[a-zA-Z0-9_.-]+)`, 'g'), (match) => {
+            return `<span class="mention-tag">${match}</span>`;
+        });
+
+        let mentionsHtml = '';
+        if (p.mentions) {
+            let m = p.resolvedMentions ? safeHtml(p.resolvedMentions) : safeHtml(p.mentions);
+            m = m.replace(/&lt;@!?(\d+)&gt;/g, '<span class="mention-tag">@$1</span>');
+            m = m.replace(/@(\d{17,19})/g, '<span class="mention-tag">@$1</span>');
+            m = m.replace(new RegExp(`@([a-zA-Z0-9_.-]+)`, 'g'), `<span class="mention-tag">@$1</span>`);
+            mentionsHtml = `<div class="ghost-ping-mentions"><span style="margin-right:5px;">🔔</span> <strong>Pinged:</strong> ${m}</div>`;
+        }
+
+        const dateStr = new Date(p.createdAt).toLocaleString();
+
+        const avatarHtml = p.avatarUrl
+            ? `<img src="${p.avatarUrl}" class="ghost-ping-avatar" style="object-fit: cover;" alt="Avatar" />`
+            : `<div class="ghost-ping-avatar">👤</div>`;
+
+        card.innerHTML = `
+            ${avatarHtml}
+            <div class="ghost-ping-body">
+                <div class="ghost-ping-header">
+                    <span class="ghost-ping-username" title="ID: ${p.userId}">${safeHtml(p.userTag || 'Unknown')}</span>
+                    <span class="ghost-ping-timestamp">${dateStr}</span>
+                    ${p.channelName || p.channelId ? `<span class="ghost-ping-channel-tag">📌 ${channelDisplay}</span>` : ''}
+                </div>
+                <div class="ghost-ping-content">${contentDisplay}</div>
+                ${mentionsHtml}
+            </div>
+        `;
+        list.appendChild(card);
+    });
+}
+
+async function loadSnipes() {
+    try {
+        const api = window.api || (window.AdminPanel && window.AdminPanel.api);
+        if (!api || typeof api.getJson !== 'function') throw new Error('API client not available');
+
+        const { response, data } = await api.getJson('/api/admin/snipes?limit=100', { cache: 'no-store' });
+        if (!response?.ok || !data?.data) throw new Error(data?.error || 'Failed to fetch snipes');
+
+        window._allSnipes = Array.isArray(data.data) ? data.data : [];
+        renderSnipeMetrics(window._allSnipes);
+        filterSnipes();
+    } catch (err) {
+        console.error('Failed to load snipes:', err);
+        window._allSnipes = [];
+        renderSnipeMetrics([]);
+        filterSnipes();
+        adminShowNotification('Could not load snipe data', 'error');
+    }
+}
+
+function renderSnipeMetrics(snipes) {
+    if (!Array.isArray(snipes)) return;
+
+    const total = snipes.length;
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const recent = snipes.filter(s => (now - new Date(s.createdAt).getTime()) < oneDay).length;
+
+    const userCounts = {};
+    const channelCounts = {};
+
+    snipes.forEach(s => {
+        const u = String(s.userTag || s.userId || 'Unknown');
+        const c = String(s.channelName ? `#${s.channelName}` : (s.channelId || 'Unknown'));
+        userCounts[u] = (userCounts[u] || 0) + 1;
+        channelCounts[c] = (channelCounts[c] || 0) + 1;
+    });
+
+    const getTop = (obj) => {
+        let topKey = '-';
+        let topVal = 0;
+        for (const [k, v] of Object.entries(obj)) {
+            if (v > topVal) {
+                topKey = k;
+                topVal = v;
+            }
+        }
+        return topKey;
+    };
+
+    const setTxt = (id, txt) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = txt;
+    };
+
+    setTxt('snipeMetricTotal', total.toLocaleString());
+    setTxt('snipeMetric24h', recent.toLocaleString());
+    setTxt('snipeMetricTopUser', getTop(userCounts).length > 20 ? getTop(userCounts).substring(0, 18) + '..' : getTop(userCounts));
+    setTxt('snipeMetricTopChannel', getTop(channelCounts));
+}
+
+function filterSnipes() {
+    const tbody = document.getElementById('snipeTableBody');
+    if (!tbody) return;
+
+    const allSnipes = window._allSnipes || [];
+    const searchInput = document.getElementById('snipeSearchInput');
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
+
+    const snipes = allSnipes.filter(s => {
+        const q = query.replaceAll('@', '');
+        if (!q) return true;
+        return (
+            (s.userTag && s.userTag.toLowerCase().includes(q)) ||
+            (s.content && s.content.toLowerCase().includes(q)) ||
+            (s.userId && s.userId.includes(q)) ||
+            (s.channelId && s.channelId.includes(q)) ||
+            (s.channelName && s.channelName.toLowerCase().includes(q))
+        );
+    });
+
+    tbody.innerHTML = '';
+
+    if (snipes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:1rem;">No snipes recorded (or none match filter).</td></tr>';
+        return;
+    }
+
+    snipes.forEach(s => {
+        const tr = document.createElement('tr');
+        let channelDisplay = s.channelName ? `#${safeHtml(s.channelName)}` : `<span style="opacity:0.6;">${safeHtml(s.channelId)}</span>`;
+        let contentDisplay = safeHtml(s.content);
+
+        contentDisplay = contentDisplay.replace(/&lt;@!?(\d+)&gt;/g, '<span class="mention">@$1</span>');
+        contentDisplay = contentDisplay.replace(/@(\d{17,19})/g, '<span class="mention">@$1</span>');
+
+        tr.innerHTML = `
+            <td>
+                <div>${safeHtml(s.userTag || 'Unknown')}</div>
+                <small style="color:#aaa">${s.userId}</small>
+            </td>
+            <td>
+                ${channelDisplay}
+                ${s.channelName ? `<br><small style="color:#aaa; font-size:0.7em;">${safeHtml(s.channelId)}</small>` : ''}
+            </td>
+            <td>
+                <div style="max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${safeHtml(s.content)}">
+                    ${contentDisplay}
+                </div>
+            </td>
+            <td>${new Date(s.createdAt).toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+
+async function loadSuggestions() {
+    try {
+        const api = window.api || (window.AdminPanel && window.AdminPanel.api);
+        if (!api || typeof api.getJson !== 'function') return;
+
+        const { response, data } = await api.getJson('/api/admin/suggestions', { cache: 'no-store' });
+        if (!response?.ok || !data?.success) throw new Error(data?.error || 'Failed to fetch suggestions');
+
+        const returnedData = data.data || data.suggestions || [];
+        window._allSuggestions = Array.isArray(returnedData) ? returnedData : [];
+
+        filterSuggestions();
+    } catch (err) {
+        console.error('Failed to load suggestions:', err);
+        window._allSuggestions = [];
+        filterSuggestions();
+        if (typeof adminShowNotification === 'function') {
+            adminShowNotification('Could not load suggestions', 'error');
+        }
+    }
+}
+
+function filterSuggestions() {
+    const list = document.getElementById('suggestionList');
+    if (!list) return;
+
+    const all = window._allSuggestions || [];
+    const search = (document.getElementById('suggestionSearchInput')?.value || '').toLowerCase();
+    const status = document.getElementById('suggestionStatusFilter')?.value || 'all';
+
+    let total = all.length;
+    let pending = 0;
+    let approved = 0;
+    let denied = 0;
+
+    const filtered = all.filter(s => {
+        const sStatus = (s.status || 'pending').toLowerCase();
+        if (sStatus === 'pending') pending++;
+        else if (sStatus === 'approved') approved++;
+        else if (sStatus === 'denied') denied++;
+
+        const matchesSearch = (s.content && s.content.toLowerCase().includes(search)) ||
+            (s.username && s.username.toLowerCase().includes(search)) ||
+            (s.userId && s.userId.includes(search));
+        const matchesStatus = status === 'all' || sStatus === status.toLowerCase();
+        return matchesSearch && matchesStatus;
+    });
+
+    const tryUpdateCard = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+    };
+    tryUpdateCard('sugMetricTotal', total);
+    tryUpdateCard('sugMetricPending', pending);
+    tryUpdateCard('sugMetricApproved', approved);
+    tryUpdateCard('sugMetricDenied', denied);
+
+    if (filtered.length === 0) {
+        list.innerHTML = `
+            <div class="appeals-queue-empty" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#949ba4;">
+                <div style="font-size:3rem; margin-bottom:1rem;">📭</div>
+                <div style="font-size:1.2rem; font-weight:500; color:#f2f3f5;">No suggestions found</div>
+                <div style="margin-top:0.5rem;">Try changing your search or filter criteria.</div>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = filtered.map(s => {
+        const sStatus = (s.status || 'pending').toLowerCase();
+        let stText = 'Pending';
+        let statusBadgeColor = '#fcee7e';
+        let statusBgColor = 'rgba(252, 238, 126, 0.1)';
+
+        if (sStatus === 'approved') {
+            stText = 'Approved';
+            statusBadgeColor = '#57F287';
+            statusBgColor = 'rgba(87, 242, 135, 0.1)';
+        } else if (sStatus === 'denied') {
+            stText = 'Denied';
+            statusBadgeColor = '#ED4245';
+            statusBgColor = 'rgba(237, 66, 69, 0.1)';
+        }
+
+        const avatarUrl = s.avatarUrl || 'https://cdn.discordapp.com/embed/avatars/0.png';
+        const suggestionId = safeJsString(String(s.id || ''));
+
+        return `
+            <div class="suggestion-card" onclick="selectSuggestion('${suggestionId}')" style="cursor: pointer; background: #2b2d31; border-radius: 8px; padding: 16px; transition: transform 0.2s, background 0.2s; border: 1px solid #1e1f22; display: flex; flex-direction: column; gap: 12px; margin-bottom: 8px; flex-shrink: 0;" onmouseover="this.style.background='#313338'" onmouseout="this.style.background='#2b2d31'">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <img src="${avatarUrl}" alt="Avatar" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-weight: 600; color: #f2f3f5; font-size: 1rem;">${safeHtml(s.username || 'Unknown')}</span>
+                            <span style="color: #949ba4; font-size: 0.8rem;">${new Date(s.createdAt).toLocaleString()}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; padding: 4px 10px; border-radius: 12px; background: ${statusBgColor}; color: ${statusBadgeColor}; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                        ${stText}
+                    </div>
+                </div>
+                <div style="color: #dbdee1; font-size: 0.95rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">
+                    ${safeHtml(s.content)}
+                </div>
+                <div style="display: flex; gap: 16px; margin-top: auto; padding-top: 12px; border-top: 1px solid #1e1f22;">
+                    <span style="display: flex; align-items: center; color: #57F287; font-weight: 600; font-size: 0.85rem;">
+                        👍 ${s.upvotes || 0}
+                    </span>
+                    <span style="display: flex; align-items: center; color: #ED4245; font-weight: 600; font-size: 0.85rem;">
+                        👎 ${s.downvotes || 0}
+                    </span>
+                    <span style="margin-left: auto; color: #949ba4; font-size: 0.75rem;">
+                        ID: ${s.id.substring(0, 8)}...
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function selectSuggestion(id) {
+    const s = (window._allSuggestions || []).find(x => x.id === id);
+    if (!s) return;
+
+    window._selectedSuggestionId = id;
+
+    const els = {
+        user: document.getElementById('detailSuggestionUser'),
+        userId: document.getElementById('detailSuggestionUserId'),
+        id: document.getElementById('detailSuggestionId'),
+        date: document.getElementById('detailSuggestionDate'),
+        content: document.getElementById('detailSuggestionContent'),
+        avatar: document.getElementById('detailSuggestionAvatar'),
+        placeholder: document.getElementById('detailSuggestionAvatarPlaceholder'),
+        up: document.getElementById('detailSuggestionUpvotes'),
+        down: document.getElementById('detailSuggestionDownvotes'),
+        response: document.getElementById('detailSuggestionResponse'),
+        responseBlock: document.getElementById('detailSuggestionResponseBlock'),
+        status: document.getElementById('detailSuggestionStatus'),
+        panel: document.getElementById('suggestionDetailPanel')
+    };
+
+    if (els.panel) els.panel.style.display = 'flex';
+
+    if (els.user) els.user.textContent = s.username || 'Unknown';
+    if (els.userId) els.userId.textContent = s.userId || '-';
+    if (els.id) els.id.textContent = s.id || '-';
+    if (els.date) els.date.textContent = new Date(s.createdAt).toLocaleString();
+    if (els.content) els.content.innerHTML = safeHtml(s.content).replace(/\n/g, '<br>');
+    if (els.up) els.up.innerHTML = `👍 ${s.upvotes || 0}`;
+    if (els.down) els.down.innerHTML = `👎 ${s.downvotes || 0}`;
+
+    if (els.avatar && els.placeholder) {
+        if (s.avatarUrl) {
+            els.avatar.src = s.avatarUrl;
+            els.avatar.style.display = 'block';
+            els.placeholder.style.display = 'none';
+        } else {
+            els.avatar.style.display = 'none';
+            els.placeholder.style.display = 'flex';
+        }
+    }
+
+    if (els.status) {
+        const sStatus = (s.status || 'pending').toLowerCase();
+        let stText = 'PENDING';
+        let statusBadgeColor = '#fcee7e';
+        let statusBgColor = 'rgba(252, 238, 126, 0.1)';
+
+        if (sStatus === 'approved') {
+            stText = 'APPROVED';
+            statusBadgeColor = '#57F287';
+            statusBgColor = 'rgba(87, 242, 135, 0.1)';
+        } else if (sStatus === 'denied') {
+            stText = 'DENIED';
+            statusBadgeColor = '#ED4245';
+            statusBgColor = 'rgba(237, 66, 69, 0.1)';
+        }
+
+        els.status.textContent = stText;
+        els.status.style.color = statusBadgeColor;
+        els.status.style.background = statusBgColor;
+        els.status.style.display = 'inline-block';
+    }
+
+    if (els.responseBlock && els.response) {
+        if (s.response) {
+            els.responseBlock.style.display = 'block';
+            els.response.textContent = s.response;
+        } else {
+            els.responseBlock.style.display = 'none';
+        }
+    }
+
+    const btnApprove = document.getElementById('btnApproveSuggestion');
+    const btnDeny = document.getElementById('btnDenySuggestion');
+
+    if (btnApprove && btnDeny) {
+        const isPending = (s.status || 'pending').toLowerCase() === 'pending';
+        btnApprove.style.display = isPending ? 'block' : 'none';
+        btnDeny.style.display = isPending ? 'block' : 'none';
+
+        btnApprove.onclick = () => approveSuggestion(s.id);
+        btnDeny.onclick = () => denySuggestion(s.id);
+    }
+}
+
+async function approveSuggestion(id) {
+    const reason = await window.showConfirmModal("Approve Suggestion", "Provide a reason for approval (required):", true, "Enter reason here...");
+    if (reason === null || reason === false) return;
+    if (!reason.trim()) {
+        adminShowNotification('A reason is required to approve a suggestion.', 'error');
+        return;
+    }
+
+    try {
+        const response = await window.fetchWithCsrf(`/api/admin/suggestions/${id}/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        const data = await response.json();
+        if (data.success) {
+            adminShowNotification("Suggestion approved", "success");
+            loadSuggestions();
+        } else {
+            adminShowNotification('Failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        adminShowNotification('Error approving suggestion: ' + e.message, 'error');
+    }
+}
+
+async function denySuggestion(id) {
+    const reason = await window.showConfirmModal("Deny Suggestion", "Provide a reason for denial (required):", true, "Enter reason here...");
+    if (reason === null || reason === false) return;
+    if (!reason.trim()) {
+        adminShowNotification('A reason is required to deny a suggestion.', 'error');
+        return;
+    }
+    try {
+        const response = await window.fetchWithCsrf(`/api/admin/suggestions/${id}/deny`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        const data = await response.json();
+        if (data.success) {
+            adminShowNotification("Suggestion denied", "success");
+            loadSuggestions();
+        } else {
+            adminShowNotification('Failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        adminShowNotification('Error denying suggestion: ' + e.message, 'error');
+    }
+}
+
+async function clearGhostPings() {
+    const confirmed = await window.showConfirmModal(
+        "Clear Ghost Ping Log",
+        "Are you sure you want to clear the full ghost ping log? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+        const response = await window.fetchWithCsrf('/api/admin/clear-ghost-pings', { method: 'POST' });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            loadGhostPings();
+            adminShowNotification('Successfully cleared all ghost pings.', 'success');
+        } else {
+            adminShowNotification('Failed to clear ghost pings.', 'error');
+        }
+    } catch (error) {
+        console.error('Error clearing ghost pings:', error);
+        adminShowNotification('Error clearing ghost pings.', 'error');
+    }
+}
+
+async function clearSnipes() {
+    const confirmed = await window.showConfirmModal(
+        "Clear Snipe History",
+        "Are you sure you want to clear ALL snipe history? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+        const response = await window.fetchWithCsrf('/api/admin/clear-snipes', { method: 'POST' });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            loadSnipes();
+            adminShowNotification('Successfully cleared all snipes.', 'success');
+        } else {
+            adminShowNotification('Failed to clear snipes.', 'error');
+        }
+    } catch (error) {
+        console.error('Error clearing snipes:', error);
+        adminShowNotification('Error clearing snipes.', 'error');
+    }
+}
+
+window.loadSuggestions = loadSuggestions;
+window.filterSuggestions = filterSuggestions;
+window.selectSuggestion = selectSuggestion;
+window.approveSuggestion = approveSuggestion;
+window.denySuggestion = denySuggestion;
+window.loadGhostPings = loadGhostPings;
+window.clearGhostPings = clearGhostPings;
+window.filterGhostPings = filterGhostPings;
+window.loadSnipes = loadSnipes;
+window.clearSnipes = clearSnipes;
+window.filterSnipes = filterSnipes;
+
+// Dashboard stats
+async function loadDashboardStats() {
+    try {
+        const api = window.api || (window.AdminPanel && window.AdminPanel.api);
+        if (!api) return;
+
+        const { response, data } = await api.getJson('/api/stats');
+        if (!response?.ok) return;
+
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+
+        setVal('kpiTotalUsers', (data.totalUsers || 0).toLocaleString());
+        setVal('kpiActiveTickets', (data.activeTickets || 0).toLocaleString());
+
+        const banned = data.bannedUsers || 0;
+        setVal('kpiBannedUsers', banned.toLocaleString());
+
+        const totalWarns = data.totalWarnings || 0;
+        setVal('kpiTotalWarns', totalWarns.toLocaleString());
+
+    } catch (err) {
+        console.error('Failed to load dashboard stats:', err);
+    }
+}
+window.loadDashboardStats = loadDashboardStats;

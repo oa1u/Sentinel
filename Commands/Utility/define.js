@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 
-// Look up words using the Free Dictionary API—get definitions, synonyms, and more.
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('define')
@@ -36,7 +35,6 @@ module.exports = {
         .setTitle(`📖 ${entry.word}`)
         .setDescription(`*${entry.phonetic || 'N/A'}*`);
 
-      // Add all the meanings for the word.
       if (entry.meanings && entry.meanings.length > 0) {
         entry.meanings.slice(0, 3).forEach((meaning, index) => {
           const definitions = meaning.definitions
@@ -52,7 +50,6 @@ module.exports = {
         });
       }
 
-      // Add synonyms if they're available.
       if (entry.meanings?.[0]?.synonyms?.length > 0) {
         const synonyms = entry.meanings[0].synonyms.slice(0, 5).join(', ');
         em.addFields({

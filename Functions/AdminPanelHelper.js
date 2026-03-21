@@ -1,7 +1,3 @@
-// Admin panel helpers
-// Thin wrappers around the database for admin-panel-related operations
-// (bans, timeouts, warnings, kicks, etc.). Keeps API handlers small and
-// focused by centralizing DB logic here.
 
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
 
@@ -167,6 +163,18 @@ class AdminPanelHelper {
         }
     }
 
+    // Reset all users' levels
+    static async resetAllUsersLevels() {
+        try {
+            const query = 'UPDATE levels SET level = 1, xp = 0, total_xp = 0';
+            const [result] = await MySQLDatabaseManager.connection.pool.query(query);
+            return result.affectedRows;
+        } catch (err) {
+            console.error('[AdminPanelHelper] Error resetting levels:', err.message);
+            throw err;
+        }
+    }
+
     // Gets all banned users from the database.
     static async getAllBannedUsers() {
         try {
@@ -319,7 +327,8 @@ class AdminPanelHelper {
                     moderator_name,
                     moderator_source,
                     action,
-                    case_id
+                    case_id,
+                    user_avatar
                 FROM (
                     SELECT 
                         CONVERT(CAST(w.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
@@ -330,7 +339,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(CASE WHEN w.moderator_source = 'panel' THEN w.moderator_name ELSE COALESCE(m_ui.username, m.username, w.moderator_id, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(w.moderator_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
                         CONVERT('WARN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
+                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
+                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
                     FROM warns w
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(w.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
@@ -351,7 +361,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(CASE WHEN b.banned_by_source = 'panel' THEN b.banned_by_name ELSE COALESCE(m_ui.username, m.username, b.banned_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(b.banned_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
                         CONVERT('BAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(b.ban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
+                        CONVERT(CAST(b.ban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
+                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
                     FROM user_bans b
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(b.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = b.user_id COLLATE utf8mb4_unicode_ci
@@ -370,7 +381,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(CASE WHEN ub.unbanned_by_source = 'panel' THEN ub.unbanned_by_name ELSE COALESCE(ub.unbanned_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(ub.unbanned_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
                         CONVERT('UNBAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(ub.unban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
+                        CONVERT(CAST(ub.unban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
+                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
                     FROM unbans ub
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(ub.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = ub.user_id COLLATE utf8mb4_unicode_ci
@@ -386,7 +398,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(CASE WHEN t.issued_by_source = 'panel' THEN t.issued_by_name ELSE COALESCE(m_ui.username, m.username, t.issued_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(t.issued_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
                         CONVERT('TIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(t.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
+                        CONVERT(CAST(t.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
+                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
                     FROM timeouts t
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(t.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = t.user_id COLLATE utf8mb4_unicode_ci
@@ -404,7 +417,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(CASE WHEN w.moderator_source = 'panel' THEN w.moderator_name ELSE COALESCE(m_ui.username, m.username, w.moderator_id, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(w.moderator_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
                         CONVERT('UNTIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
+                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
+                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
                     FROM warns w
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(w.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
@@ -423,7 +437,8 @@ class AdminPanelHelper {
                         CONVERT(CAST(CASE WHEN k.kicked_by_source = 'panel' THEN k.kicked_by_name ELSE COALESCE(m_ui.username, m.username, k.kicked_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
                         CONVERT(COALESCE(k.kicked_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
                         CONVERT('KICK' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(k.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id
+                        CONVERT(CAST(k.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
+                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
                     FROM kicks k
                     LEFT JOIN userinfo ui ON ui.user_id = CAST(k.user_id AS UNSIGNED)
                     LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = k.user_id COLLATE utf8mb4_unicode_ci
@@ -470,13 +485,16 @@ class AdminPanelHelper {
                     username: row.user_name,
                     moderatorId: row.moderator_id,
                     moderatorName: row.moderator_name,
-                    moderatorSource: row.moderator_source
+                    moderatorSource: row.moderator_source,
+
+                    userAvatar: row.user_avatar,
+                    user_avatar: row.user_avatar
                 };
 
                 return action;
             });
 
-            // Results are already sorted by timestamp DESC and limited, return as-is
+
             return actions;
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting recent actions:', err.message);
@@ -701,7 +719,27 @@ class AdminPanelHelper {
         }
     }
 
-    // Exposes MySQL connection for direct queries (owner-only operations).
+    // Gets all suggestions from the database.
+    static async getAllSuggestions(limit = 50) {
+        try {
+            return await MySQLDatabaseManager.getAllSuggestions(limit);
+        } catch (err) {
+            console.error('[AdminPanelHelper] Error getting suggestions:', err.message);
+            return [];
+        }
+    }
+
+    // Gets all ghost pings from the database.
+    static async getAllGhostPings(limit = 50) {
+        try {
+            return await MySQLDatabaseManager.getAllGhostPings(limit);
+        } catch (err) {
+            console.error('[AdminPanelHelper] Error getting ghost pings:', err.message);
+            return [];
+        }
+    }
+
+
     static get connection() {
         return MySQLDatabaseManager.connection;
     }

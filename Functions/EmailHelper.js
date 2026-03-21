@@ -484,7 +484,7 @@ class EmailHelper {
                 );
             }
         } catch (error) {
-            console.warn('⚠️  Failed to write email analytics log:', error.message);
+            console.warn('⚠️ Failed to write email analytics log:', error.message);
         }
     }
 
@@ -540,7 +540,7 @@ class EmailHelper {
             hasDmarc ? null : 'DMARC'
         ].filter(Boolean);
 
-        console.warn(`⚠️  Email domain auth hardening: missing ${missing.join(', ')} for ${domain}`);
+        console.warn(`⚠️ Email domain auth hardening: missing ${missing.join(', ')} for ${domain}`);
     }
 
     async canSendToRecipient(to) {
@@ -631,7 +631,7 @@ class EmailHelper {
             }
         } catch (dbErr) {
             // fall back to in-memory checks below
-            console.warn('⚠️  EmailHelper DB transactional check failed, falling back to in-memory checks:', dbErr?.message || dbErr);
+            console.warn('⚠️ EmailHelper DB transactional check failed, falling back to in-memory checks:', dbErr?.message || dbErr);
         }
 
         // In-memory fallback (existing behavior)

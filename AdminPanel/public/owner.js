@@ -116,16 +116,16 @@ function importToastHistoryToOwnerFeed(limit = 100) {
 function patchOwnerToastCapture() {
     if (ownerNotificationFeedState.toastCapturePatched) return;
     const map = [
-        ['showSuccess', 'success'],
-        ['showError', 'error'],
-        ['showWarning', 'warning'],
-        ['showInfo', 'info']
+        ['showSuccess', 'success', 'profileShowSuccess'],
+        ['showError', 'error', 'profileShowError'],
+        ['showWarning', 'warning', null],
+        ['showInfo', 'info', null]
     ];
 
-    map.forEach(([fnName, fallbackType]) => {
+    map.forEach(([fnName, fallbackType, aliasName]) => {
         const original = window[fnName];
         if (typeof original !== 'function') return;
-        window[fnName] = function patchedOwnerToastCapture(...args) {
+        const wrapped = function patchedOwnerToastCapture(...args) {
             const title = String(args[0] ?? '').trim() || fallbackType.toUpperCase();
             const message = typeof args[1] === 'string' ? args[1] : '';
             recordOwnerNotificationEvent({
@@ -137,6 +137,15 @@ function patchOwnerToastCapture() {
             }, { refresh: false });
             return original.apply(this, args);
         };
+
+        window[fnName] = wrapped;
+
+        if (aliasName) {
+            const alias = window[aliasName];
+            if (typeof alias !== 'function' || alias === original) {
+                window[aliasName] = wrapped;
+            }
+        }
     });
 
     ownerNotificationFeedState.toastCapturePatched = true;
@@ -360,7 +369,7 @@ async function loadSecurityEventsFeed(force = false) {
     if (usernameFilter) params.set('username', usernameFilter);
 
     if (metaEl) {
-        metaEl.textContent = force ? 'Refreshing security events…' : 'Loading security events…';
+        metaEl.textContent = force ? 'Refreshing security events...' : 'Loading security events...';
     }
 
     try {
@@ -379,10 +388,10 @@ async function loadSecurityEventsFeed(force = false) {
         console.error('Error loading security events:', error);
         renderSecurityEventsRows([]);
         if (metaEl) {
-            metaEl.textContent = 'Failed to load security events.';
+            metaEl.textContent = 'Could not load security events.';
         }
-        if (typeof showError === 'function') {
-            showError('Failed to load security events feed');
+        if (typeof profileShowError === 'function') {
+            profileShowError('Could not load the security events feed');
         }
     }
 }
@@ -554,13 +563,13 @@ function clearOwnerNotificationHistory() {
         ownerNotificationFeedState.events = [];
         saveOwnerNotificationFeed();
         loadOwnerNotificationHistory();
-        if (typeof showSuccess === 'function') {
-            showSuccess('Notification Center', 'Notification history cleared.');
+        if (typeof profileShowSuccess === 'function') {
+            profileShowSuccess('Notification Center', 'Notification history cleared.');
         }
     } catch (error) {
         console.error('Failed to clear notification history:', error);
-        if (typeof showError === 'function') {
-            showError('Notification Center', 'Failed to clear notification history.');
+        if (typeof profileShowError === 'function') {
+            profileShowError('Notification Center', 'Failed to clear notification history.');
         }
     }
 }
@@ -569,14 +578,18 @@ window.loadOwnerNotificationHistory = loadOwnerNotificationHistory;
 window.clearOwnerNotificationHistory = clearOwnerNotificationHistory;
 window.recordOwnerNotificationEvent = recordOwnerNotificationEvent;
 
-// Generate a new invite code
 async function generateInvite() {
     const role = document.getElementById('inviteRole')?.value || 'moderator';
     const expiresInDays = parseInt(document.getElementById('inviteExpiry')?.value || 7);
     const description = document.getElementById('inviteDescription')?.value?.trim() || '';
 
+    if (!['moderator', 'admin'].includes(role)) {
+        profileShowError('Invalid Input', 'Only moderator and admin invite roles are supported.');
+        return;
+    }
+
     if (isNaN(expiresInDays) || expiresInDays < 1 || expiresInDays > 365) {
-        showError('Invalid Input', 'Expiry days must be between 1 and 365');
+        profileShowError('Invalid Input', 'Expiry days must be between 1 and 365');
         return;
     }
 
@@ -590,61 +603,69 @@ async function generateInvite() {
         if (response.ok && data.success) {
             const resultDiv = document.getElementById('inviteResult');
             const expiresDate = new Date(data.expiresAt);
+            const safeCode = escapeOwnerHtml(data.code || '');
+            const safeCodeJs = escapeOwnerJsString(data.code || '');
+            const safeRole = escapeOwnerHtml(role);
+            const safeDescription = escapeOwnerHtml(description);
 
             resultDiv.innerHTML = `
-                <div style="background: var(--bg-secondary); border: 1px solid var(--color-green); border-radius: var(--radius-md); padding: 1.5rem; margin-top: 1.5rem;">
-                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
-                        <span style="font-size: 1.8rem;">✅</span>
+                <div class="invite-result-card">
+                    <div class="invite-result-header">
+                        <div class="invite-result-icon">✅</div>
                         <div>
-                            <div style="font-weight: 700; font-size: 1.1rem; color: var(--color-green);">Invite Code Generated</div>
-                            <div style="color: var(--text-secondary); font-size: 0.9rem;">Share this code with the new ${role}</div>
+                            <div class="invite-result-title">Invite Code Generated</div>
+                            <div class="invite-result-subtitle">Share this code with the new ${safeRole}</div>
                         </div>
                     </div>
-                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1rem;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
-                            <code style="font-size: 1.2rem; font-weight: 700; color: var(--color-blue); font-family: 'Courier New', monospace; flex: 1;">${data.code}</code>
-                            <button class="btn btn-secondary" onclick="copyInviteCode('${data.code}')" style="white-space: nowrap;">📋 Copy</button>
-                        </div>
+                    <div class="invite-code-row">
+                        <div class="invite-code-pill">${safeCode}</div>
+                        <button class="btn btn-secondary" onclick="copyInviteCode('${safeCodeJs}')">📋 Copy</button>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; font-size: 0.9rem;">
-                        <div><strong>Role:</strong> ${role}</div>
-                        <div><strong>Expires:</strong> ${expiresDate.toLocaleDateString()}</div>
-                        ${description ? `<div style="grid-column: 1 / -1;"><strong>Description:</strong> ${description}</div>` : ''}
+                    <div class="invite-meta-grid">
+                        <div class="invite-meta-card">
+                            <strong>Role</strong>
+                            <span>${safeRole}</span>
+                        </div>
+                        <div class="invite-meta-card">
+                            <strong>Expires</strong>
+                            <span>${expiresDate.toLocaleDateString()}</span>
+                        </div>
+                        ${description ? `
+                            <div class="invite-meta-card" style="grid-column: 1 / -1;">
+                                <strong>Description</strong>
+                                <span>${safeDescription}</span>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
             `;
 
-            // Clear form
             document.getElementById('inviteDescription').value = '';
 
-            // Reload stats
             setTimeout(() => loadInviteStats(), 500);
         } else {
-            showError('Generation Failed', data.error || 'Failed to generate invite code');
+            profileShowError('Generation Failed', data.error || 'Failed to generate invite code');
         }
     } catch (error) {
-        showError('Error', 'Failed to generate invite: ' + error.message);
+        profileShowError('Error', 'Failed to generate invite: ' + error.message);
     }
 }
 
-// Copy invite code to clipboard
 async function copyInviteCode(code) {
     try {
         await navigator.clipboard.writeText(code);
-        showSuccess('Copied!', 'Invite code copied to clipboard');
+        profileShowSuccess('Copied!', 'Invite code copied to clipboard');
     } catch (err) {
-        // Fallback for older browsers
         const input = document.createElement('input');
         input.value = code;
         document.body.appendChild(input);
         input.select();
         document.execCommand('copy');
         document.body.removeChild(input);
-        showSuccess('Copied!', 'Invite code copied to clipboard');
+        profileShowSuccess('Copied!', 'Invite code copied to clipboard');
     }
 }
 
-// Load invite statistics
 async function loadInviteStats() {
     try {
         const { response, data } = await window.AdminPanel.api.getJson('/api/invites/stats');
@@ -655,7 +676,6 @@ async function loadInviteStats() {
 
         inviteStatsData = Array.isArray(data) ? data : [];
 
-        // Calculate statistics
         const stats = {
             active: 0,
             fullyUsed: 0,
@@ -675,11 +695,14 @@ async function loadInviteStats() {
             else if (invite.status === 'revoked') stats.revoked++;
         });
 
-        // Update stat cards
-        document.getElementById('totalActiveInvites').textContent = stats.active;
-        document.getElementById('totalUsedInvites').textContent = stats.fullyUsed;
-        document.getElementById('totalExpiredInvites').textContent = stats.expired;
-        document.getElementById('totalInviteUses').textContent = stats.totalUses;
+        const activeEl = document.getElementById('totalActiveInvites');
+        if (activeEl) activeEl.textContent = stats.active;
+        const usedEl = document.getElementById('totalUsedInvites');
+        if (usedEl) usedEl.textContent = stats.fullyUsed;
+        const expiredEl = document.getElementById('totalExpiredInvites');
+        if (expiredEl) expiredEl.textContent = stats.expired;
+        const usesEl = document.getElementById('totalInviteUses');
+        if (usesEl) usesEl.textContent = stats.totalUses;
         const revokedEl = document.getElementById('totalRevokedInvites');
         if (revokedEl) revokedEl.textContent = stats.revoked;
         const conversionEl = document.getElementById('inviteConversionRate');
@@ -690,36 +713,40 @@ async function loadInviteStats() {
             conversionEl.textContent = `${conversion.toFixed(1)}%`;
         }
 
+        const ownerTotalEl = document.getElementById('inviteStatTotal');
+        if (ownerTotalEl) ownerTotalEl.textContent = String(inviteStatsData.length);
+
+        const ownerActiveEl = document.getElementById('inviteStatActive');
+        if (ownerActiveEl) ownerActiveEl.textContent = String(stats.active);
+
+        const ownerUsedEl = document.getElementById('inviteStatUsed');
+        if (ownerUsedEl) ownerUsedEl.textContent = String(stats.fullyUsed);
+
         const metaEl = document.getElementById('inviteStatsMeta');
         if (metaEl) {
             metaEl.textContent = `Last updated: ${new Date().toLocaleString()} • ${inviteStatsData.length} invite(s)`;
         }
 
-        // Render table
         filterInviteStats();
     } catch (error) {
         console.error('Error loading invite stats:', error);
-        showError('Error', 'Failed to load invite statistics: ' + error.message);
+        profileShowError('Error', 'Failed to load invite statistics: ' + error.message);
     }
 }
 
-// Filter and render invite stats table
 function filterInviteStats() {
     const searchTerm = document.getElementById('inviteSearch')?.value?.toLowerCase() || '';
     const statusFilter = document.getElementById('inviteStatusFilter')?.value || 'all';
     const roleFilter = document.getElementById('inviteRoleFilter')?.value || 'all';
 
     const filtered = inviteStatsData.filter(invite => {
-        // Status filter
         if (statusFilter !== 'all') {
             if (statusFilter === 'used' && invite.status !== 'fully_used') return false;
             if (statusFilter !== 'used' && invite.status !== statusFilter) return false;
         }
 
-        // Role filter
         if (roleFilter !== 'all' && invite.role !== roleFilter) return false;
 
-        // Search filter
         if (searchTerm) {
             const searchableText = [
                 invite.code,
@@ -737,41 +764,83 @@ function filterInviteStats() {
     renderInviteStatsTable(filtered);
 }
 
-// Render invite stats table
 function renderInviteStatsTable(invites) {
     const tbody = document.getElementById('inviteStatsTable');
+    if (!tbody) return;
 
     if (!invites || invites.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No invites found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">No invites found matching your search.</td></tr>';
         return;
     }
 
     tbody.innerHTML = invites.map(invite => {
-        const statusBadge = getInviteStatusBadge(invite.status);
-        const createdDate = new Date(invite.created_at);
-        const expiresDate = invite.expires_at ? new Date(invite.expires_at) : null;
+        const inviteCodeHtml = escapeOwnerHtml(invite.code || '');
+        const inviteCodeJs = escapeOwnerJsString(invite.code || '');
+        const inviteDescription = escapeOwnerHtml(invite.description || '');
+        const usedByName = escapeOwnerHtml(invite.used_by || '');
+        let statusHtml = '';
+        const status = (invite.status || 'active').toLowerCase();
+
+        if (status === 'fully_used' || status === 'used')
+            statusHtml = '<span class="user-role-badge" style="background:rgba(40, 167, 69, 0.15); color:#4CAF50; border:1px solid rgba(40, 167, 69, 0.3);">Redeemed</span>';
+        else if (status === 'expired')
+            statusHtml = '<span class="user-role-badge" style="background:rgba(255, 193, 7, 0.15); color:#FFC107; border:1px solid rgba(255, 193, 7, 0.3);">Expired</span>';
+        else if (status === 'revoked')
+            statusHtml = '<span class="user-role-badge" style="background:rgba(220, 53, 69, 0.15); color:#ff6b6b; border:1px solid rgba(220, 53, 69, 0.3);">Revoked</span>';
+        else
+            statusHtml = '<span class="user-role-badge" style="background:rgba(102, 126, 234, 0.15); color:#667eea; border:1px solid rgba(102, 126, 234, 0.3);">Active</span>';
+
+        const role = (invite.role || 'user').toLowerCase();
+        const roleColor = role === 'owner' ? '#ffd700' : (role === 'admin' ? '#ff6b6b' : '#4bc0c0');
+        const roleBg = role === 'owner' ? 'rgba(255, 215, 0, 0.1)' : (role === 'admin' ? 'rgba(255, 107, 107, 0.1)' : 'rgba(75, 192, 192, 0.1)');
+
+        const createdDate = new Date(invite.created_at || Date.now()).toLocaleDateString();
+        const expiresDate = invite.expires_at ? new Date(invite.expires_at).toLocaleDateString() : 'Never';
+
+        let actions = '';
+
+        if (status === 'active') {
+            actions += `<button class="action-btn-icon" onclick="window.extendInvite('${inviteCodeJs}')" title="Extend expiration" style="color:#667eea; background:rgba(102,126,234,0.1);">⏰</button>`;
+            actions += `<button class="action-btn-icon" onclick="window.revokeInvite('${inviteCodeJs}')" title="Revoke invite" style="color:#ff6b6b; background:rgba(220,53,69,0.1);">🚫</button>`;
+        } else if (status === 'revoked') {
+            actions += `<button class="action-btn-icon" onclick="window.restoreInvite('${inviteCodeJs}')" title="Restore invite" style="color:#28a745; background:rgba(40,167,69,0.1);">♻️</button>`;
+        }
+
+        if (status !== 'fully_used' && status !== 'used') {
+            actions += `<button class="action-btn-icon" onclick="window.deleteInvitePermanent('${inviteCodeJs}')" title="Permanently delete" style="color:#ef4444; background:rgba(239,68,68,0.1);">🗑️</button>`;
+        }
+
+        const usedBy = invite.used_by ?
+            `<div class="invite-used-by">
+                <div class="user-avatar" style="width:24px; height:24px; font-size:0.6rem; background:#4CAF50;">👤</div>
+               <span class="invite-used-by-name">${usedByName}</span>
+            </div>`
+            : '<span style="color:#52525b;">-</span>';
 
         return `
             <tr>
-                <td><code style="font-size: 0.85rem; background: var(--bg-secondary); padding: 0.2rem 0.4rem; border-radius: 4px;">${invite.code}</code></td>
-                <td><span class="role-badge ${invite.role}">${invite.role.toUpperCase()}</span></td>
-                <td>${statusBadge}</td>
-                <td>${invite.created_by || '-'}</td>
-                <td>${invite.used_by || '-'}</td>
-                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${invite.description || ''}">${invite.description || '-'}</td>
-                <td>${createdDate.toLocaleDateString()}</td>
-                <td>${expiresDate ? expiresDate.toLocaleDateString() : 'Never'}</td>
-                <td class="invite-actions-cell">
-                    <div class="invite-actions">
-                        ${getInviteActionButtons(invite)}
+                <td style="padding-left:1.5rem;">
+                    <div class="invite-cell-main">
+                        <div class="invite-cell-top">
+                            <div class="invite-code-pill" style="flex:0 1 auto; min-width:0; padding:0.45rem 0.65rem; border-radius:0.65rem; font-size:0.85rem;">${inviteCodeHtml}</div>
+                            <button class="action-btn-icon" onclick="copyInviteCode('${inviteCodeJs}')" title="Copy Code" style="opacity:0.6;">📋</button>
+                        </div>
+                        ${invite.description ? `<div class="invite-description">${inviteDescription}</div>` : ''}
                     </div>
+                </td>
+                <td><span class="user-role-badge" style="color:${roleColor}; background:${roleBg}; border:1px solid ${roleColor}40;">${role.toUpperCase()}</span></td>
+                <td>${statusHtml}</td>
+                <td>${usedBy}</td>
+                <td style="color:#94a3b8; font-size:0.9rem;">${createdDate}</td>
+                <td style="color:#94a3b8; font-size:0.9rem;">${expiresDate}</td>
+                <td>
+                    <div class="invite-actions">${actions}</div>
                 </td>
             </tr>
         `;
     }).join('');
 }
 
-// Get status badge HTML
 function getInviteStatusBadge(status) {
     const badges = {
         active: '<span class="stat-card-advanced-badge healthy">Active</span>',
@@ -783,28 +852,27 @@ function getInviteStatusBadge(status) {
     return badges[status] || badges.inactive;
 }
 
-// Get action buttons based on invite status
 function getInviteActionButtons(invite) {
     const buttons = [];
     const hasBeenUsed = Boolean(invite?.used_by || invite?.used_at || Number(invite?.current_uses || 0) > 0 || String(invite?.status || '') === 'fully_used');
+    const inviteCodeJs = escapeOwnerJsString(invite?.code || '');
 
     if (invite.status === 'active') {
-        buttons.push(`<button class="btn btn-sm btn-secondary invite-action-btn" onclick="extendInvite('${invite.code}')" title="Extend expiration">⏰ Extend</button>`);
-        buttons.push(`<button class="btn btn-sm btn-danger invite-action-btn" onclick="revokeInvite('${invite.code}')" title="Revoke invite">🚫 Revoke</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary invite-action-btn" onclick="extendInvite('${inviteCodeJs}')" title="Extend expiration">⏰ Extend</button>`);
+        buttons.push(`<button class="btn btn-sm btn-danger invite-action-btn" onclick="revokeInvite('${inviteCodeJs}')" title="Revoke invite">🚫 Revoke</button>`);
     } else if (invite.status === 'revoked') {
-        buttons.push(`<button class="btn btn-sm btn-success invite-action-btn" onclick="restoreInvite('${invite.code}')" title="Restore invite">♻️ Restore</button>`);
+        buttons.push(`<button class="btn btn-sm btn-success invite-action-btn" onclick="restoreInvite('${inviteCodeJs}')" title="Restore invite">♻️ Restore</button>`);
     }
 
     if (hasBeenUsed) {
         buttons.push('<button class="btn btn-sm btn-secondary invite-action-btn" disabled title="Used invites cannot be permanently deleted">🔒 Delete Blocked</button>');
     } else {
-        buttons.push(`<button class="btn btn-sm btn-danger invite-action-btn" onclick="deleteInvitePermanent('${invite.code}')" title="Permanently delete">🗑️ Delete</button>`);
+        buttons.push(`<button class="btn btn-sm btn-danger invite-action-btn" onclick="deleteInvitePermanent('${inviteCodeJs}')" title="Permanently delete">- Delete</button>`);
     }
 
     return buttons.join('');
 }
 
-// Revoke invite code (soft delete)
 async function revokeInvite(code) {
     const confirmed = await window.modalManager?.showConfirm({
         title: 'Revoke Invite',
@@ -821,36 +889,34 @@ async function revokeInvite(code) {
         });
 
         if (response.ok && data.success) {
-            showSuccess('Revoked', 'Invite code has been revoked');
+            profileShowSuccess('Revoked', 'Invite code has been revoked');
             loadInviteStats();
         } else {
-            showError('Failed', data.error || 'Failed to revoke invite code');
+            profileShowError('Failed', data.error || 'Failed to revoke invite code');
         }
     } catch (error) {
-        showError('Error', 'Failed to revoke invite: ' + error.message);
+        profileShowError('Error', 'Failed to revoke invite: ' + error.message);
     }
 }
 
-// Restore revoked invite
 async function restoreInvite(code) {
     try {
         const { response, data } = await window.AdminPanel.api.postJson(`/api/invites/restore/${encodeURIComponent(code)}`, {});
 
         if (response.ok && data.success) {
-            showSuccess('Restored', 'Invite code has been restored');
+            profileShowSuccess('Restored', 'Invite code has been restored');
             loadInviteStats();
         } else {
-            showError('Failed', data.error || 'Failed to restore invite code');
+            profileShowError('Failed', data.error || 'Failed to restore invite code');
         }
     } catch (error) {
-        showError('Error', 'Failed to restore invite: ' + error.message);
+        profileShowError('Error', 'Failed to restore invite: ' + error.message);
     }
 }
 
-// Extend invite expiration
 async function extendInvite(code) {
     if (typeof window.showPromptModal !== 'function') {
-        showError('Unavailable', 'Prompt modal is not available right now. Please refresh and try again.');
+        profileShowError('Unavailable', 'Prompt modal is not available right now. Please refresh and try again.');
         return;
     }
 
@@ -874,7 +940,7 @@ async function extendInvite(code) {
 
     const additionalDays = parseInt(days);
     if (isNaN(additionalDays) || additionalDays < 1 || additionalDays > 365) {
-        showError('Invalid Input', 'Please enter a number between 1 and 365');
+        profileShowError('Invalid Input', 'Please enter a number between 1 and 365');
         return;
     }
 
@@ -884,17 +950,16 @@ async function extendInvite(code) {
         });
 
         if (response.ok && data.success) {
-            showSuccess('Extended', `Invite expiration extended by ${additionalDays} days`);
+            profileShowSuccess('Extended', `Invite expiration extended by ${additionalDays} days`);
             loadInviteStats();
         } else {
-            showError('Failed', data.error || 'Failed to extend invite code');
+            profileShowError('Failed', data.error || 'Failed to extend invite code');
         }
     } catch (error) {
-        showError('Error', 'Failed to extend invite: ' + error.message);
+        profileShowError('Error', 'Failed to extend invite: ' + error.message);
     }
 }
 
-// Permanently delete invite
 async function deleteInvitePermanent(code) {
     const invite = Array.isArray(inviteStatsData)
         ? inviteStatsData.find((item) => String(item?.code || '') === String(code || ''))
@@ -902,7 +967,7 @@ async function deleteInvitePermanent(code) {
     const hasBeenUsed = Boolean(invite?.used_by || invite?.used_at || Number(invite?.current_uses || 0) > 0 || String(invite?.status || '') === 'fully_used');
 
     if (hasBeenUsed) {
-        showError('Blocked', 'Used invites cannot be permanently deleted.');
+        profileShowError('Blocked', 'Used invites cannot be permanently deleted.');
         return;
     }
 
@@ -921,20 +986,19 @@ async function deleteInvitePermanent(code) {
         });
 
         if (response.ok && data.success) {
-            showSuccess('Deleted', 'Invite code has been permanently deleted');
+            profileShowSuccess('Deleted', 'Invite code has been permanently deleted');
             loadInviteStats();
         } else {
-            showError('Failed', data.error || 'Failed to delete invite code');
+            profileShowError('Failed', data.error || 'Failed to delete invite code');
         }
     } catch (error) {
-        showError('Error', 'Failed to delete invite: ' + error.message);
+        profileShowError('Error', 'Failed to delete invite: ' + error.message);
     }
 }
 
-// Export invites to CSV
 function exportInvitesCsv() {
     if (!inviteStatsData || inviteStatsData.length === 0) {
-        showError('No Data', 'No invite data to export');
+        profileShowError('No Data', 'No invite data to export');
         return;
     }
 
@@ -962,10 +1026,9 @@ function exportInvitesCsv() {
     link.download = `invite_codes_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
 
-    showSuccess('Exported', 'Invite data exported to CSV');
+    profileShowSuccess('Exported', 'Invite data exported to CSV');
 }
 
-// Expose functions globally
 window.generateInvite = generateInvite;
 window.loadInviteStats = loadInviteStats;
 window.filterInviteStats = filterInviteStats;
@@ -976,9 +1039,7 @@ window.extendInvite = extendInvite;
 window.deleteInvitePermanent = deleteInvitePermanent;
 window.exportInvitesCsv = exportInvitesCsv;
 
-// ==================== END INVITE MANAGEMENT ====================
 
-// ==================== ADMIN USER DETAIL VIEW ====================
 
 async function viewAdminUserDetail(userId, username) {
     const modal = document.getElementById('adminUserDetailModal');
@@ -1014,7 +1075,7 @@ async function viewAdminUserDetail(userId, username) {
             <div style="padding: 2rem; text-align: center; color: var(--color-red);">
                 <div style="font-size: 2rem; margin-bottom: 1rem;">⚠️</div>
                 <div style="font-weight: 600; margin-bottom: 0.5rem;">Error Loading Details</div>
-                <div style="color: var(--text-secondary);">${error.message}</div>
+				<div style="color: var(--text-secondary);">${escapeOwnerHtml(error.message || 'Failed to load account details')}</div>
             </div>
         `;
     }
@@ -1030,6 +1091,14 @@ function renderAdminUserDetail(user) {
     const passwordChanged = user.password_changed_at ? new Date(user.password_changed_at) : null;
     const discordLinked = user.discord_linked_at ? new Date(user.discord_linked_at) : null;
     const twoFactorEnabled = user.two_factor_enabled_at ? new Date(user.two_factor_enabled_at) : null;
+    const safeUsername = escapeOwnerHtml(user.username || 'Unknown');
+    const safeRole = escapeOwnerHtml((user.role || 'unknown').toUpperCase());
+    const safeUserId = escapeOwnerHtml(user.id || 'Unknown');
+    const safeEmailHtml = user.email
+        ? escapeOwnerHtml(user.email)
+        : '<span style="color: var(--text-secondary);">Not set</span>';
+    const safeDiscordUsername = escapeOwnerHtml(user.discord_username || 'Unknown');
+    const safeDiscordUserId = escapeOwnerHtml(user.discord_user_id || 'Unknown');
 
     const formatDate = (date) => date ? `${date.toLocaleDateString()} ${date.toLocaleTimeString()}` : 'Never';
     const formatRelative = (date) => {
@@ -1047,60 +1116,58 @@ function renderAdminUserDetail(user) {
 
     const recentActivityHtml = user.recentActivity && user.recentActivity.length > 0 ? user.recentActivity.map(event => {
         const eventDate = event.created_at ? new Date(event.created_at) : null;
+        const eventType = String(event.event_type || 'UNKNOWN');
         const eventIcon = {
             'LOGIN_SUCCESS': '✅',
-            'LOGIN_FAILED': '❌',
+            'LOGIN_FAILED': '-',
             'LOGOUT': '🚪',
             'PASSWORD_CHANGED': '🔑',
             'TWO_FACTOR_ENABLED': '🔐',
             'TWO_FACTOR_DISABLED': '🔓',
             'EMAIL_VERIFIED': '📧'
-        }[event.event_type] || '📝';
+        }[eventType] || '📝';
         return `
             <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 0.5rem;">${eventIcon} ${event.event_type.replace(/_/g, ' ')}</td>
-                <td style="padding: 0.5rem; color: var(--text-secondary);">${formatRelative(eventDate)}</td>
-                <td style="padding: 0.5rem; font-family: monospace; font-size: 0.85rem;">${event.ip_address || '-'}</td>
+				<td style="padding: 0.5rem;">${eventIcon} ${escapeOwnerHtml(eventType.replace(/_/g, ' '))}</td>
+				<td style="padding: 0.5rem; color: var(--text-secondary);">${escapeOwnerHtml(formatRelative(eventDate))}</td>
+				<td style="padding: 0.5rem; font-family: monospace; font-size: 0.85rem;">${escapeOwnerHtml(event.ip_address || '-')}</td>
             </tr>
         `;
     }).join('') : '';
 
     content.innerHTML = `
         <div style="display: grid; gap: 1.5rem;">
-            <!-- Basic Info -->
             <div style="background: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                     <div style="font-size: 2.5rem;">👤</div>
                     <div style="flex: 1;">
-                        <div style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary);">${user.username || 'Unknown'}</div>
+						<div style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary);">${safeUsername}</div>
                         <div style="margin-top: 0.25rem;">
-                            <span class="role-badge" style="background: ${roleColor}; padding: 0.3rem 0.7rem; border-radius: 4px; color: white; font-size: 0.85rem; font-weight: 600;">${(user.role || 'unknown').toUpperCase()}</span>
+							<span class="role-badge" style="background: ${roleColor}; padding: 0.3rem 0.7rem; border-radius: 4px; color: white; font-size: 0.85rem; font-weight: 600;">${safeRole}</span>
                             ${user.active === false ? '<span style="margin-left: 0.5rem; color: var(--color-red); font-weight: 600;">⚠️ INACTIVE</span>' : ''}
                         </div>
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; font-size: 0.95rem;">
-                    <strong>Account ID:</strong><span>${user.id}</span>
-                    <strong>Created:</strong><span>${formatDate(createdDate)} <span style="color: var(--text-secondary);">(${formatRelative(createdDate)})</span></span>
-                    <strong>Last Login:</strong><span>${formatDate(lastLogin)} <span style="color: var(--text-secondary);">${lastLogin ? `(${formatRelative(lastLogin)})` : ''}</span></span>
+					<strong>Account ID:</strong><span>${safeUserId}</span>
+					<strong>Created:</strong><span>${escapeOwnerHtml(formatDate(createdDate))} <span style="color: var(--text-secondary);">(${escapeOwnerHtml(formatRelative(createdDate))})</span></span>
+					<strong>Last Login:</strong><span>${escapeOwnerHtml(formatDate(lastLogin))} <span style="color: var(--text-secondary);">${lastLogin ? `(${escapeOwnerHtml(formatRelative(lastLogin))})` : ''}</span></span>
                 </div>
             </div>
             
-            <!-- Email & Verification -->
             <div style="background: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; font-weight: 700;">
                     <span style="font-size: 1.2rem;">📧</span>
                     Email & Security
                 </div>
                 <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; font-size: 0.95rem;">
-                    <strong>Email:</strong><span>${user.email || '<span style="color: var(--text-secondary);">Not set</span>'}</span>
-                    <strong>Verified:</strong><span>${user.email_verified ? '<span style="color: var(--color-green);">✅ Yes</span>' : '<span style="color: var(--color-orange);">❌ No</span>'}</span>
-                    <strong>2FA Enabled:</strong><span>${user.two_factor_enabled ? `<span style="color: var(--color-green);">✅ Yes</span> <span style="color: var(--text-secondary);">(since ${formatDate(twoFactorEnabled)})</span>` : '<span style="color: var(--text-secondary);">❌ No</span>'}</span>
-                    <strong>Password Changed:</strong><span>${formatDate(passwordChanged)}</span>
+                    <strong>Email:</strong><span>${safeEmailHtml}</span>
+                    <strong>Verified:</strong><span>${user.email_verified ? '<span style="color: var(--color-green);">✅ Yes</span>' : '<span style="color: var(--color-orange);">- No</span>'}</span>
+                    <strong>2FA Enabled:</strong><span>${user.two_factor_enabled ? `<span style="color: var(--color-green);">✅ Yes</span> <span style="color: var(--text-secondary);">(since ${escapeOwnerHtml(formatDate(twoFactorEnabled))})</span>` : '<span style="color: var(--text-secondary);">- No</span>'}</span>
+                    <strong>Password Changed:</strong><span>${escapeOwnerHtml(formatDate(passwordChanged))}</span>
                 </div>
             </div>
             
-            <!-- Discord Integration -->
             <div style="background: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; font-weight: 700;">
                     <span style="font-size: 1.2rem;">🎮</span>
@@ -1108,9 +1175,9 @@ function renderAdminUserDetail(user) {
                 </div>
                 ${user.discord_user_id ? `
                     <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; font-size: 0.95rem;">
-                        <strong>Discord User:</strong><span>${user.discord_username || 'Unknown'}</span>
-                        <strong>Discord ID:</strong><span><code style="background: var(--bg-card); padding: 0.2rem 0.5rem; border-radius: 4px;">${user.discord_user_id}</code></span>
-                        <strong>Linked:</strong><span>${formatDate(discordLinked)}</span>
+                        <strong>Discord User:</strong><span>${safeDiscordUsername}</span>
+                        <strong>Discord ID:</strong><span><code style="background: var(--bg-card); padding: 0.2rem 0.5rem; border-radius: 4px;">${safeDiscordUserId}</code></span>
+                        <strong>Linked:</strong><span>${escapeOwnerHtml(formatDate(discordLinked))}</span>
                     </div>
                 ` : '<div style="color: var(--text-secondary); font-style: italic;">No Discord account linked</div>'}
             </div>
@@ -1148,7 +1215,6 @@ function closeAdminUserDetail() {
     if (modal) modal.style.display = 'none';
 }
 
-// Close modal on outside click
 window.addEventListener('click', (event) => {
     const modal = document.getElementById('adminUserDetailModal');
     if (modal && event.target === modal) {
@@ -1159,9 +1225,7 @@ window.addEventListener('click', (event) => {
 window.viewAdminUserDetail = viewAdminUserDetail;
 window.closeAdminUserDetail = closeAdminUserDetail;
 
-// ==================== END ADMIN USER DETAIL VIEW ====================
 
-// This script handles all the owner-level features and access. Only for the top admin!
 if (!window.api || !window.ui) {
     const { api, ui } = window.AdminPanel || {};
     window.api = api;
@@ -1211,7 +1275,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // Set up tab event listeners
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const tabName = btn.dataset.tab;
@@ -1223,11 +1286,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     message: `Switched to ${tabName.replace(/-/g, ' ')} tab`,
                     source: 'action'
                 }, { refresh: false });
-                // Load diagnostics when diagnostics tab is clicked
                 if (tabName === 'diagnostics') {
                     loadDiagnostics();
                 }
-                // Load invite stats when invites tab is clicked
                 if (tabName === 'invites') {
                     loadInviteStats();
                 }
@@ -1252,10 +1313,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeOwnerNotificationCenter();
 
     await loadSystemStatus();
+    loadDiagnostics();
     recordOwnerNotificationEvent({
         type: 'success',
-        title: 'System Status Synced',
-        message: 'Owner dashboard metrics refreshed.',
+        title: 'System Status Updated',
+        message: 'Owner dashboard metrics were refreshed.',
         source: 'system'
     }, { refresh: false });
     loadOwnerNotificationHistory();
@@ -1278,6 +1340,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateBackupTableCount();
     });
 
+    if (typeof initAdminUserManagement === 'function') {
+        initAdminUserManagement();
+    }
+
     await loadBackupTables();
 
     function getTerminalLogDownloadName(response) {
@@ -1298,7 +1364,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const originalText = downloadBtn ? downloadBtn.textContent : '';
         if (downloadBtn) {
             downloadBtn.disabled = true;
-            downloadBtn.textContent = 'Preparing...';
+            downloadBtn.textContent = 'Preparing download...';
         }
 
         try {
@@ -1319,13 +1385,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             link.remove();
             URL.revokeObjectURL(url);
 
-            if (typeof showSuccess === 'function') {
-                showSuccess('Download Ready', 'Terminal logs saved to your downloads folder.');
+            if (typeof profileShowSuccess === 'function') {
+                profileShowSuccess('Download Ready', 'Terminal logs were saved to your downloads folder.');
             }
         } catch (error) {
             console.error('Failed to download terminal logs:', error);
-            if (typeof showError === 'function') {
-                showError('Download Failed', error.message || 'Unable to download terminal logs.');
+            if (typeof profileShowError === 'function') {
+                profileShowError('Download Failed', error.message || 'Could not download the terminal logs.');
             }
         } finally {
             if (downloadBtn) {
@@ -1480,7 +1546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             socket.emit('subscribe-terminal', { limit: 80 });
         });
         socket.on('connect_error', () => {
-            renderLogs(['[system] [error] Unable to connect to live logs.']);
+            renderLogs(['[system] [error] Could not connect to the live log feed.']);
         });
     }
 });
@@ -1497,11 +1563,10 @@ async function checkOwnerAccess() {
             return null;
         }
 
-        // Update user display
         const username = data.username || 'Owner';
-        ui?.setText('userDisplay', username);
+        ui?.setText('headerUsername', username);
         ui?.setText('dropdownUsername', username);
-        ui?.setText('roleDisplay', 'OWNER');
+        ui?.setText('headerRole', 'OWNER');
         ui?.setText('dropdownRole', 'OWNER');
         return data;
     } catch (error) {
@@ -1511,20 +1576,22 @@ async function checkOwnerAccess() {
 }
 
 function switchTab(e, tabName) {
-    e.preventDefault();
+    if (e?.preventDefault) e.preventDefault();
 
-    // Hide everything first
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
     });
 
-    // Deactivate all tab buttons
     document.querySelectorAll('.tab').forEach(btn => {
         btn.classList.remove('active');
     });
 
-    // Show selected tab
-    document.getElementById(tabName).classList.add('active');
+    const targetTab = document.getElementById(tabName);
+    if (!targetTab) {
+        console.warn('Owner tab content not found for', tabName);
+        return;
+    }
+    targetTab.classList.add('active');
     const clickedTab = e.currentTarget || e.target?.closest?.('.tab') || e.target;
     if (clickedTab?.classList?.contains('tab')) {
         clickedTab.classList.add('active');
@@ -1532,6 +1599,35 @@ function switchTab(e, tabName) {
 
     if (tabName === 'notifications') {
         loadOwnerNotificationHistory();
+    }
+
+    if (tabName === 'system') {
+        if (typeof loadBackupTables === 'function') {
+            loadBackupTables().then(() => {
+                if (typeof loadBackupStatus === 'function') loadBackupStatus();
+            });
+        } else if (typeof loadBackupStatus === 'function') {
+            loadBackupStatus();
+        }
+    }
+    if (tabName === 'invites' && typeof window.loadInviteStats === 'function') window.loadInviteStats();
+    if (tabName === 'users') {
+        if (typeof window.initAdminUserManagement === 'function') window.initAdminUserManagement();
+        if (typeof window.loadAdminUsers === 'function') window.loadAdminUsers();
+    }
+    if (tabName === 'diagnostics') {
+        if (typeof window.loadSystemStatus === 'function') window.loadSystemStatus();
+        if (typeof window.loadDiagnostics === 'function') window.loadDiagnostics();
+    }
+
+    if (tabName === 'security') {
+        if (typeof window.loadSessions === 'function') window.loadSessions();
+
+        if (typeof window.loadSessionSecurityPolicy === 'function') window.loadSessionSecurityPolicy();
+        else if (typeof loadSessionSecurityPolicy === 'function') loadSessionSecurityPolicy();
+
+        if (typeof window.loadCaptchaPolicy === 'function') window.loadCaptchaPolicy();
+        else if (typeof loadCaptchaPolicy === 'function') loadCaptchaPolicy();
     }
 }
 
@@ -1557,9 +1653,9 @@ function startSocketHealthAutoRefresh() {
     }
 
     window.socketHealthAutoRefreshIntervalId = setInterval(() => {
-        const systemTab = document.getElementById('system');
-        const isSystemActive = Boolean(systemTab && systemTab.classList.contains('active'));
-        if (!isSystemActive || document.hidden) return;
+        const diagnosticsTab = document.getElementById('diagnostics');
+        const isDiagnosticsActive = Boolean(diagnosticsTab && diagnosticsTab.classList.contains('active'));
+        if (!isDiagnosticsActive || document.hidden) return;
         loadSocketHealth();
     }, 30000);
 }
@@ -1583,31 +1679,25 @@ async function loadSystemStatus() {
                 if (element) element.textContent = value;
             };
 
-            // Advanced health score calculation based on multiple factors
             const totalUsers = data.totalUsers || 0;
             const bannedUsers = data.bannedUsers || 0;
             const totalWarnings = data.totalWarnings || 0;
             const memoryUsage = data.memoryUsage || 128;
 
-            // Health calculation factors (each is 0-100 score)
             const userHealthFactor = Math.max(0, 100 - (bannedUsers > 0 && totalUsers > 0 ? (bannedUsers / totalUsers * 20) : 0));
             const warningHealthFactor = Math.max(0, 100 - (totalWarnings > 0 && totalUsers > 0 ? (totalWarnings / totalUsers * 15) : 0));
             const memoryHealthFactor = Math.max(0, 100 - (memoryUsage > 100 ? (memoryUsage - 100) : 0));
 
-            // Overall health score (weighted average)
             const healthScore = Math.max(0, Math.min(100,
                 (userHealthFactor * 0.4) + (warningHealthFactor * 0.35) + (memoryHealthFactor * 0.25)
             ));
 
-            // Determine health status and color
             const healthStatus = healthScore >= 80 ? 'Excellent' : healthScore >= 60 ? 'Good' : healthScore >= 40 ? 'Fair' : 'Poor';
             const healthColor = healthScore >= 80 ? 'var(--color-green)' : healthScore >= 60 ? 'var(--color-yellow)' : healthScore >= 40 ? 'var(--color-yellow)' : 'var(--color-red)';
 
-            // Calculate response time estimate (random for now, but would come from real data)
-            const responseTime = Math.floor(Math.random() * 50) + 10; // 10-60ms
+            const responseTime = Math.floor(Math.random() * 50) + 10;
             const responseTimeHealth = Math.max(0, 100 - (responseTime > 50 ? (responseTime - 50) * 2 : 0));
 
-            // Real uptime from owner metrics endpoint (seconds)
             const uptimeSeconds = Number(metricsData.uptime || 0) || 0;
             const uptimeHoursTotal = Math.floor(uptimeSeconds / 3600);
             const uptimeDays = Math.floor(uptimeSeconds / 86400);
@@ -1616,31 +1706,27 @@ async function loadSystemStatus() {
                 ? `${uptimeDays}d ${uptimeHoursRemainder}h`
                 : `${uptimeHoursTotal}h`;
 
-            // Update health circle and status with dynamic information
             const healthCircle = document.querySelector('.system-health-circle');
             if (healthCircle) {
                 healthCircle.style.setProperty('--health-percentage', healthScore);
                 healthCircle.style.setProperty('--health-color', healthColor);
                 setText('healthScore', Math.round(healthScore));
 
-                // Database health with more detail
                 const dbHealth = userHealthFactor >= 80 ? 'Healthy' : 'Degraded';
-                const dbStatus = totalUsers > 0 ? `${dbHealth} | ${totalUsers.toLocaleString()} records` : 'No data';
+                const dbStatus = totalUsers > 0 ? `${dbHealth} | ${totalUsers.toLocaleString()} records` : 'No records yet';
                 const dbElement = document.getElementById('healthDb');
                 if (dbElement) {
                     dbElement.innerHTML = `<span class="system-health-status-dot ${userHealthFactor >= 80 ? 'healthy' : 'warning'}"></span>${dbStatus}`;
                 }
 
-                // Bot connection health with uptime
-                const botHealth = healthScore >= 70 ? 'Connected' : 'Unstable';
+                const botHealth = healthScore >= 70 ? 'Connected' : 'Needs attention';
                 const botUptime = `${uptimeLabel} uptime`;
                 const botElement = document.getElementById('healthBot');
                 if (botElement) {
                     botElement.innerHTML = `<span class="system-health-status-dot ${healthScore >= 70 ? 'healthy' : 'warning'}"></span>${botHealth} | ${botUptime}`;
                 }
 
-                // Performance health with response time
-                const perfHealth = responseTime < 30 ? 'Optimal' : responseTime < 50 ? 'Good' : 'Slow';
+                const perfHealth = responseTime < 30 ? 'Excellent' : responseTime < 50 ? 'Good' : 'Slow';
                 const perfDetail = `${responseTime}ms response`;
                 const perfElement = document.getElementById('healthPerf');
                 if (perfElement) {
@@ -1649,7 +1735,6 @@ async function loadSystemStatus() {
                 }
             }
 
-            // Population data (estimated)
             const estimatedGuildMembers = Math.max(1000, totalUsers * 5);
             const memberCapacity = Math.round((estimatedGuildMembers / 1000000) * 100);
             const warningRate = totalUsers > 0 ? Math.round((totalWarnings / totalUsers) * 100) : 0;
@@ -1798,7 +1883,6 @@ async function loadSystemStatus() {
         await loadBackupStatus();
     } catch (error) {
         console.error('Error loading system status:', error);
-        // Show fallback UI
         const systemStats = document.getElementById('systemStats');
         if (systemStats) {
             systemStats.innerHTML = '<div role="alert" style="padding: 2rem; text-align: center; color: var(--text-secondary);"><p>Unable to load system statistics</p></div>';
@@ -1912,7 +1996,7 @@ async function loadAntiRaidDashboard() {
                     const triggers = Array.isArray(event.details?.triggers) ? event.details.triggers : [];
                     const triggerSummary = triggers.length
                         ? triggers.map((t) => t?.name).filter(Boolean).slice(0, 2).join(', ')
-                        : (event.details?.reason || '—');
+                        : (event.details?.reason || '-');
 
                     return `
                         <tr>
@@ -1920,7 +2004,7 @@ async function loadAntiRaidDashboard() {
                             <td>${escapeNotificationCell(formatAntiRaidEventType(event.eventType))}</td>
                             <td>${riskScore === null ? '--' : escapeNotificationCell(riskScore.toFixed(0))}</td>
                             <td>${triggerCount || triggers.length || 0}</td>
-                            <td>${escapeNotificationCell(triggerSummary || '—')}</td>
+                            <td>${escapeNotificationCell(triggerSummary || '-')}</td>
                         </tr>
                     `;
                 }).join('');
@@ -2130,15 +2214,15 @@ async function saveBackupSettings() {
             format
         });
         if (!response.ok) {
-            showError(data?.error || 'Failed to update backup settings');
+            profileShowError(data?.error || 'Failed to update backup settings');
             return;
         }
         applyBackupConfigToControls(data.config || {});
         updateBackupStatus(data.state || {});
-        showSuccess('Backup settings updated');
+        profileShowSuccess('Backup settings updated');
     } catch (error) {
         console.error('Error saving backup settings:', error);
-        showError('Failed to update backup settings');
+        profileShowError('Failed to update backup settings');
     }
 }
 
@@ -2146,7 +2230,7 @@ async function runBackupNow() {
     const runBtn = document.getElementById('runBackupBtn');
     if (runBtn) {
         runBtn.disabled = true;
-        runBtn.textContent = 'Running...';
+        runBtn.textContent = 'Starting...';
     }
 
     try {
@@ -2157,23 +2241,22 @@ async function runBackupNow() {
             tables
         });
         if (!response.ok) {
-            showError(data?.error || 'Backup failed');
+            profileShowError(data?.error || 'Backup failed');
             return;
         }
-        showSuccess('Backup completed');
+        profileShowSuccess('Backup completed');
     } catch (error) {
         console.error('Error running backup:', error);
-        showError('Backup failed');
+        profileShowError('Backup failed');
     } finally {
         await loadBackupStatus();
         if (runBtn) {
             runBtn.disabled = false;
-            runBtn.textContent = 'Run Backup';
+            runBtn.textContent = 'Start Backup';
         }
     }
 }
 
-// Load diagnostics information
 async function loadDiagnostics() {
     try {
         const [statsResult, healthResult, metricsResult] = await Promise.allSettled([
@@ -2216,8 +2299,22 @@ async function loadDiagnostics() {
         const bannedUsers = Number(statsData.bannedUsers || 0) || 0;
         const adminCount = Number(statsData.adminCount || 0) || 0;
         const totalRecords = Number(statsData.totalRecords || 0) || 0;
-
         const diagStats = document.getElementById('diagnosticsStats');
+
+        const _setText = (id, text) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        };
+
+        const memStr = metricsData.memory && metricsData.memory.heapUsed
+            ? `${metricsData.memory.heapUsed} MB`
+            : (healthData.memoryUsage || '0 MB');
+
+        _setText('cpuUsage', healthData.cpuUsage || '0%');
+        _setText('memoryUsage', memStr);
+        _setText('apiLatency', String(healthData.apiLatency || '0ms'));
+        _setText('dbPing', String(healthData.dbPing || '0ms'));
+
         if (diagStats) {
             diagStats.innerHTML = `
                 <div class="stat-card-advanced">
@@ -2257,7 +2354,7 @@ async function loadDiagnostics() {
                 <div class="stat-card-advanced">
                     <div class="stat-card-advanced-header">
                         <div class="stat-card-advanced-title">Database Records</div>
-                        <div class="stat-card-advanced-icon">🗄️</div>
+                        <div class="stat-card-advanced-icon">-</div>
                     </div>
                     <div class="stat-card-advanced-value">${(totalRecords / 1000).toFixed(1)}K</div>
                     <span class="stat-card-advanced-badge healthy">✓ Indexed</span>
@@ -2420,24 +2517,29 @@ function showSelectModal(options = {}) {
                 const value = String(opt?.value ?? '');
                 const labelText = String(opt?.label ?? value);
                 const selected = value === String(defaultValue) ? 'selected' : '';
-                return `<option value="${value.replace(/"/g, '&quot;')}" ${selected}>${labelText}</option>`;
+                return `<option value="${escapeOwnerHtml(value)}" ${selected}>${escapeOwnerHtml(labelText)}</option>`;
             })
             .join('');
+
+        const safeTitle = escapeOwnerHtml(title);
+        const safeLabel = escapeOwnerHtml(label);
+        const safeCancelText = escapeOwnerHtml(cancelText);
+        const safeConfirmText = escapeOwnerHtml(confirmText);
 
         modal.innerHTML = `
             <div class="modal-overlay"></div>
             <div class="notification-modal" role="dialog" aria-modal="true" aria-labelledby="${modalId}-title">
                 <div class="modal-header">
-                    <h3 id="${modalId}-title">⚙️ ${title}</h3>
-                    <button class="modal-close" type="button">×</button>
+					<h3 id="${modalId}-title">⚙️ ${safeTitle}</h3>
+                    <button class="modal-close" type="button">-</button>
                 </div>
                 <div class="modal-body">
-                    <label for="${modalId}-select" style="display:block; font-weight:600; color:var(--text-primary); margin-bottom:0.45rem;">${label}</label>
+					<label for="${modalId}-select" style="display:block; font-weight:600; color:var(--text-primary); margin-bottom:0.45rem;">${safeLabel}</label>
                     <select id="${modalId}-select" class="form-input">${optionMarkup}</select>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" type="button" data-action="cancel">${cancelText}</button>
-                    <button class="btn btn-primary" type="button" data-action="confirm">${confirmText}</button>
+					<button class="btn btn-secondary" type="button" data-action="cancel">${safeCancelText}</button>
+					<button class="btn btn-primary" type="button" data-action="confirm">${safeConfirmText}</button>
                 </div>
             </div>
         `;
@@ -2482,13 +2584,13 @@ function showSelectModal(options = {}) {
 }
 
 function ownerNotifyError(message) {
-    if (typeof showError === 'function') return showError(message);
+    if (typeof profileShowError === 'function') return profileShowError(message);
     if (typeof window.showError === 'function') return window.showError(message);
     console.error(message);
 }
 
 function ownerNotifySuccess(message) {
-    if (typeof showSuccess === 'function') return showSuccess(message);
+    if (typeof profileShowSuccess === 'function') return profileShowSuccess(message);
     if (typeof window.showSuccess === 'function') return window.showSuccess(message);
     console.log(message);
 }
@@ -2504,6 +2606,14 @@ function escapeOwnerHtml(value) {
         "'": '&#039;'
     };
     return String(value).replace(/[&<>"']/g, (char) => map[char]);
+}
+
+function escapeOwnerJsString(value) {
+    return String(value ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n');
 }
 
 function parseDateSafe(value) {
@@ -2643,19 +2753,15 @@ function renderAdminUsersTable() {
         return rowId && adminUserState.selectedIds.has(rowId);
     });
 
-    let html = `
-        <table>
-            <thead>
-                <tr>
-                    <th style="width:42px;"><input type="checkbox" id="adminUsersSelectAll" ${allPageSelected ? 'checked' : ''}></th>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Created</th>
-                    <th>Last Login</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
+    let html = `<div class="staff-grid-list">`;
+
+    html += `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.5rem 1rem; margin-bottom:0.5rem; background:rgba(0,0,0,0.1); border-radius:0.5rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.9rem; color:var(--text-secondary); font-weight:600;">
+                <input type="checkbox" id="adminUsersSelectAll" ${allPageSelected ? 'checked' : ''}> Select Current Page
+            </label>
+            <div style="font-size:0.8rem; color:var(--text-secondary);">${filtered.length} staff found</div>
+        </div>
     `;
 
     pageRows.forEach((user) => {
@@ -2663,34 +2769,63 @@ function renderAdminUsersTable() {
         const created = parseDateSafe(user.created_at);
         const lastLoginDate = parseDateSafe(user.last_login);
         const createdText = created ? created.toLocaleDateString() : 'Unknown';
-        const lastLoginText = lastLoginDate ? lastLoginDate.toLocaleDateString() : 'Never';
+
+        const now = new Date();
+        let lastLoginText = 'Never';
+        if (lastLoginDate) {
+            const diffMins = Math.floor((now - lastLoginDate) / 60000);
+            if (diffMins < 1) lastLoginText = 'Just now';
+            else if (diffMins < 60) lastLoginText = `${diffMins}m ago`;
+            else if (diffMins < 1440) lastLoginText = `${Math.floor(diffMins / 60)}h ago`;
+            else lastLoginText = lastLoginDate.toLocaleDateString();
+        }
+
         const role = String(user.role || '').toLowerCase();
-        const roleColor = role === 'owner' ? 'var(--color-red)' : role === 'admin' ? 'var(--color-blue)' : 'var(--color-green)';
         const isOwner = role === 'owner';
         const isSelected = adminUserState.selectedIds.has(userId);
-        const viewBtn = `<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem;" onclick="viewAdminUserDetail('${escapeOwnerHtml(userId)}', '${escapeOwnerHtml(user.username || '')}')" title="View account details">👁️ View</button>`;
+        const initial = (user.username || '?').charAt(0).toUpperCase();
+        const userIdJs = escapeOwnerJsString(userId);
+        const usernameJs = escapeOwnerJsString(user.username || '');
+        const roleJs = escapeOwnerJsString(role);
+
+        const viewBtn = `<button class="action-btn view" onclick="viewAdminUserDetail('${userIdJs}', '${usernameJs}')" title="View Logs">📜</button>`;
+
         const updateRoleBtn = userId
-            ? `<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem;" onclick="updateAdminUserRole('${escapeOwnerHtml(userId)}', '${escapeOwnerHtml(user.username || '')}', '${escapeOwnerHtml(role)}')">Role</button>`
-            : '<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem; opacity:0.8;" disabled>Role</button>';
+            ? `<button class="action-btn edit" onclick="updateAdminUserRole('${userIdJs}', '${usernameJs}', '${roleJs}')" title="Edit Role">✏️</button>`
+            : '<button class="action-btn" disabled>✏️</button>';
+
         const deleteBtn = isOwner
-            ? '<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem; opacity:0.8;" disabled>Protected</button>'
+            ? '<button class="action-btn" disabled title="Protected Owner Account">-</button>'
             : userId
-                ? `<button class="btn btn-danger" style="padding: 0.45rem 0.8rem; font-size: 0.82rem;" onclick="deleteAdminUser('${escapeOwnerHtml(userId)}', '${escapeOwnerHtml(user.username || '')}')">Delete</button>`
-                : '<button class="btn btn-secondary" style="padding: 0.45rem 0.8rem; font-size: 0.82rem; opacity:0.8;" disabled>ID Unavailable</button>';
+                ? `<button class="action-btn delete" onclick="deleteAdminUser('${userIdJs}', '${usernameJs}')" title="Delete Account">-</button>`
+                : '<button class="action-btn" disabled>-</button>';
 
         html += `
-            <tr>
-                <td><input type="checkbox" class="admin-user-select" data-user-id="${escapeOwnerHtml(userId)}" ${isSelected ? 'checked' : ''}></td>
-                <td>${escapeOwnerHtml(user.username || 'Unknown')}</td>
-                <td><strong style="color: ${roleColor};">${escapeOwnerHtml(role.toUpperCase() || 'UNKNOWN')}</strong></td>
-                <td>${createdText}</td>
-                <td>${lastLoginText}</td>
-                <td style="display:flex; gap:0.5rem; flex-wrap:wrap;">${viewBtn}${updateRoleBtn}${deleteBtn}</td>
-            </tr>
+            <div class="staff-row-card">
+                <div class="staff-user-info">
+                    <input type="checkbox" class="admin-user-select" data-user-id="${escapeOwnerHtml(userId)}" ${isSelected ? 'checked' : ''} style="margin-right:1rem;">
+                    <div class="staff-avatar-placeholder">${initial}</div>
+                    <div class="staff-details">
+                        <div class="staff-name">
+                            ${escapeOwnerHtml(user.username || 'Unknown')}
+                            <span class="role-badge ${escapeOwnerHtml(role)}">${escapeOwnerHtml(role)}</span>
+                        </div>
+                        <div class="staff-meta">
+                            <span>📅 ${createdText}</span>
+                            <span>🕒 ${lastLoginText}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="staff-actions">
+                    ${viewBtn}
+                    ${updateRoleBtn}
+                    ${deleteBtn}
+                </div>
+            </div>
         `;
     });
 
-    html += '</tbody></table>';
+    html += '</div>';
     container.innerHTML = html;
 
     const selectAllEl = document.getElementById('adminUsersSelectAll');
@@ -2790,39 +2925,44 @@ function applyAdminUserFiltersAndRender() {
 }
 
 function initAdminUserManagement() {
+    if (window._adminUserManagementInitialized) return;
+    window._adminUserManagementInitialized = true;
+
     const searchEl = document.getElementById('adminUserSearch');
     const roleEl = document.getElementById('adminUserRoleFilter');
     const activityEl = document.getElementById('adminUserActivityFilter');
     const sortEl = document.getElementById('adminUserSort');
-    if (!searchEl || !roleEl || !activityEl || !sortEl) return;
 
-    searchEl.addEventListener('input', () => {
-        adminUserState.query = String(searchEl.value || '').trim().toLowerCase();
-        adminUserState.page = 1;
-        applyAdminUserFiltersAndRender();
-    });
+    if (searchEl) {
+        searchEl.addEventListener('input', () => {
+            adminUserState.query = String(searchEl.value || '').trim().toLowerCase();
+            adminUserState.page = 1;
+            applyAdminUserFiltersAndRender();
+        });
+    }
 
-    roleEl.addEventListener('change', () => {
-        adminUserState.roleFilter = roleEl.value || 'all';
-        adminUserState.page = 1;
-        applyAdminUserFiltersAndRender();
-    });
+    if (roleEl) {
+        roleEl.addEventListener('change', () => {
+            adminUserState.roleFilter = roleEl.value || 'all';
+            adminUserState.page = 1;
+            applyAdminUserFiltersAndRender();
+        });
+    }
 
-    activityEl.addEventListener('change', () => {
-        adminUserState.activityFilter = activityEl.value || 'all';
-        adminUserState.page = 1;
-        applyAdminUserFiltersAndRender();
-    });
+    if (activityEl) {
+        activityEl.addEventListener('change', () => {
+            adminUserState.activityFilter = activityEl.value || 'all';
+            adminUserState.page = 1;
+            applyAdminUserFiltersAndRender();
+        });
+    }
 
-    sortEl.addEventListener('change', () => {
-        adminUserState.sortBy = sortEl.value || 'created_desc';
-        applyAdminUserFiltersAndRender();
-    });
-}
-
-function changeAdminUsersPage(step) {
-    const totalPages = Math.max(1, Math.ceil(adminUserState.filteredUsers.length / adminUserState.pageSize));
-    adminUserState.page = Math.min(totalPages, Math.max(1, adminUserState.page + Number(step || 0)));
+    if (sortEl) {
+        sortEl.addEventListener('change', () => {
+            adminUserState.sortBy = sortEl.value || 'created_desc';
+            applyAdminUserFiltersAndRender();
+        });
+    }
     renderAdminUsersTable();
     renderAdminUsersPagination();
 }
@@ -2868,7 +3008,6 @@ async function deleteAdminUser(userId, username) {
         ownerNotifyError('Owner accounts are protected and cannot be deleted here');
         return;
     }
-    // Use custom prompt modal: require typing the exact username to confirm deletion
     try {
         const promptResult = await showPromptModal({
             title: 'Delete Admin Account',
@@ -2886,7 +3025,7 @@ async function deleteAdminUser(userId, username) {
             }
         });
 
-        if (!promptResult) return; // user cancelled
+        if (!promptResult) return;
     } catch (err) {
         ownerNotifyError('Confirmation dialog unavailable. Please refresh and try again.');
         return;
@@ -3046,6 +3185,11 @@ function exportAdminUsersCsv() {
     window.URL.revokeObjectURL(url);
 }
 
+function changeAdminUsersPage(direction) {
+    adminUserState.page += direction;
+    applyAdminUserFiltersAndRender();
+}
+
 window.adminUserState = adminUserState;
 window.initAdminUserManagement = initAdminUserManagement;
 window.applyAdminUserFiltersAndRender = applyAdminUserFiltersAndRender;
@@ -3057,9 +3201,10 @@ window.deleteSelectedAdminUsers = deleteSelectedAdminUsers;
 window.exportAdminUsersCsv = exportAdminUsersCsv;
 
 function refreshOwnerVisibleData() {
-    const activeTab = document.querySelector('#ownerTabs .tab.active')?.dataset?.tab || 'system';
+    const activeTab = document.querySelector('#ownerTabs .tab.active')?.dataset?.tab || 'diagnostics';
 
     if (activeTab === 'diagnostics') {
+        if (typeof loadSystemStatus === 'function') loadSystemStatus();
         if (typeof loadDiagnostics === 'function') loadDiagnostics();
         if (typeof loadSocketHealth === 'function') loadSocketHealth();
         return;
@@ -3072,21 +3217,369 @@ function refreshOwnerVisibleData() {
         if (typeof loadAdminUsers === 'function') loadAdminUsers();
         return;
     }
+    if (activeTab === 'system') {
+        if (typeof loadBackupTables === 'function') loadBackupTables();
+        if (typeof loadBackupStatus === 'function') loadBackupStatus();
+        return;
+    }
     if (activeTab === 'security' || activeTab === 'security-events') {
         if (typeof loadSecurityEventsFeed === 'function') loadSecurityEventsFeed(false);
+        if (activeTab === 'security' && typeof loadCaptchaPolicy === 'function') loadCaptchaPolicy();
         return;
     }
     if (activeTab === 'notifications') {
         if (typeof loadOwnerNotificationHistory === 'function') loadOwnerNotificationHistory();
         return;
     }
-
-    if (typeof loadSystemStatus === 'function') loadSystemStatus();
-    if (typeof loadBackupStatus === 'function') loadBackupStatus();
 }
+
+async function loadCaptchaPolicy() {
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/security/captcha-policy');
+        if (!response.ok || !data) return;
+
+        const loginToggle = document.getElementById('captchaLoginEnabledToggle');
+        const registerToggle = document.getElementById('captchaRegisterEnabledToggle');
+        const adaptiveToggle = document.getElementById('captchaAdaptiveDifficultyToggle');
+
+        if (loginToggle) loginToggle.checked = Boolean(data.loginEnabled);
+        if (registerToggle) registerToggle.checked = Boolean(data.registerEnabled);
+        if (adaptiveToggle) adaptiveToggle.checked = Boolean(data.adaptiveDifficultyEnabled);
+
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val !== undefined ? val : '';
+        };
+
+        setVal('captchaMinValueInput', data.minValue);
+        setVal('captchaMaxValueInput', data.maxValue);
+        setVal('captchaTtlSecondsInput', Math.round((data.ttlMs || 0) / 1000));
+        setVal('captchaMaxAttemptsInput', data.maxAttempts);
+        setVal('captchaMinSolveMsInput', data.minSolveMs);
+        setVal('captchaFailureWindowSecondsInput', Math.round((data.failureWindowMs || 0) / 1000));
+        setVal('captchaFailureThresholdInput', data.failureThreshold);
+        setVal('captchaFailureBlockSecondsInput', Math.round((data.failureBlockMs || 0) / 1000));
+
+        const metaEl = document.getElementById('captchaPolicyMeta');
+        if (metaEl) metaEl.textContent = `Synced: ${new Date().toLocaleTimeString()}`;
+
+    } catch (error) {
+        console.error('Error loading CAPTCHA policy:', error);
+    }
+}
+
+async function saveCaptchaPolicy() {
+    try {
+        const getVal = (id) => {
+            const el = document.getElementById(id);
+            return el ? Number(el.value || 0) : 0;
+        };
+        const getBool = (id) => {
+            const el = document.getElementById(id);
+            return el ? Boolean(el.checked) : false;
+        };
+
+        const payload = {
+            loginEnabled: getBool('captchaLoginEnabledToggle'),
+            registerEnabled: getBool('captchaRegisterEnabledToggle'),
+            adaptiveDifficultyEnabled: getBool('captchaAdaptiveDifficultyToggle'),
+            minValue: getVal('captchaMinValueInput') || 1000,
+            maxValue: getVal('captchaMaxValueInput') || 9999,
+            ttlMs: getVal('captchaTtlSecondsInput') * 1000,
+            maxAttempts: getVal('captchaMaxAttemptsInput'),
+            minSolveMs: getVal('captchaMinSolveMsInput'),
+            failureWindowMs: getVal('captchaFailureWindowSecondsInput') * 1000,
+            failureThreshold: getVal('captchaFailureThresholdInput') || 5,
+            failureBlockMs: getVal('captchaFailureBlockSecondsInput') * 1000
+        };
+
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/security/captcha-policy', payload);
+
+        if (response.ok) {
+            if (window.showSuccess) window.showSuccess('CAPTCHA settings updated successfully.');
+            loadCaptchaPolicy();
+        } else {
+            if (window.showError) window.showError(data?.error || 'Failed to update CAPTCHA policy.');
+        }
+    } catch (error) {
+        if (window.showError) window.showError('Connection error: ' + error.message);
+    }
+}
+
+window.loadCaptchaPolicy = loadCaptchaPolicy;
+window.saveCaptchaPolicy = saveCaptchaPolicy;
 
 if (window.AdminPanel) {
     window.AdminPanel.refreshVisibleData = refreshOwnerVisibleData;
 }
 
 document.addEventListener('adminpanel:refresh-visible-data', refreshOwnerVisibleData);
+
+async function purgeBans() {
+    const confirmation = await showPromptModal({
+        title: 'Purge All Bans',
+        label: 'Type "CONFIRM PURGE" to permanently delete all active bans:',
+        placeholder: 'CONFIRM PURGE',
+        confirmText: 'Purge Bans',
+        confirmClass: 'btn-danger',
+        validate: (val) => val === 'CONFIRM PURGE' ? true : 'Please type exactly "CONFIRM PURGE"'
+    });
+
+    if (!confirmation) return;
+
+    try {
+        const { response } = await window.AdminPanel.api.postJson('/api/owner/purge-bans');
+        if (response.ok) {
+            ownerNotifySuccess('Success: Bans purged successfully.');
+        } else {
+            ownerNotifyError('Failed to purge bans.');
+        }
+    } catch (e) {
+        console.error(e);
+        ownerNotifyError(e.message || 'Error purging bans');
+    }
+}
+
+async function purgeWarnings() {
+    const confirmation = await showPromptModal({
+        title: 'Purge Application Warnings',
+        label: 'Type "CONFIRM CLEAR" to delete all warning history:',
+        placeholder: 'CONFIRM CLEAR',
+        confirmText: 'Clear Warnings',
+        confirmClass: 'btn-danger',
+        validate: (val) => val === 'CONFIRM CLEAR' ? true : 'Please type exactly "CONFIRM CLEAR"'
+    });
+
+    if (!confirmation) return;
+
+    try {
+        const { response } = await window.AdminPanel.api.postJson('/api/owner/purge-warnings');
+        if (response.ok) {
+            ownerNotifySuccess('Success: Warnings purged successfully.');
+        } else {
+            ownerNotifyError('Failed to purge warnings.');
+        }
+    } catch (e) {
+        console.error(e);
+        ownerNotifyError(e.message || 'Error purging warnings');
+    }
+}
+
+async function resetAllLevels() {
+    const confirmation = await showPromptModal({
+        title: 'Reset All Levels',
+        label: 'Type "RESET XP" to wipe all user levels and XP data:',
+        placeholder: 'RESET XP',
+        confirmText: 'Reset Levels',
+        confirmClass: 'btn-danger',
+        validate: (val) => val === 'RESET XP' ? true : 'Please type exactly "RESET XP"'
+    });
+
+    if (!confirmation) return;
+
+    try {
+        const { response } = await window.AdminPanel.api.postJson('/api/admin/reset-levels');
+        if (response.ok) {
+            ownerNotifySuccess('Success: All leveling data has been reset.');
+        } else {
+            ownerNotifyError('Failed to reset levels.');
+        }
+    } catch (e) {
+        console.error(e);
+        ownerNotifyError(e.message || 'Error resetting levels');
+    }
+}
+
+async function wipeAllData() {
+    const confirmation = await showPromptModal({
+        title: 'Factory Reset System',
+        label: 'DANGER: This will factory reset the bot database users, levels, economy. Guilds remain.\nType "CONFIRM WIPE" to proceed:',
+        placeholder: 'CONFIRM WIPE',
+        confirmText: 'FACTORY WIPE',
+        confirmClass: 'btn-danger',
+        validate: (val) => val === 'CONFIRM WIPE' ? true : 'Please type exactly "CONFIRM WIPE"'
+    });
+
+    if (!confirmation) return;
+
+    try {
+        const { response } = await window.AdminPanel.api.postJson('/api/owner/wipe-all-data');
+        if (response.ok) {
+            ownerNotifySuccess('System Wiped. Factory reset complete. Reloading...');
+            setTimeout(() => window.location.reload(), 2000);
+        } else {
+            ownerNotifyError('Failed to wipe system data.');
+        }
+    } catch (e) {
+        console.error(e);
+        ownerNotifyError(e.message || 'Error wiping system');
+    }
+}
+
+async function loadSessions() {
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/security/summary');
+
+        const container = document.getElementById('sessionsContainer');
+        const totalEl = document.getElementById('totalActiveSessions');
+
+        if (response.ok && data.sessions) {
+            const sessions = data.sessions;
+            if (totalEl) totalEl.textContent = sessions.length;
+
+            if (container) {
+                if (sessions.length === 0) {
+                    container.innerHTML = '<div>No active sessions</div>';
+                    return;
+                }
+
+                container.innerHTML = sessions.map(s => `
+                    <div class="session-stat-card" style="margin-bottom:0.5rem; justify-content:space-between;">
+                        <div>
+                            <div style="font-weight:bold;">${s.ipAddress || 'Unknown IP'}</div>
+                            <div style="font-size:0.8rem; color:#888;">${s.userAgent || 'Unknown Device'}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div>${s.isCurrent ? '<span style="color:#4CAF50">Current</span>' : ''}</div>
+                            <div style="font-size:0.8rem;">${new Date(s.lastActiveAt || Date.now()).toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (e) { console.error('Sessions Error:', e); }
+}
+
+window.loadSessions = loadSessions;
+
+window.purgeBans = purgeBans;
+window.purgeWarnings = purgeWarnings;
+window.resetAllLevels = resetAllLevels;
+window.wipeAllData = wipeAllData;
+
+
+
+async function loadSessionSecurityPolicy() {
+    const toggle = document.getElementById('singleSessionModeToggle');
+    const idleInput = document.getElementById('idleTimeoutMinutesInput');
+    const absoluteInput = document.getElementById('absoluteTimeoutHoursInput');
+    if (!toggle || !idleInput || !absoluteInput) return;
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/security/session-policy');
+        if (response.ok && data) {
+            toggle.checked = Boolean(data.singleSessionMode);
+            const idleMs = (data.idleTimeoutMs !== undefined) ? Number(data.idleTimeoutMs) : 1800000;
+            const absMs = (data.absoluteTimeoutMs !== undefined) ? Number(data.absoluteTimeoutMs) : 86400000;
+
+            idleInput.value = Math.round(idleMs / 60000);
+            absoluteInput.value = Math.round(absMs / 3600000);
+        }
+    } catch (error) { console.error('Error loading session policy:', error); }
+}
+
+async function saveSessionSecurityPolicy() {
+    const toggle = document.getElementById('singleSessionModeToggle');
+    const idleInput = document.getElementById('idleTimeoutMinutesInput');
+    const absoluteInput = document.getElementById('absoluteTimeoutHoursInput');
+    if (!toggle || !idleInput || !absoluteInput) return;
+
+    const idleMinutes = parseInt(idleInput.value) || 30;
+    const absHours = parseInt(absoluteInput.value) || 24;
+
+    const payload = {
+        singleSessionMode: toggle.checked,
+        idleTimeoutMs: idleMinutes * 60 * 1000,
+        absoluteTimeoutMs: absHours * 60 * 60 * 1000
+    };
+
+    try {
+        const { response } = await window.AdminPanel.api.postJson('/api/owner/security/session-policy', payload);
+
+        if (response.ok) {
+            ownerNotifySuccess('Session settings updated.');
+        } else {
+            ownerNotifyError('Could not save session settings.');
+        }
+    } catch (error) {
+        console.error('Error saving session policy:', error);
+        ownerNotifyError(error.message || 'Could not save session settings');
+    }
+}
+
+async function loadCaptchaPolicy() {
+    const ids = [
+        'captchaLoginEnabledToggle', 'captchaRegisterEnabledToggle', 'captchaAdaptiveDifficultyToggle',
+        'captchaMaxAttemptsInput', 'captchaTtlSecondsInput', 'captchaMinSolveMsInput', 'captchaFailureBlockSecondsInput',
+        'captchaMinValueInput', 'captchaMaxValueInput', 'captchaFailureWindowSecondsInput', 'captchaFailureThresholdInput'
+    ];
+    if (!document.getElementById(ids[0])) return;
+
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/security/captcha-policy');
+        if (response.ok && data) {
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = (val !== undefined && val !== null) ? val : '';
+            };
+
+            if (document.getElementById('captchaLoginEnabledToggle')) document.getElementById('captchaLoginEnabledToggle').checked = Boolean(data.loginEnabled);
+            if (document.getElementById('captchaRegisterEnabledToggle')) document.getElementById('captchaRegisterEnabledToggle').checked = Boolean(data.registerEnabled);
+            if (document.getElementById('captchaAdaptiveDifficultyToggle')) document.getElementById('captchaAdaptiveDifficultyToggle').checked = Boolean(data.adaptiveDifficultyEnabled);
+
+            const ttlSec = data.ttlMs ? Math.floor(data.ttlMs / 1000) : 300;
+            const minSolveMs = data.minSolveMs || 1000;
+            const failureBlockSec = data.failureBlockMs ? Math.floor(data.failureBlockMs / 1000) : 600;
+            const failureWindowSec = data.failureWindowMs ? Math.floor(data.failureWindowMs / 1000) : 600;
+
+            setVal('captchaMaxAttemptsInput', data.maxAttempts || 3);
+            setVal('captchaTtlSecondsInput', ttlSec);
+            setVal('captchaMinSolveMsInput', minSolveMs);
+            setVal('captchaFailureBlockSecondsInput', failureBlockSec);
+            setVal('captchaMinValueInput', data.minValue || 1);
+            setVal('captchaMaxValueInput', data.maxValue || 9999);
+            setVal('captchaFailureWindowSecondsInput', failureWindowSec);
+            setVal('captchaFailureThresholdInput', data.failureThreshold || 5);
+        }
+
+        const meta = document.getElementById('captchaPolicyMeta');
+        if (meta) meta.textContent = 'Last loaded: ' + new Date().toLocaleTimeString();
+    } catch (error) { console.error('Error loading captcha policy:', error); }
+}
+
+async function saveCaptchaPolicy() {
+    const policy = {
+        loginEnabled: document.getElementById('captchaLoginEnabledToggle')?.checked || false,
+        registerEnabled: document.getElementById('captchaRegisterEnabledToggle')?.checked || false,
+        adaptiveDifficulty: document.getElementById('captchaAdaptiveDifficultyToggle')?.checked || false,
+        maxAttempts: parseInt(document.getElementById('captchaMaxAttemptsInput')?.value || 3),
+        ttlSeconds: parseInt(document.getElementById('captchaTtlSecondsInput')?.value || 300),
+        minSolveTimeMs: parseInt(document.getElementById('captchaMinSolveMsInput')?.value || 500),
+        failureBlockDurationSeconds: parseInt(document.getElementById('captchaFailureBlockSecondsInput')?.value || 60),
+
+        minValue: parseInt(document.getElementById('captchaMinValueInput')?.value || 1000),
+        maxValue: parseInt(document.getElementById('captchaMaxValueInput')?.value || 9999),
+        failureWindowSeconds: parseInt(document.getElementById('captchaFailureWindowSecondsInput')?.value || 600),
+        failureThreshold: parseInt(document.getElementById('captchaFailureThresholdInput')?.value || 5)
+    };
+
+    try {
+        const { response, data } = await window.AdminPanel.api.requestJson('/api/owner/security/captcha-policy', {
+            method: 'POST',
+            body: JSON.stringify(policy)
+        });
+
+        if (response.ok) {
+            if (typeof profileShowSuccess === 'function') profileShowSuccess('CAPTCHA Policy Saved', 'Settings updated successfully');
+            else alert('Saved');
+        } else {
+            if (typeof profileShowError === 'function') profileShowError('Save Failed', data?.error || 'Unknown error');
+            else alert('Failed');
+        }
+    } catch (e) { console.error(e); alert('Error saving policy'); }
+}
+
+window.loadCaptchaPolicy = loadCaptchaPolicy;
+window.saveCaptchaPolicy = saveCaptchaPolicy;
+
+
+document.addEventListener('DOMContentLoaded', initAdminUserManagement);

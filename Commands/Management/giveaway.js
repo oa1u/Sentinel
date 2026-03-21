@@ -2,8 +2,6 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { ROLES: { administratorRoleId } } = require('../../Config/constants');
 const giveawayHandler = require('../../Events/Giveaway');
 
-// This command handles giveaways—start, extend, reroll, and more!
-// People join giveaways by reacting—easy and fun.
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('giveaway')
@@ -81,7 +79,6 @@ module.exports = {
     ),
   category: 'management',
   async execute(interaction) {
-    // Only admins are allowed to use this command.
     if (!interaction.member.roles.cache.has(administratorRoleId)) {
       const embed = {
         color: 16711680,
@@ -98,7 +95,6 @@ module.exports = {
 
     const subcommand = interaction.options.getSubcommand();
 
-    // Figure out what the user wants to do with the giveaway.
     if (subcommand === 'start') {
       await giveawayHandler.handleGiveaway(interaction, interaction.client);
     } else if (subcommand === 'extend') {

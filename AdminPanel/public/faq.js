@@ -1,5 +1,3 @@
-/* FAQ page script — small helpers for loading account info and controlling the FAQ accordion. */
-// Load user info and update navbar for FAQ page
 document.addEventListener('DOMContentLoaded', async () => {
 	try {
 		let api = window.api || (window.AdminPanel && window.AdminPanel.api);

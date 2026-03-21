@@ -1,8 +1,5 @@
 (function () {
-    // Advanced Security Utilities with Singleton Pattern
     if (window.SecurityUtils) {
-        // If already initialized, we can just return.
-        // The warning is unnecessary if we simply treat this as a no-op or module pattern.
         return;
     }
 
@@ -15,7 +12,7 @@
 
     let _csrfTokenCache = null;
     let _tokenPromise = null;
-    let _isFetching = false; // Add explicit flag
+    let _isFetching = false;
 
     async function fetchNewToken() {
         if (_tokenPromise) return _tokenPromise;
@@ -33,7 +30,6 @@
             .then(data => {
                 if (data && data.csrfToken) {
                     _csrfTokenCache = data.csrfToken;
-                    // Also update any meta tags if present
                     const meta = document.querySelector('meta[name="csrf-token"]');
                     if (meta) meta.setAttribute('content', data.csrfToken);
 
@@ -43,7 +39,7 @@
             })
             .catch(err => {
                 console.error('[Security] CSRF fetch error:', err);
-                return null; // Return null on failure
+                return null;
             })
             .finally(() => {
                 _tokenPromise = null;
@@ -57,13 +53,10 @@
         if (window.AdminPanel?.api?.getCsrfToken) {
             return window.AdminPanel.api.getCsrfToken(forceRefresh);
         }
-        // If we have a cached token and invalidation is not forced, use it.
-        // We also check if the token looks vaguely valid (non-empty string)
         if (!forceRefresh && _csrfTokenCache && typeof _csrfTokenCache === 'string' && _csrfTokenCache.length > 10) {
             return _csrfTokenCache;
         }
 
-        // Try reading from cookie first if not forcing refresh
         if (!forceRefresh) {
             const match = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
             if (match && match[1]) {
@@ -75,11 +68,9 @@
             }
         }
 
-        // Otherwise fetch from API
         return fetchNewToken();
     }
 
-    // Format bytes as human-readable string (e.g., 1.2 MB)
     function formatBytes(bytes, decimals = 2) {
         if (bytes === 0 || isNaN(bytes)) return '0 Bytes';
         const k = 1024;
@@ -88,22 +79,18 @@
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
     }
-    // Format a number with commas (e.g., 1,234,567)
     function formatNumber(num) {
         if (typeof num !== 'number') num = Number(num);
         if (isNaN(num)) return '0';
         return num.toLocaleString();
     }
-    // Helper for legacy code: fetchWithCsrf (alias for secureApiCall)
     function fetchWithCsrf(url, options = {}) {
         return secureApiCall(url, options);
     }
     if (typeof window !== 'undefined') {
         window.fetchWithCsrf = fetchWithCsrf;
     }
-    // Security utilities for the admin panel: XSS protection, input validation, and secure API calls
 
-    // Escape HTML entities to prevent XSS attacks
     function escapeHtml(text) {
         if (text === null || text === undefined) return '';
 
@@ -117,11 +104,9 @@
         return String(text).replace(/[&<>"']/g, m => map[m]);
     }
 
-    // Remove dangerous tags and attributes from user input
     function sanitizeInput(input) {
         if (typeof input !== 'string') return '';
 
-        // Remove any script tags and dangerous attributes
         let sanitized = input
             .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
             .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
@@ -130,52 +115,42 @@
         return sanitized.trim();
     }
 
-    // Input validation helpers
 
-    // Check if a string is a valid Discord User ID
     function isValidUserId(userId) {
         if (typeof userId !== 'string') return false;
         userId = userId.trim();
         return /^\d{17,19}$/.test(userId);
     }
 
-    // Check if a string is a valid reason or message
     function isValidText(text, minLength = 1, maxLength = 500) {
         if (typeof text !== 'string') return false;
         const trimmed = text.trim();
         return trimmed.length >= minLength && trimmed.length <= maxLength;
     }
 
-    // Check if a value is a valid integer within a range
     function isValidNumber(value, min = 0, max = Infinity) {
         const num = Number(value);
         return Number.isInteger(num) && num >= min && num <= max;
     }
 
-    // Check if a string is a valid email address
     function isValidEmail(email) {
         if (typeof email !== 'string') return false;
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
     }
 
-    // The best secure api calls
 
-    // Make secure API request with token refresh support
     async function secureApiCall(url, options = {}) {
         const isMutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
             (options.method || 'GET').toUpperCase()
         );
 
-        // Initial token fetch attempt
         let token = await getCsrfToken();
         if (!token && isMutating) {
-            // If we have no token but need one, fetch it explicitly
             console.warn('[Security] Token missing from cache/cookie, fetching fresh one...');
             token = await fetchNewToken();
         }
 
-        // Default headers
         const headers = new Headers(options.headers || {});
         if (!headers.has('Content-Type')) {
             headers.set('Content-Type', 'application/json');
@@ -185,7 +160,6 @@
             headers.set(CONFIG.CSRF_HEADER, token);
         } else if (isMutating) {
             console.error('[Security] CRITICAL: Mutating request blocked. CSRF token could not be obtained.');
-            // Prevent the request from being sent to avoid confusing "Token not found" errors on backend
             throw new Error('CSRF Token missing - Request blocked by security policy');
         }
 
@@ -198,38 +172,31 @@
         try {
             let response = await fetch(url, fetchConfig);
 
-            // Advanced Self-Healing: If 403 Forbidden due to CSRF failure
             if (response.status === 403 && isMutating && !options._retry) {
                 console.warn('[Security] CSRF invalid/expired. Attempting refresh...');
 
-                // Wait for a fresh token
                 const freshToken = await fetchNewToken();
                 if (freshToken) {
                     headers.set(CONFIG.CSRF_HEADER, freshToken);
 
-                    // Retry request with fresh token
                     const retryConfig = {
                         ...options,
                         headers,
                         credentials: 'include',
-                        _retry: true // Prevent infinite loops
+                        _retry: true
                     };
 
                     response = await fetch(url, retryConfig);
                 }
             }
 
-            // Global Unauthorized Handler
             if (response.status === 401) {
                 console.warn('[Security] 401 Unauthorized. Redirecting to login...');
                 window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-                // Return a promise that never resolves (or specific error) to stop execution flow
                 return new Promise(() => { });
             }
 
             if (!response.ok) {
-                // Optional: You could throw here if you prefer promise rejection for errors
-                // but standard fetch behavior is to resolve unless network error.
             }
 
             return response;
@@ -263,7 +230,6 @@
 
         isAllowed() {
             const now = Date.now();
-            // Remove old requests outside the window
             this.requests = this.requests.filter(time => now - time < this.windowMs);
             if (this.requests.length < this.maxRequests) {
                 this.requests.push(now);
@@ -279,12 +245,10 @@
         }
     }
 
-    // Make globally available immediately for internal use
     if (typeof window !== 'undefined') {
         window.RateLimiter = RateLimiter;
     }
 
-    // Create rate limiters for different operations
     const apiRateLimiters = {
         warn: new RateLimiter(10, 60000),
         ban: new RateLimiter(5, 60000),
@@ -304,7 +268,6 @@
         return { allowed: false, retryAfter: limiter.getRetryAfter() };
     }
 
-    // form validation
 
 
     function validateModerationForm(userId, reason) {
@@ -354,13 +317,15 @@
         return { valid: true };
     }
 
-    // Ui helper
 
 
     function showError(message, duration = 5000) {
         const sanitized = escapeHtml(message);
 
-        // Try to use existing alert if available
+        if (typeof window.showError === 'function' && window.showError !== showError) {
+            window.showError(sanitized, duration);
+        }
+
         const alertElement = document.getElementById('errorAlert');
         if (alertElement) {
             alertElement.textContent = sanitized;
@@ -374,7 +339,6 @@
             return;
         }
 
-        // Fallback to console
         console.error(sanitized);
     }
 
@@ -407,7 +371,6 @@
     }
 
 
-    // Make functions globally available if needed
     if (typeof window !== 'undefined') {
         window.secureApiCall = secureApiCall;
         window.securePost = securePost;
@@ -426,7 +389,6 @@
             validateWarnForm,
             validateBanForm,
             validateTimeoutForm,
-            // showError, showSuccess, showInfo are provided globally by notifications.js
             formatNumber,
             formatBytes,
             formatDuration,
@@ -436,23 +398,19 @@
         };
     }
 
-    // Tab switching logic for the admin panel
 
 
     function switchTab(e, tabName) {
         e.preventDefault();
 
-        // Hide all tabs
         document.querySelectorAll('.tab-content').forEach(tab => {
             tab.classList.remove('active');
         });
 
-        // Remove active class from buttons
         document.querySelectorAll('.tab').forEach(btn => {
             btn.classList.remove('active');
         });
 
-        // Show selected tab
         const selectedTab = document.getElementById(tabName);
         if (selectedTab) {
             selectedTab.classList.add('active');
@@ -462,7 +420,6 @@
         }
     }
 
-    // Attach event listeners to tabs when DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.tab').forEach(btn => {
             btn.addEventListener('click', (e) => {

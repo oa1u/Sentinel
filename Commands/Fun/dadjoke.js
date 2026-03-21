@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 
-// Fetch a random dad joke from icanhazdadjoke.
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('dadjoke')

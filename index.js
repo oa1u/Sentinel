@@ -160,7 +160,7 @@ webhookApp.listen(BOT_WEBHOOK_PORT, () => {
   console.log(`🔗 Bot webhook listener running on port ${BOT_WEBHOOK_PORT}`);
 });
 
-// Collections for commands, slash commands, and events — handy globals
+// Collections for commands, slash commands, and events - handy globals
 client.commands = new Collection();
 client.slashCommands = new Collection();
 client.events = new Collection();
@@ -239,7 +239,7 @@ async function registerCommands({ commandsOverride = null, skipIfUnchanged = fal
   const GUILD_ID = process.env.GUILD_ID;
 
   if (!TOKEN || !CLIENT_ID) {
-    console.error('❌ Missing TOKEN or CLIENT_ID in environment variables');
+    console.error('🗑️ Missing TOKEN or CLIENT_ID in environment variables');
     return false;
   }
 
@@ -269,7 +269,7 @@ async function registerCommands({ commandsOverride = null, skipIfUnchanged = fal
     lastRegisteredCommandSignature = signature;
     return true;
   } catch (error) {
-    console.error('❌ Error registering commands:', error.message);
+    console.error('🗑️ Error registering commands:', error.message);
     return false;
   }
 }
@@ -277,7 +277,7 @@ async function registerCommands({ commandsOverride = null, skipIfUnchanged = fal
 // Reply with a generic ephemeral error message when a command throws.
 async function sendCommandErrorResponse(interaction) {
   const errorMessage = {
-    content: '❌ There was an error while executing this command!',
+    content: '- There was an error while executing this command!',
     flags: MessageFlags.Ephemeral
   };
 
@@ -305,7 +305,7 @@ async function initializeBot() {
     const slashLoader = require('./Commands/_slashLoader');
 
     await slashLoader(client.slashCommands).catch((err) => {
-      console.error("❌ Couldn't load commands:", err.message);
+      console.error("- Couldn't load commands:", err.message);
       process.exit(1);
     });
 
@@ -371,7 +371,7 @@ async function initializeBot() {
     await jobScheduler.start();
     client.jobScheduler = jobScheduler;
   } catch (error) {
-    console.error('❌ Fatal error during bot initialization:', error);
+    console.error('🗑️ Fatal error during bot initialization:', error);
     process.exit(1);
   }
 }
@@ -430,7 +430,7 @@ function startRuntimeHealthMonitor() {
             consecutiveDatabaseHealthFailures = 0;
             console.log('✅ Database reconnection successful');
           } else {
-            console.error('❌ Database reconnection attempt failed');
+            console.error('🗑️ Database reconnection attempt failed');
           }
         }
       }
@@ -476,7 +476,7 @@ async function loginWithRetry(clientInstance, token) {
       return true;
     } catch (error) {
       const isFinal = attempt >= LOGIN_MAX_ATTEMPTS;
-      console.error(`❌ Discord login failed (attempt ${attempt}/${LOGIN_MAX_ATTEMPTS}): ${error.message}`);
+      console.error(`- Discord login failed (attempt ${attempt}/${LOGIN_MAX_ATTEMPTS}): ${error.message}`);
 
       if (isFinal) {
         throw error;
@@ -540,7 +540,7 @@ async function gracefulShutdown(reason = 'shutdown', exitCode = 0) {
         console.warn('⚠️  Failed to close database connection cleanly:', closeError.message);
       }
     } catch (error) {
-      console.error('❌ Error during graceful shutdown:', error.message || error);
+      console.error('🗑️ Error during graceful shutdown:', error.message || error);
     }
   })();
 
@@ -630,7 +630,7 @@ async function checkPendingReminders(client) {
                 if (channel && channel.isTextBased()) {
                   const failedEmbed = new EmbedBuilder()
                     .setColor(0xFF6B6B)
-                    .setTitle('❌ Reminder Delivery Failed')
+                    .setTitle('- Reminder Delivery Failed')
                     .setDescription(`Could not deliver reminder to <@${reminder.userId}>`)
                     .addFields(
                       { name: '💬 Message', value: reminder.message, inline: false },
@@ -779,7 +779,7 @@ async function finalizeGiveawayFromDB(message, giveaway, client) {
     if (participants.length === 0) {
       endEmbed = {
         color: 16744171,
-        title: '❌ No Winners',
+        title: '- No Winners',
         description: `━━━━━━━━━━━━━━━━━━━━━\n\nUnfortunately, nobody reacted to the **${giveaway.prize}** giveaway.\n\n**Better luck next time!** 🍀\n\n━━━━━━━━━━━━━━━━━━━━━`,
         fields: [
           { name: '🎁 Prize', value: `**${giveaway.prize}**`, inline: true },
@@ -916,7 +916,7 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
     if (participants.length === 0) {
       endEmbed = {
         color: 16744171,
-        title: '❌ No Winners',
+        title: '- No Winners',
         description: `━━━━━━━━━━━━━━━━━━━━━\n\nUnfortunately, nobody reacted to the **${prize}** giveaway.\n\n**Better luck next time!** 🍀\n\n━━━━━━━━━━━━━━━━━━━━━`,
         fields: [
           { name: '🎁 Prize', value: `**${prize}**`, inline: true },
@@ -966,6 +966,25 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
 
 // Handle slash command interactions: permission checks, rate limiting, execution.
 client.on("interactionCreate", async (interaction) => {
+  if (interaction.isButton()) {
+    try {
+      const announceCommand = client.slashCommands.get('announce');
+      if (announceCommand && typeof announceCommand.handleComponent === 'function') {
+        const handled = await announceCommand.handleComponent(interaction);
+        if (handled) return;
+      }
+    } catch (error) {
+      console.error('🗑️ Error handling button interaction:', error.message || error);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: '- There was an error while processing that button.',
+          flags: MessageFlags.Ephemeral
+        }).catch(() => { });
+      }
+      return;
+    }
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.slashCommands.get(interaction.commandName);
@@ -1012,7 +1031,7 @@ client.on("interactionCreate", async (interaction) => {
     if (!roleAllowed || !permissionAllowed) {
       await logInteraction('PERMISSION', 'Missing required role or permissions');
       return interaction.reply({
-        content: '❌ You do not have the required role and permissions for this command.',
+        content: '- You do not have the required role and permissions for this command.',
         flags: MessageFlags.Ephemeral
       }).catch(() => { });
     }
@@ -1044,7 +1063,7 @@ client.on("interactionCreate", async (interaction) => {
     await command.execute(interaction);
     await logInteraction('SUCCESS');
   } catch (error) {
-    console.error(`❌ Error executing command /${interaction.commandName}:`, error.message);
+    console.error(`- Error executing command /${interaction.commandName}:`, error.message);
     await logInteraction('ERROR', error.message);
     await sendCommandErrorResponse(interaction);
   }
@@ -1071,14 +1090,14 @@ function validateEnvironment() {
   }
 
   if (missing.length > 0) {
-    console.error('❌ Missing required environment variables:');
+    console.error('🗑️ Missing required environment variables:');
     missing.forEach(item => console.error(`   - ${item}`));
     console.error('\n📖 Please configure these in Config/credentials.env\n');
     process.exit(1);
   }
 
   if (empty.length > 0) {
-    console.error('❌ Empty environment variables (must have values):');
+    console.error('🗑️ Empty environment variables (must have values):');
     empty.forEach(item => console.error(`   - ${item}`));
     console.error('\n📖 Please add values in Config/credentials.env\n');
     process.exit(1);
@@ -1137,7 +1156,7 @@ client.once("clientReady", () => {
 });
 
 client.on('error', (err) => {
-  console.error('❌ Client error:', err.message);
+  console.error('🗑️ Client error:', err.message);
 });
 client.on('warn', (msg) => {
   console.warn('⚠️  Client warn:', msg);
@@ -1154,7 +1173,7 @@ client.on('shardResume', (shardId, replayedEvents) => {
 
 // Log unhandled promise rejections and optionally exit to avoid inconsistent state.
 process.on('unhandledRejection', async (err) => {
-  console.error('❌ Unhandled Promise Rejection:', err);
+  console.error('🗑️ Unhandled Promise Rejection:', err);
   if (EXIT_ON_UNHANDLED_REJECTION) {
     await gracefulShutdown('unhandledRejection', 1);
   }
@@ -1162,7 +1181,7 @@ process.on('unhandledRejection', async (err) => {
 
 // Log uncaught exceptions and optionally exit to prevent the bot from running in a bad state.
 process.on('uncaughtException', async (err) => {
-  console.error('❌ Uncaught Exception:', err);
+  console.error('🗑️ Uncaught Exception:', err);
   if (EXIT_ON_UNCAUGHT_EXCEPTION) {
     await gracefulShutdown('uncaughtException', 1);
   }
@@ -1198,7 +1217,7 @@ process.on('SIGTERM', async () => {
       }
     }
   } catch (err) {
-    console.error('❌ Fatal error during startup:', err.message);
+    console.error('🗑️ Fatal error during startup:', err.message);
     process.exit(1);
   }
 })();

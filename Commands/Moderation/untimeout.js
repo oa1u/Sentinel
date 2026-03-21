@@ -7,8 +7,6 @@ const { canModerateMember, addCase, sendModerationDM, logModerationAction } = re
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const AdminPanelHelper = require('../../Functions/AdminPanelHelper');
 
-// Lets you end a user's timeout early
-// Also updates the admin panel
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('untimeout')
@@ -30,7 +28,6 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
-    // Respond right away so Discord doesn't time out while we process
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
     }
@@ -39,7 +36,6 @@ module.exports = {
     const caseId = interaction.options.getString('caseid');
     const reason = interaction.options.getString('reason') || 'No reason provided';
 
-    // You have to give either a user or a case ID
     if (!targetUser && !caseId) {
       return sendWarningReply(
         interaction,
@@ -48,10 +44,8 @@ module.exports = {
       );
     }
 
-    // If a case ID is given, try to find the user in the database
     if (caseId) {
       try {
-        // Query MySQL timeouts table for the case ID
         const query = 'SELECT user_id, case_id, reason, issued_at, expires_at, active FROM timeouts WHERE case_id = ? LIMIT 1';
         const [rows] = await DatabaseManager.connection.pool.query(query, [caseId]);
 
@@ -66,7 +60,6 @@ module.exports = {
         const foundCase = rows[0];
         const foundUserId = foundCase.user_id;
 
-        // Fetch the user
         try {
           targetUser = await interaction.client.users.fetch(foundUserId);
         } catch (err) {
@@ -86,12 +79,10 @@ module.exports = {
       }
     }
 
-    // Check permissions and hierarchy
     if (!await canModerateMember(interaction, targetUser, 'remove timeout from')) {
       return;
     }
 
-    // Fetch member to verify they exist in guild
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
       await sendWarningReply(
@@ -102,7 +93,6 @@ module.exports = {
       return;
     }
 
-    // Check if member is actually timed out
     if (!targetMember.isCommunicationDisabled()) {
       await sendInfoReply(
         interaction,
@@ -112,10 +102,8 @@ module.exports = {
       return;
     }
 
-    // Generate case ID
     const newCaseID = generateCaseId('UNTIMEOUT');
 
-    // Create logging embed
     const logEmbed = createModerationEmbed({
       action: '✅ Untimeout',
       target: targetUser,
@@ -129,7 +117,6 @@ module.exports = {
       logEmbed.addFields({ name: '📋 Original Case', value: `\`${caseId}\``, inline: true });
     }
 
-    // Send DM to user
     const dmEmbed = createModerationDmEmbed({
       actionTitle: 'Timeout Removed',
       actionEmoji: '✅',
@@ -149,10 +136,8 @@ module.exports = {
 
     const dmSent = await sendModerationDM(targetUser, dmEmbed);
 
-    // Log the action
     await logModerationAction(interaction, logEmbed);
 
-    // Add to database
     addCase(targetUser.id, newCaseID, {
       moderator: interaction.user.id,
       moderatorTag: interaction.user.username,
@@ -163,7 +148,6 @@ module.exports = {
       originalCase: caseId || null
     });
 
-    // Remove from timeouts tracking table
     try {
       await AdminPanelHelper.clearTimeout(targetUser.id, {
         caseId: newCaseID,
@@ -175,11 +159,9 @@ module.exports = {
       console.error('[untimeout] Failed to remove timeout from database:', err.message);
     }
 
-    // Remove the timeout
     try {
       await targetMember.timeout(null, reason);
 
-      // Send success response
       await sendSuccessReply(
         interaction,
         '✅ Timeout Removed',

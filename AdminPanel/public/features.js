@@ -1,6 +1,4 @@
-// Load user info and update navbar for Features page
 document.addEventListener('DOMContentLoaded', async () => {
-	// Ensure window.api is set (like dashboard.js)
 	if (!window.api || !window.ui) {
 		const { api, ui } = window.AdminPanel || {};
 		window.api = api;
@@ -18,7 +16,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 		}
 	} catch (err) { }
 
-	// Tab system logic
 	const tabsContainer = document.getElementById('featuresTabs');
 	const tabs = Array.from(document.querySelectorAll('.tab'));
 	const tabContents = Array.from(document.querySelectorAll('.tab-content'));
@@ -82,7 +79,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 	tabs.forEach((tab, index) => wireTab(tab, index));
 
-	// Hide all but the first tab content on load
 	tabContents.forEach((panel, idx) => {
 		panel.style.display = idx === 0 ? '' : 'none';
 	});

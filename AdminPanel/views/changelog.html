@@ -22,14 +22,14 @@
             <div class="user-info">
                 <div class="user-dropdown">
                     <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
-                        <span class="username" id="userDisplay">Admin</span>
-                        <span class="role-badge" id="roleBadge">ADMIN</span>
+                        <span class="username" id="headerUsername">Loading...</span>
+                        <span class="role-badge" id="headerRole">Admin</span>
                         <span class="dropdown-arrow">▼</span>
                     </div>
                     <div class="user-dropdown-menu" id="userDropdownMenu">
                         <div class="user-dropdown-header">
-                            <span class="username" id="dropdownUsername">Admin</span>
-                            <span class="role-badge" id="dropdownRole">ADMIN</span>
+                            <span class="username" id="dropdownUsername">Loading...</span>
+                            <span class="role-badge" id="dropdownRole">Admin</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
                         <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
@@ -48,7 +48,7 @@
     <main class="container changelog-page">
         <section class="changelog-hero">
             <div class="changelog-hero-content">
-                <p class="changelog-kicker">Release Notes</p>
+                <p class="changelog-kicker">🚀 Release Notes</p>
                 <h1 class="changelog-title-lg">Changelog for <span class="botNameDisplay">Sentinel</span></h1>
                 <p class="changelog-subtitle">Keep a simple, honest record of what shipped, what changed, and what to
                     expect next.</p>
@@ -76,23 +76,25 @@
 
         <section class="changelog-shell">
             <aside class="changelog-sidebar">
-                <div class="changelog-sidebar-card">
-                    <div class="changelog-sidebar-icon">🧾</div>
-                    <div class="changelog-sidebar-title">Release History</div>
-                    <p class="changelog-sidebar-note">Short, practical notes for operators, moderators, and owners.</p>
+                <div class="changelog-search-container">
+                    <span class="changelog-search-icon">🔍</span>
+                    <input type="text" class="changelog-search-input" id="releaseSearch"
+                        placeholder="Search releases..." autocomplete="off">
                 </div>
+
+                <h2 style="margin-top: 1rem;">Browse Categories</h2>
                 <nav class="changelog-tabs" id="changelogTabs">
                     <button class="changelog-tab tab active" data-tab="overview">
-                        <span>Overview</span>
-                        <small>Highlights &amp; milestones</small>
+                        <span class="changelog-tab-icon">✨</span>
+                        <span class="changelog-tab-label">Overview</span>
                     </button>
                     <button class="changelog-tab tab" data-tab="bugs">
-                        <span>Known Issues</span>
-                        <small>Open issues and workarounds</small>
+                        <span class="changelog-tab-icon">🐛</span>
+                        <span class="changelog-tab-label">Known Issues</span>
                     </button>
                     <button class="changelog-tab tab" data-tab="planned">
-                        <span>Planned</span>
-                        <small>Roadmap and what is next</small>
+                        <span class="changelog-tab-icon">📅</span>
+                        <span class="changelog-tab-label">Planned</span>
                     </button>
                 </nav>
             </aside>
@@ -108,11 +110,45 @@
                             <div class="changelog-entry-header">
                                 <div class="changelog-entry-badge">NEW</div>
                                 <div>
+                                    <h3>Major Update 8.0.0</h3>
+                                    <p>Reliability, QoL fixes, Commands.</p>
+                                </div>
+                                <span class="changelog-entry-date">March 2026</span>
+                            </div>
+                            <ul class="changelog-item-list">
+                                <li><span class="tag tag-feature">Feature</span>Improved the Verification system</li>
+                                <li><span class="tag tag-feature">Feature</span>Improved the frontend UI of the admin
+                                    panel</li>
+                                <li><span class="tag tag-feature">Feature</span>Added an event command that explains
+                                    certain Events/Functions</li>
+                                <li><span class="tag tag-feature">Feature</span>Added an in-panel ticket transcript
+                                    viewer.</li>
+                                <li><span class="tag tag-feature">Feature</span>Added a password reset section.</li>
+                                <li><span class="tag tag-feature">Feature</span>Improved the email system reliability.
+                                </li>
+                                <li><span class="tag tag-feature">Feature</span>Added database backups.</li>
+                                <li><span class="tag tag-feature">Feature</span>Added a steam command to view
+                                    information about the selected steam account</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>Combined invitecodes and
+                                    inviteleaderboards into a single "invite" command</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>Reworked the help command</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>Improved Anti-raid (Requires more
+                                    testing to ensure functionality)</li>
+                                <li><span class="tag tag-bugfix">Fix</span>Dozens of smaller stability and fixes
+                                    across the bot and panel.</li>
+                            </ul>
+                        </div>
+
+
+                        <div class="changelog-entry-card">
+                            <div class="changelog-entry-header">
+                                <div class="changelog-entry-version">v7.0.0</div>
+                                <div>
                                     <h3>Major Update 7.0.0</h3>
                                     <p>Reliability, security, and operator-focused upgrades across the bot and the
                                         panel.</p>
                                 </div>
-                                <span class="changelog-entry-date">March 2026</span>
+                                <span class="changelog-entry-date">March, 2026</span>
                             </div>
                             <ul class="changelog-item-list">
                                 <li><span class="tag tag-feature">Feature</span>Music playback is more reliable, with
@@ -141,80 +177,96 @@
                                     across the bot and panel.</li>
                             </ul>
                         </div>
-
-                        <div class="changelog-entry-card">
-                            <div class="changelog-entry-header">
-                                <div class="changelog-entry-version">v6.0.0</div>
-                                <div>
-                                    <h3>Major Update 6.0.0</h3>
-                                    <p>Security-first release with a big lift in platform tooling.</p>
-                                </div>
-                                <span class="changelog-entry-date">February 3, 2026</span>
-                            </div>
-                            <ul class="changelog-item-list">
-                                <li><span class="tag tag-feature">Feature</span>Email notification system for alerts and
-                                    lifecycle events.</li>
-                                <li><span class="tag tag-feature">Feature</span>Discord account linking workflow with
-                                    compliance checks.</li>
-                                <li><span class="tag tag-feature">Feature</span>TOTP security flow with management
-                                    tooling.</li>
-                                <li><span class="tag tag-feature">Feature</span>Admin Panel tab system modernized across
-                                    core pages.</li>
-                                <li><span class="tag tag-enhance">Enhancement</span>Unified navigation with role-aware
-                                    identity context.</li>
-                                <li><span class="tag tag-feature">Feature</span>Performance routing improvements with
-                                    optimized WebSockets.</li>
-                                <li><span class="tag tag-security">Security</span>Hardened role validation and
-                                    permission checks.</li>
-                                <li><span class="tag tag-enhance">Enhancement</span>Appeals workflow rebuilt for faster
-                                    triage.</li>
-                                <li><span class="tag tag-bugfix">Fix</span>Resolved responsive padding and dropdown
-                                    overlap issues.</li>
-                                <li><span class="tag tag-feature">Feature</span>Music system with improved
-                                    join-to-create handling.</li>
-                                <li><span class="tag tag-feature">Feature</span>Ghost Ping alerts for deleted mention
-                                    recovery.</li>
-                                <li><span class="tag tag-bugfix">Fix</span>Stability improvements across UI sessions.
-                                </li>
-                                <li><span class="tag tag-feature">Feature</span>Utility commands: avatar, banner,
-                                    birthday, and more.</li>
-                                <li><span class="tag tag-feature">Feature</span>Moderation commands: audit, slowdown,
-                                    modlogs.</li>
-                            </ul>
-                        </div>
-
-                        <div class="changelog-entry-card subtle">
-                            <div class="changelog-entry-header">
-                                <div class="changelog-entry-version">v5.0.0</div>
-                                <div>
-                                    <h3>Major Update 5.0.0</h3>
-                                    <p>Foundation release with new core modules and automation.</p>
-                                </div>
-                                <span class="changelog-entry-date">February 3, 2026</span>
-                            </div>
-                            <ul class="changelog-item-list plain">
-                                <li><strong>Total Redesign:</strong> Modern tab system and dashboard modules.</li>
-                                <li><strong>Advanced Moderation Suite:</strong> Ban, kick, timeout, warn, and audit
-                                    logs.</li>
-                                <li><strong>Enterprise Support Tickets:</strong> Claim management and transcript
-                                    logging.</li>
-                                <li><strong>Smart Auto-Moderation:</strong> Filters for spam, invites, and DM alerts.
-                                </li>
-                                <li><strong>XP &amp; Leveling Engine:</strong> Leaderboards, rank cards, and admin
-                                    controls.</li>
-                                <li><strong>Giveaway Module:</strong> Timed rollouts and winner automation.</li>
-                                <li><strong>Fun &amp; Utilities:</strong> 8ball, trivia, polls, and verification tools.
-                                </li>
-                            </ul>
-                        </div>
-
                         <details class="changelog-archive">
                             <summary>
                                 <span>Archive / Previous Releases</span>
                                 <small>Click to expand</small>
                             </summary>
                             <div class="changelog-archive-body">
-                                <ul class="changelog-item-list plain">
+                                <div class="changelog-entry-card subtle">
+                                    <div class="changelog-entry-header">
+                                        <div class="changelog-entry-version">v6.0.0</div>
+                                        <div>
+                                            <h3>Major Update 6.0.0</h3>
+                                            <p>Security-first release with a big lift in platform tooling.</p>
+                                        </div>
+                                        <span class="changelog-entry-date">February 3, 2026</span>
+                                    </div>
+                                    <ul class="changelog-item-list">
+                                        <li><span class="tag tag-feature">Feature</span>Email notification system for
+                                            alerts and
+                                            lifecycle events.</li>
+                                        <li><span class="tag tag-feature">Feature</span>Discord account linking workflow
+                                            with
+                                            compliance checks.</li>
+                                        <li><span class="tag tag-feature">Feature</span>TOTP security flow with
+                                            management
+                                            tooling.</li>
+                                        <li><span class="tag tag-feature">Feature</span>Admin Panel tab system
+                                            modernized across
+                                            core pages.</li>
+                                        <li><span class="tag tag-enhance">Enhancement</span>Unified navigation with
+                                            role-aware
+                                            identity context.</li>
+                                        <li><span class="tag tag-feature">Feature</span>Performance routing improvements
+                                            with
+                                            optimized WebSockets.</li>
+                                        <li><span class="tag tag-security">Security</span>Hardened role validation and
+                                            permission checks.</li>
+                                        <li><span class="tag tag-enhance">Enhancement</span>Appeals workflow rebuilt for
+                                            faster
+                                            triage.</li>
+                                        <li><span class="tag tag-bugfix">Fix</span>Resolved responsive padding and
+                                            dropdown
+                                            overlap issues.</li>
+                                        <li><span class="tag tag-feature">Feature</span>Music system with improved
+                                            join-to-create handling.</li>
+                                        <li><span class="tag tag-feature">Feature</span>Ghost Ping alerts for deleted
+                                            mention
+                                            recovery.</li>
+                                        <li><span class="tag tag-bugfix">Fix</span>Stability improvements across UI
+                                            sessions.
+                                        </li>
+                                        <li><span class="tag tag-feature">Feature</span>Utility commands: avatar,
+                                            banner,
+                                            birthday, and more.</li>
+                                        <li><span class="tag tag-feature">Feature</span>Moderation commands: audit,
+                                            slowdown,
+                                            modlogs.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="changelog-entry-card subtle">
+                                    <div class="changelog-entry-header">
+                                        <div class="changelog-entry-version">v5.0.0</div>
+                                        <div>
+                                            <h3>Major Update 5.0.0</h3>
+                                            <p>Foundation release with new core modules and automation.</p>
+                                        </div>
+                                        <span class="changelog-entry-date">February 3, 2026</span>
+                                    </div>
+                                    <ul class="changelog-item-list plain">
+                                        <li><strong>Total Redesign:</strong> Modern tab system and dashboard modules.
+                                        </li>
+                                        <li><strong>Advanced Moderation Suite:</strong> Ban, kick, timeout, warn, and
+                                            audit
+                                            logs.</li>
+                                        <li><strong>Enterprise Support Tickets:</strong> Claim management and transcript
+                                            logging.</li>
+                                        <li><strong>Smart Auto-Moderation:</strong> Filters for spam, invites, and DM
+                                            alerts.
+                                        </li>
+                                        <li><strong>XP &amp; Leveling Engine:</strong> Leaderboards, rank cards, and
+                                            admin
+                                            controls.</li>
+                                        <li><strong>Giveaway Module:</strong> Timed rollouts and winner automation.</li>
+                                        <li><strong>Fun &amp; Utilities:</strong> 8ball, trivia, polls, and verification
+                                            tools.
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <ul class="changelog-item-list plain" style="margin-top: 1.5rem;">
                                     <li><strong>v4.x.x Series:</strong> New fun commands, command listener refactor, and
                                         database performance upgrades.</li>
                                     <li><strong>v3.x.x Series:</strong> Core interaction refactor and foundational
@@ -241,14 +293,7 @@
                                             unstable.</p>
                                     </div>
                                 </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-medium">Mobile UI</span>
-                                    <div>
-                                        <strong>Responsive polish</strong>
-                                        <p>Mobile layouts are still being refined, so spacing can feel off in places.
-                                        </p>
-                                    </div>
-                                </div>
+
 
                                 <div class="changelog-issue-footer">
                                     <span>Report defects via</span>
@@ -277,55 +322,110 @@
                                 <div class="changelog-issue-row">
                                     <span class="issue-pill issue-high">Now</span>
                                     <div>
-                                        <strong>Notification routing improvements and bug fixes</strong>
-                                        <p>Improve severity routing, retries, and audit visibility for critical alerts.
+                                        <strong>Security Improvements</strong>
+                                        <p>Improve the background security of the website, including ToTP 2FA, and
+                                            better session management. And implement discord OAuth security as well
                                         </p>
                                     </div>
                                 </div>
                                 <div class="changelog-issue-row">
                                     <span class="issue-pill issue-high">Now</span>
                                     <div>
-                                        <strong>AutoMod custom auto-mute durations</strong>
-                                        <p>Policy-tuned mute windows with presets for raids, spam bursts, and repeat
-                                            offenders.</p>
-                                    </div>
-                                </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-medium">Next</span>
-                                    <div>
-                                        <strong>Automated database backups from the control panel</strong>
-                                        <p>One-click snapshots with retention rules and secure download paths.</p>
-                                    </div>
-                                </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-medium">Next</span>
-                                    <div>
-                                        <strong>In-panel ticket transcript viewer</strong>
-                                        <p>Inline transcript browsing with filters for channel, assignee, and escalation
-                                            tags.</p>
-                                    </div>
-                                </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-medium">Next</span>
-                                    <div>
-                                        <strong>Password reset section within the profile page</strong>
-                                        <p>Self-serve recovery with verification checkpoints and session invalidation.
-                                        </p>
+                                        <strong>Make Discord OAuth more useful</strong>
+                                        <p>Improve the Discord OAuth system, make it more secure if possible and let
+                                            more features in the webpanel depend on it</p>
                                     </div>
                                 </div>
                                 <div class="changelog-issue-row">
                                     <span class="issue-pill issue-low">Later</span>
                                     <div>
                                         <strong>Removal of deprecated features and cleanup of legacy code</strong>
-                                        <p>Retire unused modules and consolidate configuration paths for
+                                        <p>Remove unused code for
                                             maintainability.</p>
                                     </div>
                                 </div>
                                 <div class="changelog-issue-row">
                                     <span class="issue-pill issue-low">Later</span>
                                     <div>
-                                        <strong>Email notification system reliability validation</strong>
-                                        <p>Load-testing and deliverability checks across primary alert workflows.</p>
+                                        <strong>Case ID System</strong>
+                                        <p>Improve the Case ID system</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>More Fun/Utility commands</strong>
+                                        <p>Add more commands that are either fun or provide utility to users.</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Staff performance analysis</strong>
+                                        <p>Add a section in the analysis page to track and evaluate staff performance.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Reputation system</strong>
+                                        <p>Improve the reputation system, maybe add a section into the dashboard to
+                                            display something about it</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Improve the ticket system</strong>
+                                        <p>Enhance the ticket system for better user experience and management.</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Voice analysis + Improvements</strong>
+                                        <p>Add voice analysis feature and make improvements based on user feedback.</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Auto-response knowledge base</strong>
+                                        <p>Implement a knowledge base for the auto-response system to improve response
+                                            accuracy and efficiency.</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Profile Command</strong>
+                                        <p>Add a cleaner member profile command that shows level progress, streak,
+                                            reputation, join date, and earned badges in one place.</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Report Command</strong>
+                                        <p>Add a report command that allows users to report issues or inappropriate
+                                            behavior, with a clear and organized reporting system.</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Discord Component v2</strong>
+                                        <p>Upgrade to Discord Component v2 for improved performance and new features.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-low">Later</span>
+                                    <div>
+                                        <strong>Server Backup System</strong>
+                                        <p>Implement a server backup system that allows you to backup the server
+                                            channels, roles, settings etc</p>
                                     </div>
                                 </div>
                                 <div class="changelog-issue-footer">
@@ -341,58 +441,91 @@
     </main>
 
     <style>
-        :root {
-            --changelog-ink: #f6f4f0;
-            --changelog-muted: rgba(246, 244, 240, 0.7);
-            --changelog-panel: rgba(20, 22, 28, 0.92);
-            --changelog-panel-strong: rgba(25, 29, 38, 0.95);
-            --changelog-accent: #dfb36f;
-            --changelog-accent-2: #7fb0c9;
-        }
-
         .changelog-page {
             font-family: inherit;
         }
 
         .changelog-hero {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 1.5rem;
-            padding: 2.2rem;
-            border-radius: 18px;
-            background:
-                radial-gradient(circle at 20% 0%, rgba(223, 179, 111, 0.16), transparent 55%),
-                radial-gradient(circle at 90% 20%, rgba(127, 176, 201, 0.2), transparent 60%),
-                linear-gradient(150deg, rgba(14, 16, 20, 0.98), rgba(22, 26, 34, 0.98));
-            color: var(--changelog-ink);
-            margin-bottom: 2rem;
+            background: linear-gradient(135deg, rgba(22, 22, 26, 0.8) 0%, rgba(10, 10, 12, 0.95) 100%);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 18px 32px rgba(5, 8, 14, 0.45);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            padding: 3rem 2.5rem;
+            margin-bottom: 2.5rem;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+            position: relative;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .changelog-hero::before {
+            content: '';
+            position: absolute;
+            left: -100px;
+            top: -100px;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(91, 127, 255, 0.05) 0%, rgba(91, 127, 255, 0) 70%);
+            pointer-events: none;
+            filter: blur(50px);
+        }
+
+        .changelog-hero::after {
+            content: '';
+            position: absolute;
+            right: -100px;
+            bottom: -100px;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(91, 127, 255, 0.08) 0%, rgba(91, 127, 255, 0) 70%);
+            pointer-events: none;
+            filter: blur(50px);
         }
 
         .changelog-hero-content {
             display: grid;
-            gap: 0.8rem;
+            gap: 1rem;
+            position: relative;
+            z-index: 1;
         }
 
         .changelog-kicker {
-            text-transform: uppercase;
-            letter-spacing: 0.2em;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: rgba(91, 127, 255, 0.1);
+            color: var(--color-blue);
+            border: 1px solid rgba(91, 127, 255, 0.2);
+            border-radius: 999px;
+            padding: 0.3rem 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
             font-size: 0.75rem;
-            color: var(--changelog-muted);
-            font-weight: 600;
-            margin: 0;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            box-shadow: 0 2px 10px rgba(91, 127, 255, 0.05);
         }
 
         .changelog-title-lg {
-            font-size: clamp(2rem, 3vw, 2.6rem);
-            margin: 0;
+            font-size: 2.5rem;
+            color: var(--text-primary);
+            margin-bottom: 0.8rem;
+            line-height: 1.1;
+            font-weight: 800;
+            letter-spacing: -0.02em;
         }
 
         .changelog-subtitle {
-            margin: 0;
-            color: var(--changelog-muted);
+            color: var(--text-secondary);
+            font-size: 1.05rem;
             line-height: 1.6;
+            margin: 0;
+            opacity: 0.9;
         }
 
         .changelog-hero-meta {
@@ -400,245 +533,476 @@
             flex-wrap: wrap;
             gap: 0.75rem;
             align-items: center;
+            margin-top: 1rem;
         }
 
         .changelog-pill {
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            padding: 0.35rem 0.8rem;
+            padding: 0.4rem 1rem;
             border-radius: 999px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.3);
             font-size: 0.85rem;
             font-weight: 600;
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--color-blue);
         }
 
         .changelog-link {
-            color: var(--changelog-accent-2);
+            color: var(--color-blue);
             text-decoration: none;
             font-weight: 600;
+            transition: color 0.2s;
         }
 
         .changelog-hero-card {
-            background: rgba(10, 12, 16, 0.72);
-            border-radius: 16px;
-            padding: 1.35rem;
-            display: grid;
-            gap: 0.8rem;
+            background: linear-gradient(145deg, rgba(22, 22, 26, 0.7) 0%, rgba(15, 15, 18, 0.8) 100%);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
             border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            padding: 1.8rem;
+            display: grid;
+            gap: 1.25rem;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.02);
+            position: relative;
+            z-index: 1;
         }
 
         .changelog-hero-card-title {
             font-size: 0.95rem;
-            color: var(--changelog-muted);
+            color: var(--color-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin: 0 0 0.5rem 0;
+            opacity: 0.9;
+            filter: brightness(1.2);
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
         }
 
         .changelog-hero-card-metric {
             display: flex;
             justify-content: space-between;
-            font-size: 0.9rem;
-            color: var(--changelog-muted);
+            font-size: 0.95rem;
+            color: var(--text-secondary);
         }
 
         .changelog-hero-card-metric strong {
-            color: var(--changelog-ink);
+            color: var(--text-primary);
             font-weight: 600;
         }
 
         .changelog-shell {
             display: grid;
-            grid-template-columns: minmax(220px, 280px) 1fr;
-            gap: 1.5rem;
+            grid-template-columns: 280px minmax(0, 1fr);
+            gap: 2rem;
+            align-items: start;
         }
 
         .changelog-sidebar {
             position: sticky;
-            top: 110px;
-            align-self: start;
+            top: 20px;
+            background: rgba(22, 22, 26, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        .changelog-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .changelog-sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .changelog-sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .changelog-sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .changelog-sidebar-card {
             display: grid;
             gap: 1rem;
         }
 
-        .changelog-sidebar-card {
-            background: var(--changelog-panel);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            padding: 1.2rem;
-            color: var(--changelog-ink);
-            box-shadow: 0 12px 26px rgba(8, 10, 14, 0.45);
-        }
-
         .changelog-sidebar-icon {
             font-size: 1.8rem;
+            display: none;
         }
 
         .changelog-sidebar-title {
-            font-size: 1.1rem;
-            margin-top: 0.4rem;
+            font-size: 0.75rem;
+            color: var(--color-blue);
+            margin: 0;
+            padding-left: 0.8rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            opacity: 0.9;
+            filter: brightness(1.2);
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
         }
 
         .changelog-sidebar-note {
-            color: var(--changelog-muted);
+            color: var(--text-secondary);
             font-size: 0.9rem;
-            margin: 0.6rem 0 0;
+            margin: 0;
+            line-height: 1.5;
+            padding-left: 0.8rem;
+            display: none;
+        }
+
+        .changelog-search-container {
+            position: relative;
+        }
+
+        .changelog-search-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.9rem 1rem 0.9rem 2.8rem;
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .changelog-search-input:focus {
+            border-color: var(--color-blue);
+            background: rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 0 1px var(--color-blue), inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .changelog-search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 1rem;
+            pointer-events: none;
+            transition: color 0.3s;
+            font-style: normal;
+        }
+
+        .changelog-search-input:focus+.changelog-search-icon {
+            color: var(--color-blue);
+            filter: drop-shadow(0 0 5px var(--color-blue));
+        }
+
+        .changelog-sidebar h2 {
+            font-size: 0.75rem;
+            color: var(--color-blue);
+            margin: 0 0 0.5rem 0;
+            padding-left: 0.8rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            opacity: 0.9;
+            filter: brightness(1.2);
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
         }
 
         .changelog-tabs {
-            display: grid;
-            gap: 0.6rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
         .changelog-tab {
-            background: var(--changelog-panel-strong);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 14px;
-            padding: 0.95rem 1.1rem;
-            color: var(--changelog-ink);
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--text-secondary);
             text-align: left;
-            display: grid;
-            gap: 0.2rem;
+            padding: 0.8rem 1rem;
             cursor: pointer;
-            transition: transform 0.2s ease, border-color 0.2s ease;
+            font-size: 0.95rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
             position: relative;
             overflow: hidden;
-        }
-
-        .changelog-tab::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: inherit;
-            background: linear-gradient(120deg, rgba(223, 179, 111, 0.15), rgba(127, 176, 201, 0.1));
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .changelog-tab span,
-        .changelog-tab small {
-            position: relative;
-            z-index: 1;
-        }
-
-        .changelog-tab small {
-            color: var(--changelog-muted);
-            font-size: 0.78rem;
+            font-family: inherit;
         }
 
         .changelog-tab:hover {
-            transform: translateY(-2px);
-            border-color: rgba(223, 179, 111, 0.4);
-        }
-
-        .changelog-tab:hover::before {
-            opacity: 1;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border-color: rgba(255, 255, 255, 0.1);
         }
 
         .changelog-tab.active {
-            border-color: rgba(223, 179, 111, 0.9);
-            transform: translateY(-1px);
-            box-shadow: 0 10px 18px rgba(8, 10, 14, 0.45);
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), transparent);
+            color: var(--color-blue);
+            font-weight: 600;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
         }
 
         .changelog-tab.active::before {
-            opacity: 1;
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 10%;
+            height: 80%;
+            width: 3px;
+            background: var(--color-blue);
+            border-radius: 0 4px 4px 0;
+            box-shadow: 0 0 8px var(--color-blue);
         }
 
-        .changelog-tab.active span {
-            color: var(--changelog-ink);
-            font-weight: 600;
+        .changelog-tab-icon {
+            width: 20px;
+            text-align: center;
+            opacity: 0.8;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+            font-style: normal;
+            display: inline-block;
+            filter: grayscale(1) opacity(0.7);
+        }
+
+        .changelog-tab:hover .changelog-tab-icon {
+            transform: scale(1.15) rotate(5deg);
+            opacity: 1;
+            filter: none;
+        }
+
+        .changelog-tab.active .changelog-tab-icon {
+            opacity: 1;
+            transform: scale(1.15);
+            filter: none;
         }
 
         .changelog-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            min-height: 400px;
+            animation: fadeInDocs 0.4s ease-out;
             display: grid;
             gap: 1.5rem;
+            align-content: start;
+        }
+
+        @keyframes fadeInDocs {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .changelog-section {
             display: grid;
-            gap: 1.2rem;
+            gap: 2.5rem;
+            margin-left: 32px;
         }
 
         .changelog-section-header {
             display: flex;
             justify-content: space-between;
-            align-items: baseline;
-            gap: 1rem;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            padding-bottom: 1.25rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.05);
+            margin-left: -32px;
         }
 
         .changelog-section-header h2 {
-            font-size: 1.5rem;
+            font-size: 1.75rem;
+            color: var(--text-primary);
             margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
         }
 
         .changelog-section-note {
+            font-size: 0.85rem;
             color: var(--text-secondary);
-            font-size: 0.9rem;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .changelog-entry-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 18px;
-            padding: 1.5rem;
-            box-shadow: var(--shadow-md);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            background: #151518;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            padding: 2.5rem;
             display: grid;
-            gap: 1.2rem;
+            gap: 1.5rem;
             position: relative;
-            overflow: hidden;
+            transition: all 0.3s ease;
         }
 
         .changelog-entry-card::before {
             content: '';
             position: absolute;
-            inset: 0;
-            border-radius: inherit;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            pointer-events: none;
+            left: -32px;
+            top: 0;
+            bottom: -32px;
+            width: 2px;
+            background: rgba(255, 255, 255, 0.08);
+            z-index: 0;
+        }
+
+        .changelog-entry-card::after {
+            content: '';
+            position: absolute;
+            left: -37px;
+            top: 2.5rem;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--color-blue);
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+            z-index: 1;
+            transition: all 0.3s ease;
+        }
+
+        .changelog-entry-card:hover {
+            border-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+        }
+
+        .changelog-entry-card:hover::after {
+            background: var(--color-blue);
+            box-shadow: 0 0 15px var(--color-blue);
+            transform: scale(1.2);
+        }
+
+        .changelog-section>.changelog-entry-card:last-child::before {
+            bottom: 0;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.08), transparent);
         }
 
         .changelog-entry-card.subtle {
-            background: var(--bg-card-hover);
+            background: transparent;
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            box-shadow: none;
+        }
+
+        .changelog-entry-card.subtle::after {
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: none;
+        }
+
+        .changelog-entry-card.subtle:hover::after {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.2);
         }
 
         .changelog-entry-header {
-            display: grid;
-            grid-template-columns: auto 1fr auto;
+            display: flex;
             align-items: center;
-            gap: 1rem;
+            justify-content: space-between;
+            gap: 1.5rem;
+        }
+
+        .changelog-entry-header>div {
+            flex: 1;
         }
 
         .changelog-entry-header h3 {
-            margin: 0 0 0.2rem;
+            margin: 0 0 0.5rem;
+            color: var(--text-primary);
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
         }
 
         .changelog-entry-header p {
             margin: 0;
             color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.5;
+            opacity: 0.9;
         }
 
         .changelog-entry-date {
             font-size: 0.85rem;
             color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
         }
 
         .changelog-entry-badge {
-            background: rgba(223, 179, 111, 0.22);
-            color: #f1d7a6;
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--color-blue);
             font-weight: 700;
-            padding: 0.2rem 0.6rem;
-            border-radius: 6px;
+            padding: 0.3rem 0.8rem;
+            border-radius: 8px;
             font-size: 0.75rem;
             letter-spacing: 0.08em;
-            border: 1px solid rgba(223, 179, 111, 0.6);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            margin-right: 1rem;
+            text-transform: uppercase;
+            align-self: flex-start;
         }
 
         .changelog-entry-version {
-            border: 1px solid var(--border-color);
-            padding: 0.25rem 0.6rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+            padding: 0.4rem 0.8rem;
             border-radius: 8px;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-right: 1rem;
+            align-self: flex-start;
+        }
+
+        .changelog-entry-header {
+            display: flex;
+            align-items: flex-start;
         }
 
         .changelog-item-list {
@@ -646,146 +1010,242 @@
             padding: 0;
             margin: 0;
             display: grid;
-            gap: 0.65rem;
+            gap: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 1.5rem;
         }
 
         .changelog-item-list li {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 0.75rem;
-            align-items: start;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
             color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
         }
 
         .changelog-item-list.plain li {
             grid-template-columns: 1fr;
-        }
-
-        .changelog-item-list code {
-            background: rgba(255, 255, 255, 0.08);
-            padding: 0.1rem 0.4rem;
-            border-radius: 6px;
-        }
-
-        .changelog-issue-list {
-            display: grid;
-            gap: 0.9rem;
-        }
-
-        .changelog-issue-row {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 1rem;
-            align-items: start;
-            padding: 0.85rem 0.95rem;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            background: var(--bg-card-hover);
-        }
-
-        .changelog-issue-row p {
-            margin: 0.35rem 0 0;
-            color: var(--text-secondary);
-        }
-
-        .issue-pill {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.2rem 0.7rem;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            min-width: 110px;
-            border: 1px solid transparent;
-        }
-
-        .issue-pill.issue-high {
-            background: rgba(231, 76, 60, 0.16);
-            color: #ff8e7a;
-            border-color: rgba(231, 76, 60, 0.4);
-        }
-
-        .issue-pill.issue-medium {
-            background: rgba(244, 184, 96, 0.18);
-            color: #f4b860;
-            border-color: rgba(244, 184, 96, 0.4);
-        }
-
-        .issue-pill.issue-low {
-            background: rgba(52, 152, 219, 0.16);
-            color: #7fb0c9;
-            border-color: rgba(52, 152, 219, 0.4);
-        }
-
-        .changelog-issue-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.35rem;
-            align-items: center;
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-        }
-
-        .changelog-archive {
-            border: 1px dashed var(--border-color);
-            border-radius: 16px;
-            padding: 1rem;
-            background: var(--bg-secondary);
-        }
-
-        .changelog-archive summary {
-            display: flex;
-            justify-content: space-between;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        .changelog-archive-body {
-            margin-top: 1rem;
+            display: block;
+            margin-bottom: 0.5rem;
         }
 
         .tag {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 0.2rem 0.6rem;
-            border-radius: 999px;
-            font-size: 0.78rem;
+            gap: 0.35rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 8px;
+            font-size: 0.72rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.06em;
             border: 1px solid transparent;
-            min-width: 98px;
+            min-width: 80px;
+            flex-shrink: 0;
         }
 
         .tag-feature {
-            background: rgba(46, 204, 113, 0.15);
+            background: rgba(46, 204, 113, 0.1);
             color: #2ecc71;
-            border-color: rgba(46, 204, 113, 0.35);
+            border-color: rgba(46, 204, 113, 0.25);
+        }
+
+        .tag-feature::before {
+            content: "✨";
+            font-size: 0.8rem;
+            filter: saturate(1.5);
         }
 
         .tag-enhance {
-            background: rgba(52, 152, 219, 0.15);
-            color: #3498db;
-            border-color: rgba(52, 152, 219, 0.35);
+            background: rgba(52, 152, 219, 0.1);
+            color: var(--color-blue);
+            border-color: rgba(52, 152, 219, 0.25);
         }
 
+        .tag-enhance::before {
+            content: "🚀";
+            font-size: 0.8rem;
+            filter: hue-rotate(180deg);
+        }
+
+
         .tag-security {
-            background: rgba(244, 184, 96, 0.18);
+            background: rgba(244, 184, 96, 0.1);
             color: #f4b860;
-            border-color: rgba(244, 184, 96, 0.4);
+            border-color: rgba(244, 184, 96, 0.25);
+        }
+
+        .tag-security::before {
+            content: "🛡️";
+            font-size: 0.8rem;
+            filter: saturate(1.5);
         }
 
         .tag-bugfix {
-            background: rgba(231, 76, 60, 0.15);
+            background: rgba(231, 76, 60, 0.1);
             color: #e74c3c;
-            border-color: rgba(231, 76, 60, 0.35);
+            border-color: rgba(231, 76, 60, 0.25);
+        }
+
+        .tag-bugfix::before {
+            content: "🐛";
+            font-size: 0.8rem;
+            filter: saturate(1.5);
+        }
+
+        .changelog-issue-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .changelog-issue-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 1.5rem;
+            padding: 1.5rem 1.75rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: linear-gradient(145deg, rgba(22, 22, 26, 0.7) 0%, rgba(15, 15, 18, 0.8) 100%);
+            transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+            position: relative;
+        }
+
+        .changelog-issue-row:hover {
+            border-color: rgba(91, 127, 255, 0.3);
+            background: linear-gradient(145deg, rgba(26, 26, 32, 0.8) 0%, rgba(20, 20, 24, 0.9) 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .changelog-issue-row strong {
+            color: var(--text-primary);
+            font-size: 1.15rem;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 0.2rem;
+            letter-spacing: -0.01em;
+        }
+
+        .changelog-issue-row p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+
+        .issue-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.35rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            min-width: 100px;
+            border: 1px solid transparent;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+
+        .issue-pill.issue-high {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.15) 0%, rgba(231, 76, 60, 0.05) 100%);
+            color: #ff8e7a;
+            border-color: rgba(231, 76, 60, 0.3);
+            box-shadow: 0 4px 10px rgba(231, 76, 60, 0.1);
+        }
+
+        .issue-pill.issue-medium {
+            background: linear-gradient(135deg, rgba(244, 184, 96, 0.15) 0%, rgba(244, 184, 96, 0.05) 100%);
+            color: #f4b860;
+            border-color: rgba(244, 184, 96, 0.3);
+            box-shadow: 0 4px 10px rgba(244, 184, 96, 0.1);
+        }
+
+        .issue-pill.issue-low {
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.15) 0%, rgba(52, 152, 219, 0.05) 100%);
+            color: #7fb0c9;
+            border-color: rgba(52, 152, 219, 0.3);
+            box-shadow: 0 4px 10px rgba(52, 152, 219, 0.1);
+        }
+
+        .changelog-issue-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .changelog-issue-footer a {
+            color: var(--color-blue);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .changelog-archive {
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .changelog-archive:hover {
+            border-color: rgba(91, 127, 255, 0.4);
+            background: rgba(255, 255, 255, 0.03);
+            transform: translateY(-2px);
+        }
+
+        .changelog-archive summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            outline: none;
+        }
+
+        .changelog-archive summary small {
+            color: var(--text-secondary);
+            font-weight: normal;
+            font-size: 0.85rem;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .changelog-archive-body {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         @media (max-width: 900px) {
+            .changelog-hero {
+                grid-template-columns: 1fr;
+                padding: 1.6rem 1.2rem;
+                margin-bottom: 1.2rem;
+            }
+
+            .changelog-title-lg {
+                font-size: 1.8rem;
+            }
+
+            .changelog-subtitle {
+                font-size: 0.95rem;
+            }
+
             .changelog-shell {
                 grid-template-columns: 1fr;
             }
@@ -794,15 +1254,67 @@
                 position: static;
             }
 
+            .changelog-tabs {
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+
+            .changelog-tab {
+                justify-content: center;
+            }
+
+
+
+            .changelog-tab.active::before {
+                display: none;
+            }
+
+            .changelog-content {
+                padding: 1.25rem 0.9rem;
+            }
+
+            .changelog-section {
+                margin-left: 0;
+            }
+
+            .changelog-section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+                margin-left: 0;
+            }
+
+            .changelog-entry-card::before,
+            .changelog-entry-card::after {
+                display: none;
+            }
+
             .changelog-entry-header {
-                grid-template-columns: 1fr;
-                align-items: start;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
             }
 
-            .changelog-entry-date {
-                margin-top: 0.4rem;
+            .changelog-entry-badge,
+            .changelog-entry-version {
+                margin: 0;
+                margin-bottom: 0.5rem;
             }
 
+            .changelog-item-list li {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .changelog-issue-row {
+                flex-direction: column;
+                gap: 0.8rem;
+            }
+
+            .issue-pill {
+                align-self: flex-start;
+                margin-top: 0;
+            }
         }
     </style>
 

@@ -1,214 +1,596 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
-const { MessageFlags } = require('discord.js');
-const { ROLES: { administratorRoleId }, CHANNELS: { announcementChannelId } } = require("../../Config/constants");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  MessageFlags,
+  PermissionFlagsBits,
+  Colors,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require('discord.js');
+const crypto = require('crypto');
+const { ROLES: { administratorRoleId }, CHANNELS: { announcementChannelId } } = require('../../Config/constants');
 
-// Format long messages so they fit nicely in embed fields—no ugly cutoffs.
-// Note to self: Would be cool to add templates for common announcements.
-function formatMessageForEmbed(message) {
-  const MAX_DESC_LENGTH = 4096;
+const STYLE_PRESETS = {
+  info: { color: 0x5865F2, icon: '📢', label: 'Announcement' },
+  success: { color: 0x43B581, icon: '✅', label: 'Update' },
+  warning: { color: 0xFAA61A, icon: '⚠️', label: 'Important Update' },
+  alert: { color: 0xF04747, icon: '🚨', label: 'Alert' }
+};
 
-  // If the message fits in the description, just use that.
-  if (message.length <= MAX_DESC_LENGTH) {
-    return { type: 'description', content: message };
+const ANNOUNCEMENT_PERMISSION_FLAGS = [
+  PermissionFlagsBits.Administrator,
+  PermissionFlagsBits.ManageGuild
+];
+const PREVIEW_EXPIRY_MS = 15 * 60 * 1000;
+const previewSessions = new Map();
+
+function isHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function parseHexColor(input, fallback) {
+  const raw = String(input || '').trim();
+  if (!raw) return fallback;
+
+  const normalizedName = raw.toLowerCase().replace(/[\s_-]+/g, '');
+  const namedColors = Object.entries(Colors).reduce((map, [name, value]) => {
+    if (typeof value === 'number') {
+      map[name.toLowerCase().replace(/[\s_-]+/g, '')] = value;
+    }
+    return map;
+  }, {});
+
+  if (Object.prototype.hasOwnProperty.call(namedColors, normalizedName)) {
+    return namedColors[normalizedName];
   }
 
-  // Otherwise, split the message into fields (max 1024 chars each).
-  const chunks = [];
-  const lines = message.split('\n');
-  let currentChunk = '';
+  const normalized = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    throw new Error('Color must be a 6-digit hex code like #5865F2 or a named color like red, blue, or green.');
+  }
+
+  return parseInt(normalized, 16);
+}
+
+function normalizeAnnouncementBody(input) {
+  return String(input || '')
+    .replace(/\\n/g, '\n')
+    .trim();
+}
+
+function chunkMessage(message, maxLength = 1024) {
+  const parts = [];
+  const lines = String(message || '').split('\n');
+  let current = '';
 
   for (const line of lines) {
-    if ((currentChunk + line + '\n').length > 1024) {
-      if (currentChunk) chunks.push(currentChunk.trim());
-      currentChunk = line + '\n';
-    } else {
-      currentChunk += line + '\n';
+    const next = current ? `${current}\n${line}` : line;
+    if (next.length <= maxLength) {
+      current = next;
+      continue;
     }
-  }
-  if (currentChunk) chunks.push(currentChunk.trim());
 
-  return { type: 'fields', content: chunks };
+    if (current) parts.push(current);
+
+    if (line.length <= maxLength) {
+      current = line;
+      continue;
+    }
+
+    let remainder = line;
+    while (remainder.length > maxLength) {
+      parts.push(remainder.slice(0, maxLength));
+      remainder = remainder.slice(maxLength);
+    }
+    current = remainder;
+  }
+
+  if (current) parts.push(current);
+  return parts.filter(Boolean);
+}
+
+function buildAnnouncementEmbed({
+  title,
+  message,
+  style,
+  color,
+  imageUrl,
+  thumbnailUrl,
+  author
+}) {
+  const preset = STYLE_PRESETS[style] || STYLE_PRESETS.info;
+  const embed = new EmbedBuilder()
+    .setColor(color || preset.color)
+    .setTitle(`${preset.icon} ${title}`)
+    .setFooter({
+      text: `${preset.label} • Posted by ${author.username}`,
+      iconURL: author.displayAvatarURL()
+    })
+    .setTimestamp();
+
+  const chunks = chunkMessage(message, 1024);
+  if (chunks.length === 1 && chunks[0].length <= 4096) {
+    embed.setDescription(chunks[0]);
+  } else {
+    embed.setDescription('');
+    embed.addFields(
+      chunks.slice(0, 10).map((chunk, index) => ({
+        name: chunks.length === 1 ? 'Message' : `Message ${index + 1}`,
+        value: chunk,
+        inline: false
+      }))
+    );
+  }
+
+  if (imageUrl) embed.setImage(imageUrl);
+  if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
+
+  return embed;
+}
+
+async function resolveAnnouncementChannel(interaction, explicitChannel) {
+  if (explicitChannel) return explicitChannel;
+  if (!announcementChannelId) return null;
+  return interaction.guild.channels.fetch(announcementChannelId).catch(() => null);
+}
+
+function hasAnnouncementAccess(member) {
+  return member.permissions.has(ANNOUNCEMENT_PERMISSION_FLAGS)
+    || Boolean(administratorRoleId && member.roles.cache.has(administratorRoleId));
+}
+
+function getMentionText(value) {
+  if (value === 'everyone') return '@everyone';
+  if (value === 'here') return '@here';
+  return null;
+}
+
+function createPreviewActionRow(sessionId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`announce:accept:${sessionId}`)
+      .setLabel('Accept')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`announce:deny:${sessionId}`)
+      .setLabel('Deny')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+function createDisabledPreviewActionRow(sessionId, accepted) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`announce:accept:${sessionId}`)
+      .setLabel('Accept')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(true),
+    new ButtonBuilder()
+      .setCustomId(`announce:deny:${sessionId}`)
+      .setLabel(accepted ? 'Posted' : 'Denied')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true)
+  );
+}
+
+function storePreviewSession(data) {
+  const sessionId = crypto.randomBytes(8).toString('hex');
+  previewSessions.set(sessionId, {
+    ...data,
+    createdAt: Date.now()
+  });
+  return sessionId;
+}
+
+function getPreviewSession(sessionId) {
+  const session = previewSessions.get(sessionId);
+  if (!session) return null;
+
+  if (Date.now() - session.createdAt > PREVIEW_EXPIRY_MS) {
+    previewSessions.delete(sessionId);
+    return null;
+  }
+
+  return session;
+}
+
+async function postAnnouncement({
+  sourceInteraction,
+  embed,
+  channel,
+  mentionText,
+  title,
+  style
+}) {
+  const postedMessage = await channel.send({
+    content: mentionText,
+    embeds: [embed],
+    allowedMentions: {
+      parse: mentionText === '@everyone' || mentionText === '@here' ? ['everyone'] : []
+    }
+  });
+
+  return new EmbedBuilder()
+    .setColor(0x43B581)
+    .setTitle('✅ Announcement Posted')
+    .setDescription(`Your announcement was posted in ${channel}.`)
+    .addFields(
+      { name: 'Title', value: title, inline: true },
+      { name: 'Style', value: style.charAt(0).toUpperCase() + style.slice(1), inline: true },
+      { name: 'Ping', value: mentionText || 'None', inline: true },
+      { name: 'Message Link', value: postedMessage.url, inline: false }
+    )
+    .setTimestamp();
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('announce')
-    .setDescription('Post an announcement')
-    .addSubcommand(subcommand =>
+    .setDescription('Create, preview, and post announcements')
+    .addSubcommand((subcommand) =>
       subcommand
-        .setName('normal')
-        .setDescription('Post a regular announcement')
-        .addStringOption(option =>
+        .setName('post')
+        .setDescription('Post an announcement')
+        .addStringOption((option) =>
           option.setName('title')
             .setDescription('Announcement title')
             .setRequired(true)
+            .setMinLength(3)
+            .setMaxLength(100)
         )
-        .addStringOption(option =>
+        .addStringOption((option) =>
           option.setName('message')
-            .setDescription('Announcement message')
+            .setDescription('Announcement body (use \\n for line breaks)')
             .setRequired(true)
+            .setMinLength(8)
+            .setMaxLength(4000)
         )
-        .addStringOption(option =>
-          option.setName('color')
-            .setDescription('Embed color (hex code or name)')
+        .addStringOption((option) =>
+          option.setName('style')
+            .setDescription('Visual style')
+            .setRequired(false)
+            .addChoices(
+              { name: 'Info', value: 'info' },
+              { name: 'Success', value: 'success' },
+              { name: 'Warning', value: 'warning' },
+              { name: 'Alert', value: 'alert' }
+            )
+        )
+        .addStringOption((option) =>
+          option.setName('mention')
+            .setDescription('Optional ping for the post')
+            .setRequired(false)
+            .addChoices(
+              { name: 'None', value: 'none' },
+              { name: '@here', value: 'here' },
+              { name: '@everyone', value: 'everyone' }
+            )
+        )
+        .addChannelOption((option) =>
+          option.setName('channel')
+            .setDescription('Target channel (defaults to configured announcement channel)')
             .setRequired(false)
         )
-        .addStringOption(option =>
+        .addStringOption((option) =>
+          option.setName('color')
+            .setDescription('Optional custom hex color, for example #5865F2')
+            .setRequired(false)
+        )
+        .addStringOption((option) =>
           option.setName('image_url')
-            .setDescription('Optional image URL for the announcement embed')
+            .setDescription('Optional large image URL')
+            .setRequired(false)
+        )
+        .addStringOption((option) =>
+          option.setName('thumbnail_url')
+            .setDescription('Optional thumbnail URL')
             .setRequired(false)
         )
     )
-    .addSubcommand(subcommand =>
+    .addSubcommand((subcommand) =>
       subcommand
-        .setName('everyone')
-        .setDescription('Post an announcement with @everyone ping')
-        .addStringOption(option =>
+        .setName('preview')
+        .setDescription('Preview an announcement without posting it')
+        .addStringOption((option) =>
           option.setName('title')
             .setDescription('Announcement title')
             .setRequired(true)
+            .setMinLength(3)
+            .setMaxLength(100)
         )
-        .addStringOption(option =>
+        .addStringOption((option) =>
           option.setName('message')
-            .setDescription('Announcement message')
+            .setDescription('Announcement body (use \\n for line breaks)')
             .setRequired(true)
+            .setMinLength(8)
+            .setMaxLength(4000)
         )
-        .addStringOption(option =>
+        .addStringOption((option) =>
+          option.setName('style')
+            .setDescription('Visual style')
+            .setRequired(false)
+            .addChoices(
+              { name: 'Info', value: 'info' },
+              { name: 'Success', value: 'success' },
+              { name: 'Warning', value: 'warning' },
+              { name: 'Alert', value: 'alert' }
+            )
+        )
+        .addStringOption((option) =>
           option.setName('color')
-            .setDescription('Embed color (hex code or name)')
+            .setDescription('Optional custom hex color, for example #5865F2')
             .setRequired(false)
         )
-        .addStringOption(option =>
+        .addStringOption((option) =>
           option.setName('image_url')
-            .setDescription('Optional image URL for the announcement embed')
+            .setDescription('Optional large image URL')
             .setRequired(false)
         )
-    )
-    .setDefaultMemberPermissions(0x8),
-  category: "management",
+        .addStringOption((option) =>
+          option.setName('thumbnail_url')
+            .setDescription('Optional thumbnail URL')
+            .setRequired(false)
+        )
+        .addStringOption((option) =>
+          option.setName('mention')
+            .setDescription('Optional ping if you accept the preview')
+            .setRequired(false)
+            .addChoices(
+              { name: 'None', value: 'none' },
+              { name: '@here', value: 'here' },
+              { name: '@everyone', value: 'everyone' }
+            )
+        )
+    ),
+  category: 'management',
   async execute(interaction) {
-    const Prohibited = new EmbedBuilder()
-      .setColor(0xF04747)
-      .setTitle(`❌ No Permission`)
-      .setDescription(`You need the Administrator role to use this command!`);
-
-    if (!interaction.member.roles.cache.has(administratorRoleId)) {
-      return interaction.reply({ embeds: [Prohibited], flags: MessageFlags.Ephemeral });
+    if (!hasAnnouncementAccess(interaction.member)) {
+      const deniedEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle('❌ No Permission')
+        .setDescription('You need the configured administrator role, Manage Server, or Administrator permission to use this command.');
+      return interaction.reply({ embeds: [deniedEmbed], flags: MessageFlags.Ephemeral });
     }
 
     const subcommand = interaction.options.getSubcommand();
+    const title = String(interaction.options.getString('title') || '').trim();
+    const message = normalizeAnnouncementBody(interaction.options.getString('message'));
+    const style = interaction.options.getString('style') || 'info';
+    const colorInput = interaction.options.getString('color') || '';
+    const imageUrl = interaction.options.getString('image_url') || null;
+    const thumbnailUrl = interaction.options.getString('thumbnail_url') || null;
+    const mentionText = getMentionText(interaction.options.getString('mention') || 'none');
 
-    switch (subcommand) {
-      case 'normal':
-        return await this.sendAnnouncement(interaction, false);
-      case 'everyone':
-        return await this.sendAnnouncement(interaction, true);
+    if (!title || title.length < 3 || title.length > 100) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Invalid Title')
+            .setDescription('The title must be between 3 and 100 characters.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    if (!message || message.length < 8) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Invalid Message')
+            .setDescription('The announcement message needs a little more detail before it can be sent.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    if (imageUrl && !isHttpUrl(imageUrl)) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Invalid Image URL')
+            .setDescription('The image URL must start with http:// or https://.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    if (thumbnailUrl && !isHttpUrl(thumbnailUrl)) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Invalid Thumbnail URL')
+            .setDescription('The thumbnail URL must start with http:// or https://.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    let customColor;
+    try {
+      customColor = parseHexColor(colorInput, STYLE_PRESETS[style]?.color || STYLE_PRESETS.info.color);
+    } catch (error) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Invalid Color')
+            .setDescription(error.message)
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const embed = buildAnnouncementEmbed({
+      title,
+      message,
+      style,
+      color: customColor,
+      imageUrl,
+      thumbnailUrl,
+      author: interaction.user
+    });
+
+    if (subcommand === 'preview') {
+      const sessionId = storePreviewSession({
+        authorId: interaction.user.id,
+        embed: embed.toJSON(),
+        title,
+        style,
+        mentionText,
+        targetChannelId: null
+      });
+
+      return interaction.reply({
+        content: 'Preview only. Use the buttons below to post or cancel.',
+        embeds: [embed],
+        components: [createPreviewActionRow(sessionId)],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const targetChannel = await resolveAnnouncementChannel(interaction, interaction.options.getChannel('channel'));
+    if (!targetChannel || !targetChannel.isTextBased()) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Channel Not Found')
+            .setDescription('I could not resolve the target announcement channel. Set one in the command or update the configured announcement channel.')
+        ]
+      });
+    }
+
+    try {
+      const successEmbed = await postAnnouncement({
+        sourceInteraction: interaction,
+        embed,
+        channel: targetChannel,
+        mentionText,
+        title,
+        style
+      });
+
+      return interaction.editReply({ embeds: [successEmbed] });
+    } catch (error) {
+      console.error('[announce] Failed to post announcement:', error);
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Announcement Failed')
+            .setDescription('I could not post the announcement. Check my channel permissions and make sure the target channel accepts bot messages.')
+        ]
+      });
     }
   },
+  async handleComponent(interaction) {
+    if (!interaction.isButton()) return false;
+    if (!interaction.customId.startsWith('announce:')) return false;
 
-  async sendAnnouncement(interaction, pingEveryone) {
-    const announceChan = interaction.client.channels.cache.get(announcementChannelId);
-    if (!announceChan) {
-      const notFoundEmbed = new EmbedBuilder()
-        .setColor(0xF04747)
-        .setTitle('❌ Channel Not Found')
-        .setDescription('The announcement channel could not be found!');
-      return interaction.reply({ embeds: [notFoundEmbed], flags: MessageFlags.Ephemeral });
+    const [, action, sessionId] = interaction.customId.split(':');
+    const session = getPreviewSession(sessionId);
+
+    if (!session) {
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Preview Expired')
+            .setDescription('This announcement preview is no longer available. Run /announce preview again.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+      return true;
     }
 
-    const title = interaction.options.getString('title').trim();
-    const message = interaction.options.getString('message').trim();
-    const defaultColor = pingEveryone ? 'F04747' : '5865F2';
-    const colorInput = interaction.options.getString('color') || defaultColor;
-    const imageUrlInput = interaction.options.getString('image_url');
-
-    const formattedTitle = title.charAt(0).toUpperCase() + title.slice(1);
-
-    // Double check that the title isn't too long.
-    if (title.length < 3 || title.length > 100) {
-      const titleEmbed = new EmbedBuilder()
-        .setColor(0xF04747)
-        .setTitle('❌ Invalid Title')
-        .setDescription('Title needs to be 3-100 characters!');
-      return interaction.reply({ embeds: [titleEmbed], flags: MessageFlags.Ephemeral });
+    if (interaction.user.id !== session.authorId) {
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Not Your Preview')
+            .setDescription('Only the user who created this preview can accept or deny it.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+      return true;
     }
 
-    // Make sure the message isn't too long for Discord.
-    if (!message || message.trim().split(' ').length < 3) {
-      const shortMsgEmbed = new EmbedBuilder()
-        .setColor(0xF04747)
-        .setTitle('❌ Message Too Short')
-        .setDescription('Announcement needs at least 3 words!');
-      return interaction.reply({ embeds: [shortMsgEmbed], flags: MessageFlags.Ephemeral });
+    if (!hasAnnouncementAccess(interaction.member)) {
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ No Permission')
+            .setDescription('You no longer have permission to post this announcement.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+      return true;
     }
 
-    // Figure out what color to use for the embed.
-    let embedColor = pingEveryone ? 0xF04747 : 0x5865F2;
+    if (action === 'deny') {
+      previewSessions.delete(sessionId);
+      await interaction.update({
+        content: 'Announcement preview denied. Nothing was posted.',
+        embeds: [EmbedBuilder.from(session.embed)],
+        components: [createDisabledPreviewActionRow(sessionId, false)]
+      });
+      return true;
+    }
+
+    if (action !== 'accept') return false;
+
+    const targetChannel = await resolveAnnouncementChannel(interaction, session.targetChannelId ? await interaction.guild.channels.fetch(session.targetChannelId).catch(() => null) : null);
+    if (!targetChannel || !targetChannel.isTextBased()) {
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Channel Not Found')
+            .setDescription('I could not resolve the target announcement channel for this preview.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+      return true;
+    }
+
     try {
-      if (colorInput.startsWith('#')) {
-        embedColor = parseInt(colorInput.slice(1), 16);
-      } else {
-        embedColor = parseInt(colorInput, 16);
-      }
-    } catch (e) {
-      const colorEmbed = new EmbedBuilder()
-        .setColor(0xF04747)
-        .setTitle('❌ Invalid Color')
-        .setDescription('Please provide a valid hex color code (e.g., #5865F2 or 5865F2)!');
-      return interaction.reply({ embeds: [colorEmbed], flags: MessageFlags.Ephemeral });
+      const successEmbed = await postAnnouncement({
+        sourceInteraction: interaction,
+        embed: EmbedBuilder.from(session.embed),
+        channel: targetChannel,
+        mentionText: session.mentionText,
+        title: session.title,
+        style: session.style
+      });
+
+      previewSessions.delete(sessionId);
+      await interaction.update({
+        content: 'Announcement approved and posted.',
+        embeds: [successEmbed],
+        components: [createDisabledPreviewActionRow(sessionId, true)]
+      });
+      return true;
+    } catch (error) {
+      console.error('[announce] Failed to post approved preview:', error);
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xF04747)
+            .setTitle('❌ Announcement Failed')
+            .setDescription('I could not post the approved announcement. Check my channel permissions and try again.')
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+      return true;
     }
-
-    if (imageUrlInput && !/^https?:\/\//i.test(imageUrlInput)) {
-      const imageEmbed = new EmbedBuilder()
-        .setColor(0xF04747)
-        .setTitle('❌ Invalid Image URL')
-        .setDescription('Please provide a valid image URL that starts with `http://` or `https://`.');
-      return interaction.reply({ embeds: [imageEmbed], flags: MessageFlags.Ephemeral });
-    }
-
-    await interaction.deferReply();
-
-    const em = new EmbedBuilder()
-      .setColor(embedColor)
-      .setTitle(`📢 ${formattedTitle}`)
-      .setFooter({ text: `Announced by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
-      .setTimestamp();
-
-    if (imageUrlInput) {
-      em.setImage(imageUrlInput);
-    }
-
-    // Format the message based on how long it is.
-    const formatted = formatMessageForEmbed(message);
-    if (formatted.type === 'description') {
-      em.setDescription(formatted.content);
-    } else {
-      em.addFields(
-        formatted.content.map((chunk, index) => ({
-          name: formatted.content.length === 1 ? '📝 Message' : `📝 Message (Part ${index + 1}/${formatted.content.length})`,
-          value: chunk,
-          inline: false
-        }))
-      );
-    }
-
-    const messageContent = pingEveryone ? '@everyone' : null;
-    await announceChan.send({ content: messageContent, embeds: [em] });
-
-    const successEmbed = new EmbedBuilder()
-      .setColor(0x43B581)
-      .setTitle(pingEveryone ? '✅ Announcement Sent with @everyone' : '✅ Sent!')
-      .setDescription(
-        pingEveryone
-          ? `Your announcement has been posted to <#${announcementChannelId}> and @everyone was pinged`
-          : `Posted to <#${announcementChannelId}>`
-      )
-      .addFields(
-        { name: 'Title', value: formattedTitle, inline: true },
-        { name: 'Length', value: `${message.length} chars`, inline: true }
-      )
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [successEmbed] });
   }
-}
+};

@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Account Recovery — tools to recover access to your Admin Panel account. -->
 <html lang="en">
 
 <head>
@@ -125,7 +124,6 @@
             margin: 0;
         }
 
-        /* Recovery Switches as Tabs */
         .recovery-switches {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -283,7 +281,6 @@
         }
 
 
-        /* Loading Overlay */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -402,7 +399,6 @@
                 <button type="button" id="recoveryLoginBtn" class="btn btn-primary btn-full">Sign In</button>
             </form>
 
-            <!-- Panel 2: Request Password Reset -->
             <form id="passwordResetRequestForm" style="display:none;">
                 <h3 class="sr-only">Email Reset Request</h3>
                 <div class="form-group">
@@ -416,7 +412,6 @@
                 <button type="button" id="requestResetBtn" class="btn btn-primary btn-full">Send Reset Link</button>
             </form>
 
-            <!-- Panel 3: Reset with Token -->
             <form id="passwordResetTokenForm" style="display:none;">
                 <h3 class="sr-only">Reset With Email Token</h3>
                 <div class="form-group">
@@ -446,7 +441,6 @@
                 <button type="button" id="confirmResetBtn" class="btn btn-primary btn-full">Reset Password</button>
             </form>
 
-            <!-- Panel 4: Reset with Recovery Code -->
             <form id="passwordResetRecoveryForm" style="display:none;">
                 <h3 class="sr-only">Reset With Recovery Code</h3>
                 <div class="form-group">

@@ -3,8 +3,6 @@ const { MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { sendErrorReply, sendWarningReply, sendInfoReply } = require("../../Functions/EmbedBuilders");
 const { logModerationAction } = require("../../Functions/ModerationHelper");
 
-// Lets you delete a bunch of messages at once
-// Can't delete messages older than 2 weeks (Discord rule)
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('clear')
@@ -28,12 +26,10 @@ module.exports = {
     ),
   category: "moderation",
   async execute(interaction) {
-    // Respond right away so Discord doesn't time out while we delete
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
     }
 
-    // Only let people with Manage Messages permission use this
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
       await sendWarningReply(
         interaction,
@@ -48,15 +44,12 @@ module.exports = {
     const targetUser = interaction.options.getUser('user');
 
     try {
-      // Get the messages from the channel
       const messages = await interaction.channel.messages.fetch({ limit: amount });
 
-      // If a user is picked, only delete their messages
       let toDelete = targetUser
         ? messages.filter(msg => msg.author.id === targetUser.id)
         : messages;
 
-      // Don't try to delete messages that are too old
       const twoWeeksAgo = Date.now() - (14 * 24 * 60 * 60 * 1000);
       toDelete = toDelete.filter(msg => msg.createdTimestamp > twoWeeksAgo);
 
@@ -69,10 +62,8 @@ module.exports = {
         return;
       }
 
-      // Bulk delete
       const deleted = await interaction.channel.bulkDelete(toDelete, true);
 
-      // Create logging embed
       const logFields = [
         { name: '📊 Messages Deleted', value: `**${deleted.size}**`, inline: true },
         { name: '🧰 Scope', value: targetUser ? 'Targeted user messages' : 'Recent channel messages', inline: true },
@@ -92,10 +83,8 @@ module.exports = {
         .setFooter({ text: `Logged at ${new Date().toLocaleTimeString()}` })
         .setTimestamp();
 
-      // Log the action
       await logModerationAction(interaction, logEmbed);
 
-      // Send success response
       const fields = [
         { name: '📊 Messages Deleted', value: `**${deleted.size}**`, inline: true },
         { name: '📍 Channel', value: `${interaction.channel}`, inline: true },
@@ -121,7 +110,6 @@ module.exports = {
 
       let errorMessage = 'Could not clear messages.';
 
-      // Provide specific error messages
       if (err.message.includes('Missing Permissions')) {
         errorMessage = 'I don\'t have permission to delete messages in this channel.';
       } else if (err.message.includes('50016')) {

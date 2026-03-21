@@ -120,14 +120,14 @@ async function finalizeGiveaway(message, giveawayId, forcedByUserTag = null) {
         if (eligibleParticipants.length === 0) {
             endEmbed = {
                 color: 16744171,
-                title: '❌ No Winners',
-                description: `No eligible entries were found for the **${giveaway.prize || '-'}** giveaway.`,
+                title: '❌No Winners',
+                description: `No eligible entries were found for the **${giveaway.prize || '❌'}** giveaway.`,
                 fields: [
-                    { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                    { name: '🎁 Prize', value: `**${giveaway.prize || '❌'}**`, inline: true },
                     { name: '👥 Eligible Entries', value: '0', inline: true },
                     { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
                 ],
-                footer: { text: `Giveaway Ended - No eligible participants | Case ID: ${caseId}` },
+                footer: { text: `Giveaway Ended ❌ No eligible participants | Case ID: ${caseId}` },
                 timestamp: new Date()
             };
         } else {
@@ -137,12 +137,12 @@ async function finalizeGiveaway(message, giveawayId, forcedByUserTag = null) {
             endEmbed = {
                 color: 65280,
                 title: selectedWinnerIds.length > 1 ? '🏆 Giveaway Winners!' : '🏆 Giveaway Winner!',
-                description: `🎉 Congratulations to the winner${selectedWinnerIds.length > 1 ? 's' : ''} of **${giveaway.prize || '-'}**!`,
+                description: `🎉 Congratulations to the winner${selectedWinnerIds.length > 1 ? 's' : ''} of **${giveaway.prize || '❌'}**!`,
                 fields: [
-                    { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                    { name: '🎁 Prize', value: `**${giveaway.prize || '❌'}**`, inline: true },
                     { name: '🥇 Winner Count', value: `**${selectedWinnerIds.length}**`, inline: true },
                     { name: '👥 Eligible Entries', value: `**${eligibleParticipants.length}**`, inline: true },
-                    { name: '🏅 Winners', value: winnerLines.join('\n').slice(0, 1024) || '-', inline: false },
+                    { name: '🏅 Winners', value: winnerLines.join('\n').slice(0, 1024) || '❌', inline: false },
                     { name: '🆔 Case ID', value: `\`${caseId}\``, inline: true }
                 ],
                 footer: {
@@ -199,7 +199,7 @@ async function runGiveawayCountdown(message, giveawayId) {
             title: '🎉 Giveaway in Progress!',
             description: '⏳ **Giveaway is still running!**',
             fields: [
-                { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                { name: '🎁 Prize', value: `**${giveaway.prize || '❌'}**`, inline: true },
                 { name: '⏱️ Time Left', value: `**${toTime(timeRemainingSeconds)}**`, inline: true },
                 { name: '🎪 Entries', value: `**${participantCount}**`, inline: true },
                 { name: '🏆 Winners', value: `**${winnerCount}**`, inline: true },
@@ -494,12 +494,12 @@ module.exports = {
                 embeds: [{
                     color: 65280,
                     title: selectedWinnerIds.length > 1 ? '🎊 New Winners!' : '🎊 New Winner!',
-                    description: `A reroll has been completed for **${giveaway.prize || '-'}**.`,
+                    description: `A reroll has been completed for **${giveaway.prize || '❌'}**.`,
                     fields: [
-                        { name: '🎁 Prize', value: `**${giveaway.prize || '-'}**`, inline: true },
+                        { name: '🎁 Prize', value: `**${giveaway.prize || '❌'}**`, inline: true },
                         { name: '🏆 Winners Picked', value: `**${selectedWinnerIds.length}**`, inline: true },
                         { name: '👥 Eligible Entries', value: `**${eligibleParticipants.length}**`, inline: true },
-                        { name: '🏅 Winners', value: winnerLines.join('\n').slice(0, 1024) || '-', inline: false },
+                        { name: '🏅 Winners', value: winnerLines.join('\n').slice(0, 1024) || '❌', inline: false },
                         { name: '🆔 Case ID', value: `\`${giveaway.caseId || 'N/A'}\``, inline: true }
                     ],
                     footer: { text: `Giveaway Rerolled | Case ID: ${giveaway.caseId || 'N/A'}` },

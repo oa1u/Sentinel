@@ -35,11 +35,13 @@ function setDiscordLinkBannerDismissed(value) {
             localStorage.removeItem(DISCORD_LINK_BANNER_STORAGE_KEY);
         }
     } catch (_) {
-        // ignore storage errors
     }
 }
 
 function updateDiscordLinkBanner(linked) {
+    const staticBanner = document.getElementById('discordStaticBanner');
+    if (staticBanner) staticBanner.style.display = linked ? 'none' : 'flex';
+
     if (linked) {
         setDiscordLinkBannerDismissed(false);
         setDiscordLinkBannerVisible(false);
@@ -79,7 +81,41 @@ function initDiscordLinkBanner() {
     }
 }
 
-// Custom Password Modal Logic
+function showConfirmModal(title, message, isDestructive, callback) {
+    const modal = document.getElementById('confirmationModal');
+    if (!modal) return;
+
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalMessage').textContent = message;
+
+    const confirmBtn = document.getElementById('confirmModalActionBtn');
+    if (confirmBtn) {
+        confirmBtn.className = isDestructive ? 'btn btn-danger' : 'btn btn-primary';
+        confirmBtn.innerHTML = isDestructive ? '<i class="fas fa-trash-alt"></i> Confirm' : '<i class="fas fa-check"></i> Confirm';
+
+        const newBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+
+        newBtn.onclick = () => {
+            if (callback) callback();
+            closeConfirmModal();
+        };
+    }
+
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+}
+
+function closeConfirmModal() {
+    const modal = document.getElementById('confirmationModal');
+    if (!modal) return;
+
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.style.display = 'none';
+    }, 300);
+}
+
 let passwordConfirmResolver = null;
 
 function closePasswordModal() {
@@ -119,7 +155,7 @@ function requestPasswordConfirmation() {
 
 function downloadRecoveryCodes() {
     if (!latestRecoveryCodes || !latestRecoveryCodes.length) {
-        showError('No codes available to download.');
+        profileShowError('No codes available to download.');
         return;
     }
     const date = new Date().toISOString().split('T')[0];
@@ -201,11 +237,24 @@ function buildRecoveryMetric(label, hint, value, detail = '', badge = '') {
 }
 
 function buildSecurityMiniCard(label, value, detail = '') {
+    let iconHtml = '<i class="fas fa-info-circle"></i>';
+    const l = String(label).toLowerCase();
+
+    if (l.includes('status') || l.includes('health')) iconHtml = '<i class="fas fa-heartbeat"></i>';
+    else if (l.includes('session')) iconHtml = '<i class="fas fa-desktop"></i>';
+    else if (l.includes('2fa') || l.includes('factor')) iconHtml = '<i class="fas fa-lock"></i>';
+    else if (l.includes('fail') || l.includes('event')) iconHtml = '<i class="fas fa-exclamation-triangle"></i>';
+    else if (l.includes('recovery')) iconHtml = '<i class="fas fa-life-ring"></i>';
+    else if (l.includes('enabled')) iconHtml = '<i class="fas fa-calendar-check"></i>';
+
+    const detailHtml = detail ? `<div class="metric-detail" style="font-size:0.85rem; opacity:0.75; margin-top:0.5rem; line-height:1.4;">${escapeHtml(detail)}</div>` : '';
+
     return `
-                <div class="security-mini-card">
-                    <strong>${escapeHtml(label)}</strong>
-                    <div class="security-mini-value">${escapeHtml(String(value ?? '-'))}</div>
-                    ${detail ? `<div class="security-mini-detail">${escapeHtml(detail)}</div>` : ''}
+                <div class="metric-card">
+                    <div class="metric-icon" style="font-size:1.5rem; color:#818cf8; margin-bottom:0.75rem;">${iconHtml}</div>
+                    <div class="metric-label" style="font-size:0.75rem; text-transform:uppercase; color:var(--color-text-light); letter-spacing:0.05em; margin-bottom:0.25rem;">${escapeHtml(label)}</div>
+                    <div class="metric-value font-mono" style="font-size:1.75rem; font-weight:700; color:#fff;">${escapeHtml(String(value ?? '-'))}</div>
+                    ${detailHtml}
                 </div>
             `;
 }
@@ -282,11 +331,28 @@ async function postWithCsrf(url, body = {}, options = {}) {
     return response;
 }
 
-// Toggle password visibility
-function togglePasswordVisibility(fieldId) {
+function togglePasswordVisibility(fieldId, btnElement) {
     const field = document.getElementById(fieldId);
+    if (!field) return;
+
     const isPassword = field.type === 'password';
     field.type = isPassword ? 'text' : 'password';
+
+    if (btnElement) {
+        const icon = btnElement.querySelector('i');
+        if (icon) {
+            icon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+        }
+    } else {
+        const btn = field.parentElement.querySelector('.password-toggle');
+        if (btn) {
+            const icon = btn.querySelector('i');
+            if (icon) {
+                icon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+            }
+        }
+    }
+
     syncShowAllToggleState();
 }
 
@@ -296,6 +362,14 @@ function toggleAllPasswords(show) {
         const field = document.getElementById(fieldId);
         if (field) {
             field.type = show ? 'text' : 'password';
+
+            const btn = field.parentElement.querySelector('.password-toggle');
+            if (btn) {
+                const icon = btn.querySelector('i');
+                if (icon) {
+                    icon.className = show ? 'fas fa-eye-slash' : 'fas fa-eye';
+                }
+            }
         }
     });
 }
@@ -346,13 +420,13 @@ function generateStrongPassword() {
     updatePasswordStrength(generated);
     validatePasswordMatch();
     updateChangePasswordButtonState();
-    showSuccess('Strong password generated and applied.');
+    profileShowSuccess('Strong password generated and applied.');
 }
 
 async function copyGeneratedPassword() {
     const candidate = lastGeneratedPassword || document.getElementById('newPassword')?.value || '';
     if (!candidate) {
-        showError('Generate a password first, then copy it.');
+        profileShowError('Generate a password first, then copy it.');
         return;
     }
 
@@ -367,10 +441,10 @@ async function copyGeneratedPassword() {
             document.execCommand('copy');
             temp.remove();
         }
-        showSuccess('Generated password copied to clipboard.');
+        profileShowSuccess('Generated password copied to clipboard.');
     } catch (error) {
         console.error('Failed to copy password:', error);
-        showError('Could not copy password automatically. Please copy it manually.');
+        profileShowError('Could not copy password automatically. Please copy it manually.');
     }
 }
 
@@ -444,61 +518,52 @@ function updateEmailMatchIndicator(newEmail, confirmNewEmail) {
     indicator.textContent = '✗ Emails do not match';
 }
 
-// Update password strength indicator
 function updatePasswordStrength(password) {
-    const requirements = [
-        { id: 'check-length', regex: /.{8,}/, text: 'At least 8 characters' },
-        { id: 'check-upper', regex: /[A-Z]/, text: 'One uppercase letter' },
-        { id: 'check-lower', regex: /[a-z]/, text: 'One lowercase letter' },
-        { id: 'check-number', regex: /\d/, text: 'One number' },
-        { id: 'check-special', regex: /[@$!%*?&]/, text: 'One special character' }
-    ];
-
     let strength = 0;
-    requirements.forEach(req => {
-        const element = document.getElementById(req.id);
-        const isMet = req.regex.test(password);
-        if (!element) return;
 
-        if (isMet) {
-            element.classList.add('active');
-            strength += 20;
-        } else {
-            element.classList.remove('active');
-        }
-    });
+    if (password.length >= 8) strength += 20;
+    if (/[A-Z]/.test(password)) strength += 20;
+    if (/[a-z]/.test(password)) strength += 20;
+    if (/\d/.test(password)) strength += 20;
+    if (/[@$!%*?&]/.test(password)) strength += 20;
 
-    // Update strength bar
     const strengthBar = document.getElementById('strengthBar');
-    if (!strengthBar) return;
-    strengthBar.style.width = strength + '%';
-
     const strengthText = document.getElementById('strengthText');
-    if (!strengthText) return;
-    let strengthLabel = '';
-    if (strength === 0) {
-        strengthLabel = '';
-    } else if (strength <= 20) {
-        strengthLabel = '🔴 Weak';
-        strengthBar.style.background = '#ff5b5b';
-    } else if (strength <= 40) {
-        strengthLabel = '🟠 Fair';
-        strengthBar.style.background = '#ff9d5b';
-    } else if (strength <= 60) {
-        strengthLabel = '🟡 Good';
-        strengthBar.style.background = '#ffd45b';
-    } else if (strength <= 80) {
-        strengthLabel = '🟢 Strong';
-        strengthBar.style.background = '#5bffb8';
-    } else {
-        strengthLabel = '✅ Very Strong';
-        strengthBar.style.background = '#5bffb8';
-    }
 
-    strengthText.textContent = strengthLabel;
+    if (strengthBar) {
+        strengthBar.style.width = strength + '%';
+
+        let strengthLabel = '';
+        let color = '';
+
+        if (password.length === 0) {
+            strengthLabel = '';
+            color = 'transparent';
+        } else if (strength <= 20) {
+            strengthLabel = 'Too Weak';
+            color = '#ef4444';
+        } else if (strength <= 40) {
+            strengthLabel = 'Weak';
+            color = '#f59e0b';
+        } else if (strength <= 60) {
+            strengthLabel = 'Medium';
+            color = '#eab308';
+        } else if (strength <= 80) {
+            strengthLabel = 'Strong';
+            color = '#22c55e';
+        } else {
+            strengthLabel = 'Very Strong';
+            color = '#10b981';
+        }
+
+        strengthBar.style.backgroundColor = color;
+        if (strengthText) {
+            strengthText.textContent = strengthLabel ? `Password Strength: ${strengthLabel}` : '';
+            strengthText.style.color = color;
+        }
+    }
 }
 
-// Validate password match
 function validatePasswordMatch() {
     const newPasswordField = document.getElementById('newPassword');
     const confirmPasswordField = document.getElementById('confirmPassword');
@@ -533,7 +598,6 @@ function bindListenerById(id, eventName, handler) {
     element.addEventListener(eventName, handler);
 }
 
-// Show/hide password requirements
 bindListenerById('newPassword', 'focus', function () {
     const requirements = document.getElementById('newPasswordRequirements');
     if (requirements) requirements.classList.add('show');
@@ -555,7 +619,7 @@ bindListenerById('newPassword', 'blur', function () {
 
 function applyProfileTab(tabName) {
     const tabs = document.querySelectorAll('#profileTabs .profile-nav-item');
-    const allPanels = Array.from(document.querySelectorAll('.profile-content-area .tab-content'));
+    const allPanels = Array.from(document.querySelectorAll('.content-area .tab-content'));
     const panelByTab = {
         security: document.getElementById('profileSecurityContent'),
         account: document.getElementById('profileAccountContent'),
@@ -590,6 +654,22 @@ function applyProfileTab(tabName) {
         if (window.innerWidth <= 900) {
             activePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+    }
+
+    const headerTitle = document.getElementById('profileWelcomeMsg');
+    const headerSub = document.getElementById('profileWelcomeSub');
+    const headers = {
+        security: { title: "Security Center", sub: "Monitor your account health, 2FA status, and recent activity." },
+        account: { title: "Account Settings", sub: "Update your personal details, email, and password." },
+        geo: { title: "Geo Snapshot", sub: "Visualize your login locations and active session map." },
+        recovery: { title: "Recovery Codes", sub: "View and regenerate your emergency backup codes." },
+        discord: { title: "Linked Discord", sub: "Manage your Discord connection and sync settings." }
+    };
+
+    if (headers[targetTab]) {
+        if (headerTitle) headerTitle.textContent = headers[targetTab].title;
+        if (headerSub) headerSub.textContent = headers[targetTab].sub;
+        document.title = `${headers[targetTab].title} | Sentinel Panel`;
     }
 
     activeProfileTab = targetTab;
@@ -664,8 +744,13 @@ function updateSecurityWorkspaceTabBadges(summary = null) {
     const eventsBadge = document.getElementById('securityTabBadgeEvents');
 
     if (centerBadge) {
-        centerBadge.textContent = String(failedEvents);
-        centerBadge.title = `${failedEvents} failed event${failedEvents === 1 ? '' : 's'} in rolling 24h`;
+        if (failedEvents > 0) {
+            centerBadge.textContent = String(failedEvents);
+            centerBadge.style.display = 'inline-block';
+            centerBadge.title = `${failedEvents} failed event${failedEvents === 1 ? '' : 's'} in rolling 24h`;
+        } else {
+            centerBadge.style.display = 'none';
+        }
     }
 
     if (sessionsBadge) {
@@ -729,7 +814,9 @@ function initProfileTabs() {
         }
     });
 
-    applyProfileTab('security');
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTab = urlParams.get('tab') || 'security';
+    applyProfileTab(initialTab);
 }
 
 function initSecurityEventControls() {
@@ -806,22 +893,17 @@ function getProfileInitials(name) {
     return safeName.slice(0, 2).toUpperCase();
 }
 
-// Load user profile
 async function loadProfile() {
     try {
-        // Check if viewing another user's profile
         const urlParams = new URLSearchParams(window.location.search);
         const viewUserId = urlParams.get('userId');
         const profileTabs = document.getElementById('profileTabs');
 
-        // If viewing another user, fetch their data from /api/users/:userId
         const endpoint = viewUserId ? `/api/users/${encodeURIComponent(viewUserId)}` : '/api/user';
         const { response, data } = await window.AdminPanel.api.getJson(endpoint);
         if (response.ok) {
-            // Handle different response formats
             currentUser = viewUserId ? (data.user || data) : data;
 
-            // Update header - handle both admin users and Discord users
             const displayUsername = currentUser.username || '-';
             const displayRole = viewUserId ? 'Discord User' : (currentUser.role || 'user').toUpperCase();
             const roleClass = 'role-badge role-user';
@@ -838,7 +920,6 @@ async function loadProfile() {
                 dropdownRoleEl.className = roleClass;
             }
 
-            // Handle different date fields for Discord users vs admin users
             const createdDate = currentUser.created_at || currentUser.joined_at ? new Date(currentUser.created_at || currentUser.joined_at) : null;
 
             const lastLoginDate = currentUser.last_login ? new Date(currentUser.last_login) : null;
@@ -865,7 +946,6 @@ async function loadProfile() {
             }
             updateEmailVerificationUI(Boolean(currentUser.email_verified), currentUser.email);
 
-            // Show Discord-specific fields if viewing a Discord user
             if (viewUserId) {
                 setElementDisplayById('userActionsCard', 'block');
                 setElementDisplayById('emailVerificationCard', 'none');
@@ -912,7 +992,6 @@ async function loadProfile() {
                 applySecurityWorkspaceTab(activeSecurityWorkspaceTab);
             }
 
-            // Show/hide nav links based on role
             const role = currentUser.role || 'moderator';
             if (role === 'owner') {
                 document.getElementById('moderatorLink').style.display = 'inline-block';
@@ -940,11 +1019,11 @@ async function loadProfile() {
         } else {
             const errorData = (data && typeof data === 'object') ? data : {};
             console.error('Failed to load profile:', errorData);
-            showError('Failed to load profile: ' + (errorData.error || 'Unknown error'));
+            profileShowError('Failed to load profile: ' + (errorData.error || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error loading profile:', error);
-        showError('Failed to load profile information');
+        profileShowError('Failed to load profile information');
     }
 }
 
@@ -971,7 +1050,7 @@ async function loadSecurityCenter() {
         return true;
     } catch (error) {
         console.error('Error loading security center:', error);
-        showError(error.message || 'Failed to load security center');
+        profileShowError(error.message || 'Failed to load security center');
         throw error;
     }
 }
@@ -1443,9 +1522,6 @@ function renderSecuritySessions() {
         const statusBadge = buildStatusBadge(session.isCurrent ? 'Current' : 'Active', session.isCurrent);
         const encodedSessionId = encodeURIComponent(session.sessionId || '');
         const detailsButton = `<button class="btn btn-sm btn-secondary" onclick="openSessionDetails('${encodedSessionId}')">Details</button>`;
-        const actionButton = session.isCurrent
-            ? `${detailsButton} <span style="margin-left:0.5rem;">${buildStatusBadge('This Session', 'neutral')}</span>`
-            : `${detailsButton} <button class="btn btn-sm btn-danger" onclick="revokeSession('${session.sessionId}')">Revoke</button>`;
         const tooltipParts = [];
         if (ipDisplay.tooltip) tooltipParts.push(ipDisplay.tooltip);
         if (!primaryIp && session.ipAddressV6) tooltipParts.push(`IPv6: ${session.ipAddressV6}`);
@@ -1454,6 +1530,7 @@ function renderSecuritySessions() {
         const rawSessionId = String(session.sessionId || '').trim();
         const sessionSuffix = rawSessionId ? rawSessionId.slice(-8) : 'Unknown';
         const safeDeviceLabel = escapeHtml(session.device || 'Unknown');
+        const encodedRevokeSessionId = encodeURIComponent(rawSessionId);
 
         return `
                     <tr>
@@ -1467,7 +1544,9 @@ function renderSecuritySessions() {
                             <div class="security-event-sub">${escapeHtml(ageLabel)}</div>
                         </td>
                         <td>${statusBadge}</td>
-                        <td>${actionButton}</td>
+                        <td>${session.isCurrent
+                ? `${detailsButton} <span style="margin-left:0.5rem;">${buildStatusBadge('This Session', 'neutral')}</span>`
+                : `${detailsButton} <button class="btn btn-sm btn-danger" onclick="revokeSession('${encodedRevokeSessionId}')">Revoke</button>`}</td>
                     </tr>
                 `;
     }).join('');
@@ -1600,46 +1679,26 @@ function renderLoginGeoSnapshot(snapshot) {
         || fallbackEvent?.createdAt
         || (fallbackSession?.loginTime ? Number(fallbackSession.loginTime) : null);
     const latestTime = latestTimeValue ? new Date(latestTimeValue).toLocaleString() : 'Unknown';
-    const uniqueLocations = Array.isArray(snapshot?.uniqueLocations) && snapshot.uniqueLocations.length
-        ? snapshot.uniqueLocations
-        : [...new Set([
-            ...(Array.isArray(securitySummary?.recentEvents) ? securitySummary.recentEvents.map((event) => event.geoLabel) : []),
-            ...(Array.isArray(securitySessions) ? securitySessions.map((session) => session.geoLabel) : [])
-        ].filter(Boolean))].slice(0, 5);
     const latestNetworkType = snapshot?.latestNetworkType || 'Unknown Network';
-    const latestIpVersion = snapshot?.latestIpVersion || 'Unknown';
-    const addressScope = snapshot?.addressScope || 'Unknown';
     const confidence = snapshot?.confidence || 'Low';
-    const source = snapshot?.source || 'Unknown source';
-    const recentNetworkTypes = Array.isArray(snapshot?.recentNetworkTypes) && snapshot.recentNetworkTypes.length
-        ? snapshot.recentNetworkTypes
-        : [];
-    const recentIpVersions = Array.isArray(snapshot?.recentIpVersions) && snapshot.recentIpVersions.length
-        ? snapshot.recentIpVersions
-        : [];
-    const riskSignals = Array.isArray(snapshot?.riskSignals) && snapshot.riskSignals.length
-        ? snapshot.riskSignals
-        : ['No clear risk signals'];
     const mapData = snapshot?.map && typeof snapshot.map === 'object' ? snapshot.map : null;
     const hasMap = Boolean(mapData?.available && Number.isFinite(Number(mapData.latitude)) && Number.isFinite(Number(mapData.longitude)));
     const lat = hasMap ? Number(mapData.latitude) : null;
     const lon = hasMap ? Number(mapData.longitude) : null;
-    const mapLocationLabel = hasMap ? (mapData.locationLabel || 'Approximate location') : '';
-    const mapNetwork = hasMap ? (mapData.network || 'Unknown network') : '';
-    const mapProvider = mapData?.provider || 'ip-api.com';
-    const mapReason = mapData?.reason || 'Map unavailable for this IP.';
-    const mapIp = String(mapData?.ip || latestIp || '').trim();
-    const providersTried = Array.isArray(mapData?.providersTried) && mapData.providersTried.length
-        ? mapData.providersTried
-        : [mapProvider];
-    const geoBadgeText = hasMap ? 'Approximate (City-level)' : 'Unavailable';
-    const confidenceTone = String(confidence || '').toLowerCase().includes('high')
-        ? 'positive'
-        : (String(confidence || '').toLowerCase().includes('low') ? 'warning' : 'neutral');
-    const coordinatesLabel = hasMap ? `${lat.toFixed(3)}, ${lon.toFixed(3)}` : 'Unavailable';
-    const recentLocationTypesLabel = uniqueLocations.length ? uniqueLocations.join(' • ') : 'None yet';
-    const recentNetworkTypesLabel = recentNetworkTypes.length ? recentNetworkTypes.join(' • ') : 'None yet';
-    const recentIpVersionsLabel = recentIpVersions.length ? recentIpVersions.join(' • ') : 'None yet';
+
+    const riskSignals = Array.isArray(snapshot?.riskSignals) && snapshot.riskSignals.length
+        ? snapshot.riskSignals
+        : [];
+    const hasRisks = riskSignals.length > 0;
+
+    const encodedIp = encodeURIComponent(latestIp);
+    const ipLinks = latestIp && latestIp !== 'Unknown'
+        ? [
+            { label: 'ip-api', url: `http://ip-api.com/#${encodedIp}` },
+            { label: 'ipwhois', url: `https://ipwho.is/${encodedIp}` },
+            { label: 'ipapi', url: `https://ipapi.co/${encodedIp}/` }
+        ]
+        : [];
 
     const mapEmbedHtml = hasMap
         ? (() => {
@@ -1648,92 +1707,81 @@ function renderLoginGeoSnapshot(snapshot) {
             const bbox = `${(lon - lonDelta).toFixed(6)},${(lat - latDelta).toFixed(6)},${(lon + lonDelta).toFixed(6)},${(lat + latDelta).toFixed(6)}`;
             const marker = `${lat.toFixed(6)},${lon.toFixed(6)}`;
             const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(marker)}`;
-            const openMapUrl = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat.toFixed(6))}&mlon=${encodeURIComponent(lon.toFixed(6))}#map=11/${encodeURIComponent(lat.toFixed(6))}/${encodeURIComponent(lon.toFixed(6))}`;
-            return `
-                        <div class="geo-map-panel">
-                            <div class="geo-map-frame">
-                                <iframe
-                                    title="Approximate login location map"
-                                    src="${embedUrl}"
-                                    loading="lazy"
-                                    referrerpolicy="no-referrer"
-                                ></iframe>
-                            </div>
-                            <div class="geo-map-meta">
-                                Approximate map from ${escapeHtml(mapProvider)} · ${escapeHtml(mapLocationLabel)} · ${escapeHtml(mapNetwork)} · Coordinates: ${escapeHtml(coordinatesLabel)}
-                                <a href="${openMapUrl}" target="_blank" rel="noopener noreferrer" style="margin-left:0.5rem;">Open full map</a>
-                            </div>
-                        </div>
-                    `;
+            return `<iframe title="Login Location Map" src="${embedUrl}" loading="lazy" referrerpolicy="no-referrer"></iframe>
+                    <div style="position:absolute; bottom:0; left:0; right:0; padding:0.75rem; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); font-size:0.75rem; color:#ccc;">
+                        Displaying approximate location based on IP address. 
+                        <a href="https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat.toFixed(6))}&mlon=${encodeURIComponent(lon.toFixed(6))}" target="_blank" style="color:#fff; margin-left:0.5rem;" rel="noopener noreferrer">Expand Map</a>
+                    </div>`;
         })()
-        : (() => {
-            const encodedIp = encodeURIComponent(mapIp);
-            const ipApiComLink = mapIp ? `http://ip-api.com/#${encodedIp}` : '';
-            const ipwhoLink = mapIp ? `https://ipwho.is/${encodedIp}` : '';
-            const ipapiLink = mapIp ? `https://ipapi.co/${encodedIp}/` : '';
-            const links = mapIp
-                ? `<div class="geo-external-links">
-                                <a href="${ipApiComLink}" target="_blank" rel="noopener noreferrer">Inspect IP (ip-api.com)</a>
-                                <a href="${ipwhoLink}" target="_blank" rel="noopener noreferrer">Inspect IP (ipwho.is)</a>
-                                <a href="${ipapiLink}" target="_blank" rel="noopener noreferrer">Inspect IP (ipapi.co)</a>
-                           </div>`
-                : '';
-
-            return `<div class="geo-map-panel"><div class="geo-map-meta"><strong>Map:</strong> ${escapeHtml(mapReason)}${mapIp ? `<br><strong>IP:</strong> ${escapeHtml(mapIp)}` : ''}<br><strong>Providers tried:</strong> ${escapeHtml(providersTried.join(' • '))}</div>${links}</div>`;
-        })();
+        : `<div style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); flex-direction:column; gap:1rem;">
+                <i class="fas fa-map-location-dot" style="font-size:3rem; opacity:0.3;"></i>
+                <span>Map visualization unavailable for this IP</span>
+           </div>`;
 
     container.innerHTML = `
-                <div class="geo-snapshot-shell">
-                    <div class="geo-snapshot-highlight">
-                        <div class="geo-snapshot-primary">
-                            <p class="geo-snapshot-eyebrow">Geo Intelligence Snapshot</p>
-                            <strong>${escapeHtml(String(latestLocation || 'Unknown location'))}</strong>
-                            <span>Last observed ${escapeHtml(String(latestTime || 'Unknown'))} · Source: ${escapeHtml(String(source || 'Unknown source'))}</span>
-                        </div>
-                        <div class="geo-snapshot-statuses">
-                            ${buildStatusBadge(geoBadgeText, hasMap ? 'positive' : 'warning')}
-                            ${buildStatusBadge(`Confidence: ${String(confidence || 'Unknown')}`, confidenceTone)}
-                        </div>
-                    </div>
+        <div style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:flex-end;">
+            <div>
+                <h3 style="margin:0 0 0.25rem 0;">${escapeHtml(latestLocation)}</h3>
+                <div style="font-size:0.9rem; color:var(--text-muted);">
+                    Last Active: ${escapeHtml(latestTime)}
+                </div>
+            </div>
+            ${buildStatusBadge(hasRisks ? `${riskSignals.length} Flagged Signals` : 'No Risks Detected', hasRisks ? 'warning' : 'positive')}
+        </div>
 
-                    <div class="geo-kpi-grid">
-                        <div class="geo-kpi-card"><strong>Latest IP</strong><span>${escapeHtml(String(latestIp || 'Unknown'))}</span></div>
-                        <div class="geo-kpi-card"><strong>Network Type</strong><span>${escapeHtml(String(latestNetworkType || 'Unknown Network'))}</span></div>
-                        <div class="geo-kpi-card"><strong>IP Version</strong><span>${escapeHtml(String(latestIpVersion || 'Unknown'))}</span></div>
-                        <div class="geo-kpi-card"><strong>Address Scope</strong><span>${escapeHtml(String(addressScope || 'Unknown'))}</span></div>
-                    </div>
-
-                    <div class="geo-panels-grid">
-                        <section class="geo-info-panel">
-                            <h4 class="geo-panel-title">Signal Summary</h4>
-                            <div class="geo-metrics-grid">
-                                ${buildGeoMetricCard('Latest IP', latestIp, METRIC_HINTS.geoLatestIp)}
-                                ${buildGeoMetricCard('Confidence', confidence, METRIC_HINTS.geoConfidence)}
-                                ${buildGeoMetricCard('Coordinates', coordinatesLabel, 'Approximate map coordinates when available.')}
-                                ${buildGeoMetricCard('Recent Network Classes', recentNetworkTypesLabel, METRIC_HINTS.geoRecentNetworkClasses)}
-                                ${buildGeoMetricCard('Recent IP Versions', recentIpVersionsLabel, METRIC_HINTS.geoRecentIpVersions)}
-                            </div>
-                        </section>
-
-                        <section class="geo-info-panel">
-                            <h4 class="geo-panel-title">Risk Indicators</h4>
-                            <ul class="geo-risk-list">
-                                ${riskSignals.map((signal) => `<li>${escapeHtml(String(signal || ''))}</li>`).join('')}
-                            </ul>
-                            <div class="geo-signals-note">
-                                <strong>${buildMetricLabel('Recent Location Types', METRIC_HINTS.geoRecentLocationTypes)}</strong><br>
-                                ${escapeHtml(recentLocationTypesLabel)}
-                            </div>
-                            <div class="geo-signals-note">
-                                <strong>${buildMetricLabel('Geo Source', METRIC_HINTS.geoSource)}</strong><br>
-                                ${escapeHtml(String(source || 'Unknown source'))}
-                            </div>
-                        </section>
-                    </div>
-
+        <div class="geo-snapshot-grid">
+            <div class="geo-map-visual">
+                <div class="geo-map-frame" style="width:100%; height:100%; min-height:300px;">
                     ${mapEmbedHtml}
                 </div>
-            `;
+            </div>
+
+            <div class="geo-info-card">
+                <div class="geo-big-metric">
+                    <div class="label">Primary IP Address</div>
+                    <div class="value">${escapeHtml(latestIp)}</div>
+                    <div style="font-size:0.8rem; margin-top:0.25rem;">
+                        ${ipLinks.map(link => `<a href="${link.url}" target="_blank" style="color:var(--text-muted); text-decoration:underline; margin-right:0.75rem;" rel="noopener noreferrer">${link.label}</a>`).join('')}
+                    </div>
+                </div>
+                
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.1);">
+                    <div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Network</div>
+                        <div style="font-weight:600; margin-top:0.25rem;">${escapeHtml(latestNetworkType)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Confidence</div>
+                        <div style="margin-top:0.25rem;">${buildStatusBadge(confidence, 'neutral')}</div>
+                    </div>
+                </div>
+
+                <div style="margin-top:auto; padding-top:1.5rem;">
+                    <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.75rem;">Risk Analysis</div>
+                    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                        ${riskSignals.length > 0
+            ? riskSignals.map(signal => `
+                                <div class="geo-risk-check warn">
+                                    <i class="fas fa-exclamation-triangle" style="color:#fbbf24;"></i>
+                                    <span>${escapeHtml(signal)}</span>
+                                </div>
+                              `).join('')
+            : `
+                                <div class="geo-risk-check safe">
+                                    <i class="fas fa-check-circle" style="color:#4ade80;"></i>
+                                    <span>No anomalous route patterns detected</span>
+                                </div>
+                                <div class="geo-risk-check safe">
+                                    <i class="fas fa-check-circle" style="color:#4ade80;"></i>
+                                    <span>Network type matches residential baseline</span>
+                                </div>
+                              `
+        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function renderAccountRecovery(recovery) {
@@ -1751,92 +1799,114 @@ function renderAccountRecovery(recovery) {
         ? new Date(generatedAtValue.getTime() + reviewIntervalDays * 24 * 60 * 60 * 1000)
         : null;
     const isReviewOverdue = Boolean(nextReviewDateValue && Date.now() > nextReviewDateValue.getTime());
-    const nextReviewDate = nextReviewDateValue ? nextReviewDateValue.toLocaleDateString() : 'After first generation';
-    const nextReviewLabel = !nextReviewDateValue
-        ? 'No schedule yet'
-        : (Date.now() > nextReviewDateValue.getTime() ? `Overdue (was ${nextReviewDate})` : `Due by ${nextReviewDate}`);
-    const nextReviewBadge = !nextReviewDateValue
-        ? buildStatusBadge('Unscheduled', 'warning')
-        : buildStatusBadge(isReviewOverdue ? 'Overdue' : 'On Schedule', isReviewOverdue ? 'warning' : 'positive');
-    const ageLabel = ageDays === null
-        ? 'Not generated yet'
-        : (ageDays <= 0 ? 'Generated today' : `${ageDays} day${ageDays === 1 ? '' : 's'} ago`);
+    const nextReviewDate = nextReviewDateValue ? nextReviewDateValue.toLocaleDateString() : 'N/A';
 
     const expectedCodeCount = 10;
     const coveragePercent = hasCodes
         ? Math.max(0, Math.min(100, Math.round((codeCount / expectedCodeCount) * 100)))
         : 0;
-    const coverageLabel = hasCodes
-        ? `${codeCount}/${expectedCodeCount} codes (${coveragePercent}%)`
-        : 'No codes available';
 
-    const rotationLabel = !hasCodes
-        ? 'Generate immediately'
-        : (ageDays !== null && ageDays > 30 ? 'Rotation recommended' : 'Rotation not currently required');
+    let healthState = 'healthy';
+    let healthTitle = 'Secure';
+    let healthIcon = '🛡️';
+    let healthColor = 'var(--color-green)';
 
-    const readinessLabel = hasCodes && codeCount >= expectedCodeCount
-        ? 'Ready'
-        : (hasCodes ? 'Partial coverage' : 'At risk');
+    if (!hasCodes) {
+        healthState = 'critical';
+        healthTitle = 'Not Configured';
+        healthIcon = '🔒';
+        healthColor = 'var(--color-red)';
+    } else if (codeCount < 3) {
+        healthState = 'critical';
+        healthTitle = 'Depleted';
+        healthIcon = '⚠️';
+        healthColor = 'var(--color-red)';
+    } else if (codeCount < expectedCodeCount) {
+        healthState = 'warning';
+        healthTitle = 'Partial Coverage';
+        healthIcon = '📊';
+        healthColor = 'var(--color-orange)';
+    } else if (ageDays > 90) {
+        healthState = 'warning';
+        healthTitle = 'Rotation Needed';
+        healthIcon = '♻️';
+        healthColor = 'var(--color-orange)';
+    }
 
-    const readinessDetail = hasCodes && codeCount >= expectedCodeCount
-        ? 'Recovery inventory meets expected baseline.'
-        : (hasCodes ? 'Codes exist but count is below recommended baseline.' : 'No emergency recovery inventory is available.');
+    const metricsGrid = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
+            <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+                    Available Codes
+                </div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: ${codeCount === 0 ? 'var(--color-text-muted)' : '#fff'};">
+                    ${codeCount} <span style="font-size: 0.9rem; font-weight: 400; opacity: 0.6;">/ ${expectedCodeCount}</span>
+                </div>
+                <div style="margin-top: 0.5rem; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                    <div style="height: 100%; width: ${coveragePercent}%; background: ${healthColor}; border-radius: 2px;"></div>
+                </div>
+            </div>
 
-    const rotationDetail = !hasCodes
-        ? 'Generate codes to establish a review schedule.'
-        : (ageDays !== null && ageDays > 30
-            ? 'Codes are aging out of best-practice window.'
-            : 'Current code age remains within review policy.');
+            <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+                    Inventory Age
+                </div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: #fff;">
+                    ${ageDays !== null ? ageDays : '-'} <span style="font-size: 0.9rem; font-weight: 400; opacity: 0.6;">days</span>
+                </div>
+                <div style="font-size: 0.8rem; margin-top: 0.35rem; color: var(--text-muted);">
+                    Created: ${ageDays !== null ? generatedAt.split(',')[0] : 'Never'}
+                </div>
+            </div>
 
-    const readinessBadge = buildStatusBadge(
-        readinessLabel,
-        hasCodes && codeCount >= expectedCodeCount ? 'positive' : 'warning'
-    );
-    const rotationBadge = buildStatusBadge(
-        ageDays !== null && ageDays > 30 ? 'Review Needed' : (hasCodes ? 'Healthy' : 'Pending Setup'),
-        ageDays !== null && ageDays > 30 ? 'warning' : (hasCodes ? 'positive' : 'warning')
-    );
+            <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+                    Next Review
+                </div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: ${isReviewOverdue ? 'var(--color-orange)' : '#fff'};">
+                    ${nextReviewDate}
+                </div>
+                <div style="font-size: 0.8rem; margin-top: 0.35rem; color: var(--text-muted);">
+                    ${isReviewOverdue ? 'Review limit overdue' : 'Scheduled check'}
+                </div>
+            </div>
+        </div>
+    `;
 
-    const badgeTone = hasCodes && codeCount >= expectedCodeCount ? 'positive' : (hasCodes ? 'warning' : 'warning');
-    const badge = buildStatusBadge(hasCodes ? 'Configured' : 'Not Configured', badgeTone);
+    let adviceHtml = '';
+    if (healthState === 'critical' && !hasCodes) {
+        adviceHtml = `
+            <div style="margin-top: 1.5rem; padding: 0.85rem; border-left: 3px solid var(--color-red); background: rgba(239, 68, 68, 0.1);">
+                <div style="font-weight: 600; font-size: 0.9rem; color: var(--color-red); margin-bottom: 0.25rem;">Action Required</div>
+                <div style="font-size: 0.85rem; opacity: 0.9;">Generate a new set of recovery codes immediately to ensure you don't lose access to your account if 2FA fails.</div>
+            </div>`;
+    } else if (healthState === 'warning' && ageDays > 90) {
+        adviceHtml = `
+            <div style="margin-top: 1.5rem; padding: 0.85rem; border-left: 3px solid var(--color-orange); background: rgba(245, 158, 11, 0.1);">
+                <div style="font-weight: 600; font-size: 0.9rem; color: var(--color-orange); margin-bottom: 0.25rem;">Rotation Recommended</div>
+                <div style="font-size: 0.85rem; opacity: 0.9;">These codes are older than 90 days. For optimal security hygiene, regenerate them soon.</div>
+            </div>`;
+    }
 
-    const summaryText = hasCodes ? 'Recovery codes are configured.' : 'No recovery codes configured.';
-    const coverageMeter = `<div class="recovery-coverage-track" aria-label="Recovery coverage ${coveragePercent}%"><div class="recovery-coverage-fill" style="width:${coveragePercent}%;"></div></div>`;
-    const postureIntro = hasCodes
-        ? 'Emergency access inventory is available for sign-in fallback scenarios.'
-        : 'Emergency access inventory is not available and requires initialization.';
+    statusBox.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                ${healthIcon}
+            </div>
+            <div>
+                <h3 style="margin: 0; font-size: 1.1rem;">${healthTitle}</h3>
+                <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">
+                    ${hasCodes ? 'Backup access methods configured' : 'No emergency access methods configured'}
+                </div>
+            </div>
+            <div style="margin-left: auto;">
+                 ${buildStatusBadge(healthState === 'healthy' ? 'Active' : 'Attention', healthState === 'healthy' ? 'positive' : 'warning')}
+            </div>
+        </div>
 
-    statusBox.innerHTML = hasCodes
-        ? `<div class="recovery-status-top">
-                        <div class="recovery-status-heading">Recovery Posture</div>
-                        ${badge}
-                   </div>
-                   <div class="recovery-status-summary">${summaryText}</div>
-                   <div class="recovery-status-detail">${escapeHtml(postureIntro)}</div>
-                   <div class="recovery-status-detail">${escapeHtml(readinessDetail)}</div>
-                   ${coverageMeter}
-                   <div class="recovery-metrics">
-                        ${buildRecoveryMetric('Coverage', METRIC_HINTS.recoveryCoverage, escapeHtml(coverageLabel))}
-                        ${buildRecoveryMetric('Readiness', METRIC_HINTS.recoveryReadiness, '', readinessDetail, readinessBadge)}
-                        ${buildRecoveryMetric('Last Generated', METRIC_HINTS.recoveryLastGenerated, escapeHtml(generatedAt))}
-                        ${buildRecoveryMetric('Code Age', METRIC_HINTS.recoveryCodeAge, escapeHtml(ageLabel))}
-                        ${buildRecoveryMetric('Rotation', METRIC_HINTS.recoveryRotation, '', rotationDetail, rotationBadge)}
-                        ${buildRecoveryMetric('Next Review', METRIC_HINTS.recoveryNextReview, '', nextReviewLabel, nextReviewBadge)}
-                    </div>`
-        : `<div class="recovery-status-top">
-                        <div class="recovery-status-heading">Recovery Posture</div>
-                        ${badge}
-                   </div>
-                   <div class="recovery-status-summary">${summaryText}</div>
-                    <div class="recovery-status-detail">${escapeHtml(postureIntro)}</div>
-                   <div class="recovery-status-detail">${escapeHtml(readinessDetail)}</div>
-                   ${coverageMeter}
-                   <div class="recovery-metrics">
-                        ${buildRecoveryMetric('Coverage', METRIC_HINTS.recoveryCoverage, escapeHtml(coverageLabel))}
-                        ${buildRecoveryMetric('Readiness', METRIC_HINTS.recoveryReadiness, '', readinessDetail, readinessBadge)}
-                        ${buildRecoveryMetric('Rotation', METRIC_HINTS.recoveryRotation, '', rotationDetail, rotationBadge)}
-                        ${buildRecoveryMetric('Next Review', METRIC_HINTS.recoveryNextReview, '', nextReviewLabel, nextReviewBadge)}
-                    </div>`;
+        ${metricsGrid}
+        ${adviceHtml}
+    `;
 }
 
 function renderDiscordLink(discordLink) {
@@ -1844,84 +1914,141 @@ function renderDiscordLink(discordLink) {
     const authorizeBtn = document.getElementById('discordAuthorizeBtn');
     const unlinkBtn = document.getElementById('discordUnlinkBtn');
     const refreshMeta = document.getElementById('discordProfileRefreshMeta');
+
     if (!status) return;
 
     const linked = Boolean(discordLink?.linked);
     discordAccountLinked = linked;
     updateDiscordLinkBanner(linked);
-    const linkedAt = discordLink?.linkedAt ? new Date(discordLink.linkedAt).toLocaleString() : 'Unknown';
-    const linkedUserId = discordLink?.discordUserId || '';
-    const linkedUsername = discordLink?.discordUsername || '';
-    const profile = discordLink?.profile && typeof discordLink.profile === 'object' ? discordLink.profile : null;
-    const profileDisplayName = profile?.globalName || profile?.username || linkedUsername || linkedUserId;
-    const profileTag = profile?.username && profile?.discriminator && profile.discriminator !== '0'
-        ? `${profile.username}#${profile.discriminator}`
-        : (profile?.username || linkedUsername || null);
-    const avatarUrl = profile?.avatarUrl || null;
-    const bannerUrl = profile?.bannerUrl || null;
-    const accentColor = profile?.accentColor || null;
-    const profileUrl = profile?.profileUrl || (linkedUserId ? `https://discord.com/users/${encodeURIComponent(linkedUserId)}` : null);
-    const badge = buildStatusBadge(linked ? 'Linked' : 'Not Linked', linked);
 
-    if (authorizeBtn && linked) {
-        authorizeBtn.disabled = true;
-        authorizeBtn.style.opacity = '0.6';
-        authorizeBtn.style.cursor = 'not-allowed';
-        authorizeBtn.title = 'This profile is already linked. Unlink first to connect a different Discord account';
-    }
+    const linkedAt = discordLink?.linkedAt ? new Date(discordLink.linkedAt).toLocaleString() : 'Unknown';
+    const linkedUserId = discordLink?.discordUserId || 'Unknown ID';
+    const linkedUsername = discordLink?.discordUsername || 'Unknown User';
+
+    const profile = discordLink?.profile || {};
+    const globalName = profile.globalName || '';
+    const username = profile.username || linkedUsername;
+    const discriminator = profile.discriminator && profile.discriminator !== '0' ? `#${profile.discriminator}` : '';
+    const avatarUrl = profile.avatarUrl || 'https://cdn.discordapp.com/embed/avatars/0.png';
+    const bannerUrl = profile.bannerUrl || '';
+    const profileColor = profile.accentColor ? `#${profile.accentColor.toString(16)}` : '#5865F2';
 
     if (authorizeBtn) {
         authorizeBtn.style.display = linked ? 'none' : 'inline-flex';
+        authorizeBtn.disabled = linked;
     }
 
     if (unlinkBtn) {
-        unlinkBtn.disabled = !linked;
-        unlinkBtn.style.opacity = linked ? '1' : '0.6';
-        unlinkBtn.style.cursor = linked ? 'pointer' : 'not-allowed';
-        unlinkBtn.title = linked ? '' : 'No Discord account is linked';
         unlinkBtn.style.display = linked ? 'inline-flex' : 'none';
+        unlinkBtn.disabled = !linked;
     }
 
     if (refreshMeta) {
-        refreshMeta.textContent = `Last refreshed: ${new Date().toLocaleString()}`;
+        refreshMeta.textContent = `Last synced: ${new Date().toLocaleString()}`;
     }
 
-    const connectionMeta = linked
-        ? `Connected since ${linkedAt}`
-        : 'No active Discord connection for this profile';
+    if (!linked) {
+        status.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem;">
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                    🔌
+                </div>
+                <div>
+                   <h3 style="margin: 0; font-size: 1.1rem;">Not Connected</h3>
+                   <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">
+                       Link your Discord account to access community features
+                   </div>
+                </div>
+                 <div style="margin-left: auto;">
+                    ${buildStatusBadge('Unlinked', 'neutral')}
+                </div>
+            </div>
 
-    status.innerHTML = linked
-        ? `<div class="discord-status-head">
-                        <div class="discord-status-badges">${badge}<span id="discordConnectionHealthChip"></span></div>
-                        <span class="discord-status-meta">${escapeHtml(connectionMeta)}</span>
+            <div style="background: rgba(88, 101, 242, 0.1); border: 1px dashed rgba(88, 101, 242, 0.4); border-radius: 12px; padding: 2rem; text-align: center;">
+                <div style="font-size: 2.5rem; margin-bottom: 1rem;">👾</div>
+                <h4 style="margin: 0 0 0.5rem 0; color: #fff;">Connect to Discord</h4>
+                <p style="margin: 0 auto; max-width: 400px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
+                    Verify your identity and unlock role-based access management by linking a Discord account.
+                </p>
+                <div style="margin-top: 1.5rem;">
+                    <span id="discordConnectionHealthChip"></span>
+                </div>
+            </div>
+        `;
+    } else {
+        const bannerStyle = bannerUrl
+            ? `background-image: url('${escapeHtml(bannerUrl)}'); background-size: cover; background-position: center;`
+            : `background-color: ${profileColor};`;
+
+        status.innerHTML = `
+            <div style="background: rgba(20, 21, 25, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; overflow: hidden; position: relative;">
+                
+                <div style="height: 180px; width: 100%; position: relative; ${bannerStyle}">
+                    <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 0%, rgba(20, 21, 25, 0.8) 100%);"></div>
+                    
+                    <div style="position: absolute; top: 1.5rem; right: 1.5rem; display: flex; gap: 0.75rem; align-items: center; z-index: 2;">
+                        ${buildStatusBadge('Active Connection', 'positive')}
+                        <span id="discordConnectionHealthChip"></span>
                     </div>
-                    <div class="discord-profile-shell">
-                        ${bannerUrl ? `<img class="discord-profile-banner" src="${escapeHtml(bannerUrl)}" alt="Discord banner" />` : `<div class="discord-profile-banner"></div>`}
-                        <div class="discord-profile-content">
-                            <div class="discord-profile-top">
-                                ${avatarUrl ? `<img class="discord-profile-avatar" src="${escapeHtml(avatarUrl)}" alt="Discord avatar" />` : `<div class="discord-profile-avatar"></div>`}
-                                <div class="discord-profile-identity">
-                                    <h4 class="discord-profile-name">${escapeHtml(profileDisplayName || 'Linked Discord Account')}</h4>
-                                    ${profileTag ? `<span class="discord-profile-handle">@${escapeHtml(profileTag)}</span>` : `<span class="discord-profile-handle">Discord profile linked</span>`}
+                </div>
+
+                <div style="padding: 0 2rem 2rem; position: relative; z-index: 10;">
+                    
+                    <div style="display: flex; align-items: flex-end; justify-content: space-between; margin-top: -50px; flex-wrap: wrap; gap: 1rem;">
+                        <div style="display: flex; align-items: flex-end; gap: 1.5rem;">
+                            <div style="position: relative; width: 100px; height: 100px; border-radius: 50%; padding: 6px; background: #141519;">
+                                <div style="position: absolute; inset: 0; border-radius: 50%; border: 2px solid ${profileColor}; opacity: 0.3; pointer-events: none;"></div>
+                                <img src="${escapeHtml(avatarUrl)}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #2c2f33;" alt="Avatar">
+                                <div style="position: absolute; bottom: 4px; right: 4px; width: 24px; height: 24px; background: #23a559; border: 4px solid #141519; border-radius: 50%;" title="Online"></div>
+                            </div>
+                            
+                            <div style="padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                                <h2 style="margin: 0; font-size: 1.75rem; font-weight: 700; color: #fff; line-height: 1.2;">
+                                    ${escapeHtml(globalName || username)}
+                                </h2>
+                                <div style="color: var(--text-muted); font-size: 1rem; font-weight: 500;">
+                                    @${escapeHtml(username)}${escapeHtml(discriminator)}
                                 </div>
                             </div>
-                            <div class="discord-profile-meta">
-                                ${linkedUserId ? `<div class="discord-meta-item"><strong>User ID</strong>${escapeHtml(linkedUserId)}</div>` : ''}
-                                <div class="discord-meta-item"><strong>Linked At</strong>${escapeHtml(linkedAt)}</div>
-                                ${accentColor ? `<div class="discord-meta-item"><strong>Accent</strong>${escapeHtml(accentColor)}</div>` : ''}
-                                ${profileUrl ? `<div class="discord-meta-item"><strong>Profile</strong><a href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">Open in Discord</a></div>` : ''}
-                            </div>
                         </div>
+
+                       <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 0.6rem 1rem; margin-bottom: 1.5rem;">
+                           <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.25rem;">Discord User ID</div>
+                           <div style="display: flex; align-items: center; gap: 0.5rem;">
+                               <code style="font-family: 'JetBrains Mono', monospace; color: #e2e8f0; font-size: 0.9rem;">${escapeHtml(linkedUserId)}</code>
+                               <button onclick="navigator.clipboard.writeText('${escapeHtml(linkedUserId)}'); showSuccess('Copied ID')" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0; opacity: 0.6; transition: opacity 0.2s;">
+                                   <i class="fas fa-copy" style="font-size: 0.8rem;"></i>
+                               </button>
+                           </div>
+                       </div>
                     </div>
-                    `
-        : `<div class="discord-status-head">
-                        <div class="discord-status-badges">${badge}<span id="discordConnectionHealthChip"></span></div>
-                        <span class="discord-status-meta">${escapeHtml(connectionMeta)}</span>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-top: 1rem; padding: 1.5rem; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.03);">
+                        
+                         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                             <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
+                                 <i class="fas fa-link" style="opacity: 0.5;"></i> Connected Since
+                             </div>
+                             <div style="font-size: 0.95rem; font-weight: 500; color: #fff;">
+                                 ${linkedAt}
+                             </div>
+                         </div>
+
+                         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
+                                 <i class="fas fa-palette" style="opacity: 0.5;"></i> Accent Color
+                             </div>
+                             <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                 <div style="width: 24px; height: 24px; border-radius: 6px; background: ${profileColor}; border: 1px solid rgba(255,255,255,0.1);"></div>
+                                 <code style="font-family: monospace; color: #fff; background: rgba(255,255,255,0.1); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.85rem;">${profileColor}</code>
+                             </div>
+                         </div>
                     </div>
-                    <div class="discord-unlinked-shell">
-                        <div class="discord-unlinked-title">Discord identity not linked</div>
-                        <div class="discord-unlinked-copy">Authorize with Discord to attach a verified Discord account to this profile and unlock linked identity context.</div>
-                    </div>`;
+
+                </div>
+            </div>
+        `;
+    }
 
     updateDiscordConnectionHealthChip();
 }
@@ -1953,11 +2080,11 @@ async function generateRecoveryCodesForAccount() {
             output.classList.remove('revealed');
         }
 
-        showSuccess('Recovery codes generated. Store them securely before leaving this page.');
+        profileShowSuccess('Recovery codes generated. Store them securely before leaving this page.');
         loadSecurityCenter();
     } catch (error) {
         console.error('Error generating recovery codes:', error);
-        showError(error.message || 'Failed to generate recovery codes');
+        profileShowError(error.message || 'Failed to generate recovery codes');
     }
 }
 
@@ -1965,7 +2092,7 @@ async function copyRecoveryCodes() {
     const output = document.getElementById('recoveryCodesOutput');
     const text = output?.value || '';
     if (!text.trim()) {
-        showError('No recovery codes available to copy.');
+        profileShowError('No recovery codes available to copy.');
         return;
     }
 
@@ -1977,10 +2104,10 @@ async function copyRecoveryCodes() {
             output.select();
             document.execCommand('copy');
         }
-        showSuccess('Recovery codes copied to clipboard.');
+        profileShowSuccess('Recovery codes copied to clipboard.');
     } catch (error) {
         console.error('Failed to copy recovery codes:', error);
-        showError('Could not copy recovery codes automatically.');
+        profileShowError('Could not copy recovery codes automatically.');
     }
 }
 
@@ -1988,7 +2115,7 @@ function startDiscordOAuthLink() {
     const authorizeBtn = document.getElementById('discordAuthorizeBtn');
     const unlinkBtn = document.getElementById('discordUnlinkBtn');
     if (authorizeBtn && authorizeBtn.disabled) {
-        showError(authorizeBtn.title || 'Discord OAuth linking is currently unavailable.');
+        profileShowError(authorizeBtn.title || 'Discord OAuth linking is currently unavailable.');
         return;
     }
 
@@ -2043,7 +2170,7 @@ async function unlinkDiscordAccount() {
     const unlinkBtn = document.getElementById('discordUnlinkBtn');
     const authorizeBtn = document.getElementById('discordAuthorizeBtn');
     if (unlinkBtn && unlinkBtn.disabled) {
-        showError(unlinkBtn.title || 'No Discord account is linked.');
+        profileShowError(unlinkBtn.title || 'No Discord account is linked.');
         return;
     }
 
@@ -2097,11 +2224,11 @@ async function unlinkDiscordAccount() {
             throw new Error(data.error || `Failed to unlink Discord account (HTTP ${response.status})`);
         }
 
-        showSuccess('Discord account unlinked.');
+        profileShowSuccess('Discord account unlinked.');
         loadSecurityCenter();
     } catch (error) {
         console.error('Error unlinking Discord account:', error);
-        showError(error.message || 'Failed to unlink Discord account');
+        profileShowError(error.message || 'Failed to unlink Discord account');
     } finally {
         discordUnlinkInProgress = false;
         if (unlinkBtn) {
@@ -2123,7 +2250,7 @@ function openSessionDetails(encodedSessionId) {
 
     const session = securitySessions.find((item) => String(item.sessionId) === sessionId);
     if (!session) {
-        showError('Session details not available');
+        profileShowError('Session details not available');
         return;
     }
 
@@ -2153,43 +2280,56 @@ function closeSessionDetails() {
     if (drawer) drawer.style.display = 'none';
 }
 
-async function logoutOtherSessions() {
-    if (!confirm('Logout all sessions except this one?')) return;
+function logoutOtherSessions() {
+    showConfirmModal(
+        'Logout Other Sessions',
+        'Are you sure you want to log out all active sessions except this one? This will disconnect you from all other devices.',
+        true,
+        async () => {
+            try {
+                const response = await postWithCsrf('/api/security/sessions/logout-others', {});
+                const data = await response.json();
 
-    try {
-        const response = await postWithCsrf('/api/security/sessions/logout-others', {});
-        const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to logout other sessions');
+                }
 
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to logout other sessions');
+                profileShowSuccess('Other sessions logged out successfully');
+                loadSecurityCenter();
+            } catch (error) {
+                console.error('Error logging out other sessions:', error);
+                profileShowError(error.message || 'Failed to logout other sessions');
+            }
         }
-
-        showSuccess('Other sessions logged out successfully');
-        loadSecurityCenter();
-    } catch (error) {
-        console.error('Error logging out other sessions:', error);
-        showError(error.message || 'Failed to logout other sessions');
-    }
+    );
 }
 
-async function revokeSession(sessionId) {
+function revokeSession(encodedSessionId) {
+    const sessionId = decodeURIComponent(String(encodedSessionId || ''));
     if (!sessionId) return;
-    if (!confirm('Revoke this session?')) return;
 
-    try {
-        const response = await postWithCsrf('/api/security/sessions/revoke', { sessionId });
-        const data = await response.json();
+    showConfirmModal(
+        'Revoke Session',
+        'Are you sure you want to revoke this session? The device will be logged out immediately.',
+        true,
+        async () => {
+            try {
+                const response = await postWithCsrf('/api/security/sessions/revoke', { sessionId });
+                const data = await response.json();
 
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to revoke session');
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to revoke session');
+                }
+
+                profileShowSuccess('Session revoked successfully');
+                loadSecurityCenter();
+                closeSessionDetails();
+            } catch (error) {
+                console.error('Error revoking session:', error);
+                profileShowError(error.message || 'Failed to revoke session');
+            }
         }
-
-        showSuccess('Session revoked successfully');
-        loadSecurityCenter();
-    } catch (error) {
-        console.error('Error revoking session:', error);
-        showError(error.message || 'Failed to revoke session');
-    }
+    );
 }
 
 async function startTwoFactorSetup() {
@@ -2204,8 +2344,7 @@ async function startTwoFactorSetup() {
         }
 
         document.getElementById('twoFactorSecret').value = data.secret || '';
-        document.getElementById('twoFactorUri').value = data.otpauthUri || '';
-        document.getElementById('twoFactorVerifyCode').value = '';
+        if (document.getElementById('twoFactorVerifyCode')) document.getElementById('twoFactorVerifyCode').value = '';
 
         const qrWrap = document.getElementById('twoFactorQrWrap');
         const qrImage = document.getElementById('twoFactorQrImage');
@@ -2215,17 +2354,17 @@ async function startTwoFactorSetup() {
         }
 
         document.getElementById('twoFactorSetupPanel').style.display = 'block';
-        showSuccess('2FA setup initialized. Add the secret in your authenticator app.');
+        profileShowSuccess('2FA setup initialized. Add the secret in your authenticator app.');
     } catch (error) {
         console.error('Error starting 2FA setup:', error);
-        showError(error.message || 'Failed to start 2FA setup');
+        profileShowError(error.message || 'Failed to start 2FA setup');
     }
 }
 
 async function confirmTwoFactorSetup() {
     const token = (document.getElementById('twoFactorVerifyCode').value || '').trim();
     if (!/^\d{6}$/.test(token)) {
-        showError('Please enter a valid 6-digit verification code');
+        profileShowError('Please enter a valid 6-digit verification code');
         return;
     }
 
@@ -2242,11 +2381,11 @@ async function confirmTwoFactorSetup() {
         const qrImage = document.getElementById('twoFactorQrImage');
         if (qrWrap) qrWrap.style.display = 'none';
         if (qrImage) qrImage.src = '';
-        showSuccess('Two-factor authentication enabled.');
+        profileShowSuccess('Two-factor authentication enabled.');
         loadSecurityCenter();
     } catch (error) {
         console.error('Error enabling 2FA:', error);
-        showError(error.message || 'Failed to enable 2FA');
+        profileShowError(error.message || 'Failed to enable 2FA');
     }
 }
 
@@ -2265,15 +2404,14 @@ async function disableTwoFactor() {
             throw new Error(data.error || 'Failed to disable 2FA');
         }
 
-        showSuccess('Two-factor authentication disabled.');
+        profileShowSuccess('Two-factor authentication disabled.');
         loadSecurityCenter();
     } catch (error) {
         console.error('Error disabling 2FA:', error);
-        showError(error.message || 'Failed to disable 2FA');
+        profileShowError(error.message || 'Failed to disable 2FA');
     }
 }
 
-// Handle password change
 bindListenerById('changePasswordForm', 'submit', async function (e) {
     e.preventDefault();
 
@@ -2282,24 +2420,21 @@ bindListenerById('changePasswordForm', 'submit', async function (e) {
     const confirmPassword = document.getElementById('confirmPassword').value;
 
     if (!currentPassword) {
-        showError('Please enter your current password');
+        profileShowError('Please enter your current password');
         return;
     }
 
-    // Validate passwords match
     if (newPassword !== confirmPassword) {
-        showError('New passwords do not match');
+        profileShowError('New passwords do not match');
         return;
     }
 
-    // Validate password strength
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,100}$/;
     if (!passwordRegex.test(newPassword)) {
-        showError('Password must contain at least 8 characters, including uppercase, lowercase, number, and special character');
+        profileShowError('Password must contain at least 8 characters, including uppercase, lowercase, number, and special character');
         return;
     }
 
-    // Show loading
     document.getElementById('changePasswordBtnText').style.display = 'none';
     document.getElementById('changePasswordLoading').classList.remove('hidden');
 
@@ -2312,18 +2447,18 @@ bindListenerById('changePasswordForm', 'submit', async function (e) {
         const data = await response.json();
 
         if (response.ok) {
-            showSuccess('Password changed successfully');
+            profileShowSuccess('Password changed successfully');
             document.getElementById('changePasswordForm').reset();
             lastGeneratedPassword = '';
             const showAllToggle = document.getElementById('showAllPasswordsToggle');
             if (showAllToggle) showAllToggle.checked = false;
             toggleAllPasswords(false);
         } else {
-            showError(data.error || 'Failed to change password');
+            profileShowError(data.error || 'Failed to change password');
         }
     } catch (error) {
         console.error('Error changing password:', error);
-        showError('Failed to change password');
+        profileShowError('Failed to change password');
     } finally {
         document.getElementById('changePasswordBtnText').style.display = 'inline';
         document.getElementById('changePasswordLoading').classList.add('hidden');
@@ -2341,17 +2476,17 @@ bindListenerById('changeEmailForm', 'submit', async function (e) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (newEmail !== confirmNewEmail) {
-        showError('New email addresses do not match');
+        profileShowError('New email addresses do not match');
         return;
     }
 
     if (!emailRegex.test(newEmail)) {
-        showError('Please enter a valid email address');
+        profileShowError('Please enter a valid email address');
         return;
     }
 
     if (activeEmail && newEmail === activeEmail) {
-        showError('New email must be different from your current email');
+        profileShowError('New email must be different from your current email');
         return;
     }
 
@@ -2373,13 +2508,13 @@ bindListenerById('changeEmailForm', 'submit', async function (e) {
             currentUser.email = updatedEmail;
             currentUser.email_verified = false;
             updateEmailVerificationUI(false, updatedEmail);
-            showSuccess('Email updated. Please verify your new address from your inbox.');
+            profileShowSuccess('Email updated. Please verify your new address from your inbox.');
         } else {
-            showError(data.error || 'Failed to change email');
+            profileShowError(data.error || 'Failed to change email');
         }
     } catch (error) {
         console.error('Error changing email:', error);
-        showError('Failed to change email');
+        profileShowError('Failed to change email');
     } finally {
         document.getElementById('changeEmailBtnText').style.display = 'inline';
         document.getElementById('changeEmailLoading').classList.add('hidden');
@@ -2407,15 +2542,14 @@ async function warnUser() {
 
         const data = await response.json();
         if (response.ok) {
-            showSuccess('User warned successfully');
-            // Reload profile to update warning count
+            profileShowSuccess('User warned successfully');
             setTimeout(() => location.reload(), 1500);
         } else {
-            showError(data.error || 'Failed to warn user');
+            profileShowError(data.error || 'Failed to warn user');
         }
     } catch (error) {
         console.error('Error warning user:', error);
-        showError('Failed to warn user');
+        profileShowError('Failed to warn user');
     }
 }
 
@@ -2437,15 +2571,14 @@ async function banUser() {
 
         const data = await response.json();
         if (response.ok) {
-            showSuccess('User banned successfully');
-            // Reload profile to update ban status
+            profileShowSuccess('User banned successfully');
             setTimeout(() => location.reload(), 1500);
         } else {
-            showError(data.error || 'Failed to ban user');
+            profileShowError(data.error || 'Failed to ban user');
         }
     } catch (error) {
         console.error('Error banning user:', error);
-        showError('Failed to ban user');
+        profileShowError('Failed to ban user');
     }
 }
 
@@ -2484,29 +2617,39 @@ bindListenerById('resendVerificationBtn', 'click', async function () {
         const data = await response.json();
 
         if (response.ok) {
-            showSuccess(data.message || 'Verification email sent');
+            profileShowSuccess(data.message || 'Verification email sent');
             updateEmailVerificationUI(false, currentUser?.email || '');
         } else {
-            showError(data.error || 'Failed to resend verification email');
+            profileShowError(data.error || 'Failed to resend verification email');
         }
     } catch (error) {
         console.error('Error resending verification email:', error);
-        showError('Failed to resend verification email');
+        profileShowError('Failed to resend verification email');
     } finally {
         button.textContent = originalText;
         updateEmailVerificationUI(Boolean(currentUser?.email_verified), currentUser?.email || '');
     }
 });
 
-function showError(message) {
+function profileShowError(message) {
+    if (typeof window.showError === 'function' && window.showError !== profileShowError) {
+        window.showError(message);
+    }
+
     const errorMsg = document.getElementById('errorMsg');
+    if (!errorMsg) return;
     errorMsg.textContent = message;
     errorMsg.classList.remove('hidden');
     setTimeout(() => errorMsg.classList.add('hidden'), 5000);
 }
 
-function showSuccess(message) {
+function profileShowSuccess(message) {
+    if (typeof window.showSuccess === 'function' && window.showSuccess !== profileShowSuccess) {
+        window.showSuccess(message);
+    }
+
     const successMsg = document.getElementById('successMsg');
+    if (!successMsg) return;
     successMsg.textContent = message;
     successMsg.classList.remove('hidden');
     setTimeout(() => successMsg.classList.add('hidden'), 5000);
@@ -2525,9 +2668,9 @@ function handleDiscordOAuthFlashMessage() {
     if (!status) return;
 
     if (status === 'success') {
-        showSuccess(message || 'Discord account linked successfully.');
+        profileShowSuccess(message || 'Discord account linked successfully.');
     } else {
-        showError(message || 'Discord OAuth linking failed.');
+        profileShowError(message || 'Discord OAuth linking failed.');
     }
 
     url.searchParams.delete('discord_oauth');
@@ -2535,7 +2678,6 @@ function handleDiscordOAuthFlashMessage() {
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
 }
 
-// Load profile on page load
 initProfileTabs();
 initDiscordLinkBanner();
 loadProfile();

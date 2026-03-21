@@ -160,7 +160,20 @@
 		"singleSessionMode": true,
 		"idleTimeoutMs": 1800000,
 		"absoluteTimeoutMs": 28800000,
-		"singleSessionCheckIntervalMs": 80000
+		"singleSessionCheckIntervalMs": 80000,
+		"captchaPolicy": {
+			"loginEnabled": true,
+			"registerEnabled": true,
+			"ttlMs": 300000,
+			"maxAttempts": 3,
+			"minSolveMs": 900,
+			"adaptiveDifficultyEnabled": true,
+			"failureWindowMs": 900000,
+			"failureThreshold": 10,
+			"failureBlockMs": 600000,
+			"minValue": 1,
+			"maxValue": 20
+		}
 	},
 	"resilience": {
 		"loginMaxAttempts": 5,

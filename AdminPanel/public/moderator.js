@@ -1,5 +1,3 @@
-/* Moderator panel helpers — UI utilities and moderation actions for the moderator interface. */
-// This function lets you open and close the user dropdown menu. Makes navigation easier for moderators.
 function toggleUserDropdown() {
     const menu = document.getElementById('userDropdownMenu');
     const trigger = document.querySelector('.user-dropdown-trigger');
@@ -14,7 +12,6 @@ document.addEventListener('click', function (event) {
     }
 });
 
-// Keep the dropdown username and role in sync with the header so everything matches.
 function syncDropdownInfo() {
     const username = document.getElementById('headerUsername')?.textContent;
     const role = document.getElementById('headerRole')?.textContent;
@@ -23,12 +20,8 @@ function syncDropdownInfo() {
 }
 setTimeout(syncDropdownInfo, 500);
 
-// Search and filter moderation actions in the History Lookup tab. Makes finding actions quick and easy.
 function searchActions() {
     const query = document.getElementById('actionSearchInput')?.value?.trim() || '';
-    // TODO: Add search/filter logic for moderation actions so mods can find what they need.
-    // console.log removed for production
-    // You can add AJAX/fetch logic here to update the actions table
 }
 
 function renderTableSkeleton(tbodyId, columnCount = 5, rowCount = 4) {
@@ -166,7 +159,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     transcriptCopyBtn?.addEventListener('click', () => copyTicketTranscript());
     transcriptDownloadBtn?.addEventListener('click', () => downloadTicketTranscript());
 
-    // Attach tab event listeners
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const tabName = e.target.dataset.tab;
@@ -175,7 +167,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     });
-    // Load bans and timeouts on page load
     await loadBannedUsers();
     await loadTimeouts();
 });
@@ -238,9 +229,8 @@ async function checkModeratorAccess() {
                 window.location.href = '/unauthorized';
                 return null;
             }
-            // Update user display
-            const userDisplay = document.getElementById('userDisplay');
-            const roleBadge = document.getElementById('roleBadge');
+            const userDisplay = document.getElementById('headerUsername');
+            const roleBadge = document.getElementById('headerRole');
             const username = data.username;
             const role = data.role.toUpperCase();
             if (userDisplay) userDisplay.textContent = username;
@@ -250,8 +240,6 @@ async function checkModeratorAccess() {
                 window.AdminPanel.api.applyRoleVisibility(data || {});
             }
 
-            // console.log removed for production
-            // Update navigation based on role
             const moderatorLink = document.getElementById('moderatorLink');
             const adminLink = document.getElementById('adminLink');
             const ownerNavLink = document.getElementById('ownerNavLink');
@@ -278,21 +266,18 @@ async function checkModeratorAccess() {
 function switchTab(e, tabName) {
     e.preventDefault();
 
-    // Hide everything first
     document.querySelectorAll('.tab-content').forEach(tab => {
         if (tab && tab.classList) {
             tab.classList.remove('active');
         }
     });
 
-    // Deactivate all tab buttons
     document.querySelectorAll('.tab').forEach(btn => {
         if (btn && btn.classList) {
             btn.classList.remove('active');
         }
     });
 
-    // Show the one they clicked on
     const selectedTab = document.getElementById(tabName);
     if (selectedTab && selectedTab.classList) {
         selectedTab.classList.add('active');
@@ -301,7 +286,6 @@ function switchTab(e, tabName) {
         e.target.classList.add('active');
     }
 
-    // Load data for whichever tab they're viewing
     if (tabName === 'bans') {
         loadBannedUsers();
         loadTimeouts();
@@ -309,13 +293,10 @@ function switchTab(e, tabName) {
         const ticketStatusFilter = document.getElementById('ticketStatusFilter');
         loadTickets(ticketStatusFilter?.value || 'all');
     } else if (tabName === 'warnings') {
-        // Warning search happens when user types
     } else if (tabName === 'members') {
-        // Member lookup is manually triggered or refreshed
     }
 }
 
-//  OVERVIEW TAB 
 
 async function loadOverviewStats() {
     try {
@@ -336,54 +317,115 @@ async function loadOverviewStats() {
     }
 }
 
+function formatTimeAgo(dateParam) {
+    if (!dateParam) return 'Unknown time';
+    const date = typeof dateParam === 'object' ? dateParam : new Date(dateParam);
+    const now = new Date();
+    const seconds = Math.round((now - date) / 1000);
+    const minutes = Math.round(seconds / 60);
+    const hours = Math.round(minutes / 60);
+    const days = Math.round(hours / 24);
+
+    if (seconds < 10) return 'Just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    if (minutes === 1) return '1 min ago';
+    if (minutes < 60) return `${minutes} mins ago`;
+    if (hours === 1) return '1 hr ago';
+    if (hours < 24) return `${hours} hrs ago`;
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 async function loadRecentActions() {
-    renderTableSkeleton('recentActionsTable', 4, 6);
+    const feedContainer = document.querySelector('.mod-action-feed');
+    if (!feedContainer) return;
+
+    feedContainer.innerHTML = `
+        <div class="mod-feed-skeleton"></div>
+        <div class="mod-feed-skeleton"></div>
+        <div class="mod-feed-skeleton"></div>
+        <div class="mod-feed-skeleton"></div>
+        <div class="mod-feed-skeleton"></div>
+    `;
+
     try {
         const response = await fetch('/api/moderation/recent-actions?limit=10');
         if (response.ok) {
             const actions = await response.json();
-            const tbody = document.getElementById('recentActionsTable');
 
             if (!Array.isArray(actions) || actions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No recent actions</td></tr>';
+                feedContainer.innerHTML = '<div class="mod-empty-feed">No recent actions</div>';
                 return;
             }
 
-            tbody.innerHTML = actions.map(action => {
+            feedContainer.innerHTML = actions.map(action => {
                 const username = action.username || 'Unknown';
                 const userId = action.userId || '';
-                const isSameAsId = userId && username && username.trim() === userId.toString().trim();
-                const userLabel = userId ? (isSameAsId ? `${userId}` : `${username} (${userId})`) : username;
+                const actionType = (action.action || 'ACTION').toUpperCase();
+                const caseId = action.case_id || action.caseId || action.ban_case_id || 'N/A';
 
-                // Parse timestamp safely
-                let dateStr = 'Invalid Date';
-                if (action.timestamp) {
-                    try {
-                        const date = new Date(action.timestamp);
-                        if (!isNaN(date.getTime())) {
-                            dateStr = date.toLocaleString();
-                        }
-                    } catch (e) {
-                        dateStr = 'Invalid Date';
-                    }
+                let badgeLabelClass = 'badge-label-info';
+                let statusColor = '#9E9E9E';
+
+                if (actionType.includes('UNBAN')) {
+                    badgeLabelClass = 'badge-label-unban'; statusColor = '#4caf50';
+                } else if (actionType.includes('BAN')) {
+                    badgeLabelClass = 'badge-label-ban'; statusColor = '#f44336';
+                } else if (actionType.includes('KICK')) {
+                    badgeLabelClass = 'badge-label-kick'; statusColor = '#ff9800';
+                } else if (actionType.includes('WARN')) {
+                    badgeLabelClass = 'badge-label-warn'; statusColor = '#ffc107';
+                } else if (actionType.includes('TIMEOUT')) {
+                    badgeLabelClass = 'badge-label-timeout'; statusColor = '#5b7fff';
+                } else if (actionType.includes('DELETE')) {
+                    badgeLabelClass = 'badge-label-info'; statusColor = '#9E9E9E';
+                }
+
+                const actionDate = action.timestamp ? new Date(action.timestamp) : new Date();
+                const relativeTime = formatTimeAgo(actionDate);
+                const exactTime = actionDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
+                const avatarUrl = action.userAvatar || null;
+                const initial = getMemberInitial({ username });
+
+                let avatarContent = `${initial}`;
+                if (avatarUrl) {
+					avatarContent = `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(username)}" onerror="this.parentElement.innerText='${escapeJsString(initial)}'">`;
                 }
 
                 return `
-                <tr>
-                    <td>${dateStr}</td>
-                    <td><strong>${escapeHtml(action.action)}</strong></td>
-                    <td>${escapeHtml(userLabel) || '-'}</td>
-                    <td>${escapeHtml(action.reason) || '-'}</td>
-                </tr>
-            `;
+                    <div class="mod-feed-item" style="border-left-color: ${statusColor};">
+                        <div class="mod-feed-badge-wrapper">
+                            <span class="mod-feed-badge ${badgeLabelClass}">${escapeHtml(actionType)}</span>
+                        </div>
+                        
+                        <div class="mod-feed-user">
+                            <div class="mod-feed-avatar">${avatarContent}</div>
+                            <span class="mod-feed-username" title="${userId}">${escapeHtml(username)}</span>
+                        </div>
+
+                        <div class="mod-feed-reason" title="${escapeHtml(action.reason || 'No reason provided')}">
+                            ${escapeHtml(action.reason || 'No reason')}
+                        </div>
+
+                        <div class="mod-feed-caseid" title="Case ID">
+                            ${escapeHtml(caseId)}
+                        </div>
+
+                        <div class="mod-feed-time" title="${exactTime}">
+                            ${relativeTime}
+                        </div>
+                    </div>
+                    `;
             }).join('');
         }
     } catch (error) {
         console.error('Error loading recent actions:', error);
+        if (feedContainer) feedContainer.innerHTML = '<div class="text-danger p-3">Failed to load actions</div>';
     }
 }
 
-// TICKETS TAB 
 
 if (!window.currentTickets) {
     window.currentTickets = [];
@@ -404,38 +446,106 @@ async function loadTickets(status = 'all') {
         const data = await response.json();
         const list = Array.isArray(data) ? data : [];
         window.currentTickets = list;
-        renderTickets(list);
+        filterTickets();
     } catch (error) {
         console.error('Error loading tickets:', error);
         renderTickets([]);
     }
 }
 
+function filterTickets() {
+    const searchInput = document.getElementById('ticketSearchInput');
+    const statusSelect = document.getElementById('ticketStatusFilter');
+
+    const query = (searchInput?.value || '').toLowerCase().trim();
+    const statusFilter = (statusSelect?.value || 'all').toLowerCase();
+
+    if (!window.currentTickets) window.currentTickets = [];
+
+    const filtered = window.currentTickets.filter(ticket => {
+        const tStatus = (ticket.status || 'open').toLowerCase();
+        let matchesStatus = true;
+        if (statusFilter !== 'all') {
+            matchesStatus = tStatus === statusFilter;
+        }
+
+        const username = (ticket.username || '').toLowerCase();
+        const id = String(ticket.id || '').toLowerCase();
+        const matchesSearch = !query || username.includes(query) || id.includes(query);
+
+        return matchesStatus && matchesSearch;
+    });
+
+    renderTickets(filtered);
+}
+
 function renderTickets(tickets) {
     const tbody = document.getElementById('ticketsTable');
+    if (!tbody) return;
 
     if (!Array.isArray(tickets) || tickets.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No tickets are currently open</td></tr>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center text-muted" style="padding: 4rem;">
+                    <div style="display:flex; flex-direction:column; align-items:center; gap:1rem; opacity: 0.5;">
+                        <i class="fas fa-inbox" style="font-size: 3rem;"></i>
+                        <span>No tickets found.</span>
+                    </div>
+                </td>
+            </tr>`;
         return;
     }
 
-    tbody.innerHTML = tickets.map(ticket => `
+    tbody.innerHTML = tickets.map(ticket => {
+        const rawStatus = (ticket.status || 'open').toLowerCase();
+        let badgeClass = 'badge-kick';
+        let iconClass = 'fa-archive';
+        let statusLabel = rawStatus.toUpperCase();
+
+        if (rawStatus === 'open') {
+            badgeClass = 'badge-timeout';
+            iconClass = 'fa-envelope-open';
+        } else if (rawStatus === 'claimed') {
+            badgeClass = 'badge-warn';
+            iconClass = 'fa-user-check';
+        } else if (rawStatus === 'closed') {
+            badgeClass = 'badge-kick';
+            iconClass = 'fa-check-circle';
+        }
+
+        const createdDate = ticket.created_at ? new Date(ticket.created_at) : new Date();
+        const timeAgo = formatTimeAgo(createdDate);
+
+        return `
         <tr>
-            <td>#${escapeHtml(ticket.id)}</td>
-            <td>${escapeHtml(ticket.username)}</td>
-            <td><span class="badge badge-${escapeHtml(ticket.status)}">${escapeHtml(ticket.status.toUpperCase())}</span></td>
-            <td>${new Date(ticket.created_at).toLocaleDateString()}</td>
+            <td style="font-family: monospace; color: #5b7fff; font-weight: 600;">#${escapeHtml(String(ticket.id))}</td>
             <td>
-                <button class="btn btn-sm btn-primary" onclick="viewTicket('${escapeHtml(ticket.id)}')">View</button>
+                <div class="user-cell">
+                    <span class="username">${escapeHtml(ticket.username || 'Unknown')}</span>
+                </div>
+            </td>
+            <td>
+                <span class="mod-feed-badge ${badgeClass}" style="font-size: 0.75rem; border: none; background: rgba(255,255,255,0.05);">
+                    <i class="fas ${iconClass}"></i> ${escapeHtml(statusLabel)}
+                </span>
+            </td>
+            <td style="text-align: right; color: var(--text-secondary); font-size: 0.9rem;" title="${createdDate.toLocaleString()}">
+                ${timeAgo}
+            </td>
+            <td style="text-align: right;">
+                <button class="action-btn action-btn-secondary" style="height: 32px; font-size: 0.8rem; padding: 0 0.8rem;" onclick="viewTicket('${escapeJsString(ticket.id)}')">
+                    View
+                </button>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 async function viewTicket(ticketId) {
     const ticket = currentTickets.find(t => String(t.id) === String(ticketId));
     if (!ticket) {
-        return showError('Ticket not found');
+        return profileShowError('Ticket not found');
     }
     const created = ticket.created_at ? new Date(ticket.created_at).toLocaleString() : 'N/A';
 
@@ -511,7 +621,7 @@ async function loadTicketTranscript(ticketId) {
 
 async function copyTicketTranscript() {
     if (!activeTicketTranscript) {
-        showError('No transcript to copy');
+        profileShowError('No transcript to copy');
         return;
     }
 
@@ -526,16 +636,16 @@ async function copyTicketTranscript() {
             document.execCommand('copy');
             temp.remove();
         }
-        showSuccess('Transcript copied to clipboard');
+        profileShowSuccess('Transcript copied to clipboard');
     } catch (error) {
         console.error('Failed to copy transcript:', error);
-        showError('Could not copy transcript');
+        profileShowError('Could not copy transcript');
     }
 }
 
 function downloadTicketTranscript() {
     if (!activeTicketTranscript) {
-        showError('No transcript to download');
+        profileShowError('No transcript to download');
         return;
     }
 
@@ -555,24 +665,22 @@ async function claimTicket(ticketId) {
     try {
         const { response, data } = await AdminPanel.api.postJson(`/api/tickets/${ticketId}/claim`, {});
         if (response && response.ok) {
-            showSuccess('Ticket claimed successfully');
+            profileShowSuccess('Ticket claimed successfully');
         } else {
-            showError((data && data.error) || 'Failed to claim ticket');
+            profileShowError((data && data.error) || 'Failed to claim ticket');
         }
     } catch (error) {
-        showError('Error claiming ticket');
+        profileShowError('Error claiming ticket');
     }
 }
 
-//  Bans/timeout tab
 
 async function loadBannedUsers() {
-    renderTableSkeleton('bannedUsersTable', 6, 5);
+    renderTableSkeleton('bannedUsersTable', 5, 5);
     try {
         const response = await fetch('/api/moderation/bans');
         if (response.ok) {
             const json = await response.json();
-            // Handle both data / raw array responses
             const bans = json.data || (Array.isArray(json) ? json : []);
             renderBannedUsers(bans);
         } else {
@@ -588,7 +696,7 @@ function renderBannedUsers(bans) {
     const tbody = document.getElementById('bannedUsersTable');
 
     if (!Array.isArray(bans) || bans.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No banned users</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding: 3rem;">No active bans found</td></tr>';
         return;
     }
 
@@ -597,36 +705,40 @@ function renderBannedUsers(bans) {
         const username = ban.username || 'Unknown';
         const reason = (ban.ban_reason && String(ban.ban_reason).trim()) ? ban.ban_reason : 'No reason provided';
         const bannedDate = ban.banned_at ? new Date(ban.banned_at).toLocaleString() : 'Unknown';
+
+        const initial = username.charAt(0).toUpperCase();
+
         return `
-        <tr class="moderation-list-row">
-            <td><code class="list-id">${escapeHtml(ban.user_id)}</code></td>
-            <td>${escapeHtml(username)}</td>
-            <td><div class="list-reason">${escapeHtml(reason)}</div></td>
-            <td>${escapeHtml(bannedByDisplay)}</td>
-            <td>${escapeHtml(bannedDate)}</td>
-            <td>
-                <div class="list-actions">
-                    <button class="btn btn-sm btn-primary" onclick="window.viewBanDetails_${idx}()">View</button>
-                    <button class="btn btn-sm btn-success" onclick="unbanUser('${escapeHtml(ban.user_id)}')">Unban</button>
+        <tr>
+            <td style="display:flex; align-items:center; gap:1rem;">
+                <div class="mod-feed-avatar" style="width:36px; height:36px; font-size:0.9rem;">
+					 ${ban.user_avatar ? `<img src="${escapeHtml(ban.user_avatar)}" style="width:100%; height:100%; object-fit:cover;">` : `<span>${initial}</span>`}
+                </div>
+                <div class="user-cell">
+                    <span class="username">${escapeHtml(username)}</span>
+                    <span class="userid">${escapeHtml(ban.user_id)}</span>
                 </div>
             </td>
-        </tr>
+            <td><div class="reason-truncated" title="${escapeHtml(reason)}">${escapeHtml(reason)}</div></td>
+            <td><span class="badge badge-secondary" style="font-size:0.75rem;">${escapeHtml(bannedByDisplay)}</span></td>
+            <td><span style="font-size:0.85rem; color:var(--text-secondary);">${escapeHtml(bannedDate)}</span></td>
+            <td style="text-align: right;">
+                  <button class="btn btn-sm btn-secondary" style="margin-right:0.5rem;" onclick="window.viewBanDetails_${idx}()" title="View Details"><i class="fas fa-eye"></i> View</button>
+                <button class="btn btn-sm btn-danger" style="background-color:rgba(244,67,54,0.1); color:#f44336; border:1px solid rgba(244,67,54,0.3);" onclick="unbanUser('${escapeJsString(ban.user_id)}')" title="Unban User"><i class="fas fa-unlock"></i> Unban</button>
     `;
     }).join('');
 
-    // Store ban data globally and attach click handlers
     bans.forEach((ban, idx) => {
         window[`viewBanDetails_${idx}`] = () => viewBanDetails(ban);
     });
 }
 
 async function loadTimeouts() {
-    renderTableSkeleton('timeoutsTable', 6, 5);
+    renderTableSkeleton('timeoutsTable', 5, 5);
     try {
         const response = await fetch('/api/moderation/timeouts');
         if (response.ok) {
             const json = await response.json();
-            // Handle both data / raw array responses
             const timeouts = json.data || (Array.isArray(json) ? json : []);
             renderTimeouts(timeouts);
         } else {
@@ -640,13 +752,13 @@ async function loadTimeouts() {
 
 function renderTimeouts(timeouts) {
     const tbody = document.getElementById('timeoutsTable');
+    window.__timeoutDetailHandlers = [];
 
     if (!Array.isArray(timeouts) || timeouts.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No active timeouts</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding: 3rem;">No active timeouts</td></tr>';
         return;
     }
 
-    // Remove duplicate timeouts for same user, reason, and issued_by
     const uniqueTimeouts = [];
     const seen = new Set();
     for (const timeout of timeouts) {
@@ -656,28 +768,40 @@ function renderTimeouts(timeouts) {
             seen.add(key);
         }
     }
-    tbody.innerHTML = uniqueTimeouts.map(timeout => {
+    tbody.innerHTML = uniqueTimeouts.map((timeout, idx) => {
+        window.__timeoutDetailHandlers[idx] = () => viewTimeoutDetails(timeout);
         const issuedByDisplay = timeout.issued_by_username ? `${timeout.issued_by_username}` : timeout.issued_by || 'Unknown';
         const username = timeout.username || 'Unknown';
         const reason = (timeout.reason && String(timeout.reason).trim()) ? timeout.reason : 'No reason provided';
-        // Fix expiration date formatting if invalid
         let expiresDate = 'N/A';
+        let isExpired = false;
         if (timeout.expires_at) {
             const expires = new Date(timeout.expires_at);
-            expiresDate = isNaN(expires.getTime()) ? 'N/A' : expires.toLocaleString();
+            if (!isNaN(expires.getTime())) {
+                expiresDate = expires.toLocaleString();
+                if (expires < new Date()) isExpired = true;
+            }
         }
+
+        const initial = username.charAt(0).toUpperCase();
+
         return `
-        <tr class="moderation-list-row">
-            <td><code class="list-id">${escapeHtml(timeout.user_id)}</code></td>
-            <td>${escapeHtml(username)}</td>
-            <td><div class="list-reason">${escapeHtml(reason)}</div></td>
-            <td>${escapeHtml(issuedByDisplay)}</td>
-            <td>${expiresDate}</td>
-            <td>
-                <div class="list-actions">
-                    <button class="btn btn-sm btn-primary" onclick='viewTimeoutDetails(${JSON.stringify(timeout)})'>View</button>
-                    <button class="btn btn-sm btn-success" onclick="removeTimeout('${escapeHtml(timeout.user_id)}')">Remove</button>
+        <tr>
+             <td style="display:flex; align-items:center; gap:1rem;">
+                <div class="mod-feed-avatar" style="width:36px; height:36px; font-size:0.9rem;">
+					 ${timeout.user_avatar ? `<img src="${escapeHtml(timeout.user_avatar)}" style="width:100%; height:100%; object-fit:cover;">` : `<span>${initial}</span>`}
                 </div>
+                <div class="user-cell">
+                    <span class="username">${escapeHtml(username)}</span>
+                    <span class="userid">${escapeHtml(timeout.user_id)}</span>
+                </div>
+            </td>
+            <td><div class="reason-truncated" title="${escapeHtml(reason)}">${escapeHtml(reason)}</div></td>
+            <td><span class="badge badge-secondary" style="font-size:0.75rem;">${escapeHtml(issuedByDisplay)}</span></td>
+            <td><span style="font-size:0.85rem; color:${isExpired ? '#4caf50' : '#ff9800'};">${expiresDate}</span></td>
+            <td style="text-align: right;">
+                <button class="btn btn-sm btn-secondary" style="margin-right:0.5rem;" onclick="window.__timeoutDetailHandlers[${idx}]()" title="View Details"><i class="fas fa-eye"></i> View</button>
+                <button class="btn btn-sm btn-danger" style="background-color:rgba(244,67,54,0.1); color:#f44336; border:1px solid rgba(244,67,54,0.3);" onclick="removeTimeout('${escapeJsString(timeout.user_id)}')" title="Revoke Timeout"><i class="fas fa-history"></i> Revoke</button>
             </td>
         </tr>
     `;
@@ -708,14 +832,14 @@ async function unbanUser(userId) {
         const { response, data } = await AdminPanel.api.requestJson(`/api/moderation/bans/${userId}`, { method: 'DELETE' });
         if (response && response.ok && data && data.success) {
             const caseIdMsg = data.caseId ? ` (Case ID: ${data.caseId})` : '';
-            showSuccess(`User unbanned successfully${caseIdMsg}`);
+            profileShowSuccess(`User unbanned successfully${caseIdMsg}`);
             await loadBannedUsers();
         } else {
-            showError((data && data.error) || 'Failed to unban user');
+            profileShowError((data && data.error) || 'Failed to unban user');
             console.error('Error unbanning user:', data || response);
         }
     } catch (error) {
-        showError('Error unbanning user');
+        profileShowError('Error unbanning user');
     }
 }
 
@@ -723,17 +847,16 @@ async function removeTimeout(userId) {
     try {
         const { response, data } = await AdminPanel.api.requestJson(`/api/moderation/timeouts/${userId}`, { method: 'DELETE' });
         if (response && response.ok) {
-            showSuccess('Timeout removed successfully');
+            profileShowSuccess('Timeout removed successfully');
             await loadTimeouts();
         } else {
-            showError((data && data.error) || 'Failed to remove timeout');
+            profileShowError((data && data.error) || 'Failed to remove timeout');
         }
     } catch (error) {
-        showError('Error removing timeout');
+        profileShowError('Error removing timeout');
     }
 }
 
-//  Warnings tab
 
 const warningCaseHandlers = [];
 window.__warningCaseHandlers = warningCaseHandlers;
@@ -872,7 +995,6 @@ async function searchWarnings() {
     }
 }
 
-// Expose function to global scope for inline onclick handlers
 window.searchWarnings = searchWarnings;
 
 function renderWarningsUserLookup(userId, history) {
@@ -952,7 +1074,7 @@ function renderWarningsCaseLookup(caseRecord) {
 
 async function viewCaseDetailsById(caseId) {
     if (!caseId || caseId === 'N/A') {
-        showError('No valid Case ID available.');
+        profileShowError('No valid Case ID available.');
         return;
     }
 
@@ -968,10 +1090,10 @@ async function viewCaseDetailsById(caseId) {
             });
             return;
         }
-        showError('Case details not found.');
+        profileShowError('Case details not found.');
     } catch (error) {
         console.error('Error loading case details:', error);
-        showError('Failed to load case details.');
+        profileShowError('Failed to load case details.');
     }
 }
 
@@ -998,13 +1120,13 @@ async function clearWarnings(userId) {
     try {
         const { response, data } = await AdminPanel.api.requestJson(`/api/moderation/warnings/${userId}`, { method: 'DELETE' });
         if (response && response.ok) {
-            showSuccess('Warnings cleared successfully');
+            profileShowSuccess('Warnings cleared successfully');
             await searchWarnings();
         } else {
-            showError((data && data.error) || 'Failed to clear warnings');
+            profileShowError((data && data.error) || 'Failed to clear warnings');
         }
     } catch (error) {
-        showError('Error clearing warnings');
+        profileShowError('Error clearing warnings');
     }
 }
 
@@ -1013,7 +1135,6 @@ function viewWarningDetails(warn) {
     document.getElementById('warningDetailUser').textContent = userDisplay;
     document.getElementById('warningDetailCount').textContent = warn.warn_count || 0;
 
-    // Create detailed warning list
     if (warn.warns && Array.isArray(warn.warns) && warn.warns.length > 0) {
         const warningsList = warn.warns.map(w => {
             const actionType = (w.type || 'WARN').toUpperCase();
@@ -1051,7 +1172,6 @@ function closeWarningsDetails() {
     if (modal) modal.style.display = 'none';
 }
 
-// Member info tab
 
 let currentMemberLookup = null;
 let memberLookupTrendState = {
@@ -1137,14 +1257,12 @@ function setMemberIntelligence(member) {
     const recentActionEl = document.getElementById('memberIntelRecentAction');
     const pressureEl = document.getElementById('memberIntelEnforcementPressure');
     const signalEl = document.getElementById('memberIntelSignalQuality');
-    const recommendationEl = document.getElementById('memberIntelRecommendation');
 
     if (!member) {
         if (accountAgeEl) accountAgeEl.textContent = 'Unknown';
         if (recentActionEl) recentActionEl.textContent = 'No data';
         if (pressureEl) pressureEl.textContent = 'Low';
         if (signalEl) signalEl.textContent = 'Pending';
-        if (recommendationEl) recommendationEl.textContent = 'Run lookup';
         memberLookupTrendState.pressure = null;
         memberLookupTrendState.pressureUpdatedAt = null;
         return;
@@ -1171,22 +1289,12 @@ function setMemberIntelligence(member) {
     const signalQuality = [member.username, member.user_id, member.joined_at, member.created_at]
         .filter(Boolean).length >= 4 ? 'High' : 'Partial';
 
-    const risk = Number(member.risk_score || 0);
-    const recommendation = risk >= 75
-        ? 'Escalate immediately'
-        : risk >= 50
-            ? 'Review & monitor closely'
-            : risk >= 25
-                ? 'Watchlist candidate'
-                : 'Normal monitoring';
-
     if (accountAgeEl) accountAgeEl.textContent = accountAgeDays === null ? 'Unknown' : `${accountAgeDays} days`;
     if (recentActionEl) recentActionEl.textContent = latestActionLabel;
     if (pressureEl) {
         pressureEl.innerHTML = `${escapeHtml(pressureLabel)} ${pressureTrendHtml} ${pressureTimeHtml}`.trim();
     }
     if (signalEl) signalEl.textContent = signalQuality;
-    if (recommendationEl) recommendationEl.textContent = recommendation;
 }
 
 function renderMemberLookupCardsSkeleton(count = 3) {
@@ -1217,18 +1325,16 @@ async function searchMembers() {
     const inputElem = document.getElementById('memberSearchInput');
     const statusElem = document.getElementById('memberSearchStatus');
     const userId = inputElem.value.trim();
-    if (statusElem) statusElem.textContent = '';
 
-    // Only allow valid Discord user IDs (17-19 digits)
     if (!/^\d{17,19}$/.test(userId)) {
         renderMembers([]);
         renderDeepMemberProfile(null);
-        if (statusElem) statusElem.textContent = 'Please enter a valid Discord User ID.';
+		if (statusElem) statusElem.innerHTML = '<span style="color: #ff6b6b">Enter a valid Discord user ID and try again.</span>';
         return;
     }
 
     try {
-        if (statusElem) statusElem.textContent = 'Loading full member profile...';
+		if (statusElem) statusElem.innerHTML = '<span style="color: #5b7fff; animation: pulse 1s infinite;">Looking up member details...</span>';
         renderMemberLookupCardsSkeleton(3);
         showMemberProfileSkeleton();
 
@@ -1289,12 +1395,12 @@ async function searchMembers() {
         currentMemberLookup = enrichedMember;
         renderMembers([enrichedMember]);
         renderDeepMemberProfile(enrichedMember);
-        if (statusElem) statusElem.textContent = 'Loaded member profile and moderation history.';
+		if (statusElem) statusElem.innerHTML = `<span style="color: #2ecc71">Member details loaded.</span>`;
     } catch (error) {
         renderMembers([]);
         renderDeepMemberProfile(null);
-        if (statusElem) statusElem.textContent = 'Error searching user.';
-        console.error('Error searching user:', error);
+		if (statusElem) statusElem.innerHTML = `<span style="color: #ff6b6b">Could not find that member.</span>`;
+        console.error('Search error:', error);
     }
 }
 
@@ -1302,7 +1408,7 @@ function clearMemberSearch() {
     const inputElem = document.getElementById('memberSearchInput');
     const statusElem = document.getElementById('memberSearchStatus');
     if (inputElem) inputElem.value = '';
-    if (statusElem) statusElem.textContent = '';
+	if (statusElem) statusElem.textContent = 'Ready to search';
     currentMemberLookup = null;
     resetMemberLookupTrendState();
     setMemberLookupOverview();
@@ -1313,7 +1419,7 @@ function clearMemberSearch() {
 
 async function refreshCurrentMemberLookup() {
     if (!currentMemberLookup?.user_id) {
-        showError('No member selected to refresh.');
+        profileShowError('No member selected to refresh.');
         return;
     }
     const inputElem = document.getElementById('memberSearchInput');
@@ -1444,7 +1550,7 @@ function renderDeepMemberProfile(member) {
     setMetric('memberMetricFlags', member.flags || 'None');
 
     if (riskStrip) {
-        riskStrip.innerHTML = `<span>Risk Assessment</span>${getRiskBadgeHtml(member)}`;
+        riskStrip.innerHTML = `<span style="display: flex; align-items: center; gap: 0.5rem;"><i class="fas fa-shield-alt" style="color: #5b7fff;"></i> Risk Assessment</span>${getRiskBadgeHtml(member)}`;
     }
 
     setMemberIntelligence(member);
@@ -1499,11 +1605,19 @@ function renderDeepMemberProfile(member) {
 async function quickWarnFromMemberLookup() {
     const userId = currentMemberLookup?.user_id;
     if (!userId) {
-        showError('Search a member first.');
+        profileShowError('Search a member first.');
         return;
     }
-    const reason = window.prompt('Warn reason (3-500 chars):');
-    if (!reason || reason.trim().length < 3) return;
+    const reason = await showPromptModal({
+        title: 'Issue Warning',
+        label: 'Warn reason (3-500 chars):',
+        placeholder: 'Enter reason...',
+        confirmText: 'Warn User',
+        confirmClass: 'action-btn-primary',
+        validate: (val) => val.trim().length >= 3 || 'Reason must be at least 3 characters.'
+    });
+
+    if (!reason) return;
 
     const snapshot = currentMemberLookup ? JSON.parse(JSON.stringify(currentMemberLookup)) : null;
     if (currentMemberLookup) {
@@ -1530,7 +1644,7 @@ async function quickWarnFromMemberLookup() {
             reason: reason.trim()
         });
         if (response && response.ok) {
-            showSuccess('Warning issued successfully.');
+            profileShowSuccess('Warning issued successfully.');
             await refreshCurrentMemberLookup();
         } else {
             if (snapshot) {
@@ -1538,7 +1652,7 @@ async function quickWarnFromMemberLookup() {
                 renderMembers([currentMemberLookup]);
                 renderDeepMemberProfile(currentMemberLookup);
             }
-            showError((data && data.error) || 'Failed to issue warning.');
+            profileShowError((data && data.error) || 'Failed to issue warning.');
         }
     } catch (error) {
         if (snapshot) {
@@ -1546,24 +1660,44 @@ async function quickWarnFromMemberLookup() {
             renderMembers([currentMemberLookup]);
             renderDeepMemberProfile(currentMemberLookup);
         }
-        showError('Error issuing warning.');
+        profileShowError('Error issuing warning.');
     }
 }
 
 async function quickTimeoutFromMemberLookup() {
     const userId = currentMemberLookup?.user_id;
     if (!userId) {
-        showError('Search a member first.');
+        profileShowError('Search a member first.');
         return;
     }
-    const minutesRaw = window.prompt('Timeout minutes (1 - 40320):', '60');
-    if (minutesRaw === null) return;
-    const reason = window.prompt('Timeout reason (3-500 chars):');
-    if (!reason || reason.trim().length < 3) return;
+    const minutesRaw = await showPromptModal({
+        title: 'Timeout Duration',
+        label: 'Timeout minutes (1 - 40320):',
+        defaultValue: '60',
+        inputType: 'number',
+        confirmText: 'Next',
+        validate: (val) => {
+            const num = parseInt(val, 10);
+            return (Number.isFinite(num) && num >= 1 && num <= 40320) || 'Must be 1-40320 mins.';
+        }
+    });
+
+    if (!minutesRaw) return;
+
+    const reason = await showPromptModal({
+        title: 'Timeout Reason',
+        label: 'Timeout reason (3-500 chars):',
+        placeholder: 'Enter reason...',
+        confirmText: 'Issue Timeout',
+        confirmClass: 'action-btn-primary',
+        validate: (val) => val.trim().length >= 3 || 'Reason must be at least 3 characters.'
+    });
+
+    if (!reason) return;
 
     const minutes = parseInt(minutesRaw, 10);
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > 40320) {
-        showError('Duration must be between 1 and 40320 minutes.');
+        profileShowError('Duration must be between 1 and 40320 minutes.');
         return;
     }
 
@@ -1591,11 +1725,11 @@ async function quickTimeoutFromMemberLookup() {
     try {
         const { response, data } = await AdminPanel.api.postJson('/api/moderation/timeout', {
             userId,
-            duration: minutes * 60 * 1000,
+            duration: minutes,
             reason: reason.trim()
         });
         if (response && response.ok) {
-            showSuccess('Timeout issued successfully.');
+            profileShowSuccess('Timeout issued successfully.');
             await refreshCurrentMemberLookup();
         } else {
             if (snapshot) {
@@ -1603,7 +1737,7 @@ async function quickTimeoutFromMemberLookup() {
                 renderMembers([currentMemberLookup]);
                 renderDeepMemberProfile(currentMemberLookup);
             }
-            showError((data && data.error) || 'Failed to issue timeout.');
+            profileShowError((data && data.error) || 'Failed to issue timeout.');
         }
     } catch (error) {
         if (snapshot) {
@@ -1611,7 +1745,7 @@ async function quickTimeoutFromMemberLookup() {
             renderMembers([currentMemberLookup]);
             renderDeepMemberProfile(currentMemberLookup);
         }
-        showError('Error issuing timeout.');
+        profileShowError('Error issuing timeout.');
     }
 }
 
@@ -1665,7 +1799,7 @@ function renderMembers(members) {
 
             <div class="member-result-foot">
                 <div class="member-result-notes ${member.notes ? 'has-notes' : ''}">${member.notes ? 'Notes available' : 'No notes yet'}</div>
-                <button class="btn btn-sm btn-primary" onclick="openNotesModal('${escapeHtml(member.user_id)}', '${escapeHtml(member.username || 'Unknown')}')">Open Notes</button>
+                <button class="btn btn-sm btn-primary" onclick="openNotesModal('${escapeJsString(member.user_id)}', '${escapeJsString(member.username || 'Unknown')}')">Open Notes</button>
             </div>
         </article>
     `).join('');
@@ -1705,38 +1839,37 @@ async function saveNotes() {
     try {
         const { response, data } = await AdminPanel.api.postJson(`/api/members/${userId}/notes`, { notes });
         if (response && response.ok) {
-            showSuccess('Notes saved successfully');
+            profileShowSuccess('Notes saved successfully');
             closeNotesModal();
         } else {
             if (currentMemberLookup) {
                 currentMemberLookup.notes = previousNotes;
                 renderMembers([currentMemberLookup]);
             }
-            showError((data && data.error) || 'Failed to save notes');
+            profileShowError((data && data.error) || 'Failed to save notes');
         }
     } catch (error) {
         if (currentMemberLookup) {
             currentMemberLookup.notes = previousNotes;
             renderMembers([currentMemberLookup]);
         }
-        showError('Error saving notes');
+        profileShowError('Error saving notes');
     }
 }
 
-//  Utility functions
 
-function showError(msg) {
+function profileShowError(msg) {
     if (typeof showToast === 'function') {
         return showToast('error', 'Error', msg);
     }
     const notification = document.createElement('div');
     notification.className = 'notification error';
-    notification.textContent = '❌ ' + msg;
+    notification.textContent = '- ' + msg;
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 5000);
 }
 
-function showSuccess(msg) {
+function profileShowSuccess(msg) {
     if (typeof showToast === 'function') {
         return showToast('success', 'Success', msg);
     }
@@ -1784,7 +1917,14 @@ function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
-//  Ban/timeout detail modals
+function escapeJsString(text) {
+    return String(text ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n');
+}
+
 
 function viewBanDetails(ban) {
     const userDisplay = ban.username ? `${ban.username} (${ban.user_id})` : ban.user_id || 'N/A';
@@ -1793,9 +1933,7 @@ function viewBanDetails(ban) {
     const bannedAt = ban.banned_at ? new Date(ban.banned_at).toLocaleString() : 'N/A';
     const caseId = ban.ban_case_id || 'N/A';
 
-    // If modalManager is available, show a polished modal. Otherwise fall back to legacy modal DOM.
     if (typeof modalManager !== 'undefined' && modalManager && typeof modalManager.showDetails === 'function') {
-        // Ensure legacy static modal is hidden to avoid duplicate UI
         try { document.getElementById('banDetailsModal').style.display = 'none'; } catch (e) { }
         const modalTimestamp = Date.now();
         const unbanBtnId = `unban-btn-${modalTimestamp}`;
@@ -1826,21 +1964,18 @@ function viewBanDetails(ban) {
 
         const modal = modalManager.showDetails('Ban Details', html, null);
 
-        // Attach copy handler
         try {
             const copyBtn = document.getElementById(copyBtnId);
             const idEl = document.getElementById(`ban-id-${modalTimestamp}`);
             if (copyBtn && idEl) {
                 copyBtn.addEventListener('click', () => {
                     navigator.clipboard.writeText(idEl.textContent || '');
-                    showSuccess('Copied', 'User ID copied to clipboard', 2000);
+                    profileShowSuccess('Copied', 'User ID copied to clipboard', 2000);
                 });
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {}
 
-        // Attach unban handler
         try {
-            // Append an Unban button into the existing modal footer so there's only one Close button.
             const footer = modal.querySelector('.modal-footer');
             if (footer) {
                 const unbanBtn = document.createElement('button');
@@ -1850,12 +1985,10 @@ function viewBanDetails(ban) {
                 footer.appendChild(unbanBtn);
 
                 unbanBtn.addEventListener('click', async () => {
-                    // close this modal and trigger unban
                     if (modal && modal.id) modalManager.closeModal(modal.id);
                     await unbanUser(String(ban.user_id));
                 });
             } else {
-                // Fallback: if footer not found, attach to dynamically created button id
                 const btn = document.getElementById(unbanBtnId);
                 if (btn) {
                     btn.addEventListener('click', async () => {
@@ -1869,7 +2002,6 @@ function viewBanDetails(ban) {
         return;
     }
 
-    // Legacy fallback: populate existing static modal
     document.getElementById('banDetailUser').textContent = userDisplay;
     document.getElementById('banDetailReason').textContent = reason;
     document.getElementById('banDetailBannedBy').textContent = bannedByDisplay;
@@ -1891,15 +2023,13 @@ function viewTimeoutDetails(timeout) {
     document.getElementById('timeoutDetailIssuedAt').textContent = timeout.issued_at ? new Date(timeout.issued_at).toLocaleString() : 'N/A';
     document.getElementById('timeoutDetailExpiresAt').textContent = timeout.expires_at ? new Date(timeout.expires_at).toLocaleString() : 'N/A';
 
-    // Calculate remaining time
     const now = Date.now();
     const expires = timeout.expires_at ? new Date(timeout.expires_at).getTime() : null;
     let remaining = 'N/A';
     if (expires && expires > now) {
         const diff = expires - now;
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        remaining = `${hours}h ${minutes}m`;
+        const totalMinutes = Math.ceil(diff / (1000 * 60));
+        remaining = `${totalMinutes} minutes`;
     } else if (expires) {
         remaining = 'Expired';
     }

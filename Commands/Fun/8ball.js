@@ -1,7 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 
-// The classic magic 8ball command—ask anything and get a fun answer!
-// Note to self: Would be cool to add more custom responses someday.
 const responses = [
   "It is certain 🎱",
   "It is decidedly so ✅",

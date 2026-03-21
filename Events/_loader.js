@@ -162,7 +162,7 @@ async function load(client) {
 		} catch (error) {
 			errorCount += 1;
 			errors.push({ file: relFile, error: error?.message || String(error) });
-			console.log(`  ${colors.red}❌${colors.reset} ${relFile}: ${colors.red}${error?.message || error}${colors.reset}`);
+			console.log(`  ${colors.red}-${colors.reset} ${relFile}: ${colors.red}${error?.message || error}${colors.reset}`);
 		}
 	}
 

@@ -1,26 +1,40 @@
 {
-    "serverLogChannelId": "LOG_CHANNEL_ID",
-    "announcementChannelId": "ANNOUNCEMENT_CHANNEL_ID",
-    "suggestionChannelId": "SUGGESTION_CHANNEL_ID",
-    "welcomeChannelId": "WELCOME_CHANNEL_ID",
-    "leaveChannelId": "LEAVE_CHANNEL_ID",
-    "ticketCategoryId": "TICKET_CATEGORY_ID",
-    "ticketLogChannelId": "TICKET_LOG_CHANNEL_ID",
-    "joinToCreateChannelId": "JOIN_TO_CREATE_CHANNEL_ID",
-    "joinToCreateCategoryId": "JOIN_TO_CREATE_CATEGORY_ID",
-    "verificationChannelId": "VERIFICATION_CHANNEL_ID",
-    "captchaLogChannelId": "CAPTCHA_LOG_CHANNEL_ID",
-    "giveawayChannelId": "GIVEAWAY_CHANNEL_ID",
-    "levelUpLogChannelId": "LEVEL_UP_LOG_CHANNEL_ID",
-    "birthdayChannelId": "BIRTHDAY_CHANNEL_ID",
-    "rulesChannelId": "RULES_CHANNEL_ID",
-    "incidentChannelId": "INCIDENT_CHANNEL_ID",
-    "notificationChannelId": "NOTIFICATION_CHANNEL_ID",
-    "webhookChannelId": "WEBHOOK_CHANNEL_ID",
-    "discordChannelId": "DISCORD_CHANNEL_ID",
-    "mediaOnlyChannelIds": ["MEDIA_ONLY_CHANNEL_ID_1", "MEDIA_ONLY_CHANNEL_ID_2"],
-    "mediaOnlyLogChannelId": "MEDIA_ONLY_LOG_CHANNEL_ID",
-    "inactiveChannelIgnoreIds": ["INACTIVE_CHANNEL_IGNORE_ID_1", "INACTIVE_CHANNEL_IGNORE_ID_2"],
-    "revivalIgnoreIds": ["REVIVAL_IGNORE_ID_1", "REVIVAL_IGNORE_ID_2"],
-    "revivalTargetIds": ["REVIVAL_TARGET_ID_1", "REVIVAL_TARGET_ID_2"]
+  "serverLogChannelId": "SERVER_LOG_CHANNEL_ID",
+  "announcementChannelId": "ANNOUNCEMENT_CHANNEL_ID",
+  "suggestionChannelId": "SUGGESTION_CHANNEL_ID",
+  "welcomeChannelId": "WELCOME_CHANNEL_ID",
+  "leaveChannelId": "LEAVE_CHANNEL_ID",
+  "ticketCategoryId": "TICKET_CATEGORY_ID",
+  "ticketLogChannelId": "TICKET_LOG_CHANNEL_ID",
+  "joinToCreateChannelId": "JOIN_TO_CREATE_CHANNEL_ID",
+  "joinToCreateCategoryId": "JOIN_TO_CREATE_CATEGORY_ID",
+  "verificationChannelId": "VERIFICATION_CHANNEL_ID",
+  "captchaLogChannelId": "CAPTCHA_LOG_CHANNEL_ID",
+  "giveawayChannelId": "GIVEAWAY_CHANNEL_ID",
+  "levelUpLogChannelId": "LEVEL_UP_LOG_CHANNEL_ID",
+  "birthdayChannelId": "BIRTHDAY_CHANNEL_ID",
+  "rulesChannelId": "RULES_CHANNEL_ID",
+  "incidentChannelId": "INCIDENT_CHANNEL_ID",
+  "notificationChannelId": "NOTIFICATION_CHANNEL_ID",
+  "webhookChannelId": "WEBHOOK_CHANNEL_ID",
+  "discordChannelId": "DISCORD_CHANNEL_ID",
+  "antiraidLogChannelId": "ANTIRAID_LOG_CHANNEL_ID",
+  "mediaOnlyChannelIds": [
+    "MEDIA_ONLY_CHANNEL_ID_1",
+    "MEDIA_ONLY_CHANNEL_ID_2"
+  ],
+  "mediaOnlyLogChannelId": "MEDIA_ONLY_LOG_CHANNEL_ID",
+  "inactiveChannelIgnoreIds": [
+    "INACTIVE_CHANNEL_IGNORE_ID_1",
+    "INACTIVE_CHANNEL_IGNORE_ID_2"
+  ],
+  "revivalIgnoreIds": [
+    "REVIVAL_IGNORE_ID_1",
+    "REVIVAL_IGNORE_ID_2"
+  ],
+  "revivalTargetIds": [
+    "REVIVAL_TARGET_ID_1",
+    "REVIVAL_TARGET_ID_2"
+  ],
+  "lockdownChannelIds": ["advanced_users_touch_only"]
 }

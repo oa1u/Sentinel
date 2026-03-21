@@ -398,7 +398,7 @@ function cleanupSpamData() {
 setInterval(cleanupSpamData, 5 * 60 * 1000);
 
 async function handleMessageCreate(message, client) {
-    // Ignore bots and direct messages — moderation only runs inside guilds.
+    // Ignore bots and direct messages - moderation only runs inside guilds.
     if (!message || message.author?.bot) return;
     if (!message.guild) return;
 
@@ -907,9 +907,10 @@ function sendUserNotification(message, context) {
     const userEmbed = new EmbedBuilder()
         .setColor(color)
         .setAuthor({ name: '⚠️ AutoMod Alert', iconURL: message.guild.iconURL() })
-        .setDescription(embedDescription)
-        .addFields(fields)
-        .setFooter({ text: message.guild.name })
+        .setDescription(`**${embedDescription}**`)
+        .addFields(fields.map(f => ({ ...f, name: `**${f.name}**` })))
+        .setThumbnail(message.author.displayAvatarURL())
+        .setFooter({ text: 'AutoMod Enforcement • Contact staff if needed', iconURL: message.guild.iconURL() })
         .setTimestamp();
 
     message.author.send({ embeds: [userEmbed] }).catch(err => {
@@ -949,21 +950,22 @@ function logToServerChannel(message, client, context) {
         .setColor(0xFF4444)
         .setAuthor({ name: '🛡️ AutoMod Detection', iconURL: client.user.displayAvatarURL() })
         .setTitle('Message Filtered')
-        .setDescription(`A message was automatically removed for violating server rules.`)
-        .addFields(
-            { name: '👤 User', value: `${message.author} (${message.author.tag})\n\`${message.author.id}\``, inline: true },
-            { name: '📍 Channel', value: `${message.channel}\n\`#${message.channel.name}\``, inline: true },
-            { name: '⚡ Action', value: `\`${formatActionLabel(actionTaken, timeoutMs)}\``, inline: true },
-            { name: '📈 Risk', value: `\`${Math.round(Number(riskScore || 0))}\` (${String(riskLevel || 'low').toUpperCase()})`, inline: true },
-            { name: '📊 Signals', value: `\`${Math.max(1, Number(signalCount || 1))}\``, inline: true },
-            { name: '🕒 Prior 24h', value: `\`${Math.max(0, Number(priorViolations24h || 0))}\``, inline: true },
-            { name: '📝 Appeal Notified', value: appealNotified ? 'Yes' : 'No', inline: true },
-            { name: '⚠️ Reason', value: `\`\`\`${reason}\`\`\``, inline: false },
-            { name: '🏷️ Violation Type', value: `\`${violationType}\``, inline: true },
-            { name: '📋 Case ID', value: `\`${caseId}\``, inline: true },
-            { name: '📝 Message Content', value: message.content ? `\`\`\`${message.content.slice(0, 500)}\`\`\`` : '`(no text content)`', inline: false }
-        )
-        .setFooter({ text: `User ID: ${message.author.id}` })
+        .setDescription('A message was automatically removed for violating server rules.')
+        .addFields([
+            { name: '**👤 User**', value: `${message.author} (${message.author.tag})\n\`${message.author.id}\``, inline: true },
+            { name: '**📍 Channel**', value: `${message.channel}\n\`#${message.channel.name}\``, inline: true },
+            { name: '**⚡ Action**', value: `\`${formatActionLabel(actionTaken, timeoutMs)}\``, inline: true },
+            { name: '**📈 Risk**', value: `\`${Math.round(Number(riskScore || 0))}\` (${String(riskLevel || 'low').toUpperCase()})`, inline: true },
+            { name: '**📊 Signals**', value: `\`${Math.max(1, Number(signalCount || 1))}\``, inline: true },
+            { name: '**🕒 Prior 24h**', value: `\`${Math.max(0, Number(priorViolations24h || 0))}\``, inline: true },
+            { name: '**📝 Appeal Notified**', value: appealNotified ? 'Yes' : 'No', inline: true },
+            { name: '**⚠️ Reason**', value: `\`\`\`${reason}\`\`\``, inline: false },
+            { name: '**🏷️ Violation Type**', value: `\`${violationType}\``, inline: true },
+            { name: '**📋 Case ID**', value: `\`${caseId}\``, inline: true },
+            { name: '**📝 Message Content**', value: message.content ? `\`\`\`${message.content.slice(0, 500)}\`\`\`` : '`(no text content)`', inline: false }
+        ])
+        .setThumbnail(message.guild.iconURL())
+        .setFooter({ text: `AutoMod Log • User ID: ${message.author.id}`, iconURL: client.user.displayAvatarURL() })
         .setTimestamp();
 
     logChannel.send({ embeds: [logEmbed] }).catch(err => {

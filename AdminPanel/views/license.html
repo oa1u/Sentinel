@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- License — licensing details and legal information for the Admin Panel. -->
 <html lang="en">
 
 <head>
@@ -7,19 +6,286 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="websiteNameTitle">License</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+
     <link rel="stylesheet" href="/css/style.css">
 
+    <style>
+        :root {
+            --license-accent: var(--color-blue);
+            --license-accent-soft: rgba(59, 130, 246, 0.1);
+            --bg-glass: rgba(22, 22, 26, 0.6);
+            --border-glass: rgba(255, 255, 255, 0.08);
+        }
+
+        .license-wrapper {
+            max-width: 900px;
+            margin: 4rem auto;
+            position: relative;
+        }
+
+        .license-card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-glass);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            padding: 4rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .license-card::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            right: -100px;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--license-accent-soft) 0%, transparent 70%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .license-header {
+            text-align: center;
+            margin-bottom: 3.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .license-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            display: inline-block;
+            filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.3));
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .license-header h1 {
+            font-size: 2.5rem;
+            margin: 0 0 1rem 0;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(to bottom right, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .license-header p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .license-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.25rem;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 50px;
+            color: var(--color-blue);
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        }
+
+        .license-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .license-box {
+            background: #1e1e24;
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-md);
+            padding: 2rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            color: #a0a0a0;
+            line-height: 1.7;
+            margin-bottom: 3rem;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            position: relative;
+        }
+
+        .license-box::before {
+            content: 'LICENSE.txt';
+            display: block;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 0.75rem;
+            color: #666;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #333;
+            padding-bottom: 0.5rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .license-box::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .license-box::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .license-box::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .permissions-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+
+        .perm-card {
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            height: 100%;
+        }
+
+        .perm-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .perm-card.allowed {
+            border-top: 3px solid var(--color-green);
+        }
+
+        .perm-card.limited {
+            border-top: 3px solid var(--color-red);
+        }
+
+        .perm-card.obligations {
+            border-top: 3px solid var(--color-blue);
+        }
+
+        .perm-title {
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .allowed .perm-title {
+            color: var(--color-green);
+        }
+
+        .limited .perm-title {
+            color: var(--color-red);
+        }
+
+        .obligations .perm-title {
+            color: var(--color-blue);
+        }
+
+        .perm-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .perm-list li {
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+
+        .perm-list li:hover {
+            color: white;
+        }
+
+        .perm-list li i {
+            font-style: normal;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .license-links {
+            text-align: center;
+            margin-top: 2.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .license-links a {
+            color: var(--color-blue);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .license-links a:hover {
+            text-decoration: underline;
+            color: #60a5fa;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .permissions-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .license-card {
+                padding: 1.5rem;
+            }
+
+            .license-wrapper {
+                margin: 2rem 1rem;
+            }
+        }
+    </style>
 </head>
 
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo">📄 License</div>
+            <div class="logo"><span id="PanelEmoji">⚖️</span> License</div>
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
                 <a href="/admin" class="nav-link" id="adminLink">Admin</a>
-                <a href="/owner" class="nav-link" id="ownerLink">Owner</a>
+                <a href="/owner" class="nav-link" id="ownerNavLink">Owner</a>
             </nav>
             <div class="user-info">
                 <div class="user-dropdown">
@@ -46,126 +312,81 @@
             </div>
         </div>
     </header>
-    <style>
-        .license-container {
-            max-width: 920px;
-            margin: 2rem auto;
-            display: grid;
-            gap: 1rem;
-        }
 
-        .license-hero {
-            padding: 1.75rem 2rem;
-            border-radius: 1rem;
-            background: linear-gradient(120deg, var(--bg-card) 0%, #2a3150 100%);
-            border: 1px solid var(--border-color);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-        }
+    <main class="license-wrapper">
+        <div class="license-card">
+            <div class="license-header">
+                <div class="license-badge">GPL v3.0</div>
+                <h1>Open & Free</h1>
+                <p>Sentinel is open-source software licensed under the GNU GPL v3.0. This ensures that the software
+                    remains free and open for everyone to use, modify, and improve.</p>
+            </div>
 
-        .license-hero h1 {
-            margin: 0;
-            font-size: 2rem;
-        }
+            <div class="license-content">
+                <div class="license-box">GNU GENERAL PUBLIC LICENSE
+                    Version 3, 29 June 2007
 
-        .license-hero p {
-            margin: 0.6rem 0 0;
-            color: var(--text-secondary);
-        }
+                    Copyright (C) 2007 Free Software Foundation, Inc.
+                    <https: //fsf.org />
+                    Everyone is permitted to copy and distribute verbatim copies
+                    of this license document, but changing it is not allowed.
 
-        .license-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1rem;
-        }
+                    Preamble
 
-        .license-summary {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.25rem 1.5rem;
-        }
+                    The GNU General Public License is a free, copyleft license for
+                    software and other kinds of works.
 
-        .license-summary h2 {
-            margin-top: 0;
-            margin-bottom: 0.75rem;
-        }
+                    The licenses for most software and other practical works are designed
+                    to take away your freedom to share and change the works. By contrast,
+                    the GNU General Public License is intended to guarantee your freedom to
+                    share and change all versions of a program--to make sure it remains free
+                    software for all its users. We, the Free Software Foundation, use the
+                    GNU General Public License for most of our software; it applies also to
+                    any other work released this way by its authors. You can apply it to
+                    your programs, too.
+                    ...
+                </div>
 
-        .license-summary ul {
-            margin: 0;
-            padding-left: 1.2rem;
-            color: var(--text-secondary);
-            line-height: 1.8;
-        }
+                <div class="permissions-grid">
+                    <div class="perm-card allowed">
+                        <div class="perm-title"><i>✅</i> You Can</div>
+                        <ul class="perm-list">
+                            <li><i>🏢</i> Use for any commercial purpose</li>
+                            <li><i>✏️</i> Modify and adapt the code freely</li>
+                            <li><i>📦</i> Distribute copies to anyone</li>
+                            <li><i>🔒</i> Use privately without sharing</li>
+                        </ul>
+                    </div>
 
-        .license-text {
-            background: #1f2435;
-            color: #d6deef;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 0.9rem;
-            padding: 1.15rem 1.25rem;
-            max-height: 430px;
-            overflow: auto;
-            line-height: 1.65;
-            font-size: 0.98rem;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
+                    <div class="perm-card limited">
+                        <div class="perm-title"><i>🚫</i> You Cannot</div>
+                        <ul class="perm-list">
+                            <li><i>⚖️</i> Hold the authors liable for damages</li>
+                            <li><i>📝</i> Use our trademarks or branding</li>
+                            <li><i>🔒</i> Keep your modifications closed-source if distributed</li>
+                        </ul>
+                    </div>
 
-        .license-links {
-            margin-top: 0.9rem;
-            color: var(--text-secondary);
-        }
-    </style>
+                    <div class="perm-card obligations">
+                        <div class="perm-title"><i>⚠️</i> You Must</div>
+                        <ul class="perm-list">
+                            <li><i>📄</i> Include a copy of the license</li>
+                            <li><i>©️</i> Keep original copyright notices intact</li>
+                            <li><i>🔄</i> Clearly state any changes made</li>
+                            <li><i>🔓</i> Share source code when distributing</li>
+                        </ul>
+                    </div>
+                </div>
 
-    <main class="container license-container">
-        <section class="license-hero">
-            <h1>📄 License</h1>
-            <p>Open source license details for this <span class="websiteName"></span> and bot project.</p>
-        </section>
-
-        <section class="license-grid">
-            <article class="license-summary">
-                <h2>GNU General Public License v3.0</h2>
-                <ul>
-                    <li>This project is distributed under GPL-3.0.</li>
-                    <li>You may use, modify, and redistribute under GPL terms.</li>
-                    <li>Any redistributed modified version must keep the same license.</li>
-                    <li>This software is provided without warranty.</li>
-                </ul>
-            </article>
-
-            <article class="license-summary">
-                <h2>License Text (Excerpt)</h2>
-                <pre class="license-text">GNU GENERAL PUBLIC LICENSE
-Version 3, 29 June 2007
-
-Copyright (C) 2026 <span class="websiteName"></span> Developers
-
-Everyone is permitted to copy and distribute verbatim copies
-of this license document, but changing it is not allowed.
-
-... (full GPLv3 text should be included here, truncated for brevity) ...
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program. If not, see &lt;https://www.gnu.org/licenses/&gt;.</pre>
-
-                <p class="license-links">For more details, see the <a href="https://www.gnu.org/licenses/gpl-3.0.html"
-                        target="_blank" rel="noopener noreferrer">GNU GPL v3 License</a> or the project's <a
-                        id="githubLicensePageLink" href="#" target="_blank" rel="noopener noreferrer">GitHub
-                        repository</a>.</p>
-            </article>
-        </section>
+                <div class="license-links">
+                    <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank">Read Full License Text →</a>
+                    <span style="margin: 0 1rem; color: var(--border-glass);">|</span>
+                    <a href="#" id="githubLicensePageLink" target="_blank">View on GitHub →</a>
+                </div>
+            </div>
+        </div>
     </main>
+
 
     <footer class="page-footer">
         <div class="footer-links">
@@ -179,59 +400,94 @@ along with this program. If not, see &lt;https://www.gnu.org/licenses/&gt;.</pre
         </div>
     </footer>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/public/notifications.js" defer></script>
     <script src="/public/shared.js"></script>
     <script src="/public/version.js"></script>
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            updateAccountInfo();
+
+            fetch('/Config/main.json')
+                .then(res => res.json())
+                .then(cfg => {
+                    const link = cfg.githublink || 'https://github.com/oa1u/Sentinel';
+                    const githubLicensePageLink = document.getElementById('githubLicensePageLink');
+                    if (githubLicensePageLink) {
+                        githubLicensePageLink.href = link;
+                    }
+                })
+                .catch(err => console.error("Error loading config:", err));
+        });
+
         function toggleUserDropdown() {
             const menu = document.getElementById('userDropdownMenu');
             const trigger = document.querySelector('.user-dropdown-trigger');
-            if (menu && trigger) {
-                menu.classList.toggle('show');
-                trigger.classList.toggle('active');
-            }
+            if (menu) menu.classList.toggle('show');
+            if (trigger) trigger.classList.toggle('active');
         }
 
-        document.addEventListener('click', function (event) {
-            const dropdown = document.querySelector('.user-dropdown');
-            if (dropdown && !dropdown.contains(event.target)) {
-                const menu = document.getElementById('userDropdownMenu');
-                const trigger = document.querySelector('.user-dropdown-trigger');
+        document.addEventListener('click', (e) => {
+            const trigger = document.querySelector('.user-dropdown-trigger');
+            const menu = document.getElementById('userDropdownMenu');
+            if (trigger && menu && !trigger.contains(e.target) && !menu.contains(e.target)) {
                 if (menu) menu.classList.remove('show');
                 if (trigger) trigger.classList.remove('active');
             }
         });
 
-        // Fetch account info and update username/role
         async function updateAccountInfo() {
             try {
                 let api = window.api || (window.AdminPanel && window.AdminPanel.api);
                 if (!api && window.AdminPanel) api = window.AdminPanel.api;
+
                 if (api && typeof api.getAccountInfo === 'function') {
                     const accountInfo = await api.getAccountInfo();
                     if (accountInfo) {
-                        document.getElementById('headerUsername').textContent = accountInfo.username || 'User';
-                        document.getElementById('headerRole').textContent = (accountInfo.role || 'User').toUpperCase();
-                        document.getElementById('dropdownUsername').textContent = accountInfo.username || 'User';
-                        document.getElementById('dropdownRole').textContent = (accountInfo.role || 'User').toUpperCase();
+                        updateUI(accountInfo);
+                        return;
                     }
                 }
-            } catch (err) {
-                // Fallback: leave as Loading...
+
+                const res = await fetch("/api/account/info");
+                if (res.ok) {
+                    const data = await res.json();
+                    updateUI(data);
+                }
+            } catch (error) {
+                console.error("Error loading user info:", error);
             }
         }
-        document.addEventListener('DOMContentLoaded', updateAccountInfo);
 
-        fetch('/Config/main.json')
-            .then(res => res.json())
-            .then(cfg => {
-                const link = cfg.githublink || 'https://github.com/oa1u/Sentinel';
-                const githubLicensePageLink = document.getElementById('githubLicensePageLink');
-                if (githubLicensePageLink) {
-                    githubLicensePageLink.href = link;
-                }
-            });
+        function updateUI(data) {
+            const safeText = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = val;
+            };
+
+            safeText("headerUsername", data.username || "User");
+            safeText("headerRole", (data.role || "user").toUpperCase());
+            safeText("dropdownUsername", data.username || "User");
+            safeText("dropdownRole", (data.role || "user").toUpperCase());
+
+            const moderatorLink = document.getElementById("moderatorLink");
+            const adminLink = document.getElementById("adminLink");
+            const ownerNavLink = document.getElementById("ownerNavLink");
+            const analyticsLink = document.getElementById("analyticsLink");
+
+            const role = data.role || 'user';
+            const isMod = ["moderator", "admin", "owner"].includes(role);
+            const isAdmin = ["admin", "owner"].includes(role);
+            const isOwner = (role === "owner");
+
+            if (moderatorLink) moderatorLink.style.display = isMod ? "block" : "none";
+            if (adminLink) adminLink.style.display = isAdmin ? "block" : "none";
+            if (ownerNavLink) ownerNavLink.style.display = isOwner ? "block" : "none";
+            if (analyticsLink) analyticsLink.style.display = isMod ? "block" : "none";
+        }
+
+        function logout() {
+            document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            window.location.href = "/login";
+        }
     </script>
 </body>
 

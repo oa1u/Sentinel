@@ -8,7 +8,6 @@ const { canModerateMember, addCase, sendModerationDM, logModerationAction } = re
 const { AppealLink } = require("../../Config/main.json");
 const { formatErrorMessage } = require("../../Functions/ErrorFormatter");
 
-// This command bans users, logs the action, sends DM notifications, and tracks bans in the admin panel.
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
@@ -33,12 +32,10 @@ module.exports = {
       const targetUser = interaction.options.getUser('user');
       const reason = interaction.options.getString('reason') || 'No reason provided';
 
-      // Double check that someone was actually specified for the ban.
       if (!targetUser) {
         return await sendWarningReply(interaction, 'Invalid User', 'Please specify a valid user to ban');
       }
 
-      // Make sure the person running the command is allowed to ban this user (role hierarchy and all).
       if (!await canModerateMember(interaction, targetUser, 'ban')) {
         return;
       }
@@ -53,7 +50,6 @@ module.exports = {
         color: 0xF04747
       });
 
-      // Try to send the user a DM first so they know why they're getting banned.
       const dmEmbed = createModerationDmEmbed({
         actionTitle: 'Server Ban Notice',
         actionEmoji: '🔨',
@@ -75,7 +71,6 @@ module.exports = {
         console.error('[ban] Failed to log action:', err.message);
       });
 
-      // Store the ban case in our database for tracking.
       try {
         addCase(targetUser.id, caseID, {
           moderator: interaction.user.id,
@@ -89,7 +84,6 @@ module.exports = {
         console.error('[ban] Failed to save case:', dbErr.message);
       }
 
-      // Actually ban the user now.
       try {
         await interaction.guild.members.ban(targetUser, { reason });
 

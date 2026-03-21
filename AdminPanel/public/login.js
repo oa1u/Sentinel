@@ -1,7 +1,4 @@
-/* Login page script — handles CSRF, form submission and small UI helpers for signing in. */
-// Simple username and password authentication. Nothing fancy, just what you need.
 
-// Wait until everything on the page is loaded before running the login logic.
 document.addEventListener('DOMContentLoaded', () => {
     const loginBtn = document.getElementById('loginBtn');
     const registerLink = document.getElementById('registerLink');
@@ -28,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
         challengeId: '',
         required: false
     };
-    // Recovery code logic removed
 
     function showMessage(el, msg, type) {
         if (!el) return;
@@ -49,8 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setLoading(show) {
-        // The redesigned page doesn't include a global loading overlay by default.
-        // Prefer the AdminPanel UI helper when available; otherwise disable the login button.
         if (ui?.setLoading) return ui.setLoading(null, show);
         if (loginBtn) loginBtn.disabled = show;
     }
@@ -66,7 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // Wire interactions
     loginForm?.addEventListener('submit', (e) => { e.preventDefault(); handleLogin(); });
     loginBtn.addEventListener('click', (e) => { e.preventDefault(); handleLogin(); });
     registerLink?.addEventListener('click', (e) => { e?.preventDefault(); window.location.href = '/register'; });
@@ -128,7 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadCaptchaChallenge(false);
 
-    // Recovery code logic removed
 
     async function handleLogin() {
         hideMessage(errorMsg);
@@ -187,7 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Server may require 2FA for this account — display a friendly message
             if (response?.status === 202 && data?.requiresTwoFactor) {
                 twoFactorState.challengeId = String(data?.challengeId || '');
                 setTwoFactorRequired(true);
@@ -207,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Login error', err);
             await loadCaptchaChallenge(true);
-            showMessage(errorMsg, 'Connection error — try again.', 'error');
+            showMessage(errorMsg, 'Connection error - try again.', 'error');
         } finally {
             setLoading(false);
         }

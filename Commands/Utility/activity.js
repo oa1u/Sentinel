@@ -71,13 +71,13 @@ module.exports = {
 
             const topChannelsText = topChannels.length
                 ? topChannels
-                    .map((row, index) => `**${index + 1}.** <#${row.channelId}> — **${row.messageCount.toLocaleString()}** msg`)
+                    .map((row, index) => `**${index + 1}.** <#${row.channelId}> - **${row.messageCount.toLocaleString()}** msg`)
                     .join('\n')
                 : 'No channel activity tracked yet.';
 
             const topCommandsText = Array.isArray(commandSummary?.topCommands) && commandSummary.topCommands.length
                 ? commandSummary.topCommands
-                    .map((row, index) => `**${index + 1}.** \`/${row.command}\` — **${row.uses.toLocaleString()}** use${row.uses === 1 ? '' : 's'}`)
+                    .map((row, index) => `**${index + 1}.** \`/${row.command}\` - **${row.uses.toLocaleString()}** use${row.uses === 1 ? '' : 's'}`)
                     .join('\n')
                 : 'No command usage tracked for this window.';
 

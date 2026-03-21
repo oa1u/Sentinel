@@ -6,11 +6,9 @@
   "scripts": {
     "start": "node --max-old-space-size=12288 index.js",
     "admin": "node --max-old-space-size=12288 adminPanel.js",
-    "start:all": "node --max-old-space-size=12288 startAll.js",
-    "migrate": "node migrate-to-mysql.js",
-    "safety:check": "node scripts/safetyCheck.js",
+    "account:create": "node scripts/createAccount.js",
     "email:send-all-templates": "node scripts/sendAllEmailTemplates.js",
-    "test": "npm run safety:check"
+    "test": "node -e \"console.log('No automated test suite is currently configured.')\""
   },
   "keywords": [
     "discord",

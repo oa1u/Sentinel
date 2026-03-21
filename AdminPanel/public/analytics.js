@@ -1,8 +1,8 @@
-function showNotification(message, type = 'info') {
-    if (type === 'success' && typeof showSuccess === 'function') return showSuccess('Success', message);
-    if (type === 'error' && typeof showError === 'function') return showError('Error', message);
-    if (type === 'warning' && typeof showWarning === 'function') return showWarning('Warning', message);
-    if (typeof showInfo === 'function') return showInfo('Info', message);
+function analyticsShowNotification(message, type = 'info') {
+    if (type === 'success' && typeof window.showSuccess === 'function') return window.showSuccess('Success', message);
+    if (type === 'error' && typeof window.showError === 'function') return window.showError('Error', message);
+    if (type === 'warning' && typeof window.showWarning === 'function') return window.showWarning('Warning', message);
+    if (typeof window.showInfo === 'function') return window.showInfo('Info', message);
     console.log(`[${type}] ${message}`);
 }
 
@@ -79,13 +79,32 @@ async function loadVerificationAnalytics() {
 
         const modeRows = Object.entries(verificationModes);
         if (!modeRows.length) {
-            modeBreakdown.innerHTML = '<span class="text-muted">No mode data yet.</span>';
+            modeBreakdown.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--text-muted);">No verification mode data available yet.</div>';
         } else {
             const totalModes = modeRows.reduce((acc, [, value]) => acc + Number(value || 0), 0);
-            modeBreakdown.innerHTML = modeRows.map(([mode, value]) => {
+
+            modeRows.sort((a, b) => Number(b[1]) - Number(a[1]));
+
+            modeBreakdown.innerHTML = modeRows.map(([mode, value], index) => {
                 const count = Number(value || 0);
                 const pct = totalModes > 0 ? ((count / totalModes) * 100).toFixed(1) : '0.0';
-                return `<div style="margin-bottom:0.5rem;"><strong>${escapeVerificationValue(mode)}</strong>: ${count.toLocaleString()} (${pct}%)</div>`;
+                const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#a78bfa', '#ec4899'];
+                const color = colors[index % colors.length];
+
+                return `
+                <div style="margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem; font-size: 0.9rem;">
+                        <span style="font-weight: 600; text-transform: capitalize;">${escapeVerificationValue(mode).replace(/_/g, ' ')}</span>
+                        <span>
+                            <span style="color:white; font-weight:700;">${count.toLocaleString()}</span>
+                            <span style="color:rgba(255,255,255,0.5); font-size:0.8em; margin-left:4px;">${pct}%</span>
+                        </span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.08); border-radius: 99px; height: 8px; overflow: hidden;">
+                        <div style="background: ${color}; height: 100%; width: ${pct}%; border-radius: 99px; transition: width 1s ease-out;"></div>
+                    </div>
+                </div>
+                `;
             }).join('');
         }
 
@@ -107,28 +126,27 @@ async function loadVerificationAnalytics() {
                     datasets: [{
                         data: values,
                         backgroundColor: colors.slice(0, labels.length),
-                        borderColor: '#222c37',
+                        borderColor: 'rgba(20, 20, 20, 0.8)',
                         borderWidth: 2
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false }
                     }
                 }
             });
-        }
 
-        if (!labels.length) {
-            legendEl.innerHTML = '<div class="text-muted">No challenge distribution data yet.</div>';
-        } else {
-            const challengeTotal = values.reduce((acc, value) => acc + value, 0);
+            const total = values.reduce((a, b) => a + b, 0);
             legendEl.innerHTML = labels.map((label, index) => {
                 const value = values[index];
-                const pct = challengeTotal > 0 ? ((value / challengeTotal) * 100).toFixed(1) : '0.0';
+                const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
                 return `<div style="margin-bottom:0.35rem;"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${colors[index]};margin-right:0.45rem;"></span>${escapeVerificationValue(label)}: ${value.toLocaleString()} (${pct}%)</div>`;
             }).join('');
+        } else {
+            legendEl.innerHTML = '<span class="text-muted">No challenge data.</span>';
         }
 
         if (!recent.length) {
@@ -173,7 +191,7 @@ function csvEscape(value) {
 function exportVerificationEventsCsv() {
     const payload = window.verificationAnalyticsData;
     if (!payload || !Array.isArray(payload.recent)) {
-        showError('Export Failed', 'Load verification analytics before exporting.');
+        analyticsShowNotification('Load verification analytics before exporting.', 'error');
         return;
     }
 
@@ -215,7 +233,7 @@ function exportVerificationEventsCsv() {
     document.body.removeChild(anchor);
     window.URL.revokeObjectURL(url);
 
-    showSuccess('Exported', 'Verification analytics exported to CSV.');
+    analyticsShowNotification('Verification analytics exported to CSV.', 'success');
 }
 
 window.exportVerificationEventsCsv = exportVerificationEventsCsv;
@@ -228,7 +246,7 @@ async function loadAlertAnalytics() {
     try {
         const { response, data } = await window.AdminPanel.api.getJson('/api/owner/alert-settings-analytics');
         if (!response.ok) {
-            showNotification('Failed to load alert analytics', 'error');
+            analyticsShowNotification('Failed to load alert analytics', 'error');
             return;
         }
 
@@ -240,7 +258,7 @@ async function loadAlertAnalytics() {
         await loadAlertMonitorStatus();
     } catch (error) {
         console.error('Error loading alert analytics:', error);
-        showNotification('Failed to load alert analytics', 'error');
+        analyticsShowNotification('Failed to load alert analytics', 'error');
         renderAlertMonitorStatus(null);
     }
 }
@@ -285,10 +303,43 @@ async function loadAlertMonitorStatus() {
 }
 
 function updateAlertStats(summary) {
-    document.getElementById('totalAlertSettings').textContent = summary?.total || 0;
-    document.getElementById('enabledAlertSettings').textContent = summary?.enabled || 0;
-    document.getElementById('activeAlertsCount').textContent = summary?.activeAlerts || 0;
-    document.getElementById('recentAlertsCount').textContent = summary?.recentAlerts || 0;
+    const total = Number(summary?.total || 0);
+    const enabled = Number(summary?.enabled || 0);
+    const active = Number(summary?.active || 0);
+    const recent = Number(summary?.recent || 0);
+
+    const totalEl = document.getElementById('totalAlertSettings');
+    if (totalEl) totalEl.textContent = total;
+
+    const enabledEl = document.getElementById('enabledAlertSettings');
+    if (enabledEl) enabledEl.textContent = enabled;
+
+    const activeEl = document.getElementById('activeAlertsCount');
+    if (activeEl) activeEl.textContent = active;
+
+    const recentEl = document.getElementById('recentAlertsCount');
+    if (recentEl) recentEl.textContent = recent;
+
+    const healthIndicator = document.getElementById('systemHealthIndicator');
+    if (healthIndicator) {
+        healthIndicator.classList.remove('warning', 'critical');
+        const healthText = healthIndicator.querySelector('.health-text');
+        const healthDot = healthIndicator.querySelector('.health-dot');
+
+        if (healthDot) {
+            healthDot.style = '';
+        }
+
+        if (active > 2) {
+            healthIndicator.classList.add('critical');
+            if (healthText) healthText.textContent = 'Critical System Load';
+        } else if (active > 0) {
+            healthIndicator.classList.add('warning');
+            if (healthText) healthText.textContent = 'System Warnings';
+        } else {
+            if (healthText) healthText.textContent = 'System Operational';
+        }
+    }
 }
 
 function filterAlertSettings() {
@@ -370,7 +421,7 @@ function renderAlertSettings(settings) {
 
 async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
     if (typeof window.showPromptModal !== 'function') {
-        showNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
+        analyticsShowNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
         return;
     }
 
@@ -394,7 +445,7 @@ async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
 
     const threshold = parseFloat(newThreshold);
     if (isNaN(threshold) || threshold < 0 || threshold > 100) {
-        showNotification('Invalid threshold value. Must be between 0 and 100.', 'error');
+        analyticsShowNotification('Invalid threshold value. Must be between 0 and 100.', 'error');
         return;
     }
 
@@ -405,14 +456,14 @@ async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
         });
 
         if (response.ok) {
-            showNotification(`Updated ${alertType} threshold to ${threshold}%`, 'success');
+            analyticsShowNotification(`Updated ${alertType} threshold to ${threshold}%`, 'success');
             await loadAlertAnalytics();
         } else {
-            showNotification('Failed to update alert settings', 'error');
+            analyticsShowNotification('Failed to update alert settings', 'error');
         }
     } catch (error) {
         console.error('Error updating alert settings:', error);
-        showNotification('Failed to update alert settings', 'error');
+        analyticsShowNotification('Failed to update alert settings', 'error');
     }
 }
 
@@ -434,7 +485,7 @@ async function toggleAlertEnabled(alertType, newEnabled) {
         });
 
         if (response.ok) {
-            showNotification(`${alertType} alert ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
+            analyticsShowNotification(`${alertType} alert ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
             try {
                 await loadAlertAnalytics();
             } catch (refreshError) {
@@ -443,7 +494,7 @@ async function toggleAlertEnabled(alertType, newEnabled) {
         } else {
             setting.enabled = previousEnabled;
             filterAlertSettings();
-            showNotification('Failed to toggle alert status', 'error');
+            analyticsShowNotification('Failed to toggle alert status', 'error');
         }
     } catch (error) {
         console.error('Error toggling alert:', error);
@@ -452,7 +503,7 @@ async function toggleAlertEnabled(alertType, newEnabled) {
             fallbackSetting.enabled = !Boolean(newEnabled);
             filterAlertSettings();
         }
-        showNotification('Failed to toggle alert status', 'error');
+        analyticsShowNotification('Failed to toggle alert status', 'error');
     } finally {
         pendingAlertToggleByType[alertType] = false;
         filterAlertSettings();
@@ -502,7 +553,7 @@ function renderActiveAlerts(alerts) {
                         <div class="active-alert-footer">
                             <span>Value: <strong>${alert.value}</strong> / Threshold: <strong>${alert.threshold}</strong></span>
                             <span>${createdAt}</span>
-                            <button class="btn-resolve-alert" onclick="resolveAlert(${alert.id})">
+                            <button class="btn-resolve-alert" onclick="resolveAlert('${alert.id}')">
                                 &#10004; Resolve
                             </button>
                         </div>
@@ -513,8 +564,25 @@ function renderActiveAlerts(alerts) {
     container.innerHTML = html;
 }
 
-async function resolveAlert(alertId) {
-    const confirmed = await window.modalManager?.showConfirm({
+window.resolveAlert = async function (alertId) {
+    if (!window.modalManager) {
+        if (!confirm('Are you sure you want to resolve this alert?')) return;
+
+        try {
+            const { response } = await window.AdminPanel.api.postJson(`/api/alerts/${alertId}/resolve`, {});
+            if (response.ok) {
+                analyticsShowNotification('Alert resolved successfully', 'success');
+                await loadAlertAnalytics();
+            } else {
+                analyticsShowNotification('Failed to resolve alert', 'error');
+            }
+        } catch (error) {
+            console.error('Error resolving alert:', error);
+        }
+        return;
+    }
+
+    const confirmed = await window.modalManager.showConfirm({
         title: 'Resolve Alert',
         message: 'Are you sure you want to resolve this alert?',
         confirmText: 'Resolve',
@@ -526,20 +594,20 @@ async function resolveAlert(alertId) {
     try {
         const { response } = await window.AdminPanel.api.postJson(`/api/alerts/${alertId}/resolve`, {});
         if (response.ok) {
-            showNotification('Alert resolved successfully', 'success');
+            analyticsShowNotification('Alert resolved successfully', 'success');
             await loadAlertAnalytics();
         } else {
-            showNotification('Failed to resolve alert', 'error');
+            analyticsShowNotification('Failed to resolve alert', 'error');
         }
     } catch (error) {
         console.error('Error resolving alert:', error);
-        showNotification('Failed to resolve alert', 'error');
+        analyticsShowNotification('Failed to resolve alert', 'error');
     }
-}
+};
 
 function exportAlertSettings() {
     if (allAlertSettings.length === 0) {
-        showNotification('No alert settings to export', 'warning');
+        analyticsShowNotification('No alert settings to export', 'warning');
         return;
     }
 
@@ -565,7 +633,7 @@ function exportAlertSettings() {
     a.click();
     URL.revokeObjectURL(url);
 
-    showNotification('Alert settings exported successfully', 'success');
+    analyticsShowNotification('Alert settings exported successfully', 'success');
 }
 
 let emailAnalyticsTrendChart = null;
@@ -749,12 +817,13 @@ function renderEmailTemplatePie(templates) {
             datasets: [{
                 data: values,
                 backgroundColor: colors.slice(0, labels.length),
-                borderColor: '#222c37',
+                borderColor: 'rgba(20, 20, 20, 0.8)',
                 borderWidth: 2
             }]
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -857,14 +926,22 @@ function renderEmailTrend(trends) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'top'
+                    position: 'top',
+                    labels: { color: '#cbd5e1' }
                 }
             },
             scales: {
                 y: {
-                    beginAtZero: true
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#94a3b8' }
+                },
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#94a3b8' }
                 }
             }
         }
@@ -900,7 +977,7 @@ function renderEmailRecentRows(recentRows) {
 
 function exportEmailRecentCsv() {
     if (!Array.isArray(latestEmailRecentRows) || latestEmailRecentRows.length === 0) {
-        showNotification('No recent email deliveries to export', 'warning');
+        analyticsShowNotification('No recent email deliveries to export', 'warning');
         return;
     }
 
@@ -973,6 +1050,8 @@ document.addEventListener('DOMContentLoaded', function () {
     startEmailAnalyticsAutoRefresh();
     startEmailAnalyticsLastUpdatedTicker();
 
+    loadAlertAnalytics();
+
     const tabs = document.querySelectorAll('#ownerTabs .tab');
     tabs.forEach(tab => {
         tab.addEventListener('click', function () {
@@ -1014,4 +1093,143 @@ window.addEventListener('beforeunload', () => {
         clearInterval(emailAnalyticsLastUpdatedTickerId);
         emailAnalyticsLastUpdatedTickerId = null;
     }
+    if (window.systemMonitorInterval) {
+        clearInterval(window.systemMonitorInterval);
+        window.systemMonitorInterval = null;
+    }
 });
+
+window.systemMonitorInterval = null;
+window.systemMemoryChart = null;
+window.systemMemoryData = {
+    labels: [],
+    datasets: [{
+        label: 'Process Memory (MB)',
+        data: [],
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.4,
+        fill: true
+    }]
+};
+
+window.toggleSystemMonitor = function () {
+    const btn = document.getElementById('sysMonitorToggle');
+    if (window.systemMonitorInterval) {
+        clearInterval(window.systemMonitorInterval);
+        window.systemMonitorInterval = null;
+        if (btn) {
+            btn.textContent = '▶ Start Monitor';
+            btn.classList.remove('active');
+            btn.style.borderColor = 'rgba(255,255,255,0.1)';
+            btn.style.color = 'white';
+            btn.style.background = 'rgba(255,255,255,0.05)';
+        }
+    } else {
+        window.loadSystemStats();
+        if (window.systemMonitorInterval) clearInterval(window.systemMonitorInterval);
+        window.systemMonitorInterval = setInterval(window.loadSystemStats, 3000);
+        if (btn) {
+            btn.textContent = '⏹ Stop Monitor';
+            btn.classList.add('active');
+            btn.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+            btn.style.color = '#60a5fa';
+            btn.style.background = 'rgba(59, 130, 246, 0.1)';
+        }
+    }
+};
+
+window.loadSystemStats = async function () {
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/system-stats');
+        if (!response.ok) return;
+
+        const { system, process: proc, bot } = data;
+
+        const memPercent = system.totalMem > 0 ? ((system.usedMem / system.totalMem) * 100).toFixed(1) : '0.0';
+        const sysMemEl = document.getElementById('sysMemUsage');
+        if (sysMemEl) sysMemEl.textContent = `${memPercent}%`;
+
+        const load = system.loadavg && typeof system.loadavg[0] === 'number' ? system.loadavg[0].toFixed(2) : '0.00';
+        const sysLoadEl = document.getElementById('sysLoadAvg');
+        if (sysLoadEl) sysLoadEl.textContent = load;
+
+        const formatUptime = (sec) => {
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            return `${h}h ${m}m`;
+        };
+
+        const sysUptimeEl = document.getElementById('sysUptime');
+        if (sysUptimeEl) sysUptimeEl.textContent = formatUptime(system.uptime);
+
+        const botUptimeEl = document.getElementById('botUptime');
+        if (botUptimeEl) botUptimeEl.textContent = formatUptime(proc.uptime);
+
+        const now = new Date();
+        const timeLabel = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+        const procMemMB = (proc.memory.rss / 1024 / 1024).toFixed(1);
+
+        window.systemMemoryData.labels.push(timeLabel);
+        window.systemMemoryData.datasets[0].data.push(procMemMB);
+
+        if (window.systemMemoryData.labels.length > 20) {
+            window.systemMemoryData.labels.shift();
+            window.systemMemoryData.datasets[0].data.shift();
+        }
+
+        const chartCanvas = document.getElementById('systemMemoryChart');
+        if (chartCanvas) {
+            if (!window.systemMemoryChart) {
+                const ctx = chartCanvas.getContext('2d');
+                window.systemMemoryChart = new Chart(ctx, {
+                    type: 'line',
+                    data: window.systemMemoryData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                grid: { color: 'rgba(255,255,255,0.05)' }
+                            },
+                            x: {
+                                grid: { display: false }
+                            }
+                        },
+                        animation: false
+                    }
+                });
+            } else {
+                window.systemMemoryChart.update();
+            }
+        }
+
+        const tbody = document.getElementById('systemInfoTableBody');
+        if (tbody) {
+            const safePlatform = sanitizeHtml(system.platform || '-');
+            const safeArch = sanitizeHtml(system.arch || '-');
+            const safeRelease = sanitizeHtml(system.release || '-');
+            const safeNodeVersion = sanitizeHtml(proc.version || '-');
+            const safeCpuCount = sanitizeHtml(system.cpus);
+            const safeGuildCount = sanitizeHtml(bot.guildCount);
+            const safeMemberCount = sanitizeHtml(bot.totalMembers);
+            tbody.innerHTML = `
+                <tr><td><strong>Platform</strong></td><td>${safePlatform} (${safeArch})</td></tr>
+                <tr><td><strong>Release</strong></td><td>${safeRelease}</td></tr>
+                <tr><td><strong>CPU Cores</strong></td><td>${safeCpuCount}</td></tr>
+                <tr><td><strong>Total Memory</strong></td><td>${(system.totalMem / 1024 / 1024 / 1024).toFixed(2)} GB</td></tr>
+                <tr><td><strong>Free Memory</strong></td><td>${(system.freeMem / 1024 / 1024 / 1024).toFixed(2)} GB</td></tr>
+                <tr><td><strong>Node Version</strong></td><td>${safeNodeVersion}</td></tr>
+                <tr><td><strong>Bot Guilds</strong></td><td>${safeGuildCount}</td></tr>
+                <tr><td><strong>Bot Members</strong></td><td>${safeMemberCount}</td></tr>
+            `;
+        }
+
+    } catch (e) {
+        console.error('SysMonitor Error:', e);
+    }
+};

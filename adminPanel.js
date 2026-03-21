@@ -1,4 +1,4 @@
-// Admin Panel server — backend for the dashboard
+// Admin Panel server - backend for the dashboard
 // Serves the admin UI, manages sessions, and applies security protections.
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -20,7 +20,11 @@ const { getVerificationAnalytics } = require('./Functions/VerificationAnalytics'
 const CsrfHelper = require('./Functions/CsrfHelper');
 const { getStats } = require('./Functions/botStats');
 const { generateCaseId } = require('./Events/caseId');
-const { CHANNELS: { serverLogChannelId, discordChannelId }, RULES: RULES_CONFIG, MISC: MISC_CONFIG } = require('./Config/constants');
+const { createModerationEmbed, createModerationDmEmbed } = require('./Functions/EmbedBuilders');
+const { EmbedBuilder } = require('discord.js');
+const moment = require('moment');
+require('moment-duration-format');
+const { CHANNELS: { serverLogChannelId, discordChannelId, suggestionChannelId }, RULES: RULES_CONFIG, MISC: MISC_CONFIG } = require('./Config/constants');
 
 function validateCsrfHelperApi() {
     const requiredMethods = ['generateSecret', 'createToken', 'verifyToken', 'verifyOrigin'];
@@ -354,8 +358,20 @@ function logDiscordOAuthStartupStatus() {
 
 logDiscordOAuthStartupStatus();
 
+
 app.use(cookieParser());
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            "default-src": ["'self'"],
+            "script-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdn.socket.io", "https://cdnjs.cloudflare.com"],
+            "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
+            "font-src": ["'self'", "data:", "https://cdnjs.cloudflare.com", "https://fonts.gstatic.com"],
+            "img-src": ["'self'", "data:", "https://cdn.discordapp.com", "https://cdnjs.cloudflare.com"],
+            "connect-src": ["'self'", "ws:", "wss:", "https://cdn.socket.io"]
+        },
+    },
+}));
 // Redirect to HTTPS if running in production
 app.use((req, res, next) => {
     if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] !== 'https') {
@@ -466,7 +482,7 @@ function addTerminalLog(level, args = []) {
     try {
         io.to(TERMINAL_ROOM).emit('terminal-log-line', line);
     } catch {
-        // Socket emit failures are fine — logging shouldn't crash the admin panel.
+        // Socket emit failures are fine - logging shouldn't crash the admin panel.
     }
 }
 
@@ -552,9 +568,7 @@ app.use((req, res, next) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
     res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
     res.setHeader('Origin-Agent-Cluster', '?1');
-    // Strict CSP: No inline scripts allowed (prevents XSS)
-    // Chrome DevTools may show .well-known/appspecific requests; that's just browser behavior
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io 'unsafe-inline' 'unsafe-hashes'; style-src 'self' 'unsafe-inline' 'unsafe-hashes'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io; frame-src 'self' https://www.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; child-src 'none'; object-src 'none';");
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io; frame-src 'self' https://www.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; child-src 'none'; object-src 'none';");
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 
     const noStoreTargets = new Set(['/login', '/register', '/recovery', '/owner', '/admin', '/moderator', '/dashboard', '/profile']);
@@ -704,7 +718,7 @@ function normalizeCredentialInput(value, options = {}) {
     return normalized;
 }
 if (!SESSION_SECRET) {
-    console.error('❌ CRITICAL: SESSION_SECRET is not set in Config/credentials.env');
+    console.error('- CRITICAL: SESSION_SECRET is not set in Config/credentials.env');
     console.error('   This is a security vulnerability. Admin panel will not start.');
     console.error('   Add SESSION_SECRET to Config/credentials.env and restart the bot.');
     if (process.env.NODE_ENV === 'production') {
@@ -736,7 +750,7 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 
 // Listen for session store connection/disconnection events
-// Note: session store event hooks were removed — they were no-ops.
+// Note: session store event hooks were removed - they were no-ops.
 
 // (Optional) Log session ID for debugging
 
@@ -961,7 +975,7 @@ app.use((req, res, next) => {
 
         // 2. Verify Signed Token (Advanced timestamp + salt check)
         if (!CsrfHelper.verifyToken(secret, token)) {
-            console.warn(`[CSRF] Invalid CSRF token for '${req.session.username}' (role: ${req.session.role}). Token verify failed.`);
+            console.error(`[CSRF FAILURE] Invalid CSRF token for '${req.session.username}' (role: ${req.session.role}). Verify failed. Token: ${token ? 'PROVIDED' : 'MISSING'}`);
             emitSecuritySignal(req, 'csrf-token-failed', {
                 username: req.session?.username || null,
                 role: req.session?.role || null
@@ -1183,7 +1197,8 @@ const PUBLIC_API_PATTERNS = [
     /^\/api\/email\/verify$/,
     /^\/api\/csrf$/,
     /^\/api\/appeals\/submit$/,
-    /^\/api\/appeals\/validate-case-id$/
+    /^\/api\/appeals\/validate-case-id$/,
+    /^\/api\/rules$/
 ];
 
 const API_ROLE_POLICIES = [
@@ -1191,7 +1206,7 @@ const API_ROLE_POLICIES = [
     { methods: null, pattern: /^\/api\/jobs(?:\/|$)/, minRole: 'owner' },
     { methods: null, pattern: /^\/api\/automod(?:\/|$)/, minRole: 'owner' },
     { methods: null, pattern: /^\/api\/alerts(?:\/|$)/, minRole: 'owner' },
-    { methods: null, pattern: /^\/api\/security(?:\/|$)/, minRole: 'owner' },
+    // { methods: null, pattern: /^\/api\/security(?:\/|$)/, minRole: 'owner' }, // Disabled: Security endpoints are user-scoped (2FA, sessions) or have specific middleware
     { methods: null, pattern: /^\/api\/system(?:\/|$)/, minRole: 'owner' },
     { methods: null, pattern: /^\/api\/audit-logs$/, minRole: 'owner' },
     { methods: ['POST'], pattern: /^\/api\/appeals\/\d+\/(accept|deny)$/, minRole: 'owner' },
@@ -1273,7 +1288,7 @@ async function enforceApiRolePolicy(req, res, next) {
 
         const currentRole = req.session?.role;
         if (getRoleRank(currentRole) < getRoleRank(requiredRole)) {
-            console.warn(`[API Policy] Denied access to ${req.method} ${req.path}. User '${req.session?.username}' role '${currentRole}' (rank ${getRoleRank(currentRole)}) < required '${requiredRole}' (rank ${getRoleRank(requiredRole)})`);
+            console.error(`[API Policy FAILURE] Denied access to ${req.method} ${req.path}. User '${req.session?.username}' role '${currentRole}' (rank ${getRoleRank(currentRole)}) < required '${requiredRole}' (rank ${getRoleRank(requiredRole)})`);
             return res.status(403).json({ error: `${requiredRole} access required` });
         }
         return next();
@@ -1537,6 +1552,96 @@ async function exportTablesToJson(tables = []) {
     return payload;
 }
 
+function getFirstExistingPath(candidates = []) {
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        try {
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        } catch {
+        }
+    }
+    return null;
+}
+
+function getFirstExecutableFromSubdirs(parentDir, executableName) {
+    try {
+        if (!parentDir || !fs.existsSync(parentDir)) return null;
+        const entries = fs.readdirSync(parentDir, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+        for (const entry of entries) {
+            const candidate = path.join(parentDir, entry.name, 'bin', executableName);
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        }
+    } catch {
+    }
+
+    return null;
+}
+
+function resolveMysqldumpCommand() {
+    const configured = String(process.env.MYSQLDUMP_PATH || process.env.MYSQL_DUMP_PATH || '').trim();
+    if (configured) {
+        if (configured.includes(path.sep) || configured.includes('/') || configured.includes('\\')) {
+            return fs.existsSync(configured) ? configured : null;
+        }
+        return configured;
+    }
+
+    if (process.platform !== 'win32') {
+        return 'mysqldump';
+    }
+
+    const executableName = 'mysqldump.exe';
+    const programFiles = [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']].filter(Boolean);
+    const directCandidates = [
+        'C:\\xampp\\mysql\\bin\\mysqldump.exe',
+        'C:\\wamp64\\bin\\mysql\\mysql8.0.31\\bin\\mysqldump.exe',
+        'C:\\wamp64\\bin\\mysql\\mysql8.0.30\\bin\\mysqldump.exe',
+        'C:\\laragon\\bin\\mysql\\mysql-8.0.30-winx64\\bin\\mysqldump.exe',
+        'C:\\laragon\\bin\\mysql\\mysql-8.0.31-winx64\\bin\\mysqldump.exe'
+    ];
+
+    for (const root of programFiles) {
+        directCandidates.push(path.join(root, 'MySQL', 'MySQL Server 8.0', 'bin', executableName));
+        directCandidates.push(path.join(root, 'MySQL', 'MySQL Server 8.4', 'bin', executableName));
+        directCandidates.push(path.join(root, 'MariaDB 11.4', 'bin', executableName));
+        directCandidates.push(path.join(root, 'MariaDB 11.3', 'bin', executableName));
+    }
+
+    const directMatch = getFirstExistingPath(directCandidates);
+    if (directMatch) {
+        return directMatch;
+    }
+
+    for (const root of programFiles) {
+        const mysqlDirMatch = getFirstExecutableFromSubdirs(path.join(root, 'MySQL'), executableName);
+        if (mysqlDirMatch) {
+            return mysqlDirMatch;
+        }
+    }
+
+    const additionalRoots = [
+        'C:\\xampp\\mysql',
+        'C:\\wamp64\\bin\\mysql',
+        'C:\\laragon\\bin\\mysql'
+    ];
+
+    for (const root of additionalRoots) {
+        const match = getFirstExecutableFromSubdirs(root, executableName);
+        if (match) {
+            return match;
+        }
+    }
+
+    return 'mysqldump';
+}
+
 function scheduleBackupTimer() {
     if (backupTimer) {
         clearInterval(backupTimer);
@@ -1622,10 +1727,16 @@ async function runDatabaseBackup(trigger = 'manual', options = {}) {
         return { success: true, fileName, trigger };
     }
 
-    const dumpCommand = process.env.MYSQLDUMP_PATH || process.env.MYSQL_DUMP_PATH || 'mysqldump';
-    if (dumpCommand.includes(path.sep) && !fs.existsSync(dumpCommand)) {
+    const dumpCommand = resolveMysqldumpCommand();
+    if (!dumpCommand) {
         backupState.lastRunStatus = 'failed';
-        backupState.lastRunError = 'mysqldump path not found. Check MYSQLDUMP_PATH.';
+        backupState.lastRunError = 'mysqldump path not found. Set MYSQLDUMP_PATH or switch backups to JSON format.';
+        backupState.running = false;
+        return { success: false, error: backupState.lastRunError };
+    }
+    if ((dumpCommand.includes(path.sep) || dumpCommand.includes('/')) && !fs.existsSync(dumpCommand)) {
+        backupState.lastRunStatus = 'failed';
+        backupState.lastRunError = 'mysqldump path not found. Check MYSQLDUMP_PATH or switch backups to JSON format.';
         backupState.running = false;
         return { success: false, error: backupState.lastRunError };
     }
@@ -1659,7 +1770,7 @@ async function runDatabaseBackup(trigger = 'manual', options = {}) {
             resolve({
                 success: false,
                 error: error.code === 'ENOENT'
-                    ? 'mysqldump not found. Ensure MySQL tools are installed and on PATH.'
+                    ? 'mysqldump not found. Set MYSQLDUMP_PATH, add MySQL bin to PATH, or switch backups to JSON format.'
                     : (error.message || 'Backup process failed.')
             });
         });
@@ -2576,6 +2687,47 @@ app.get('/api/getting-started/config-readiness', requireAuth, (req, res) => {
         });
     }
 });
+
+// Documentation Feedback Endpoint
+app.post('/api/feedback', requireAuth, (req, res) => {
+    const { page, helpful } = req.body;
+    const user = req.session.user;
+
+    if (typeof helpful !== 'boolean') {
+        return res.status(400).json({ error: 'Invalid feedback data' });
+    }
+
+    const feedbackFile = path.join(__dirname, 'Config', 'feedback.json');
+    const entry = {
+        timestamp: new Date().toISOString(),
+        user: user ? user.username : 'Anonymous',
+        userId: user ? user.id : null,
+        page: page || 'unknown',
+        helpful: helpful
+    };
+
+    fs.readFile(feedbackFile, 'utf8', (err, data) => {
+        let feedbacks = [];
+        if (!err && data) {
+            try {
+                feedbacks = JSON.parse(data);
+            } catch (e) {
+                console.error('Error parsing feedback.json:', e);
+            }
+        }
+
+        feedbacks.push(entry);
+
+        // Limit size (keep last 1000)
+        if (feedbacks.length > 1000) feedbacks = feedbacks.slice(-1000);
+
+        fs.writeFile(feedbackFile, JSON.stringify(feedbacks, null, 2), (err) => {
+            if (err) console.error('Error saving feedback:', err);
+            res.json({ success: true });
+        });
+    });
+});
+
 app.get('/moderation-playbook', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'moderation-playbook.html'));
 });
@@ -4146,6 +4298,26 @@ app.get('/api/stats/today', requireAuth, async (req, res) => {
     }
 });
 
+app.get('/api/suggestions', requireAuth, async (req, res) => {
+    try {
+        const suggestions = await AdminPanelHelper.getAllSuggestions(100);
+        res.json({ success: true, suggestions });
+    } catch (error) {
+        console.error('Error fetching suggestions:', error);
+        res.status(500).json({ error: 'Failed to fetch suggestions' });
+    }
+});
+
+app.get('/api/ghostpings', requireAuth, async (req, res) => {
+    try {
+        const ghostPings = await AdminPanelHelper.getAllGhostPings(100);
+        res.json({ success: true, ghostPings });
+    } catch (error) {
+        console.error('Error fetching ghost pings:', error);
+        res.status(500).json({ error: 'Failed to fetch ghost pings' });
+    }
+});
+
 // Combined dashboard endpoint - reduces API calls
 app.get('/api/dashboard/all', requireAuth, async (req, res) => {
     try {
@@ -4490,6 +4662,59 @@ app.post('/api/moderation/warn', createRateLimiter(10, 60000), requireAuth, asyn
 
         if (success) {
             console.log(`[Admin] ${req.session.username} warned user ${userId}: ${reason}`);
+
+            // Log to Discord Log Channel
+            if (discordClient) {
+                try {
+                    const mainConfig = require('./Config/main.json');
+                    const guild = await discordClient.guilds.fetch(mainConfig.serverID).catch(() => null);
+                    if (guild && serverLogChannelId) {
+                        const targetUserObj = await discordClient.users.fetch(userId.trim()).catch(() => null);
+                        const logChannel = await guild.channels.fetch(serverLogChannelId).catch(() => null);
+
+                        // Create a mock moderator object for the panel user
+                        const moderatorObj = {
+                            toString: () => `**${req.session.username}** (Panel)`,
+                            tag: req.session.username,
+                            username: req.session.username,
+                            id: 'PANEL'
+                        };
+
+                        if (targetUserObj) {
+                            const dmEmbed = createModerationDmEmbed({
+                                actionTitle: 'Warning Notice',
+                                actionEmoji: '⚠️',
+                                color: 0xFAA61A,
+                                guildName: guild.name,
+                                description: `⚠️ You've received a warning in **${guild.name}**. Please follow the server rules to avoid further action.`,
+                                statusLabel: 'Warning Status',
+                                statusValue: '🛡️ **Active**',
+                                effectiveDate: moment(Date.now()).format('dddd, D MMMM YYYY [at] HH:mm'),
+                                effectiveLabel: 'Issued At',
+                                reason: reason.trim(),
+                                caseId: caseId,
+                                moderatorName: moderatorObj.tag
+                            });
+                            await targetUserObj.send({ embeds: [dmEmbed] }).catch(() => console.log('Failed to DM warning to user'));
+                        }
+
+                        if (logChannel && targetUserObj) {
+                            const logEmbed = createModerationEmbed({
+                                action: '⚠️ Warning',
+                                target: targetUserObj,
+                                moderator: moderatorObj,
+                                reason: reason.trim(),
+                                caseId: caseId,
+                                color: 0xFAA61A
+                            });
+                            await logChannel.send({ embeds: [logEmbed] }).catch(err => console.error('Failed to send warn log:', err));
+                        }
+                    }
+                } catch (logParamsErr) {
+                    console.error('Error preparing warn log parameters:', logParamsErr);
+                }
+            }
+
             res.json({ success: true, message: 'Warning issued', caseId });
         } else {
             res.status(500).json({ error: 'Failed to issue warning' });
@@ -4549,12 +4774,16 @@ app.post('/api/moderation/timeout', createRateLimiter(10, 60000), requireAuth, a
 
         const { userId, duration, reason } = req.body;
 
+        // Convert duration (minutes) to milliseconds
+        const durationMinutes = parseInt(duration);
+        const durationMs = durationMinutes * 60 * 1000;
+
         // Input validation
         if (!isValidDiscordUserId(userId)) {
             return res.status(400).json({ error: 'Invalid user ID format' });
         }
 
-        if (!isValidTimeoutDurationMs(duration)) {
+        if (!isValidTimeoutDurationMs(durationMs)) {
             return res.status(400).json({ error: 'Duration must be between 1 minute and 28 days' });
         }
 
@@ -4573,7 +4802,60 @@ app.post('/api/moderation/timeout', createRateLimiter(10, 60000), requireAuth, a
             if (!member) {
                 return res.status(404).json({ error: 'User not found in server' });
             }
-            await member.timeout(duration, reason.trim());
+            await member.timeout(durationMs, reason.trim());
+
+            // Log to Discord Log Channel
+            try {
+                if (serverLogChannelId) {
+                    const logChannel = await guild.channels.fetch(serverLogChannelId).catch(() => null);
+
+                    const moderatorObj = {
+                        toString: () => `**${req.session.username}** (Panel)`,
+                        tag: req.session.username,
+                        username: req.session.username,
+                        id: 'PANEL'
+                    };
+
+                    const expiresAt = Date.now() + durationMs;
+
+                    if (member.user) {
+                        const dmEmbed = createModerationDmEmbed({
+                            actionTitle: 'Timeout Notice',
+                            actionEmoji: '⏱️',
+                            color: 0xFAA61A,
+                            guildName: guild.name,
+                            description: `⏱️ You've been timed out in **${guild.name}**.`,
+                            statusLabel: 'Duration',
+                            statusValue: moment.duration(durationMinutes, 'minutes').format('d[d] h[h] m[m]'),
+                            effectiveDate: `<t:${Math.floor(expiresAt / 1000)}:R>`,
+                            effectiveLabel: 'Expires',
+                            reason: reason.trim(),
+                            caseId: caseId,
+                            moderatorName: moderatorObj.tag
+                        });
+                        await member.user.send({ embeds: [dmEmbed] }).catch(() => console.log('Failed to DM timeout to user'));
+                    }
+
+                    if (logChannel) {
+                        const logEmbed = createModerationEmbed({
+                            action: '⏱️ Time Out',
+                            target: member.user,
+                            moderator: moderatorObj,
+                            reason: reason.trim(),
+                            caseId: caseId,
+                            color: 0xFAA61A
+                        }).addFields(
+                            { name: '⏰ Duration', value: moment.duration(durationMinutes, 'minutes').format('d[d] h[h] m[m]'), inline: true },
+                            { name: '📅 Expires', value: `<t:${Math.floor(expiresAt / 1000)}:R>`, inline: true }
+                        );
+
+                        await logChannel.send({ embeds: [logEmbed] }).catch(err => console.error('Failed to send timeout log:', err));
+                    }
+                }
+            } catch (loggingErr) {
+                console.error('Error logging timeout action:', loggingErr);
+            }
+
             resolvedUsername = member.user?.username || null;
             await resolveDiscordUser(userId.trim());
         }
@@ -4582,7 +4864,7 @@ app.post('/api/moderation/timeout', createRateLimiter(10, 60000), requireAuth, a
         const timeoutRecord = {
             userId: userId.trim(),
             username: resolvedUsername,
-            duration,
+            duration: durationMs,
             reason: reason.trim(),
             issuedBy: req.session.username,
             issuedAt: new Date(),
@@ -4598,10 +4880,10 @@ app.post('/api/moderation/timeout', createRateLimiter(10, 60000), requireAuth, a
             issuedByName: req.session.username,
             issuedBySource: 'panel',
             issuedAt: Date.now(),
-            expiresAt: Date.now() + duration
+            expiresAt: Date.now() + durationMs
         });
 
-        console.log(`[Admin] ${req.session.username} timed out user ${userId} for ${duration}ms: ${reason}`);
+        console.log(`[Admin] ${req.session.username} timed out user ${userId} for ${durationMs}ms: ${reason}`);
         res.json({ success: true, message: 'User timed out', timeout: timeoutRecord });
     } catch (error) {
         console.error('Error timing out user:', error);
@@ -7594,16 +7876,14 @@ app.post('/api/admin/reset-levels', createRateLimiter(1, 600000), requireAuth, a
             return res.status(403).json({ error: 'Admin access required' });
         }
 
-        const levels = await AdminPanelHelper.getAllLevels();
+        const count = await AdminPanelHelper.resetAllUsersLevels();
 
-        // Reset all levels to 1 and XP to 0 (this would require a helper method)
-        // For now, just return the count
-        console.log(`[Admin] ${req.session.username} attempted to reset ${levels.length} levels`);
+        console.log(`[Admin] ${req.session.username} reset ${count} levels`);
 
         res.json({
             success: true,
-            count: levels.length,
-            message: `Reset ${levels.length} users to level 1`
+            count: count,
+            message: `Reset ${count} users to level 1`
         });
     } catch (error) {
         console.error('Error resetting levels:', error);
@@ -8002,15 +8282,461 @@ app.get('/api/admin/user-profile/:userId', requireAuth, async (req, res) => {
 // Get suggestions endpoint
 app.get('/api/admin/suggestions', requireAuth, async (req, res) => {
     try {
-        const { status, guildId, limit } = req.query;
+        const { limit } = req.query;
+        let suggestions = await MySQLDatabaseManager.getAllSuggestions(parseInt(limit) || 50);
 
-        // For now, return empty suggestions
-        res.json({ success: true, data: [] });
+        // Map and Hydrate with Discord User Info
+        if (discordClient) {
+            suggestions = await Promise.all(suggestions.map(async (s) => {
+                const suggestion = {
+                    id: s.case_id || s.suggestion_id,
+                    userId: s.user_id,
+                    title: s.title,
+                    content: s.description,
+                    upvotes: s.upvotes,
+                    downvotes: s.downvotes,
+                    createdAt: s.created_at,
+                    status: s.status,
+                    response: s.admin_response,
+                    responderId: s.responded_by
+                };
+
+                // Fetch user if possible
+                try {
+                    const user = await discordClient.users.fetch(s.user_id).catch(() => null);
+                    if (user) {
+                        suggestion.username = user.username;
+                        suggestion.discriminator = user.discriminator;
+                        suggestion.tag = user.tag;
+                        suggestion.avatarUrl = user.displayAvatarURL({ dynamic: true, size: 64 });
+                    }
+                } catch (err) {
+                    // Ignore fetch errors
+                }
+
+                // Fetch responder if exists
+                if (s.responded_by) {
+                    try {
+                        // First try local admin user (UUID)
+                        let adminUser = null;
+                        if (AdminPanelHelper && typeof AdminPanelHelper.getAdminUserById === 'function') {
+                            adminUser = await AdminPanelHelper.getAdminUserById(s.responded_by);
+                        }
+
+                        // Fallback: If ID looks truncated (common VARCHAR(20) issue), try partial match
+                        if (!adminUser && typeof s.responded_by === 'string' && s.responded_by.length >= 20 && s.responded_by.length < 32) {
+                            try {
+                                const validPrefix = s.responded_by.replace(/[^a-zA-Z0-9-]/g, '');
+                                const query = 'SELECT * FROM admin_users WHERE id LIKE ? LIMIT 1';
+                                const rows = await MySQLDatabaseManager.query(query, [validPrefix + '%']);
+                                if (rows && rows.length > 0) adminUser = rows[0];
+                            } catch (err) {
+                                console.error('Error finding admin user by prefix:', err);
+                            }
+                        }
+
+                        if (adminUser) {
+                            suggestion.responderTag = adminUser.username;
+                        }
+
+                        // Fallback to Discord fetch if not found locally (assuming it's a snowflake)
+                        if (!adminUser) {
+                            const responder = await discordClient.users.fetch(s.responded_by).catch(() => null);
+                            if (responder) {
+                                suggestion.responderTag = responder.tag;
+                            }
+                        }
+                    } catch (_) { }
+                }
+
+                return suggestion;
+            }));
+        } else {
+            // Fallback mapping if no client
+            suggestions = suggestions.map(s => ({
+                id: s.case_id || s.suggestion_id,
+                userId: s.user_id,
+                title: s.title,
+                content: s.description,
+                upvotes: s.upvotes,
+                downvotes: s.downvotes,
+                createdAt: s.created_at,
+                status: s.status,
+                response: s.admin_response,
+                responderId: s.responded_by
+            }));
+        }
+
+        res.json({ success: true, data: suggestions });
     } catch (error) {
         console.error('Error getting suggestions:', error);
         res.status(500).json({ error: 'Failed to get suggestions' });
     }
 });
+
+
+async function syncSuggestionEmbed(suggestionIdOrCaseId, newStatus, reason, moderatorId, moderatorName) {
+    if (!discordClient) {
+        console.warn(`[SyncSuggestion] Discord client not ready, skipping sync for ${suggestionIdOrCaseId}`);
+        return;
+    }
+
+    try {
+        console.log(`[SyncSuggestion] Syncing suggestion ${suggestionIdOrCaseId} -> ${newStatus}`);
+
+        let suggestion = null;
+
+        // Try getting by numeric ID first (if applicable)
+        if (!isNaN(suggestionIdOrCaseId)) {
+            suggestion = await MySQLDatabaseManager.getSuggestion(suggestionIdOrCaseId);
+        }
+
+        // If not found, try by Case ID
+        if (!suggestion) {
+            suggestion = await MySQLDatabaseManager.getSuggestionByCaseId(suggestionIdOrCaseId);
+        }
+
+        if (!suggestion) {
+            console.warn(`[SyncSuggestion] Suggestion not found in DB: ${suggestionIdOrCaseId}`);
+            return;
+        }
+
+        if (!suggestion.message_id) {
+            console.warn(`[SyncSuggestion] Suggestion ${suggestionIdOrCaseId} has no message_id stored.`);
+            return;
+        }
+
+        // Get guild and channel
+        const guildId = suggestion.guild_id || process.env.GUILD_ID;
+        const guild = discordClient.guilds.cache.get(guildId) || discordClient.guilds.cache.first();
+        if (!guild) {
+            console.warn(`[SyncSuggestion] Guild not found (ID: ${guildId})`);
+            return;
+        }
+
+        const channel = guild.channels.cache.get(suggestionChannelId);
+        if (!channel) {
+            console.warn(`[SyncSuggestion] Suggestion channel not found (ID: ${suggestionChannelId})`);
+            return;
+        }
+
+        // Fetch message
+        const message = await channel.messages.fetch(suggestion.message_id).catch(() => null);
+        if (!message) {
+            console.warn(`[SyncSuggestion] Message ${suggestion.message_id} not found/fetch failed`);
+            return;
+        }
+
+        const oldEmbed = message.embeds[0];
+        if (!oldEmbed) return;
+
+        const embed = EmbedBuilder.from(oldEmbed);
+
+        // Update Status
+        const statusMap = {
+            'approved': { color: 0x57F287, text: '✅ **Approved**' },
+            'denied': { color: 0xED4245, text: '- **Denied**' }
+        };
+
+        if (statusMap[newStatus]) {
+            embed.setColor(statusMap[newStatus].color);
+
+            // Find and update status field if it exists
+            const statusIdx = embed.data.fields.findIndex(f => f.name === '📊 Status');
+            if (statusIdx !== -1) {
+                embed.data.fields[statusIdx].value = statusMap[newStatus].text;
+            } else {
+                embed.addFields({ name: '📊 Status', value: statusMap[newStatus].text, inline: true });
+            }
+        }
+
+        // Manage Admin Response / Moderator fields
+        // Remove old response fields to avoid duplicates if re-approved/denied
+        if (embed.data.fields) {
+            embed.data.fields = embed.data.fields.filter(f => f.name !== '📝 Admin Response' && f.name !== '⚖️ Moderator');
+        }
+
+        if (reason) {
+            embed.addFields({ name: '📝 Admin Response', value: reason, inline: false });
+        }
+
+        const modUser = await discordClient.users.fetch(moderatorId).catch(() => null);
+        const moderatorDisplay = modUser ? `<@${modUser.id}>` : (moderatorName || moderatorId);
+
+        if (moderatorDisplay) {
+            embed.addFields({ name: '⚖️ Moderator', value: moderatorDisplay, inline: true });
+        }
+
+        // Remove footer content about voting if resolved
+        if (embed.data.footer && embed.data.footer.text) {
+            embed.setFooter({ text: embed.data.footer.text.replace(' • Vote using the reactions below!', '') });
+        }
+
+        await message.edit({ embeds: [embed] });
+        console.log(`[SyncSuggestion] Updated message ${message.id} for suggestion ${suggestionIdOrCaseId}`);
+
+        // Remove voting reactions to prevent further voting
+        if (message.reactions) {
+            await message.reactions.removeAll().catch(err => console.error('Failed to clear reactions', err));
+        }
+
+        // Send confirmation embed to serverlogchannel
+        if (serverLogChannelId) {
+            try {
+                const logChannel = await guild.channels.fetch(serverLogChannelId).catch(() => null);
+                if (logChannel && logChannel.isTextBased()) {
+                    const logEmbed = new EmbedBuilder()
+                        .setTitle(newStatus === 'approved' ? '✅ Suggestion Approved' : '- Suggestion Denied')
+                        .setColor(statusMap[newStatus]?.color || 0x2B2D31)
+                        .addFields(
+                            { name: '👤 Suggester', value: `<@${suggestion.user_id}>`, inline: true },
+                            { name: '⚖️ Moderator', value: moderatorDisplay, inline: true },
+                            { name: '💡 Suggestion', value: suggestion.description || 'No content', inline: false },
+                            { name: '📝 Reason', value: reason || 'No reason provided', inline: false }
+                        )
+                        .setFooter({ text: `Suggestion ID: ${suggestion.case_id || suggestionIdOrCaseId}` })
+                        .setTimestamp();
+
+                    await logChannel.send({ embeds: [logEmbed] });
+                }
+            } catch (logErr) {
+                console.error('[SyncSuggestion] Error sending log to serverLogChannel:', logErr);
+            }
+        }
+
+    } catch (error) {
+        console.error('Error syncing suggestion embed:', error);
+    }
+}
+
+// Approve suggestion
+app.post('/api/admin/suggestions/:id/approve', requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        // userId from session
+        const userId = req.session.userId;
+        const username = req.session.username;
+
+        if (!reason || reason.trim() === '') {
+            return res.status(400).json({ success: false, error: 'A reason is required to approve this suggestion.' });
+        }
+
+        await MySQLDatabaseManager.updateSuggestionStatus(id, 'approved', userId, reason);
+
+        // Update Discord Embed
+        await syncSuggestionEmbed(id, 'approved', reason, userId, username);
+
+        res.json({ success: true, message: 'Suggestion approved' });
+    } catch (error) {
+        console.error('Error approving suggestion:', error);
+        res.status(500).json({ error: 'Failed to approve suggestion' });
+    }
+});
+
+// Deny suggestion
+app.post('/api/admin/suggestions/:id/deny', requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const userId = req.session.userId;
+        const username = req.session.username;
+
+        if (!reason || reason.trim() === '') {
+            return res.status(400).json({ success: false, error: 'A reason is required to deny this suggestion.' });
+        }
+
+        await MySQLDatabaseManager.updateSuggestionStatus(id, 'denied', userId, reason);
+
+        // Update Discord Embed
+        await syncSuggestionEmbed(id, 'denied', reason, userId, username);
+
+        res.json({ success: true, message: 'Suggestion denied' });
+    } catch (error) {
+        console.error('Error denying suggestion:', error);
+        res.status(500).json({ error: 'Failed to deny suggestion' });
+    }
+});
+
+
+// Get ghost pings endpoint
+app.get('/api/admin/ghost-pings', requireAuth, async (req, res) => {
+    try {
+        const { limit } = req.query;
+        let pings = await MySQLDatabaseManager.getAllGhostPings(parseInt(limit) || 50);
+
+        // Hydrate
+        if (discordClient) {
+            const guildId = process.env.GUILD_ID;
+            const guild = guildId ? discordClient.guilds.cache.get(guildId) : discordClient.guilds.cache.first();
+
+            pings = await Promise.all(pings.map(async (p) => {
+                // Clone object to avoid mutating readonly DB row if driver returns so
+                const ping = { ...p };
+
+                // Resolve Channel Name
+                const channelId = ping.channelId || ping.channel_id;
+                if (!ping.channelName && channelId && guild) {
+                    const ch = guild.channels.cache.get(channelId);
+                    if (ch) ping.channelName = ch.name; // Set camelCase for frontend consistency
+                }
+
+                // Resolve User Tag and Avatar
+                try {
+                    const userId = ping.userId || ping.user_id;
+                    if (userId) {
+                        const user = await discordClient.users.fetch(userId).catch(() => null);
+                        if (user) {
+                            ping.userTag = user.tag; // Ensure we maintain camelCase for frontend
+                            ping.avatarUrl = user.displayAvatarURL({ dynamic: true, extension: 'png', size: 128 });
+                        } else {
+                            let userInfo = await MySQLDatabaseManager.getUserInfo(userId);
+                            if (userInfo && userInfo.avatar) {
+                                ping.avatarUrl = `https://cdn.discordapp.com/avatars/${userId}/${userInfo.avatar}.png`;
+                            }
+                        }
+                    }
+                } catch (err) { }
+
+                // Resolve Mentioned Users into Usernames instead of raw IDs
+                if (ping.mentions && typeof ping.mentions === 'string') {
+                    // The mentions string comes through as comma separated tags like "<@123456789>, <@!123456789>" or raw IDs like "123456789"
+                    // We want to transform the IDs to usernames from Discord
+                    let rawMentions = ping.mentions;
+                    const mentionRegex = /<@!?(\d+)>|(\d{17,19})/g;
+
+                    let match;
+                    const replacedMentionsIds = new Set();
+                    while ((match = mentionRegex.exec(ping.mentions)) !== null) {
+                        const mId = match[1] || match[2];
+                        if (mId && !replacedMentionsIds.has(mId)) {
+                            replacedMentionsIds.add(mId);
+                            try {
+                                const mUser = await discordClient.users.fetch(mId).catch(() => null);
+                                if (mUser) {
+                                    // Make sure we just insert text to be later parsed on the client
+                                    rawMentions = rawMentions.replace(new RegExp(`<@!?${mId}>|\\b${mId}\\b`, 'g'), `@${mUser.username}`);
+                                } else {
+                                    // Fallback to db
+                                    const mUserInfo = await MySQLDatabaseManager.getUserInfo(mId);
+                                    if (mUserInfo && mUserInfo.username) {
+                                        rawMentions = rawMentions.replace(new RegExp(`<@!?${mId}>|\\b${mId}\\b`, 'g'), `@${mUserInfo.username}`);
+                                    }
+                                }
+                            } catch (e) { }
+                        }
+                    }
+                    ping.resolvedMentions = rawMentions;
+                } else {
+                    ping.resolvedMentions = ping.mentions;
+                }
+
+                // Also resolve IDs inside the content so it reads better
+                if (ping.content && typeof ping.content === 'string') {
+                    let resolvedContent = ping.content;
+                    const mentionContentRegex = /<@!?(\d+)>|(\d{17,19})/g;
+
+                    let cMatch;
+                    const replacedContentIds = new Set();
+                    while ((cMatch = mentionContentRegex.exec(ping.content)) !== null) {
+                        const cId = cMatch[1] || cMatch[2];
+                        if (cId && !replacedContentIds.has(cId)) {
+                            replacedContentIds.add(cId);
+                            try {
+                                const cUser = await discordClient.users.fetch(cId).catch(() => null);
+                                if (cUser) {
+                                    resolvedContent = resolvedContent.replace(new RegExp(`<@!?${cId}>|\\b${cId}\\b`, 'g'), `@${cUser.username}`);
+                                } else {
+                                    const cUserInfo = await MySQLDatabaseManager.getUserInfo(cId);
+                                    if (cUserInfo && cUserInfo.username) {
+                                        resolvedContent = resolvedContent.replace(new RegExp(`<@!?${cId}>|\\b${cId}\\b`, 'g'), `@${cUserInfo.username}`);
+                                    }
+                                }
+                            } catch (e) { }
+                        }
+                    }
+                    ping.resolvedContent = resolvedContent;
+                } else {
+                    ping.resolvedContent = ping.content;
+                }
+
+                return ping;
+            }));
+        }
+
+        res.json({ success: true, data: pings });
+    } catch (error) {
+        console.error('Error getting ghost pings:', error);
+        res.status(500).json({ error: 'Failed to get ghost pings' });
+    }
+});
+
+// Clear ghost pings endpoint
+app.post('/api/admin/clear-ghost-pings', requireAuth, async (req, res) => {
+    try {
+        const user = await AdminPanelHelper.getAdminUser(req.session.username);
+        if (!hasAdminAccess(user)) return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+
+        const success = await MySQLDatabaseManager.clearGhostPings();
+        if (success) res.json({ success: true });
+        else res.status(500).json({ error: 'Failed to clear ghost pings' });
+    } catch (error) {
+        console.error('Error clearing ghost pings:', error);
+        res.status(500).json({ error: 'Failed to clear ghost pings' });
+    }
+});
+
+// Get snipes endpoint
+app.get('/api/admin/snipes', requireAuth, async (req, res) => {
+    try {
+        const { limit } = req.query;
+        let snipes = await MySQLDatabaseManager.getAllSnipes(parseInt(limit) || 50);
+
+        // Hydrate
+        if (discordClient) {
+            const guildId = process.env.GUILD_ID;
+            const guild = guildId ? discordClient.guilds.cache.get(guildId) : discordClient.guilds.cache.first();
+
+            snipes = await Promise.all(snipes.map(async (s) => {
+                const snipe = { ...s };
+
+                if (!snipe.channelName && snipe.channelId && guild) {
+                    const ch = guild.channels.cache.get(snipe.channelId);
+                    if (ch) snipe.channelName = ch.name;
+                }
+
+                if (!snipe.userTag || snipe.userTag === 'Unknown') {
+                    try {
+                        const u = await discordClient.users.fetch(snipe.userId);
+                        if (u) snipe.userTag = u.tag;
+                    } catch (e) { }
+                }
+                return snipe;
+            }));
+        }
+
+        res.json({ success: true, data: snipes });
+    } catch (error) {
+        console.error('Error getting snipes:', error);
+        res.status(500).json({ error: 'Failed to get snipes' });
+    }
+});
+
+// Clear snipes endpoint
+app.post('/api/admin/clear-snipes', requireAuth, async (req, res) => {
+    try {
+        const user = await AdminPanelHelper.getAdminUser(req.session.username);
+        if (!hasAdminAccess(user)) return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+
+        const success = await MySQLDatabaseManager.clearSnipes();
+        if (success) res.json({ success: true });
+        else res.status(500).json({ error: 'Failed to clear snipes' });
+    } catch (error) {
+        console.error('Error clearing snipes:', error);
+        res.status(500).json({ error: 'Failed to clear snipes' });
+    }
+});
+
 
 // Get AutoMod violations endpoint
 app.get('/api/admin/automod-violations', requireAuth, async (req, res) => {
@@ -9015,7 +9741,7 @@ app.post('/api/owner/security/captcha-policy', requireAuth, requireOwner, async 
 // Purge all bans (owner only)
 app.post('/api/owner/purge-bans', requireAuth, requireOwner, async (req, res) => {
     try {
-        const result = await AdminPanelHelper.connection.query('DELETE FROM bans');
+        const result = await AdminPanelHelper.connection.query('DELETE FROM user_bans');
         const deletedCount = result.affectedRows || 0;
 
         console.log(`[Owner] ${req.session.username} purged ${deletedCount} ban records`);
@@ -12733,6 +13459,45 @@ app.get('/api/owner/verification-analytics', requireAuth, requireOwner, async (r
     }
 });
 
+app.get('/api/owner/system-stats', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const botStats = getStats();
+        // os is likely already required at the top, but to be safe/clean we can use the global require or if it's top-level
+        // Checking file content, os IS required at top.
+        const os = require('os');
+
+        const memoryUsage = process.memoryUsage();
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+
+        const stats = {
+            system: {
+                platform: process.platform,
+                arch: os.arch(),
+                release: os.release(),
+                uptime: os.uptime(),
+                loadavg: os.loadavg(),
+                totalMem,
+                freeMem,
+                usedMem,
+                cpus: os.cpus().length
+            },
+            process: {
+                uptime: process.uptime(),
+                memory: memoryUsage,
+                version: process.version
+            },
+            bot: botStats
+        };
+
+        return res.json(stats);
+    } catch (error) {
+        console.error('Error fetching system stats:', error);
+        return res.status(500).json({ error: 'Failed to fetch system stats' });
+    }
+});
+
 // Phase 2: Scheduled jobs controls (owner only)
 app.get('/api/jobs', requireAuth, requireOwner, async (req, res) => {
     try {
@@ -13979,7 +14744,52 @@ app.get('/api/moderation/user/:userId/history', requireAuth, async (req, res) =>
     }
 });
 
+// System stats for owner dashboard
+app.get('/api/owner/system-stats', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const botStats = getStats();
+        const memUsage = process.memoryUsage();
+
+        const system = {
+            platform: os.platform(),
+            arch: os.arch(),
+            release: os.release(),
+            cpus: os.cpus().length,
+            totalMem: os.totalmem(),
+            freeMem: os.freemem(),
+            usedMem: os.totalmem() - os.freemem(),
+            uptime: os.uptime(),
+            loadavg: os.loadavg()
+        };
+
+        const proc = {
+            uptime: process.uptime(),
+            memory: memUsage,
+            version: process.version
+        };
+
+        res.json({
+            system,
+            process: proc,
+            bot: botStats
+        });
+    } catch (error) {
+        console.error('Error fetching system stats:', error);
+        res.status(500).json({ error: 'Failed to fetch system stats' });
+    }
+});
+
 // Start server
+server.on('error', (error) => {
+    if (error?.code === 'EADDRINUSE') {
+        console.warn(`⚠️ Admin Panel Server could not bind to port ${PORT} because it is already in use.`);
+        console.warn('⚠️ Skipping embedded admin panel startup for this process.');
+        return;
+    }
+
+    console.error('Admin Panel server failed to start:', error);
+});
+
 server.listen(PORT, () => {
     ioReady = true;
     console.log(`\nAdmin Panel Server Running on port ${PORT}`);

@@ -108,7 +108,7 @@ async function generateInactiveChannelReport(client) {
     const displayed = inactiveChannels.slice(0, maxResults).map(entry => {
         const days = Math.floor((Date.now() - entry.lastActivityAt) / (24 * 60 * 60 * 1000));
         const lastDate = new Date(entry.lastActivityAt).toISOString().slice(0, 10);
-        return `<#${entry.channel.id}> — ${days} days inactive (last: ${lastDate})`;
+        return `<#${entry.channel.id}> - ${days} days inactive (last: ${lastDate})`;
     });
 
     const remaining = inactiveChannels.length - displayed.length;

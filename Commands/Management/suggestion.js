@@ -2,7 +2,6 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } =
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const { ROLES: { administratorRoleId } } = require('../../Config/constants');
 
-// Admins can handle suggestions—approve, deny, or mark as implemented.
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('suggestion')
@@ -52,7 +51,6 @@ module.exports = {
                         .setDescription('Suggestion ID or Case ID')
                         .setRequired(true))),
     execute: async (interaction) => {
-        // Only admins are allowed to use this command.
         const member = interaction.member;
         const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator) ||
             member.roles.cache.has(administratorRoleId);
@@ -80,7 +78,6 @@ module.exports = {
         const response = interaction.options.getString('response');
 
         try {
-            // Try to fetch the suggestion from the database.
             const suggestion = await MySQLDatabaseManager.getSuggestion(suggestionId);
 
             if (!suggestion) {
@@ -91,7 +88,6 @@ module.exports = {
             }
 
             if (subcommand === 'view') {
-                // Show all the details for this suggestion.
                 const statusEmojis = {
                     'pending': '🟡',
                     'approved': '✅',
@@ -123,7 +119,6 @@ module.exports = {
                 return interaction.reply({ embeds: [embed], ephemeral: true });
             }
 
-            // Change the suggestion's status depending on the subcommand.
             let newStatus;
             if (subcommand === 'approve') newStatus = 'approved';
             else if (subcommand === 'deny') newStatus = 'denied';
@@ -136,7 +131,6 @@ module.exports = {
                 response
             );
 
-            // If the suggestion was posted in a channel, update the message there as well.
             if (suggestion.message_id) {
                 try {
                     const channel = interaction.channel;
@@ -169,7 +163,6 @@ module.exports = {
                 }
             }
 
-            // Record this action in the audit log for tracking.
             await MySQLDatabaseManager.logAuditEvent(interaction.guild.id, 'OTHER', {
                 userId: interaction.user.id,
                 action: `Suggestion ${newStatus}`,

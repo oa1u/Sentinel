@@ -79,7 +79,7 @@ function getShopItem(itemId) {
 
 function formatItemLine(item) {
     const price = moneyLine(item.price || 0);
-    return `• **${item.name}** (${item.id}) — ${price}\n${item.description}`;
+    return `• **${item.name}** (${item.id}) - ${price}\n${item.description}`;
 }
 
 function getQuestList(cadence) {
@@ -541,7 +541,7 @@ module.exports = {
                 }
 
                 const lines = rows.map((row) => {
-                    return `• **#${row.bounty_id}** — ${row.title} (${moneyLine(row.reward_amount)})`;
+                    return `• **#${row.bounty_id}** - ${row.title} (${moneyLine(row.reward_amount)})`;
                 });
 
                 const embed = new EmbedBuilder()
@@ -1045,7 +1045,7 @@ module.exports = {
                     const progress = Number(progressRow?.progress || 0);
                     const target = Math.max(1, Number(quest.target) || 1);
                     const status = progress >= target ? '✅' : '⬜';
-                    return `${status} **${quest.title}** (${quest.key}) — ${progress}/${target} • Reward: ${moneyLine(quest.reward || 0)}`;
+                    return `${status} **${quest.title}** (${quest.key}) - ${progress}/${target} • Reward: ${moneyLine(quest.reward || 0)}`;
                 }).join('\n')
                 : 'No daily quests configured.';
 
@@ -1055,13 +1055,13 @@ module.exports = {
                     const progress = Number(progressRow?.progress || 0);
                     const target = Math.max(1, Number(quest.target) || 1);
                     const status = progress >= target ? '✅' : '⬜';
-                    return `${status} **${quest.title}** (${quest.key}) — ${progress}/${target} • Reward: ${moneyLine(quest.reward || 0)}`;
+                    return `${status} **${quest.title}** (${quest.key}) - ${progress}/${target} • Reward: ${moneyLine(quest.reward || 0)}`;
                 }).join('\n')
                 : 'No weekly quests configured.';
 
             const embed = new EmbedBuilder()
                 .setColor(0x1e1f22)
-                .setTitle('🗺️ Economy Quests')
+                .setTitle('❌ Economy Quests')
                 .addFields(
                     { name: 'Daily', value: dailyLines, inline: false },
                     { name: 'Weekly', value: weeklyLines, inline: false }
@@ -1166,7 +1166,7 @@ module.exports = {
             const lines = rows.map((row) => {
                 const item = getShopItem(row.item_id);
                 const name = item ? item.name : row.item_id;
-                return `• **${name}** (${row.item_id}) — x${formatNumber(row.quantity)}`;
+                return `• **${name}** (${row.item_id}) - x${formatNumber(row.quantity)}`;
             });
 
             const embed = new EmbedBuilder()
@@ -1263,7 +1263,7 @@ module.exports = {
             }
 
             const lines = rows.map((row, index) => {
-                return `**#${index + 1}** <@${row.user_id}> — ${moneyLine(row.total)}`;
+                return `**#${index + 1}** <@${row.user_id}> - ${moneyLine(row.total)}`;
             });
 
             const embed = new EmbedBuilder()
@@ -1288,7 +1288,7 @@ module.exports = {
             }
 
             const topTypesText = stats.topTypes.length
-                ? stats.topTypes.map((entry) => `• ${formatTxType(entry.type)} — **${formatNumber(entry.count)}**`).join('\n')
+                ? stats.topTypes.map((entry) => `• ${formatTxType(entry.type)} - **${formatNumber(entry.count)}**`).join('\n')
                 : 'No transaction data yet.';
 
             const recentText = stats.recentTransactions.length

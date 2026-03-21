@@ -2,7 +2,6 @@ const moment = require("moment");
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags, ChannelType } = require('discord.js');
 
-// Shows detailed server stats and information
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('serverinfo')

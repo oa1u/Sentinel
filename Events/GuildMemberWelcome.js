@@ -21,7 +21,8 @@ module.exports = {
       const userInfoAdded = await MySQLDatabaseManager.addUserInfo(
         member.id,
         member.user.username,
-        member.user.bot
+        member.user.bot,
+        member.user.displayAvatarURL({ dynamic: true })
       );
       if (userInfoAdded) {
         console.log(`[Database] User ${member.user.tag} (${member.id}) added to userinfo table`);

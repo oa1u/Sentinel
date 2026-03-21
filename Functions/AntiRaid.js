@@ -3,6 +3,8 @@ const { createLogEmbed, sendLogEmbed } = require('./LoggingHelper');
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
 const InviteTracker = require('./InviteTracker');
 const automodConfig = require('../Config/constants/automod.json');
+const channelConfig = require('../Config/constants/channel.json');
+const rolesConfig = require('../Config/constants/roles.json');
 const { ROLES: { moderatorRoleId, administratorRoleId, supportTeamRoleId } } = require('../Config/constants');
 
 const DEFAULT_CONFIG = {
@@ -41,10 +43,9 @@ const DEFAULT_CONFIG = {
     earlyLeaveThreshold: 5,
     earlyLeaveMaxAgeMs: 900000,
     lockdownSlowmodeSeconds: 30,
-    lockdownAllTextChannels: false,
+    lockdownAllTextChannels: true,
     lockdownChannelIds: [],
     autoRevertMs: 1800000,
-    quarantineRoleId: '',
     protectedRoleIds: [],
     verificationSignals: {
         enabled: true,
@@ -77,7 +78,7 @@ function resolveConfig() {
             ...DEFAULT_CONFIG.verificationSignals,
             ...verificationSignals
         },
-        lockdownChannelIds: Array.isArray(base.lockdownChannelIds) ? base.lockdownChannelIds : DEFAULT_CONFIG.lockdownChannelIds,
+        lockdownChannelIds: Array.isArray(channelConfig.lockdownChannelIds) ? channelConfig.lockdownChannelIds : DEFAULT_CONFIG.lockdownChannelIds,
         protectedRoleIds: Array.isArray(base.protectedRoleIds) ? base.protectedRoleIds : DEFAULT_CONFIG.protectedRoleIds
     };
 }
@@ -179,8 +180,9 @@ function hasProtectedRole(member, config) {
         || member.permissions?.has(PermissionFlagsBits.Administrator);
     if (hasModPermissions) return true;
 
+
     const protectedIds = new Set([
-        ...config.protectedRoleIds.map((id) => String(id)),
+        ...(Array.isArray(rolesConfig.protectedRoleIds) ? rolesConfig.protectedRoleIds.map((id) => String(id)) : []),
         moderatorRoleId,
         administratorRoleId,
         supportTeamRoleId
@@ -193,7 +195,7 @@ async function applySlowmode(guild, config, state) {
     if (!guild) return;
 
     const channelsToUpdate = [];
-    if (config.lockdownAllTextChannels) {
+    if (config.lockdownAllTextChannels === true) {
         const allChannels = await guild.channels.fetch().catch(() => null);
         if (allChannels) {
             for (const channel of allChannels.values()) {
@@ -209,28 +211,51 @@ async function applySlowmode(guild, config, state) {
         }
     }
 
-    if (channelsToUpdate.length === 0) return;
+    if (channelsToUpdate.length === 0) {
+        console.log('[AntiRaid] No channels matched for slowmode application.');
+        return;
+    }
 
-    for (const channel of channelsToUpdate) {
+    console.log(`[AntiRaid] Applying ${config.lockdownSlowmodeSeconds}s slowmode to ${channelsToUpdate.length} channels...`);
+    const rateLimit = Math.max(0, Math.floor(Number(config.lockdownSlowmodeSeconds) || 0));
+
+    // Fire in parallel but catch errors so they don't block
+    await Promise.allSettled(channelsToUpdate.map(async (channel) => {
         if (!state.lockdown.previousSlowmode.has(channel.id)) {
             state.lockdown.previousSlowmode.set(channel.id, channel.rateLimitPerUser ?? 0);
         }
 
-        await channel.setRateLimitPerUser(
-            Math.max(0, Math.floor(Number(config.lockdownSlowmodeSeconds) || 0)),
-            'Anti-raid lockdown'
-        ).catch(() => null);
-    }
+        try {
+            await channel.setRateLimitPerUser(rateLimit, 'Anti-raid lockdown');
+        } catch (err) {
+            console.error(`[AntiRaid] Failed to apply slowmode to channel ${channel.id} (${channel.name}):`, err.message);
+        }
+    }));
+    console.log('[AntiRaid] Finished applying slowmode.');
 }
 
 async function revertSlowmode(guild, state) {
-    if (!guild) return;
+    if (!guild || state.lockdown.previousSlowmode.size === 0) return;
+
+    console.log(`[AntiRaid] Reverting slowmode on ${state.lockdown.previousSlowmode.size} channels...`);
+
+    const rollbackTasks = [];
     for (const [channelId, previous] of state.lockdown.previousSlowmode.entries()) {
-        const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-        if (!channel || typeof channel.setRateLimitPerUser !== 'function') continue;
-        await channel.setRateLimitPerUser(previous ?? 0, 'Anti-raid auto-revert').catch(() => null);
+        rollbackTasks.push((async () => {
+            const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+            if (!channel || typeof channel.setRateLimitPerUser !== 'function') return;
+
+            try {
+                await channel.setRateLimitPerUser(previous, 'Anti-raid lockdown ended');
+            } catch (err) {
+                console.error(`[AntiRaid] Failed to revert slowmode for channel ${channelId}:`, err.message);
+            }
+        })());
     }
+
+    await Promise.allSettled(rollbackTasks);
     state.lockdown.previousSlowmode.clear();
+    console.log('[AntiRaid] Finished reverting slowmode.');
 }
 
 async function logAntiRaid(guild, title, description, fields = [], color = 0xF04747) {
@@ -240,6 +265,18 @@ async function logAntiRaid(guild, title, description, fields = [], color = 0xF04
         color,
         fields
     });
+
+    // Try sending to the dedicated antiraid log channel first
+    const raidChannelId = channelConfig.antiraidLogChannelId;
+    if (raidChannelId) {
+        const channel = guild.channels.cache.get(raidChannelId);
+        if (channel) {
+            await channel.send({ embeds: [embed] }).catch(() => null);
+            return;
+        }
+    }
+
+    // Fallback to default server log channel
     await sendLogEmbed(guild, embed);
 }
 
@@ -255,9 +292,10 @@ async function startLockdown(guild, config, state, reason, details = [], manual 
     state.lockdown.lastTriggerCount = Array.isArray(details) ? details.length : null;
     state.lockdown.lastRiskScore = computeRiskScore(state.lockdown.lastTriggerCount || 0, state.joinEvents.length);
 
-    await applySlowmode(guild, config, state);
-
     await logAntiRaid(guild, '🚨 Anti-Raid Lockdown', reason, details, 0xED4245);
+
+    // Apply slowmode asynchronously to avoid rate-limit blocking
+    applySlowmode(guild, config, state).catch(() => null);
 
     const eventType = manual ? 'manual_enable' : 'lockdown_start';
     await MySQLDatabaseManager.logAntiRaidEvent(
@@ -360,9 +398,9 @@ async function stopLockdown(guild, config, state, reason) {
 }
 
 async function applyQuarantine(member, config) {
-    if (!member || !config.quarantineRoleId) return;
-    const roleId = String(config.quarantineRoleId).trim();
-    if (!roleId) return;
+
+    const roleId = String(rolesConfig.quarantineRoleId || '').trim();
+    if (!member || !roleId) return;
 
     const role = member.guild.roles.cache.get(roleId);
     if (!role) return;
@@ -487,10 +525,56 @@ async function computeInviteWeight(inviteInfo, guildId, config) {
     return Math.min(3, Math.max(0.2, weight));
 }
 
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+
+const pendingModConfirmations = new Map();
+
+async function sendModConfirmation(guild, triggers, actionType = 'lockdown', timeoutMs = 30000) {
+    if (!guild || pendingModConfirmations.get(guild.id)) {
+        // If a confirmation is already pending for this guild, auto-approve to avoid spam
+        return { approved: true, mod: null, reason: 'Confirmation already pending, auto-approved.' };
+    }
+    pendingModConfirmations.set(guild.id, true);
+    // Get role IDs and log channel
+    const roles = require('../Config/constants/roles.json');
+    const channels = require('../Config/constants/channel.json');
+    const modRoleId = roles.moderatorRoleId;
+    const adminRoleId = roles.administratorRoleId;
+    const logChannelId = channels.antiraidLogChannelId;
+    const logChannel = guild.channels.cache.get(logChannelId);
+    if (!logChannel) {
+        pendingModConfirmations.delete(guild.id);
+        return { approved: true, mod: null, reason: 'Log channel not found, auto-approved.' };
+    }
+
+    // Build embed and buttons
+    const embed = createLogEmbed({
+        title: 'Anti-Raid Action Confirmation',
+        description: `A potential raid was detected.\n**Triggers:**\n${triggers.map(t => `• ${t.name}: ${t.value}`).join('\n')}\n\nDo you want to **approve** the ${actionType}?`,
+        color: 0xFEE75C
+    });
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('antiraid_approve').setLabel('Approve').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('antiraid_deny').setLabel('Deny').setStyle(ButtonStyle.Danger)
+    );
+    // Ping both mod and admin roles
+    const pingContent = `<@&${modRoleId}> <@&${adminRoleId}>`;
+    const msg = await logChannel.send({ content: pingContent, embeds: [embed], components: [row] });
+    // Wait for a response from a member with either role
+    const filter = i => (i.member.roles.cache.has(modRoleId) || i.member.roles.cache.has(adminRoleId)) && ['antiraid_approve', 'antiraid_deny'].includes(i.customId);
+    const collected = await msg.awaitMessageComponent({ filter, time: timeoutMs }).catch(() => null);
+    pendingModConfirmations.delete(guild.id);
+    if (!collected) return { approved: true, mod: null, reason: 'No response, auto-approved.' };
+    await collected.update({ content: `Selected: ${collected.customId === 'antiraid_approve' ? 'Approve' : 'Deny'}`, embeds: [embed], components: [] });
+    return { approved: collected.customId === 'antiraid_approve', mod: collected.member, reason: `Mod ${collected.user.tag} selected ${collected.customId}` };
+}
+
 async function handleMemberJoin(member, inviteInfo = null) {
-    if (!member?.guild) return;
+    if (!member?.guild) return false;
     const config = resolveConfig();
-    if (!config.enabled) return;
+    if (!config.enabled) {
+        return false;
+    }
 
     const state = getState(member.guild.id);
     const now = Date.now();
@@ -506,6 +590,7 @@ async function handleMemberJoin(member, inviteInfo = null) {
 
     const joinEntry = {
         ts: now,
+        memberId: member.id,
         accountAgeDays,
         entropyRatio,
         lowEntropy,
@@ -513,6 +598,7 @@ async function handleMemberJoin(member, inviteInfo = null) {
         inviteCode: inviteInfo?.code || null,
         inviteWeight: await computeInviteWeight(inviteInfo, member.guild.id, config)
     };
+
 
     state.joinEvents = pruneEvents([...state.joinEvents, joinEntry], config.joinWindowMs);
     state.entropyEvents = pruneEvents([...state.entropyEvents, joinEntry], config.joinWindowMs);
@@ -523,7 +609,7 @@ async function handleMemberJoin(member, inviteInfo = null) {
         if (!hasProtectedRole(member, config)) {
             await applyQuarantine(member, config);
         }
-        return;
+        return true;
     }
 
     const triggers = [];
@@ -560,11 +646,24 @@ async function handleMemberJoin(member, inviteInfo = null) {
     }
 
     if (triggers.length > 0) {
+        await logAntiRaid(member.guild, '🚨 Anti-Raid Lockdown', 'Automated anti-raid trigger', triggers, 0xED4245);
         await startLockdown(member.guild, config, state, 'Automated anti-raid trigger', triggers);
         if (!hasProtectedRole(member, config)) {
             await applyQuarantine(member, config);
         }
+
+        // Retroactively quarantine ALL recent users who triggered this lockdown!
+        for (const entry of state.joinEvents) {
+            if (entry.memberId && entry.memberId !== member.id) {
+                const recentMember = member.guild.members.cache.get(entry.memberId);
+                if (recentMember && !hasProtectedRole(recentMember, config)) {
+                    applyQuarantine(recentMember, config).catch(() => null);
+                }
+            }
+        }
+        return true;
     }
+    return false;
 }
 
 async function handleMemberLeave(member) {

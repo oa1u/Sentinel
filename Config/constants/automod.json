@@ -77,10 +77,7 @@
         "earlyLeaveMaxAgeMs": 900000,
         "lockdownSlowmodeSeconds": 30,
         "lockdownAllTextChannels": true,
-        "lockdownChannelIds": [],
         "autoRevertMs": 1800000,
-        "quarantineRoleId": "",
-        "protectedRoleIds": [],
         "verificationSignals": {
             "enabled": true,
             "riskWindowMs": 600000,

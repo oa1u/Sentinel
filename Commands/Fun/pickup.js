@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 
-// A bunch of pickup lines—use them wisely (or not at all).
 const pickupLines = [
   "Are you a magician? Because whenever I look at you, everyone else disappears.",
   "Do you have a map? I keep getting lost in your eyes.",

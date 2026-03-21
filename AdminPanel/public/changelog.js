@@ -1,4 +1,3 @@
-/* Changelog page utilities — helper functions for rendering and interacting with the changelog. */
 document.addEventListener('DOMContentLoaded', async () => {
     if (!window.api || !window.ui) {
         const { api, ui } = window.AdminPanel || {};

@@ -4,6 +4,7 @@ const inviteCache = new Map();
 const inviteCreators = new Map();
 const inviteJoinCounts = new Map();
 const inviterJoinCounts = new Map();
+const pendingFetches = new Map();
 
 function ensureGuildCache(guildId) {
     if (!inviteCache.has(guildId)) {
@@ -20,13 +21,26 @@ function ensureGuildCache(guildId) {
     }
 }
 
+async function fetchGuildInvitesDeduplicated(guild) {
+    if (!pendingFetches.has(guild.id)) {
+        const promise = guild.invites.fetch().catch(err => {
+            pendingFetches.delete(guild.id);
+            throw err;
+        }).finally(() => {
+            setTimeout(() => pendingFetches.delete(guild.id), 2500);
+        });
+        pendingFetches.set(guild.id, promise);
+    }
+    return pendingFetches.get(guild.id);
+}
+
 async function cacheGuildInvites(guild) {
     if (!guild?.id || !guild?.invites?.fetch) return;
 
     ensureGuildCache(guild.id);
 
     try {
-        const invites = await guild.invites.fetch();
+        const invites = await fetchGuildInvitesDeduplicated(guild);
         const cache = inviteCache.get(guild.id);
         const creators = inviteCreators.get(guild.id);
         cache.clear();
@@ -105,7 +119,7 @@ async function handleMemberJoin(member) {
 
     let invites;
     try {
-        invites = await guild.invites.fetch();
+        invites = await fetchGuildInvitesDeduplicated(guild);
     } catch (error) {
         console.warn(`[InviteTracker] Could not refresh invites for guild ${guild.id}: ${error?.message || error}`);
         return null;

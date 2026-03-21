@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Privacy Policy — outlines data handling and privacy commitments for users. -->
 <html lang="en">
 
 <head>
@@ -7,19 +6,262 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="websiteNameTitle">Privacy Policy</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+
     <link rel="stylesheet" href="/css/style.css">
 
+    <style>
+        :root {
+            --privacy-accent: var(--color-purple);
+            --privacy-accent-soft: rgba(139, 92, 246, 0.1);
+        }
+
+        .privacy-wrapper {
+            max-width: 1000px;
+            margin: 4rem auto;
+            position: relative;
+        }
+
+        .privacy-card {
+            background: rgba(22, 22, 26, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            padding: 3rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+            min-height: 600px;
+        }
+
+        .privacy-card::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            left: -100px;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, var(--privacy-accent-soft) 0%, transparent 70%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .privacy-header {
+            text-align: center;
+            margin-bottom: 3rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .privacy-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            display: inline-block;
+            filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.3));
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .privacy-header h1 {
+            font-size: 2.5rem;
+            margin: 0 0 0.5rem 0;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(to bottom right, #ffffff, #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .privacy-header p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+
+        .tabs-container {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 3rem;
+            overflow-x: auto;
+            padding: 6px;
+            position: relative;
+            z-index: 5;
+            justify-content: center;
+            flex-wrap: wrap;
+
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            max-width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            padding: 0.75rem 1.25rem;
+            border-radius: 10px;
+            color: #94a3b8;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab-btn:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-btn.active {
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: #c4b5fd;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.05);
+        }
+
+        .tab-btn.active i {
+            color: #a78bfa;
+            filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+        }
+
+        .tab-content {
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tab-content.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .content-box {
+            background: linear-gradient(to bottom, rgba(30, 30, 40, 0.5), rgba(20, 20, 25, 0.5));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-lg);
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .section-title {
+            font-size: 1.4rem;
+            font-weight: 800;
+            margin-bottom: 1.75rem;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .content-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .content-list li {
+            position: relative;
+            padding-left: 2rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 1rem 1rem 1rem 2.5rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            border: 1px solid transparent;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .content-list li:hover {
+            border-color: rgba(139, 92, 246, 0.3);
+            background: rgba(139, 92, 246, 0.05);
+        }
+
+        .content-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 1rem;
+            top: 1rem;
+            color: #10b981;
+            font-weight: 900;
+            font-size: 1rem;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .privacy-card {
+                padding: 1.5rem;
+            }
+
+            .privacy-wrapper {
+                margin: 2rem 1rem;
+            }
+
+            .tabs-container {
+                justify-content: flex-start;
+                flex-wrap: nowrap;
+                padding-bottom: 1rem;
+            }
+        }
+    </style>
 </head>
 
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo">🔒 Privacy Policy</div>
+            <div class="logo"><span id="PanelEmoji">🔒</span> Privacy Policy</div>
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
                 <a href="/admin" class="nav-link" id="adminLink">Admin</a>
-                <a href="/owner" class="nav-link" id="ownerLink">Owner</a>
+                <a href="/owner" class="nav-link" id="ownerNavLink">Owner</a>
             </nav>
             <div class="user-info">
                 <div class="user-dropdown">
@@ -47,204 +289,124 @@
         </div>
     </header>
 
-    <main class="container" style="max-width: 960px; padding: 2rem 1rem 3rem;">
-        <div class="tabs" id="privacyTabs" style="margin-bottom: 2rem;">
-            <button class="tab active" data-tab="overview" style="--tab-color:#5b7fff;"><span class="tab-icon">📌</span>
-                <span>Overview</span></button>
-            <button class="tab" data-tab="data" style="--tab-color:#8e6bff;"><span class="tab-icon">📦</span>
-                <span>Data</span></button>
-            <button class="tab" data-tab="usage" style="--tab-color:#38d39f;"><span class="tab-icon">🎯</span>
-                <span>Usage</span></button>
-            <button class="tab" data-tab="security" style="--tab-color:#ff9f43;"><span class="tab-icon">🧯</span>
-                <span>Security</span></button>
-            <button class="tab" data-tab="rights" style="--tab-color:#5bc0de;"><span class="tab-icon">🗂️</span>
-                <span>Rights</span></button>
-            <button class="tab" data-tab="version" style="--tab-color:#ffd45b;"><span class="tab-icon">📅</span>
-                <span>Version</span></button>
-        </div>
+    <main class="privacy-wrapper">
+        <div class="privacy-card">
+            <div class="privacy-header">
+                <div class="privacy-icon">🔒</div>
+                <h1>Privacy Policy</h1>
+                <p>Transparent overview of how we handle, store, and protect your data.</p>
+            </div>
 
-        <style>
-            .tabs {
-                display: flex;
-                gap: 1.25rem;
-                border-bottom: 2px solid var(--border-color);
-                margin: 2rem 0 1.5rem 0;
-                padding-left: 0.5rem;
-                align-items: center;
-                flex-wrap: wrap;
-            }
+            <div class="tabs-container" role="tablist" aria-label="Privacy Policy Sections">
+                <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="overview"
+                    onclick="openTab('overview', this)">
+                    <i>📌</i> Overview
+                </button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="data"
+                    onclick="openTab('data', this)">
+                    <i>📦</i> Data Collection
+                </button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="usage"
+                    onclick="openTab('usage', this)">
+                    <i>🎯</i> Data Usage
+                </button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="security"
+                    onclick="openTab('security', this)">
+                    <i>🧯</i> Security
+                </button>
 
-            .tab {
-                background: none;
-                border: none;
-                outline: none;
-                color: var(--text-secondary);
-                font-size: 1rem;
-                font-weight: 600;
-                padding: 0.65rem 1rem 0.5rem 1rem;
-                border-radius: var(--radius-md) var(--radius-md) 0 0;
-                cursor: pointer;
-                transition: color 0.2s, background 0.2s;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                position: relative;
-            }
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="version"
+                    onclick="openTab('version', this)">
+                    <i>📅</i> Policy Version
+                </button>
+            </div>
 
-            .tab.active {
-                color: var(--tab-color, #5b7fff);
-                background: var(--bg-card);
-                box-shadow: 0 2px 8px rgba(91, 127, 255, 0.08);
-                border-bottom: 2px solid var(--tab-color, #5b7fff);
-                z-index: 2;
-            }
-
-            .tab:not(.active):hover {
-                color: var(--tab-color, #5b7fff);
-                background: var(--bg-card-hover);
-            }
-
-            .tab .tab-icon {
-                font-size: 1.1rem;
-            }
-        </style>
-
-        <div id="overview" class="tab-content active">
-            <section class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📌</span>
-                    <span>Overview</span>
+            <div id="overview" class="tab-content active">
+                <div class="content-box">
+                    <div class="section-title"><i>📌</i> The Basics</div>
+                    <div class="content-text">
+                        <p>Hi! This Privacy Policy explains how <span class="websiteName"></span> ("we", "us") handles
+                            your information. We built this bot to help you manage your community, not to spy on you.
+                        </p>
+                        <p>By using the bot or this dashboard, you're cool with how we handle things described here.</p>
+                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5rem 0;">
+                        <p style="color: #94a3b8; font-size: 0.95rem;"><em><strong>Heads Up:</strong> Every Discord
+                                server is different. The server owners who use our bot might have their own rules. We
+                                provide the tools, but they decide how to use them (like what words to ban).</em></p>
+                    </div>
+                    <div class="content-text"
+                        style="margin-top: 1.5rem; background: rgba(59, 130, 246, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                        <p style="margin:0; color: #60a5fa; font-size: 0.9rem;"><strong>📩 Got Questions?</strong> Ask
+                            in the <a href="#" id="githubRepoLink"
+                                style="color: white; text-decoration: underline;">GitHub Repo</a>.</p>
+                    </div>
                 </div>
-                <p style="margin: 0 0 1rem 0; line-height: 1.7;">
-                    This Privacy Policy describes how this Discord bot and how <span class="websiteName"></span>
-                    collects, uses, stores, and protects data while providing moderation, automation, and
-                    community-management features.
-                </p>
-                <p style="margin: 0 0 1rem 0; line-height: 1.7;">
-                    The policy applies to server owners, administrators, moderators, and members whose data is processed
-                    through bot commands, moderation actions, ticket flows, and audit features.
-                </p>
-                <p style="margin: 0; line-height: 1.7;">
-                    By using this system, administrators acknowledge responsibility for configuring features in line
-                    with their community rules and applicable platform requirements.
-                </p>
-            </section>
-        </div>
+            </div>
 
-        <div id="data" class="tab-content" style="display:none;">
-            <section class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📦</span>
-                    <span>Data We Process</span>
+            <div id="data" class="tab-content">
+                <div class="content-box">
+                    <div class="section-title"><i>📦</i> What We Collect</div>
+                    <ul class="content-list">
+                        <li><strong>Your Profile:</strong> We save your Discord ID, username, and avatar so we know
+                            who's who.</li>
+                        <li><strong>Server Settings:</strong> We store your server's config like channel IDs, role
+                            setups, and welcome messages so the bot works.</li>
+                        <li><strong>Mod History:</strong> If someone gets warned, kicked, or banned, we keep a record of
+                            it (the "case log") to help mods keep track.</li>
+                        <li><strong>Messages (Sometimes):</strong> We <strong>do not</strong> store chat logs by
+                            default. We only save specific messages if you enable "Message Logging" or when a command is
+                            used.</li>
+                        <li><strong>Login Info:</strong> When you log into this dashboard, we use cookies and your IP to
+                            keep your session secure.</li>
+                        <li><strong>Bot Stats:</strong> We track basic things like "how many times was the !help command
+                            used" to optimize performance.</li>
+                    </ul>
                 </div>
-                <ul style="margin: 0; padding-left: 1.2rem; line-height: 1.7;">
-                    <li><strong>Platform identifiers:</strong> Discord user IDs, guild/server IDs, role IDs, and channel
-                        IDs used to map actions and permissions.</li>
-                    <li><strong>Moderation history:</strong> warnings, kicks, bans, unbans, timeouts, case IDs, reasons,
-                        moderator identifiers, and timestamps.</li>
-                    <li><strong>Audit logs:</strong> event metadata and, when enabled, message content snapshots (before
-                        and after) for edits/deletions.</li>
-                    <li><strong>Tickets and appeals:</strong> ticket status, participants, appeal statements, decisions,
-                        and contact email provided by the submitter.</li>
-                    <li><strong>Admin panel accounts:</strong> usernames, roles, email addresses, password hashes,
-                        encrypted 2FA secrets, recovery code hashes, trusted device metadata, and optional linked
-                        Discord IDs.</li>
-                    <li><strong>Authentication events:</strong> login/logout activity, IP address, user agent, session
-                        data, and security-related events.</li>
-                    <li><strong>Operational metrics:</strong> command usage, verification analytics, activity tracking,
-                        and automation outcomes for reliability and safety.</li>
-                    <li><strong>Configuration data:</strong> server-specific settings for automod, logging channels,
-                        verification, leveling, backups, and feature toggles.</li>
-                    <li><strong>Backups:</strong> database exports stored on the server when backups are enabled.</li>
-                </ul>
-            </section>
-        </div>
+            </div>
 
-        <div id="usage" class="tab-content" style="display:none;">
-            <section class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">🎯</span>
-                    <span>How Data Is Used</span>
+            <div id="usage" class="tab-content">
+                <div class="content-box">
+                    <div class="section-title"><i>🎯</i> How We Use It</div>
+                    <ul class="content-list">
+                        <li><strong>To Run the Bot:</strong> We use data to reply to commands, give you roles, and show
+                            you pretty graphs on this dashboard.</li>
+                        <li><strong>To Keep It Safe:</strong> We use data for AutoMod (like catching bad words) and to
+                            stop spammers.</li>
+                        <li><strong>To Fix Bugs:</strong> If the bot crashes, we look at error logs to see what went
+                            wrong.</li>
+                        <li><strong>To Talk to You:</strong> Sometimes the bot needs to DM you (like "You were warned in
+                            Server X") or post in a log channel.</li>
+                        <li><strong>To Follow the Law:</strong> We have to follow the rules, including Discord's Terms
+                            of Service.</li>
+                    </ul>
                 </div>
-                <ul style="margin: 0; padding-left: 1.2rem; line-height: 1.7;">
-                    <li>To execute requested bot features, including moderation workflows, tickets, utility commands,
-                        and community-management tools.</li>
-                    <li>To maintain safety controls such as automod checks, suspicious-pattern detection, and
-                        repeat-offense tracking.</li>
-                    <li>To provide accountability through case histories, moderation logs, and privileged action
-                        traceability.</li>
-                    <li>To enforce role-based access in the <span class="websiteName"></span> so users only access tools
-                        permitted by their role.</li>
-                    <li>To improve stability and feature quality through diagnostics and aggregate performance
-                        monitoring.</li>
-                    <li>To comply with lawful requests and platform safety obligations when required.</li>
-                </ul>
-            </section>
-        </div>
+            </div>
 
-        <div id="security" class="tab-content" style="display:none;">
-            <section class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">🧯</span>
-                    <span>Security & Retention</span>
+            <div id="security" class="tab-content">
+                <div class="content-box">
+                    <div class="section-title"><i>🧯</i> Keeping It Safe</div>
+                    <ul class="content-list">
+                        <li><strong>Encryption:</strong> We scramble sensitive stuff like tokens and passwords so nobody
+                            can read them.</li>
+                        <li><strong>Locked Doors:</strong> Only the main developers can access the database, and we use
+                            secure providers.</li>
+                        <li><strong>Less is More:</strong> We try not to hoard data. If we don't need it for a feature,
+                            we don't save it.</li>
+                        <li><strong>Cleaning House:</strong> The owner has options to delete certain rows of data.</li>
+                    </ul>
                 </div>
-                <ul style="margin: 0; padding-left: 1.2rem; line-height: 1.7;">
-                    <li><strong>Access control:</strong> administrative features are restricted by authentication, role
-                        checks, and protected sessions.</li>
-                    <li><strong>Auditability:</strong> sensitive actions are logged to support incident investigation
-                        and moderation transparency.</li>
-                    <li><strong>Data minimization:</strong> only data necessary for configured features and moderation
-                        operations is processed.</li>
-                    <li><strong>Retention practice:</strong> records are retained until deleted by administrators or
-                        rotated by configured backup retention settings. There is no automatic global expiration
-                        unless configured.</li>
-                    <li><strong>Safeguards:</strong> credentials are stored as hashes, and 2FA secrets are stored
-                        encrypted. Additional controls reduce unauthorized access and misuse.</li>
-                    <li><strong>Third-party platform dependency:</strong> some data handling occurs through Discord
-                        infrastructure and is subject to Discord platform behavior.</li>
-                    <li><strong>Email delivery:</strong> if SMTP is enabled, email delivery logs may include recipient
-                        address, template name, and delivery status.</li>
-                </ul>
-            </section>
-        </div>
+            </div>
 
-        <div id="rights" class="tab-content" style="display:none;">
-            <section class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">🗂️</span>
-                    <span>Your Rights</span>
+            <div id="version" class="tab-content">
+                <div class="content-box">
+                    <div class="section-title"><i>📅</i> Policy Version</div>
+                    <div class="content-text">
+                        <p><strong>Last updated:</strong> March 18, 2026</p>
+                        <p>Continued use after an update indicates acceptance of the revised policy terms.</p>
+                    </div>
                 </div>
-                <p style="margin: 0 0 1rem 0; line-height: 1.7;">
-                    Depending on your role and local requirements, you may request actions related to data processed by
-                    this system.
-                </p>
-                <ul style="margin: 0 0 1rem 0; padding-left: 1.2rem; line-height: 1.7;">
-                    <li>Review moderation or ticket records related to your account where policy permits.</li>
-                    <li>Request correction of inaccurate records or context notes.</li>
-                    <li>Request deletion of records that are no longer necessary, subject to operational and legal
-                        constraints.</li>
-                    <li>Request explanation of automated moderation outcomes that affected your account.</li>
-                </ul>
-                <p style="margin: 0; line-height: 1.7;">
-                    Requests are handled by server management or designated administrators, and may be limited where
-                    retention is required for security, dispute resolution, or compliance.
-                </p>
-            </section>
-        </div>
+            </div>
 
-        <div id="version" class="tab-content" style="display:none;">
-            <section class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📅</span>
-                    <span>Policy Version</span>
-                </div>
-                <p style="margin: 0 0 0.75rem 0; line-height: 1.7;"><strong>Last updated:</strong> March 8, 2026.
-                </p>
-                <p style="margin: 0 0 0.75rem 0; line-height: 1.7;">Material policy changes may be announced in the
-                    panel changelog and reflected on this page.</p>
-                <p style="margin: 0; line-height: 1.7;">Continued use after an update indicates acceptance of the
-                    revised policy terms.</p>
-            </section>
         </div>
     </main>
 
@@ -263,81 +425,118 @@
     <script src="/public/shared.js"></script>
     <script src="/public/version.js"></script>
     <script>
-        function toggleUserDropdown() {
-            const menu = document.getElementById('userDropdownMenu');
-            const trigger = document.querySelector('.user-dropdown-trigger');
-            if (menu && trigger) {
-                menu.classList.toggle('show');
-                trigger.classList.toggle('active');
+        function openTab(tabId, btnElement) {
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+                content.setAttribute('aria-hidden', 'true');
+            });
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-selected', 'false');
+            });
+
+            const targetContent = document.getElementById(tabId);
+            if (targetContent) {
+                targetContent.classList.add('active');
+                targetContent.setAttribute('aria-hidden', 'false');
+            }
+
+            if (btnElement) {
+                btnElement.classList.add('active');
+                btnElement.setAttribute('aria-selected', 'true');
             }
         }
 
-        document.addEventListener('click', function (event) {
-            const dropdown = document.querySelector('.user-dropdown');
-            if (dropdown && !dropdown.contains(event.target)) {
-                const menu = document.getElementById('userDropdownMenu');
-                const trigger = document.querySelector('.user-dropdown-trigger');
-                if (menu) menu.classList.remove('show');
-                if (trigger) trigger.classList.remove('active');
+        document.addEventListener('DOMContentLoaded', () => {
+            updateAccountInfo();
+
+            fetch('/Config/main.json')
+                .then(res => res.json())
+                .then(cfg => {
+                    const link = cfg.githublink || 'https://github.com/oa1u/Sentinel';
+                    const repoLink = document.getElementById('githubRepoLink');
+                    if (repoLink) {
+                        repoLink.href = link;
+                    }
+                })
+                .catch(err => console.error("Error loading config:", err));
+        });
+
+        function toggleUserDropdown() {
+            const menu = document.getElementById('userDropdownMenu');
+            const trigger = document.querySelector('.user-dropdown-trigger');
+            if (menu) menu.classList.toggle('show');
+            if (trigger) trigger.classList.toggle('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            const trigger = document.querySelector('.user-dropdown-trigger');
+            const menu = document.getElementById('userDropdownMenu');
+            if (trigger && menu && !trigger.contains(e.target) && !menu.contains(e.target)) {
+                menu.classList.remove('show');
+                trigger.classList.remove('active');
             }
         });
 
         async function updateAccountInfo() {
             try {
-                const api = window.AdminPanel?.api || window.api;
-                if (!api || typeof api.getAccountInfo !== 'function') return;
+                let api = window.api || (window.AdminPanel && window.AdminPanel.api);
+                if (!api && window.AdminPanel) api = window.AdminPanel.api;
 
-                const accountInfo = await api.getAccountInfo();
-                const username = accountInfo?.username || 'User';
-                const role = String(accountInfo?.role || 'user').toUpperCase();
+                if (api && typeof api.getAccountInfo === 'function') {
+                    const accountInfo = await api.getAccountInfo();
+                    if (accountInfo) {
+                        updateUI(accountInfo);
+                        return;
+                    }
+                }
 
-                const setText = (id, value) => {
-                    const el = document.getElementById(id);
-                    if (el) el.textContent = value;
-                };
-
-                setText('headerUsername', username);
-                setText('headerRole', role);
-                setText('dropdownUsername', username);
-                setText('dropdownRole', role);
-
-                if (typeof api.applyRoleVisibility === 'function') {
-                    api.applyRoleVisibility(accountInfo, {
-                        moderatorLinkId: 'moderatorLink',
-                        adminLinkId: 'adminLink',
-                        ownerLinkId: 'ownerLink'
-                    });
+                const res = await fetch("/api/account/info");
+                if (res.ok) {
+                    const data = await res.json();
+                    updateUI(data);
                 }
             } catch (error) {
-                console.error('Failed to load account info:', error);
+                console.error("Error loading user info:", error);
             }
         }
 
-        document.addEventListener('DOMContentLoaded', function () {
-            updateAccountInfo();
+        function updateUI(data) {
+            const safeText = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = val;
+            };
 
-            const tabs = document.querySelectorAll('#privacyTabs .tab');
-            const tabContents = document.querySelectorAll('.tab-content');
+            safeText("headerUsername", data.username || "User");
+            safeText("headerRole", (data.role || "user").toUpperCase());
+            safeText("dropdownUsername", data.username || "User");
+            safeText("dropdownRole", (data.role || "user").toUpperCase());
 
-            tabs.forEach(tab => {
-                tab.addEventListener('click', function () {
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
+            const moderatorLink = document.getElementById("moderatorLink");
+            const adminLink = document.getElementById("adminLink");
+            const ownerNavLink = document.getElementById("ownerNavLink");
+            const analyticsLink = document.getElementById("analyticsLink");
 
-                    const tabName = tab.getAttribute('data-tab');
-                    tabContents.forEach(tc => {
-                        if (tc.id === tabName) {
-                            tc.classList.add('active');
-                            tc.style.display = '';
-                        } else {
-                            tc.classList.remove('active');
-                            tc.style.display = 'none';
-                        }
-                    });
-                });
-            });
-        });
+            const role = data.role || 'user';
+            const isMod = ["moderator", "admin", "owner"].includes(role);
+            const isAdmin = ["admin", "owner"].includes(role);
+            const isOwner = (role === "owner");
+
+            if (moderatorLink) moderatorLink.style.display = isMod ? "block" : "none";
+            if (adminLink) adminLink.style.display = isAdmin ? "block" : "none";
+            if (ownerNavLink) ownerNavLink.style.display = isOwner ? "block" : "none";
+            if (analyticsLink) analyticsLink.style.display = isMod ? "block" : "none";
+        }
+
+        function logout() {
+            document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            window.location.href = "/login";
+        }
     </script>
+</body>
+
+</html>
 </body>
 
 </html>

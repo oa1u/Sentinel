@@ -1,41 +1,16 @@
-const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, MessageFlags } = require('discord.js');
 const { ROLES: { administratorRoleId, moderatorRoleId } } = require("../../Config/constants");
 
-// The help command shows a categorized list of all available commands—easy to find what you need.
-// Note to self: Remember to update categories when adding new commands!
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Show all available commands')
-    .addStringOption(option =>
-      option.setName('category')
-        .setDescription('Command category to display')
-        .setRequired(false)
-        .addChoices(
-          { name: 'Management', value: 'management' },
-          { name: 'Moderation', value: 'moderation' },
-          { name: 'Voice', value: 'voice' },
-          { name: 'Utility', value: 'utility' },
-          { name: 'Leveling', value: 'levels' },
-          { name: 'Fun', value: 'fun' },
-          { name: 'Ticket', value: 'ticket' },
-          { name: 'Verification', value: 'verification' }
-        )
-    ),
+    .setDescription('Show all available commands'),
   category: 'utility',
   async execute(interaction) {
-    const category = interaction.options.getString('category');
-
-    // Figure out which commands the user can see based on their roles.
     const member = interaction.member;
     const hasAdminRole = member.roles.cache.has(administratorRoleId);
     const hasModRole = member.roles.cache.has(moderatorRoleId);
 
-    function ChangeLatter(string) {
-      return string.charAt(0).toUpperCase() + string.slice(1);
-    }
-
-    // Emojis for each command category—makes the help menu more fun.
     const categoryIcons = {
       management: '⚙️',
       moderation: '🛡️',
@@ -47,229 +22,216 @@ module.exports = {
       verification: '🔐'
     };
 
-    // Show different categories depending on the user's role.
-    let categoryList = [];
-    if (hasAdminRole) {
-      categoryList.push('⚙️ **Management** - Server management commands');
-    }
-    if (hasModRole || hasAdminRole) {
-      categoryList.push('🛡️ **Moderation** - Moderation & safety commands');
-    }
-    categoryList.push('🎤 **Voice** - Music and temporary voice channel commands');
-    categoryList.push('🔧 **Utility** - Helpful utility commands');
-    categoryList.push('📈 **Leveling** - Level up and rank commands');
-    categoryList.push('🎮 **Fun** - Games and entertainment commands');
-    categoryList.push('🎫 **Ticket** - Ticket system commands');
-    categoryList.push('🔐 **Verification** - Account verification commands');
+    const categories = [];
+    if (hasAdminRole) categories.push('management');
+    if (hasModRole || hasAdminRole) categories.push('moderation');
+    categories.push('voice', 'utility', 'levels', 'fun', 'ticket', 'verification');
 
-    let embedhelp = new EmbedBuilder()
-      .setColor(0x1e1f22)
-      .setAuthor({
-        name: `${interaction.client.user.username} Help Menu`,
-        iconURL: interaction.client.user.displayAvatarURL()
-      })
-      .setTitle('Bot Command Help')
-      .setDescription([
-        'Welcome to the help menu!', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        'Select a category below to view available commands.', '',
-        '**Usage:** `/help [category]`', '**Example:** `/help moderation`'
-      ].join('\n'))
-      .addFields(
-        {
-          name: '📚 Available Categories',
-          value: categoryList.join('\n') + '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    const uniqueCategories = [...new Set(categories)];
+
+    function buildMainMenuEmbed() {
+      return new EmbedBuilder()
+        .setColor(0x23272A)
+        .setTitle('✨  __Bot Command Help__')
+        .setDescription([
+          '**Welcome to the interactive help menu!**',
+          '╭───────────────────────────────╮',
+          'Click a button below to view commands for a category.',
+          '',
+          '_Tip: Commands are filtered based on your permissions._',
+          '',
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        ].join('\n'))
+        .addFields({
+          name: '📚 __Available Categories__',
+          value: uniqueCategories.map(cat => `> ${categoryIcons[cat]} **${cat.charAt(0).toUpperCase() + cat.slice(1)}**`).join('\n'),
           inline: false
-        },
-        {
-          name: '💡 Tip',
-          value: 'Commands are filtered based on your permissions. Admin and Moderator commands are only visible to users with the appropriate roles.',
-          inline: false
-        },
-      )
-      .setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ size: 128 }) })
-      .setTimestamp();
-
-    if (!category) {
-      return interaction.reply({ embeds: [embedhelp], flags: MessageFlags.Ephemeral });
+        })
+        .setFooter({ text: `Requested by ${interaction.user.tag}  •  ${new Date().toLocaleTimeString()}`, iconURL: interaction.user.displayAvatarURL({ size: 128 }) })
+        .setTimestamp();
     }
 
-    // Make sure the user has permission to view this category.
-    if (category === 'management' && !hasAdminRole) {
-      const adminRole = interaction.guild.roles.cache.get(administratorRoleId);
-      const roleName = adminRole ? adminRole.name : 'Administrator';
-      return interaction.reply({
-        content: `❌ You need the **${roleName}** role to view Management commands.`,
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    if (category === 'moderation' && !hasModRole && !hasAdminRole) {
-      const modRole = interaction.guild.roles.cache.get(moderatorRoleId);
-      const roleName = modRole ? modRole.name : 'Moderator';
-      return interaction.reply({
-        content: `❌ You need the **${roleName}** role to view Moderation commands.`,
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    // Build the command list for this category.
-    let count = 0;
-    const commands = [];
-    for (const [, command] of interaction.client.slashCommands) {
-      if (command.category === category) {
-        const emoji = getCommandEmoji(command.data.name);
-        commands.push(`${emoji} \`/${command.data.name}\` - ${command.data.description || 'No description'}`);
-        count++;
+    function buildCategoryEmbed(category) {
+      let commands = [];
+      for (const [, command] of interaction.client.slashCommands) {
+        if (command.category === category) {
+          const cmdName = command?.data?.name || 'unknown';
+          const emoji = getCommandEmoji(cmdName);
+          let desc = 'No description';
+          if (command?.data?.description && typeof command.data.description === 'string') {
+            desc = command.data.description;
+          }
+          commands.push(`${emoji} \`/${cmdName}\` - ${desc}`);
+        }
       }
+      if (commands.length === 0) {
+        commands = ['No commands found in this category.'];
+      }
+      return new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle(`${categoryIcons[category] || ''} ${category.charAt(0).toUpperCase() + category.slice(1)} Commands`)
+        .setDescription(commands.join('\n'))
+        .setFooter({ text: `Requested by ${interaction.user.tag} • Click Back to return`, iconURL: interaction.user.displayAvatarURL({ size: 128 }) })
+        .setTimestamp();
     }
 
-    if (count === 0) {
-      return interaction.reply({ content: `No commands found in the ${category} category.`, flags: MessageFlags.Ephemeral });
-    }
-
-    const categoryEmbed = new EmbedBuilder()
-      .setColor(0x1e1f22)
-      .setAuthor({
-        name: `${ChangeLatter(category)} Commands`,
-        iconURL: interaction.client.user.displayAvatarURL()
-      })
-      .setTitle(`${categoryIcons[category]} ${ChangeLatter(category)} Commands`)
-      .setDescription(`Here are all commands in the **${ChangeLatter(category)}** category:`)
-      .addFields({
-        name: `Commands`,
-        value: commands.join('\n'),
-        inline: false
-      })
-      .setFooter({ text: `${count} commands • Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ size: 128 }) })
-      .setTimestamp();
-
-
-    if (category === 'utility') {
-      const economyUserLines = [
-        '• `/economy balance [user]` — wallet, bank, totals',
-        '• `/economy daily` and `/economy weekly` — timed rewards',
-        '• `/economy work` — work payouts with cooldowns',
-        '• `/economy deposit|withdraw <amount|%|all>` — move funds',
-        '• `/economy gamble <amount|%|all>` — risk/reward',
-        '• `/economy quests` and `/economy quest-claim <quest>` — quests + rewards',
-        '• `/economy shop`, `/economy buy`, `/economy inventory`, `/economy use` — items + boosts',
-        '• `/economy leaderboard` and `/economy stats [user]` — rankings + analytics',
-        '• `/weather <city>` — get the weather'
-      ];
-
-      categoryEmbed.addFields({
-        name: '💰 Economy & Utility',
-        value: economyUserLines.join('\n'),
-        inline: false
+    function buildCategoryButtons(selected) {
+      const rows = [];
+      let currentRow = new ActionRowBuilder();
+      uniqueCategories.forEach((cat, idx) => {
+        if (currentRow.components.length === 5) {
+          rows.push(currentRow);
+          currentRow = new ActionRowBuilder();
+        }
+        currentRow.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`help_cat_${cat}`)
+            .setLabel(`${categoryIcons[cat] || ''} ${cat.charAt(0).toUpperCase() + cat.slice(1)}`)
+            .setStyle(selected === cat ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        );
       });
+      if (currentRow.components.length > 0) rows.push(currentRow);
+      return rows;
+    }
 
-      if (hasAdminRole) {
-        categoryEmbed.addFields({
-          name: '🛠️ Economy Admin Tools',
-          value: [
-            '• `/economy admin set <user> <wallet|bank> <amount> [reason]`',
-            '• `/economy admin add <user> <wallet|bank> <amount> [reason]`',
-            '• `/economy admin remove <user> <wallet|bank> <amount> [reason]`',
-            '• `/economy bounty list|create|award|close` — manage bounties'
-          ].join('\n'),
-          inline: false
+    function buildBackButton() {
+      return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('help_back')
+          .setLabel('⬅️ Back')
+          .setStyle(ButtonStyle.Secondary)
+      );
+    }
+
+    await interaction.reply({
+      embeds: [buildMainMenuEmbed()],
+      components: buildCategoryButtons(),
+      flags: MessageFlags.Ephemeral
+    });
+
+    const msg = await interaction.fetchReply();
+    const collector = msg.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 2 * 60 * 1000,
+      filter: i => i.user.id === interaction.user.id
+    });
+
+    collector.on('collect', async i => {
+      if (i.customId === 'help_back') {
+        await i.update({
+          embeds: [buildMainMenuEmbed()],
+          components: buildCategoryButtons(),
+        });
+        return;
+      }
+      if (i.customId.startsWith('help_cat_')) {
+        const cat = i.customId.replace('help_cat_', '');
+        if (!uniqueCategories.includes(cat)) {
+          await i.reply({ content: 'Invalid category.', ephemeral: true });
+          return;
+        }
+        await i.update({
+          embeds: [buildCategoryEmbed(cat)],
+          components: [buildBackButton()],
         });
       }
-    }
+    });
 
-    if (category === 'fun') {
-      const funLines = [
-        '• `/trivia` — answer a trivia question',
-        '• `/riddle` — solve a riddle for XP',
-        '• `/8ball` — magic 8-ball',
-        '• `/coinflip` — flip a coin',
-        '• `/fact` — get a random fact',
-        '• `/roast` — get roasted',
-        '• `/pickup` — pickup lines'
-      ];
-      categoryEmbed.addFields({
-        name: '🎮 Fun Quick Guide',
-        value: funLines.join('\n'),
-        inline: false
-      });
-    }
-
-    return interaction.reply({ embeds: [categoryEmbed], flags: MessageFlags.Ephemeral });
+    collector.on('end', async () => {
+      try {
+        await msg.edit({ components: [] });
+      } catch (_) {}
+    });
   }
 };
 
-// Helper function to get the right emoji for each command category.
 function getCommandEmoji(commandName) {
   const emojiMap = {
-    // Management commands
     'announce': '📢',
-    'checkban': '🔍',
-    'unban': '🚫',
+    'automodwarns': '🤖',
     'clearwarns': '🧹',
     'giveaway': '🎉',
-    'automodwarns': '⚠️',
-  'rules': '📜',
-  'suggestion': '🧾',
-  'setlevel': '⚡',
-  'health': '🩺',
-    // Moderation commands
+    'health': '🩺',
+    'rules': '📜',
+    'setup': '🧰',
+    'setlevel': '⚡',
+    'suggestion': '🗳️',
+    'swearfilter': '🚫',
+
+    'audit': '🧾',
+    'ban': '🔨',
+    'case': '⚖️',
+    'checkban': '🔍',
+    'clear': '🧹',
+    'deletemsg': '🗑️',
+    'incident': '🚨',
+    'kick': '👢',
+    'moderations': '📂',
+    'modlogs': '📚',
+    'note': '📝',
+    'raid': '🛡️',
+    'setnick': '✏️',
+    'slowmode': '🐢',
+    'timeout': '⏱️',
+    'unban': '🔓',
+    'untimeout': '✅',
     'warn': '⚠️',
     'warning': '📋',
     'warns': '📊',
-    'ban': '🔨',
-    'kick': '👢',
-    'clear': '🧹',
-    'timeout': '⏱️',
-    'untimeout': '✅',
-    'deletemsg': '🗑️',
-    'slowmode': '🐢',
-    'moderations': '📄',
-    'note': '📝',
-    'incident': '📁',
-    'modlogs': '📚',
-    'audit': '🧠',
-    // Utility commands
-    'help': '❓',
-    'ping': '🏓',
-    'userinfo': '👤',
-    'avatar': '🖼️',
-    'banner': '🧵',
-    'serverinfo': '🏰',
-    'inviteinfo': '🔎',
+
     'activity': '📊',
     'afk': '💤',
-    'suggest': '💡',
-    'snipe': '🎯',
-    'rep': '🤝',
-    'economy': '🪙',
-    'joke': '😂',
-    'define': '📖',
-    'poll': '📊',
-    'music': '🎵',
+    'avatar': '🖼️',
+    'banner': '🏳️',
     'birthday': '🎂',
-    'reminders': '🔔',
     'crypto': '💰',
+    'define': '📖',
+    'economy': '🪙',
+    'events': '📅',
+    'help': '🧭',
+    'inviteinfo': '🔗',
+    'invites': '📨',
+    'ping': '🏓',
+    'poll': '🗳️',
+    'reminders': '⏰',
+    'rep': '🤝',
+    'serverhealth': '❤️‍🩹',
+    'serverinfo': '🏰',
+    'snipe': '🎯',
+    'steam': '🎮',
+    'suggest': '💡',
+    'timezone': '🌍',
+    'uptime': '⏱️',
+    'userinfo': '👤',
+    'weather': '🌤️',
+
+    'music': '🎵',
     'voice': '🎤',
-    // Leveling commands
-    'rank': '🏆',
+
     'leaderboard': '🥇',
-    // Fun commands
+    'rank': '🏆',
+    'streak': '🔥',
+
     '8ball': '🎱',
-    'trivia': '🧠',
-    'coinflip': '🎲',
-    'riddle': '🧩',
+    'coinflip': '🪙',
+    'dadjoke': '👴',
     'fact': '💡',
-    'roast': '🔥',
+    'joke': '😂',
+    'mock': '🎭',
     'pickup': '💘',
-    // Ticket commands
+    'qr': '🔳',
+    'riddle': '🧩',
+    'roast': '🌶️',
+    'trivia': '🧠',
+
     'ticket': '🎫',
+    'ticketadduser': '➕',
+    'ticketclaim': '🙋',
     'ticketclose': '🔒',
     'ticketmarkhandled': '✅',
-    'ticketclaim': '👤',
-    'ticketadduser': '➕',
     'ticketremoveuser': '➖',
     'tickettransfer': '🔁',
-    // Verification commands
+
     'verify': '🔐',
     'verify-override': '🛂'
   };

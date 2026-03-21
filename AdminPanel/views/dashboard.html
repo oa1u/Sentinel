@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Dashboard — quick overview of server stats and recent activity for admins. -->
 <html lang="en">
 
 <head>
@@ -8,11 +7,417 @@
     <title id="websiteNameTitle">Dashboard</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+    <style>
+        :root {
+            --glass-bg: rgba(30, 30, 36, 0.7);
+            --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+            --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .dashboard-container {
+            padding: 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .welcome-section {
+            margin-bottom: 2rem;
+            background: var(--accent-gradient);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .welcome-section::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        .welcome-text h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 0;
+        }
+
+        .welcome-text p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .kpi-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: var(--glass-border);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .kpi-icon-wrapper {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-right: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .kpi-content h3 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .kpi-content p {
+            color: #9ca3af;
+            margin: 0;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .charts-section {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .dashboard-card {
+            background: var(--bg-card, #1e1e24);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .activity-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .activity-table th {
+            text-align: left;
+            padding: 1rem;
+            color: #9ca3af;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .activity-table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .activity-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-online {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-offline {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .bg-blue-grad {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+
+        .bg-purple-grad {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .bg-green-grad {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .bg-red-grad {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .bg-orange-grad {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+        }
+
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .action-btn {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .action-btn:hover::before {
+            opacity: 1;
+        }
+
+        .action-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+            transition: transform 0.3s ease;
+        }
+
+        .action-btn:hover .action-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .action-label {
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 0.02em;
+            color: #e5e7eb;
+            z-index: 1;
+        }
+
+        .action-desc {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            text-align: center;
+            line-height: 1.4;
+            display: none;
+        }
+
+        .info-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: #9ca3af;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            margin-left: 0.5rem;
+        }
+
+        .info-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            transform: scale(1.1);
+        }
+
+        .admin-hero {
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            background: linear-gradient(140deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.1) 50%, rgba(30, 30, 36, 0.95) 100%);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: grid;
+            gap: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .admin-hero::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .admin-hero-main {
+            display: grid;
+            gap: 0.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .admin-eyebrow {
+            margin: 0;
+            color: #a5b4fc;
+            font-size: 0.75rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .admin-hero h1 {
+            margin: 0;
+            color: white;
+            font-size: 2.5rem;
+            line-height: 1.1;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .admin-hero-copy {
+            margin: 0;
+            color: #94a3b8;
+            line-height: 1.6;
+            max-width: 800px;
+            font-size: 1.1rem;
+        }
+
+        .admin-hero-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .admin-chip {
+            font-size: 0.8rem;
+            color: #e2e8f0;
+            border: 1px solid rgba(165, 180, 252, 0.3);
+            background: rgba(165, 180, 252, 0.1);
+            border-radius: 999px;
+            padding: 0.35rem 0.85rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .admin-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .admin-kpi {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .admin-kpi .kpi-label {
+            color: #94a3b8;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .admin-kpi .kpi-value {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            font-family: 'Consolas', monospace;
+        }
+    </style>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="/public/shared.js"></script>
-    <script src="/public/dashboard.js?v=6" defer></script>
+    <script src="/public/dashboard.js?v=7" defer></script>
 
 <body>
     <header class="header">
@@ -21,20 +426,20 @@
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link active">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
-                <a href="/admin" class="nav-link" id="adminLink">Admin</a>
-                <a href="/owner" class="nav-link" id="ownerLink">Owner</a>
+                <a href="/admin" class="nav-link">Admin</a>
+                <a href="/owner" class="nav-link" id="ownerNavLink">Owner</a>
             </nav>
             <div class="user-info">
                 <div class="user-dropdown">
                     <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
                         <span class="username" id="headerUsername">Loading...</span>
-                        <span class="role-badge" id="headerRole">user</span>
+                        <span class="role-badge" id="headerRole">Admin</span>
                         <span class="dropdown-arrow">▼</span>
                     </div>
                     <div class="user-dropdown-menu" id="userDropdownMenu">
                         <div class="user-dropdown-header">
                             <span class="username" id="dropdownUsername">Loading...</span>
-                            <span class="role-badge" id="dropdownRole">user</span>
+                            <span class="role-badge" id="dropdownRole">Admin</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
                         <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
@@ -50,89 +455,138 @@
         </div>
     </header>
 
-    <div class="container">
-        <h1 style="margin-bottom: 2rem; font-size: 2rem; color: var(--text-primary);">📊 Server Overview</h1>
+    <div class="dashboard-container">
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon blue">👥</div>
-                <div class="stat-value" id="statTotalUsers">-</div>
-                <div class="stat-label">Total Users</div>
+        <section class="admin-hero">
+            <div class="admin-hero-main">
+                <p class="admin-eyebrow">System Overview</p>
+                <h1>Dashboard Overview</h1>
+                <p class="admin-hero-copy">Monitor your server's performance, manage users, and track activities in
+                    real-time.</p>
+                <div class="admin-hero-chips">
+                    <span class="admin-chip">Overview</span>
+                    <span class="admin-chip">Moderation</span>
+                    <span class="admin-chip">Tickets</span>
+                    <span class="admin-chip">Performance</span>
+                </div>
             </div>
-
-            <div class="stat-card">
-                <div class="stat-icon red">⚠️</div>
-                <div class="stat-value" id="statTotalWarns">-</div>
-                <div class="stat-label">Total Warns</div>
+            <div class="admin-kpi-grid">
+                <div class="admin-kpi">
+                    <span class="kpi-label">Total Members</span>
+                    <span class="kpi-value" id="statTotalUsers">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Total Infractions</span>
+                    <span class="kpi-value" id="statTotalWarns">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Open Tickets</span>
+                    <span class="kpi-value" id="statActiveTickets">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Commands Today</span>
+                    <span class="kpi-value" id="commandsToday">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Banned Users</span>
+                    <span class="kpi-value" id="statTotalBanned">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Active Giveaways</span>
+                    <span class="kpi-value" id="statTotalGiveaways">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Active Reminders</span>
+                    <span class="kpi-value" id="statActiveReminders">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Total Server XP</span>
+                    <span class="kpi-value" id="totalXP">-</span>
+                </div>
             </div>
+        </section>
 
-            <div class="stat-card">
-                <div class="stat-icon green">⏰</div>
-                <div class="stat-value" id="statActiveReminders">-</div>
-                <div class="stat-label">Active Reminders</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon yellow">🎁</div>
-                <div class="stat-value" id="statTotalGiveaways">-</div>
-                <div class="stat-label">Giveaways</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon red">🚫</div>
-                <div class="stat-value" id="statTotalBanned">-</div>
-                <div class="stat-label">Currently Banned</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon purple">🎫</div>
-                <div class="stat-value" id="statActiveTickets">-</div>
-                <div class="stat-label">Active Tickets</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon red">⚠️</div>
-                <div class="stat-value" id="warnsToday">0</div>
-                <div class="stat-label">Warnings Today</div>
-            </div>
-
-
-            <div class="stat-card">
-                <div class="stat-icon blue">⚡</div>
-                <div class="stat-value" id="commandsToday">0</div>
-                <div class="stat-label">Commands Used Today</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon green">🗄️</div>
-                <div class="stat-value" id="statDbStatus">Checking...</div>
-                <div class="stat-label">Database</div>
-            </div>
-        </div>
-
-        <div class="card" style="margin-top: 2rem;">
-            <div class="card-header">Summary Statistics</div>
-            <div class="summary-section">
-                <div class="summary-grid">
-                    <div class="summary-item">
-                        <div class="summary-label">Average Level</div>
-                        <div class="summary-value" id="avgLevel">-</div>
+        <div class="charts-section">
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="dashboard-card">
+                    <div class="card-header-flex">
+                        <div class="card-title">
+                            🎯 Community Health Radar
+                            <button class="info-btn"
+                                onclick="showDashboardInfo('Community Health Radar', 'This scatter plot visualizes the relationship between user engagement (Level) and warnings. It helps identify high-risk veteran users versus new troublemakers.')">ℹ️</button>
+                        </div>
+                        <span style="color: #9ca3af; font-size: 0.8rem;">Risk vs. Reward Analysis</span>
                     </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Total XP</div>
-                        <div class="summary-value" id="totalXP">-</div>
+                    <div style="position: relative; height: 350px;">
+                        <canvas id="riskMatrixChart"></canvas>
                     </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Average Warns per User</div>
-                        <div class="summary-value" id="avgWarns">-</div>
+                </div>
+
+                <div class="dashboard-card">
+                    <div class="card-header-flex">
+                        <div class="card-title">
+                            🥧 Member Retention Zones
+                            <button class="info-btn"
+                                onclick="showDashboardInfo('Member Retention Zones', 'This polar chart displays the distribution of your community across different levels, helping you understand user retention and growth stages.')">ℹ️</button>
+                        </div>
                     </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Ban Rate</div>
-                        <div class="summary-value" id="banRate">-</div>
+                    <div style="position: relative; height: 300px; display: flex; justify-content: center;">
+                        <canvas id="retentionChart"></canvas>
                     </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Active Reminders</div>
-                        <div class="summary-value" id="summaryActiveReminders">-</div>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="dashboard-card">
+                    <div class="card-header-flex">
+                        <div class="card-title">⚡ Quick Actions</div>
+                    </div>
+                    <div class="quick-actions-grid">
+                        <a href="/profile" class="action-btn">
+                            <div class="action-icon">👤</div>
+                            <span class="action-label">My Profile</span>
+                        </a>
+                        <a href="/moderation-playbook" class="action-btn">
+                            <div class="action-icon">🛡️</div>
+                            <span class="action-label">Mod Playbook</span>
+                        </a>
+                        <a href="/changelog" class="action-btn">
+                            <div class="action-icon">📜</div>
+                            <span class="action-label">Changelog</span>
+                        </a>
+                        <a href="/features" class="action-btn">
+                            <div class="action-icon">✨</div>
+                            <span class="action-label">Features</span>
+                        </a>
+                    </div>
+                </div>
+
+
+                <div class="dashboard-card">
+                    <div class="card-header-flex">
+                        <div class="card-title">🧠 Insights & Operations</div>
+                    </div>
+                    <div style="display: grid; gap: 1rem;">
+                        <div
+                            style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span style="color: #9ca3af">System Latency</span>
+                            <span style="font-weight: 700; color: #10b981;" id="statDbStatus">Online</span>
+                        </div>
+                        <div
+                            style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span style="color: #9ca3af">Staff Team Size</span>
+                            <span style="font-weight: 700" id="statAdminCount">-</span>
+                        </div>
+                        <div
+                            style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span style="color: #9ca3af">Highest Ranked User</span>
+                            <span style="font-weight: 700" id="statTopUser">-</span>
+                        </div>
+                        <div
+                            style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span style="color: #9ca3af">Most Infractions</span>
+                            <span style="font-weight: 700" id="statMostWarned">-</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -153,6 +607,22 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closePunishmentHistory()">Close</button>
             </div>
+        </div>
+    </div>
+
+    <div id="infoModal" class="modal">
+        <div class="modal-content"
+            style="max-width: 400px; text-align: center; display: flex; flex-direction: column; align-items: center;">
+            <div
+                style="width: 60px; height: 60px; background: rgba(102, 126, 234, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; margin-bottom: 1rem;">
+                ℹ️
+            </div>
+            <h3 id="infoModalTitle" style="margin: 0 0 1rem 0; font-size: 1.5rem;">Information</h3>
+            <p id="infoModalText" style="color: #9ca3af; line-height: 1.6; margin-bottom: 1.5rem;">Details goes here...
+            </p>
+            <button class="btn btn-primary" onclick="closeInfoModal()"
+                style="width: 100%; border: none; padding: 0.75rem; border-radius: 0.5rem; background: #667eea; color: white; cursor: pointer; font-weight: 600;">Got
+                it</button>
         </div>
     </div>
 

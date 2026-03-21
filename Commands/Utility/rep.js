@@ -88,7 +88,7 @@ module.exports = {
             }
 
             const lines = topRows.map((row, index) => {
-                return `**#${index + 1}** <@${row.user_id}> — **${row.points}** point${row.points === 1 ? '' : 's'}`;
+                return `**#${index + 1}** <@${row.user_id}> - **${row.points}** point${row.points === 1 ? '' : 's'}`;
             });
 
             const embed = new EmbedBuilder()

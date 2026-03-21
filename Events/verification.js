@@ -198,6 +198,37 @@ module.exports = {
         const antiRaidLinked = ANTI_RAID_LINK.enabled !== false && (antiRaidSnapshot?.active || antiRaidRecent);
         const strictMode = baseStrictMode || riskAssessment.shouldUseStrictMode || (antiRaidLinked && ANTI_RAID_LINK.forceStrictOnLockdown !== false);
 
+        // --- Verification timeout logic ---
+        // Kick user if verification not completed in xyz time
+        const VERIFICATION_TIMEOUT_MS = Math.max(1, Math.round(CHALLENGE_TIMEOUT * 2)); // Double challenge timeout for full process
+        let verificationCompleted = false;
+        // Helper to mark verification as completed
+        function markVerificationCompleted() {
+            verificationCompleted = true;
+        }
+        // Schedule kick
+        setTimeout(async () => {
+            if (!verificationCompleted && member && member.kickable) {
+                try {
+                    const kickEmbed = new EmbedBuilder()
+                        .setColor("#FF0000")
+                        .setTitle("🚫 Verification Failed")
+                        .setDescription(`You have been removed from **${member.guild.name}** because you did not complete the verification process in time.\n\nPlease rejoin the server to try again when you are ready.`)
+                        .setTimestamp();
+
+                    try {
+                        await member.send({ embeds: [kickEmbed] });
+                    } catch (dmErr) {
+                        // User has DMs off
+                    }
+
+                    await member.kick("Failed to complete verification in time.");
+                } catch (err) {
+                    console.error(`[Verify] Failed to kick user ${member.user.tag}: ${err.message}`);
+                }
+            }
+        }, VERIFICATION_TIMEOUT_MS);
+
         const penaltyCheck = canStartVerification(userId);
         if (!penaltyCheck.allowed) {
             const cooldownSeconds = Math.max(1, Math.ceil(penaltyCheck.remainingMs / 1000));
@@ -451,7 +482,7 @@ module.exports = {
                             .setDescription(
                                 captchaAttempt.status === "max_attempts"
                                     ? `Too many wrong captcha attempts. Run /verify to try again.`
-                                    : "Captcha timed out. Run /verify to try again."
+                                    : "You did not complete the captcha verification within the time limit. This check ensures you are not a robot. Please run `/verify` to try again."
                             )
                     ]
                 }).catch(() => { });
@@ -603,6 +634,7 @@ module.exports = {
 
             await member.roles.add(roleObj);
             registerVerificationSuccess(userId);
+            markVerificationCompleted();
 
             const successEmbed = new EmbedBuilder()
                 .setAuthor({ name: `${member.guild.name} Verification System`, iconURL: member.guild.iconURL() })

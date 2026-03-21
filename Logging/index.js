@@ -8,8 +8,6 @@ module.exports = (client) => {
     const emojiCreate = require("./EmojiCreate");
     const emojiDelete = require("./EmojiDelete");
     const emojiUpdate = require("./EmojiUpdate");
-    const guildMemberAdd = require("./GuildMemberAdd");
-    const guildMemberRemove = require("./GuildMemberRemove");
     const guildMemberUpdate = require("./GuildMemberUpdate");
     const inviteCreate = require("./InviteCreate");
     const inviteDelete = require("./InviteDelete");
@@ -40,8 +38,6 @@ module.exports = (client) => {
     emojiCreate(client);
     emojiDelete(client);
     emojiUpdate(client);
-    guildMemberAdd(client);
-    guildMemberRemove(client);
     guildMemberUpdate(client);
     inviteCreate(client);
     inviteDelete(client);

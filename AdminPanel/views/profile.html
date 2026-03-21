@@ -1,74 +1,607 @@
 <!DOCTYPE html>
-<!-- Profile — view and edit your Admin Panel profile and preferences. -->
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="websiteNameTitle">Profile</title>
+    <title id="websiteNameTitle">Profile Settings | Sentinel</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/shared.js"></script>
     <script src="/public/notifications.js" defer></script>
     <script src="/public/profile.js" defer></script>
+
     <style>
-        .discord-link-banner {
-            background: linear-gradient(135deg, rgba(91, 127, 255, 0.18), rgba(64, 120, 255, 0.08));
-            border: 1px solid rgba(91, 127, 255, 0.45);
-            border-radius: 12px;
-            padding: 0.85rem 1rem;
-            margin: 0 0 1.2rem 0;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            color: var(--text-primary);
-            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+        :root {
+            --sidebar-width: 300px;
+            --glass-bg: rgba(13, 14, 18, 0.85);
+            --glass-bg-hover: rgba(20, 21, 26, 0.9);
+            --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+            --accent-primary: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --card-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
         }
 
-        .discord-link-banner__text {
+        body {
+            background: var(--bg-primary);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+
+        .profile-layout {
+            display: grid;
+            grid-template-columns: var(--sidebar-width) 1fr;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+            align-items: start;
+        }
+
+        .profile-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            position: sticky;
+            top: 6rem;
+        }
+
+        .user-hero-card {
+            background: var(--glass-bg);
+            border: var(--glass-border);
+            border-radius: 24px;
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+        }
+
+        .hero-avatar-wrapper {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 1rem;
+        }
+
+        .hero-avatar-ring {
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent, var(--accent-primary), #a855f7, transparent);
+            animation: spin 3s linear infinite;
+            filter: blur(8px);
+            opacity: 0.7;
+        }
+
+        .hero-avatar-img {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: #1e1e24;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            color: #fff;
+            border: 3px solid #0f0f13;
+            z-index: 2;
+            overflow: hidden;
+        }
+
+        .hero-avatar-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .hero-name {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin: 0;
+            color: #fff;
+        }
+
+        .hero-role {
+            display: inline-block;
+            margin-top: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
             font-weight: 600;
-            line-height: 1.4;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: rgba(99, 102, 241, 0.1);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.2);
         }
 
-        .discord-link-banner__actions {
+        .nav-menu {
+            background: var(--glass-bg);
+            border: var(--glass-border);
+            border-radius: 20px;
+            padding: 1rem;
             display: flex;
-            align-items: center;
+            flex-direction: column;
             gap: 0.5rem;
         }
 
-        .discord-link-banner__close {
-            background: rgba(15, 23, 42, 0.12);
-            border: 1px solid rgba(15, 23, 42, 0.2);
-            color: var(--text-primary);
-            border-radius: 8px;
-            width: 32px;
-            height: 32px;
-            display: inline-flex;
+        .nav-section {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #64748b;
+            margin: 0.75rem 0 0.25rem 0.75rem;
+            font-weight: 700;
+        }
+
+        .profile-nav-item {
+            display: flex;
             align-items: center;
-            justify-content: center;
+            gap: 0.85rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+            width: 100%;
+            text-align: left;
             cursor: pointer;
+            transition: all 0.2s ease;
         }
 
-        .discord-link-banner__close:hover {
-            background: rgba(15, 23, 42, 0.2);
+        .profile-nav-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+            color: #e2e8f0;
         }
 
-        @media (max-width: 720px) {
-            .discord-link-banner {
-                flex-direction: column;
-                align-items: flex-start;
+        .profile-nav-item.active {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.05));
+            border-left: 3px solid var(--accent-primary);
+            color: #fff;
+        }
+
+        .nav-icon {
+            width: 22px;
+            text-align: center;
+            color: var(--accent-primary);
+        }
+
+        .content-area {
+            min-height: 50vh;
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+            background: var(--glass-bg);
+            border: var(--glass-border);
+            padding: 2rem;
+            border-radius: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-titles h1 {
+            font-size: 1.75rem;
+            margin: 0 0 0.5rem 0;
+            font-weight: 700;
+        }
+
+        .header-titles p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .workspace-tabs {
+            display: inline-flex;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 0.35rem;
+            border-radius: 14px;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            gap: 0.25rem;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        .security-workspace-tab {
+            padding: 0.6rem 1.2rem;
+            border-radius: 10px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            position: relative;
+        }
+
+        .security-workspace-tab:hover {
+            color: #e2e8f0;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .security-workspace-tab.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .tab-badge {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            font-size: 0.7rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 20px;
+            font-weight: 700;
+            min-width: 18px;
+            text-align: center;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            transition: all 0.2s;
+            opacity: 0;
+            transform: scale(0.8);
+            display: inline-block;
+        }
+
+        .tab-badge:not(:empty) {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .geo-snapshot-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .geo-map-visual {
+            background: #18181b;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            min-height: 300px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .geo-map-frame iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            filter: invert(90%) hue-rotate(180deg) contrast(90%);
+        }
+
+        .geo-info-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .geo-big-metric {
+            margin-bottom: 0.5rem;
+        }
+
+        .geo-big-metric .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .geo-big-metric .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            font-family: monospace;
+        }
+
+        .geo-risk-check {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            border-left: 3px solid transparent;
+        }
+
+        .geo-risk-check.safe {
+            border-left-color: #4ade80;
+        }
+
+        .geo-risk-check.warn {
+            border-left-color: #fbbf24;
+        }
+
+        .geo-risk-check i {
+            font-size: 1rem;
+        }
+
+        @media (max-width: 1100px) {
+            .geo-snapshot-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .geo-map-visual {
+                min-height: 250px;
+            }
+        }
+
+        .security-overview-item {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            position: relative;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .security-overview-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .security-overview-item strong {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .overview-value {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: #fff;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .security-empty-note {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-top: 0.75rem;
+            line-height: 1.4;
+            padding-top: 0.75rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            border: var(--glass-border);
+            border-radius: 20px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .panel-heading {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0 0 1.5rem 0;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            color: #64748b;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            padding: 1rem;
+        }
+
+        td {
+            padding: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            color: #e2e8f0;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .form-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: #fff;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .btn-brand {
+            background: var(--accent-primary);
+            color: #fff;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-brand:hover {
+            background: #5558e6;
+            transform: translateY(-1px);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #errorMsg,
+        #successMsg {
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            font-weight: 500;
+            display: none;
+        }
+
+        #errorMsg.show,
+        #successMsg.show {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        #errorMsg {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        #successMsg {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #86efac;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 900px) {
+            .profile-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .profile-sidebar {
+                position: static;
             }
         }
     </style>
 </head>
 
 <body>
+
     <header class="header">
         <div class="header-content">
-            <div class="logo">👤 Profile</div>
+            <div class="logo">Sentinel Panel</div>
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
@@ -79,13 +612,13 @@
                 <div class="user-dropdown">
                     <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
                         <span class="username" id="headerUsername">Loading...</span>
-                        <span class="role-badge" id="headerRole">user</span>
+                        <span class="role-badge" id="headerRole">loading...</span>
                         <span class="dropdown-arrow">▼</span>
                     </div>
                     <div class="user-dropdown-menu" id="userDropdownMenu">
                         <div class="user-dropdown-header">
                             <span class="username" id="dropdownUsername">Loading...</span>
-                            <span class="role-badge" id="dropdownRole">user</span>
+                            <span class="role-badge" id="dropdownRole">loading...</span>
                         </div>
                         <a href="/profile">👤 My Profile</a>
                         <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
@@ -101,752 +634,522 @@
         </div>
     </header>
 
-    <main class="container profile-page">
-        <div class="discord-link-banner" id="discordLinkBanner" style="display: none;">
-            <div class="discord-link-banner__text">
-                You can only use this page until you link your Discord account for safety reasons.
-            </div>
-            <div class="discord-link-banner__actions">
-                <button class="btn btn-sm btn-secondary" id="discordLinkBannerAction" type="button">Link
-                    Discord</button>
-                <button class="discord-link-banner__close" id="discordLinkBannerClose" type="button"
-                    aria-label="Dismiss">✕</button>
-            </div>
-        </div>
-        <div class="message error hidden" id="errorMsg"></div>
-        <div class="message success hidden" id="successMsg"></div>
+    <main class="profile-layout">
 
-        <div class="profile-layout">
-            <aside class="profile-sidebar">
-                <div class="profile-user-card">
-                    <div class="profile-avatar-large" id="profileHeroAvatar">--</div>
-                    <div class="profile-name-large" id="profileHeroTitle">Loading...</div>
-                    <div class="profile-role-badge" id="profileHeroRole">-</div>
-                    <div class="profile-meta-list">
-                        <div class="profile-meta-item">
-                            <span>User Since</span>
-                            <span class="profile-meta-value" id="profileHeroCreated">-</span>
+        <aside class="profile-sidebar">
+            <div class="user-hero-card">
+                <div class="hero-avatar-wrapper">
+                    <div class="hero-avatar-ring"></div>
+                    <div class="hero-avatar-img" id="profileHeroAvatar">U</div>
+                </div>
+                <h2 class="hero-name" id="profileHeroTitle">--</h2>
+                <span class="hero-role" id="profileHeroRole">Loading</span>
+                <div
+                    style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.1); padding-top:1rem; display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div>
+                        <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem">MEMBER SINCE</div>
+                        <div id="profileHeroCreated" style="font-size:0.85rem; font-weight:600">--</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem">LAST ACTIVE</div>
+                        <div id="profileHeroLastActive" style="font-size:0.85rem; font-weight:600">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="nav-menu" id="profileTabs">
+                <div class="nav-section">General</div>
+                <button class="profile-nav-item active" data-tab="security" id="profileSecurityTabBtn">
+                    <i class="fas fa-shield-halved nav-icon"></i> Security Center
+                </button>
+                <button class="profile-nav-item" data-tab="account" id="profileAccountTabBtn">
+                    <i class="fas fa-user-gear nav-icon"></i> Account Settings
+                </button>
+
+                <div class="nav-section">Data & Privacy</div>
+                <button class="profile-nav-item" data-tab="geo" id="profileGeoTabBtn">
+                    <i class="fas fa-globe-americas nav-icon"></i> Geo Snapshot
+                </button>
+                <button class="profile-nav-item" data-tab="recovery" id="profileRecoveryTabBtn">
+                    <i class="fas fa-key nav-icon"></i> Recovery Codes
+                </button>
+                <button class="profile-nav-item" data-tab="discord" id="profileDiscordTabBtn">
+                    <i class="fab fa-discord nav-icon"></i> Linked Discord
+                </button>
+            </nav>
+        </aside>
+
+        <section class="content-area">
+
+
+            <div id="discordStaticBanner"
+                style="display:none; margin-bottom:1.5rem; background:rgba(88,101,242,0.13); border:1px solid #5865F2; padding:1.1rem 1.5rem; border-radius:12px; color:#fff; font-size:1.05rem; font-weight:500; align-items:center; gap:1rem;">
+                <i class="fab fa-discord" style="font-size:1.5rem; color:#5865F2; margin-right:0.7rem;"></i>
+                <span>You can access other pages once you link your Discord account.</span>
+            </div>
+
+            <div id="errorMsg" class="hidden"></div>
+            <div id="successMsg" class="hidden"></div>
+
+            <div class="page-header">
+                <div class="header-titles">
+                    <h1 id="profileWelcomeMsg">Security Center</h1>
+                    <p id="profileWelcomeSub">Monitor your account health and activity.</p>
+                </div>
+                <div id="headerActions">
+                </div>
+            </div>
+
+            <div id="profileSecurityContent" class="tab-content active">
+
+                <div class="workspace-tabs" id="securityWorkspaceTabs">
+                    <button class="security-workspace-tab active" data-security-view="center" aria-selected="true"
+                        title="View overall security status">
+                        <i class="fas fa-home"></i>
+                        <span>Overview</span>
+                        <span id="securityTabBadgeCenter" class="tab-badge" style="display:none"></span>
+                    </button>
+                    <button class="security-workspace-tab" data-security-view="sessions" aria-selected="false"
+                        title="Manage active sessions">
+                        <i class="fas fa-desktop"></i>
+                        <span>Sessions</span>
+                        <span id="securityTabBadgeSessions" class="tab-badge"></span>
+                    </button>
+                    <button class="security-workspace-tab" data-security-view="events" aria-selected="false"
+                        title="Review recent activity">
+                        <i class="fas fa-list-alt"></i>
+                        <span>Event Log</span>
+                        <span id="securityTabBadgeEvents" class="tab-badge"
+                            style="border-color:rgba(129, 140, 248, 0.3); background:rgba(129, 140, 248, 0.15); color:#a5b4fc;"></span>
+                    </button>
+                </div>
+
+                <div id="securityCenterCard">
+                    <div class="stats-grid" id="securityOverviewPrimary">
+                    </div>
+
+                    <div class="glass-panel">
+                        <div class="panel-heading">
+                            <span>2FA Authentication</span>
+                            <div id="twoFactorStatusText">Loading...</div>
                         </div>
-                        <div class="profile-meta-item">
-                            <span>Last Active</span>
-                            <span class="profile-meta-value" id="profileHeroLastActive">-</span>
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:2rem;">
+                            <p style="color:var(--text-muted); margin:0; flex:1;" id="twoFactorStatusHint">
+                                Enable two-factor authentication to secure your account.
+                            </p>
+                            <div>
+                                <button id="setup2faBtn" onclick="startTwoFactorSetup()" class="btn-brand">Enable
+                                    2FA</button>
+                                <button id="disable2faBtn" onclick="disableTwoFactor()" class="btn-brand"
+                                    style="background:#ef4444; display:none;">Disable</button>
+                            </div>
+                        </div>
+
+                        <div id="twoFactorSetupPanel"
+                            style="display:none; margin-top:2rem; padding-top:2rem; border-top:1px solid rgba(255,255,255,0.1);">
+                            <div style="display:flex; gap:2rem; flex-wrap:wrap;">
+                                <div id="twoFactorQrWrap"
+                                    style="background:#fff; padding:1rem; border-radius:12px; display:none;">
+                                    <img id="twoFactorQrImage" src="" alt="2FA QR">
+                                </div>
+                                <div style="flex:1;">
+                                    <h4>1. Scan QR Code</h4>
+                                    <p style="color:var(--text-muted); font-size:0.9rem;">Scan this image with Google
+                                        Authenticator or Authy.</p>
+
+                                    <h4>2. Enter Verification Code</h4>
+                                    <div style="display:flex; gap:1rem; margin-top:1rem;">
+                                        <input type="text" id="twoFactorVerifyCode" maxlength="6" class="form-input"
+                                            placeholder="000 000"
+                                            style="width:180px; text-align:center; font-size:1.2rem; letter-spacing:0.2em;">
+                                        <button onclick="confirmTwoFactorSetup()" class="btn-brand">Verify &
+                                            Enable</button>
+                                    </div>
+                                    <input type="hidden" id="twoFactorSecret">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid" id="securityOverviewSecondary">
+                    </div>
+                </div>
+
+                <div id="securitySessionsCard" style="display:none">
+                    <div class="glass-panel">
+                        <div class="panel-heading">
+                            <span>Active Sessions</span>
+                            <button onclick="logoutOtherSessions()" class="btn-brand"
+                                style="font-size:0.8rem; padding:0.4rem 0.8rem; background:rgba(239, 68, 68, 0.2); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.4);">
+                                Revoke All Others
+                            </button>
+                        </div>
+                        <div class="stats-grid" id="securitySessionsOverview" style="margin-bottom:1.5rem"></div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Device</th>
+                                        <th>Location/IP</th>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="securitySessionsTable">
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="hiddenSessionsHint"
+                            style="padding:1rem; text-align:center; color:var(--text-muted); font-size:0.85rem; font-style:italic;">
                         </div>
                     </div>
                 </div>
 
-                <nav class="profile-nav-menu" id="profileTabs">
-                    <button class="profile-nav-item active" id="profileSecurityTabBtn" data-tab="security">
-                        <span class="profile-nav-icon">🛡️</span> Security Center
-                    </button>
-                    <button class="profile-nav-item" id="profileAccountTabBtn" data-tab="account">
-                        <span class="profile-nav-icon">⚙️</span> Account Settings
-                    </button>
-                    <button class="profile-nav-item" id="profileGeoTabBtn" data-tab="geo">
-                        <span class="profile-nav-icon">🌍</span> Geo Snapshot
-                    </button>
-                    <button class="profile-nav-item" id="profileRecoveryTabBtn" data-tab="recovery">
-                        <span class="profile-nav-icon">🧷</span> Account Recovery
-                    </button>
-                    <button class="profile-nav-item" id="profileDiscordTabBtn" data-tab="discord">
-                        <span class="profile-nav-icon">🔗</span> Linked Discord
-                    </button>
-                </nav>
-
-                <div class="card profile-feature-card" id="userActionsCard" style="display: none; margin-bottom: 2rem;">
-                    <div class="card-header">
-                        <span class="card-header-icon">⚡</span>
-                        Moderation Actions
-                    </div>
-                    <div class="profile-card-body" style="padding: 1.5rem;">
-                        <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">Apply
-                            direct moderation actions to the selected Discord user profile.</div>
-                        <div class="profile-actions-row" style="display: flex; gap: 1rem;">
-                            <button onclick="warnUser()" class="btn"
-                                style="background: var(--color-orange); color: white; padding: 0.75rem 1.5rem; font-size: 1rem; min-width: 150px;">⚠️
-                                Warn</button>
-                            <button onclick="banUser()" class="btn"
-                                style="background: var(--color-red); color: white; padding: 0.75rem 1.5rem; font-size: 1rem; min-width: 150px;">🚫
-                                Ban</button>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-
-            <div class="profile-content-area">
-                <div id="profileSecurityContent" class="tab-content active">
-                    <div class="security-workspace-tabs" id="securityWorkspaceTabs" role="tablist"
-                        aria-label="Security Workspace Views"
-                        style="display: flex; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-                        <button class="security-workspace-tab active btn btn-secondary" type="button"
-                            data-security-view="center" role="tab" aria-selected="true">
-                            <span class="security-tab-main"><span>🧠</span> <span>Command Center</span></span>
-                            <span class="security-tab-badge" id="securityTabBadgeCenter"
-                                style="background: var(--bg-card-hover); padding: 0.1rem 0.4rem; border-radius: 10px; font-size: 0.8rem; margin-left: 0.5rem;">0</span>
-                        </button>
-                        <button class="security-workspace-tab btn btn-secondary" type="button"
-                            data-security-view="sessions" role="tab" aria-selected="false">
-                            <span class="security-tab-main"><span>🖥️</span> <span>Active Sessions</span></span>
-                            <span class="security-tab-badge" id="securityTabBadgeSessions"
-                                style="background: var(--bg-card-hover); padding: 0.1rem 0.4rem; border-radius: 10px; font-size: 0.8rem; margin-left: 0.5rem;">0</span>
-                        </button>
-                        <button class="security-workspace-tab btn btn-secondary" type="button"
-                            data-security-view="events" role="tab" aria-selected="false">
-                            <span class="security-tab-main"><span>🧾</span> <span>Event Log</span></span>
-                            <span class="security-tab-badge" id="securityTabBadgeEvents"
-                                style="background: var(--bg-card-hover); padding: 0.1rem 0.4rem; border-radius: 10px; font-size: 0.8rem; margin-left: 0.5rem;">0</span>
-                        </button>
-                    </div>
-
-                    <div class="card security-feature-card" id="securityCenterCard" style="margin-bottom: 1.5rem;">
-                        <div class="card-header">
-                            <span class="card-header-icon">🛡️</span>
-                            Security Command Center
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div class="security-ops-grid" aria-label="Security Intelligence Panels"
-                                style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 1.5rem;">
-                                <article class="security-ops-panel"
-                                    style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
-                                    <div class="security-ops-panel-head" style="margin-bottom: 1rem;">
-                                        <h5 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">Security
-                                            Health Matrix</h5>
-                                        <span style="font-size: 0.85rem; color: var(--text-secondary);">Current
-                                            Posture</span>
-                                    </div>
-                                    <div class="security-overview-grid" id="securityOverviewPrimary"
-                                        style="display: grid; gap: 0.75rem; margin-bottom: 0.75rem;">
-                                        <div class="security-overview-item"><strong>Security Status</strong><span
-                                                class="overview-value"
-                                                style="color: var(--text-secondary);">Loading...</span></div>
-                                        <div class="security-overview-item"><strong>Active Sessions</strong><span
-                                                class="overview-value"
-                                                style="color: var(--text-secondary);">Loading...</span></div>
-                                    </div>
-                                    <div class="security-overview-grid" id="securityOverviewSecondary"
-                                        style="display: grid; gap: 0.75rem;">
-                                        <div class="security-overview-item"><strong>2FA Posture</strong><span
-                                                class="overview-value"
-                                                style="color: var(--text-secondary);">Loading...</span></div>
-                                        <div class="security-overview-item"><strong>Failed Events (Recent)</strong><span
-                                                class="overview-value"
-                                                style="color: var(--text-secondary);">Loading...</span></div>
-                                    </div>
-                                </article>
-
-                                <article class="security-ops-panel"
-                                    style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
-                                    <div class="security-block-title"
-                                        style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
-                                        <div>
-                                            <h4
-                                                style="margin: 0 0 0.25rem 0; font-size: 1.1rem; color: var(--text-primary);">
-                                                Two-Factor Authentication</h4>
-                                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">
-                                                Enforce second-factor verification.</p>
-                                        </div>
-                                        <div class="security-inline-actions">
-                                            <button id="setup2faBtn" class="btn btn-primary btn-sm"
-                                                onclick="startTwoFactorSetup()">Enable 2FA</button>
-                                            <button id="disable2faBtn" class="btn btn-danger btn-sm"
-                                                onclick="disableTwoFactor()" style="display:none;">Disable 2FA</button>
-                                        </div>
-                                    </div>
-                                    <div class="security-status-box"
-                                        style="background: var(--bg-card-hover); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
-                                        <div class="security-status-heading"
-                                            style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
-                                            Current 2FA State</div>
-                                        <div id="twoFactorStatusText"
-                                            style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">
-                                            Loading...</div>
-                                        <div id="twoFactorStatusHint"
-                                            style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem;">
-                                            Checking 2FA state...</div>
-                                    </div>
-                                    <div class="security-split-stack" style="display: grid; gap: 0.75rem;">
-                                        <div id="twoFactorMetaPrimary" class="security-mini-grid"
-                                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                                            <div class="security-mini-card"><strong
-                                                    style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Enabled
-                                                    Since</strong><span class="security-mini-value"
-                                                    style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
-                                            </div>
-                                            <div class="security-mini-card"><strong
-                                                    style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Last
-                                                    2FA Failure</strong><span class="security-mini-value"
-                                                    style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
-                                            </div>
-                                        </div>
-                                        <div id="twoFactorMetaSecondary" class="security-mini-grid"
-                                            style="display: grid; grid-template-columns: 1fr; gap: 0.75rem;">
-                                            <div class="security-mini-card"><strong
-                                                    style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Recovery
-                                                    Logins</strong><span class="security-mini-value"
-                                                    style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </article>
-                            </div>
-
-                            <div id="twoFactorSetupPanel" class="security-subcard security-subcard-wide"
-                                style="display:none; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card); margin-bottom: 1.5rem;">
-                                <div class="security-block-title" style="margin-bottom: 1rem;">
-                                    <h4 style="margin: 0 0 0.25rem 0; font-size: 1.1rem; color: var(--text-primary);">
-                                        2FA Enrollment Workflow</h4>
-                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Issue a
-                                        fresh secret, verify one-time code, and lock in multi-factor authentication.</p>
-                                </div>
-                                <p class="security-setup-note"
-                                    style="color: var(--text-secondary); margin-bottom: 1rem;">Scan the QR code with
-                                    your authenticator app or use the secret directly, then confirm with a valid 6-digit
-                                    token.</p>
-                                <div id="twoFactorQrWrap" style="display:none; margin-bottom: 1rem; text-align:center;">
-                                    <img id="twoFactorQrImage" alt="2FA QR Code"
-                                        style="max-width: 220px; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border-color); background: #fff; padding: 0.5rem;">
-                                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
-                                        Scan this QR code in Google Authenticator, Authy, or 1Password.</div>
-                                </div>
-                                <div style="margin-bottom: 1rem;">
-                                    <label class="form-label" for="twoFactorSecret">2FA Secret</label>
-                                    <input id="twoFactorSecret" class="form-input" readonly>
-                                </div>
-                                <div style="margin-bottom: 1rem;">
-                                    <label class="form-label" for="twoFactorUri">OTP Auth URI</label>
-                                    <textarea id="twoFactorUri" class="form-input" rows="2" readonly></textarea>
-                                </div>
-                                <div class="security-setup-inline"
-                                    style="display: flex; gap: 1rem; align-items: flex-end;">
-                                    <div style="flex:1; min-width:200px;">
-                                        <label class="form-label" for="twoFactorVerifyCode">Verification Code</label>
-                                        <input id="twoFactorVerifyCode" class="form-input"
-                                            placeholder="Enter 6-digit code" inputmode="numeric" maxlength="6">
-                                    </div>
-                                    <button class="btn btn-success" onclick="confirmTwoFactorSetup()">Confirm &
-                                        Enable</button>
-                                </div>
-                            </div>
-
-                            <div class="security-group">
-                                <h4 class="security-group-title"
-                                    style="margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--text-primary);">Activity
-                                    & Risk Insights</h4>
-                                <div class="security-cards-grid security-cards-grid-metrics"
-                                    style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
-                                    <div class="security-subcard"
-                                        style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
-                                        <div class="security-block-title" style="margin-bottom: 1rem;">
-                                            <h4
-                                                style="margin: 0 0 0.25rem 0; font-size: 1rem; color: var(--text-primary);">
-                                                Session Intelligence</h4>
-                                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">
-                                                Access continuity, session freshness, and network-origin visibility.</p>
-                                        </div>
-                                        <div class="security-split-stack" style="display: grid; gap: 0.75rem;">
-                                            <div id="securitySessionStatsPrimary" class="security-mini-grid"
-                                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                                                <div class="security-mini-card"><strong
-                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Current
-                                                        Session</strong><span class="security-mini-value"
-                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
-                                                </div>
-                                                <div class="security-mini-card"><strong
-                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Other
-                                                        Sessions</strong><span class="security-mini-value"
-                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
-                                                </div>
-                                            </div>
-                                            <div id="securitySessionStatsSecondary" class="security-mini-grid"
-                                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                                                <div class="security-mini-card"><strong
-                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Unique
-                                                        Session IPs</strong><span class="security-mini-value"
-                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
-                                                </div>
-                                                <div class="security-mini-card"><strong
-                                                        style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Logins
-                                                        (Recent)</strong><span class="security-mini-value"
-                                                        style="font-size: 0.9rem; color: var(--text-primary);">Loading...</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card security-feature-card" id="securitySessionsCard"
-                        style="margin-bottom: 1.5rem; display: none;">
-                        <div class="card-header">
-                            <span class="card-header-icon">🖥️</span>
-                            Active Sessions
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div id="securitySessionsOverview" class="security-mini-grid"
-                                style="display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1rem;">
-                            </div>
-
-                            <div id="hiddenSessionsHint"
-                                style="display:none; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card-hover); color: var(--text-secondary); font-size: 0.85rem;">
-                            </div>
-
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Device</th>
-                                            <th>IP Address</th>
-                                            <th>Login Time</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="securitySessionsTable">
-                                        <tr>
-                                            <td colspan="5" style="text-align:center; color: var(--text-secondary);">
-                                                Loading active sessions...</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card security-feature-card" id="securityEventsCard"
-                        style="margin-bottom: 1.5rem; display: none;">
-                        <div class="card-header">
-                            <span class="card-header-icon">🧾</span>
-                            Security Event Log
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div class="security-mini-grid"
-                                style="display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 1rem;">
-                                <div class="security-mini-card">
-                                    <strong>Total Events</strong>
-                                    <div id="securityEventsMetricTotal" class="security-mini-value">0</div>
-                                </div>
-                                <div class="security-mini-card">
-                                    <strong>Warnings</strong>
-                                    <div id="securityEventsMetricWarnings" class="security-mini-value">0</div>
-                                </div>
-                                <div class="security-mini-card">
-                                    <strong>Successful</strong>
-                                    <div id="securityEventsMetricSuccess" class="security-mini-value">0</div>
-                                </div>
-                                <div class="security-mini-card">
-                                    <strong>Latest Event</strong>
-                                    <div id="securityEventsMetricLatest" class="security-mini-value">Unavailable</div>
-                                </div>
-                            </div>
-
-                            <div class="security-event-controls"
-                                style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
-                                <select id="securityEventToneFilter" class="form-input" style="max-width: 180px;">
-                                    <option value="all">All tones</option>
-                                    <option value="positive">Positive</option>
-                                    <option value="warning">Warning</option>
+                <div id="securityEventsCard" style="display:none">
+                    <div class="glass-panel">
+                        <div class="panel-heading">
+                            <span>Security Events</span>
+                            <div style="display:flex; gap:0.5rem">
+                                <select id="securityEventToneFilter" class="form-input"
+                                    style="width:auto; padding:0.4rem;">
+                                    <option value="all">All Severities</option>
+                                    <option value="warning">Warnings only</option>
+                                    <option value="positive">Success only</option>
                                 </select>
-                                <input id="securityEventSearch" class="form-input"
-                                    placeholder="Search event context or IP..." style="flex:1; min-width:220px;">
-                                <button id="securityEventFilterReset" class="btn btn-secondary"
-                                    type="button">Reset</button>
-                            </div>
-
-                            <div id="securityEventTypeFilters"
-                                style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
-                                <button class="security-events-chip active btn btn-secondary btn-sm" type="button"
-                                    data-event-filter="all" aria-pressed="true">All</button>
-                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
-                                    data-event-filter="LOGIN_SUCCESS" aria-pressed="false">Logins</button>
-                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
-                                    data-event-filter="LOGIN_FAILED" aria-pressed="false">Login Failed</button>
-                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
-                                    data-event-filter="TWO_FA_FAILED" aria-pressed="false">2FA Failed</button>
-                                <button class="security-events-chip btn btn-secondary btn-sm" type="button"
-                                    data-event-filter="RECOVERY_CODE_USED" aria-pressed="false">Recovery</button>
-                            </div>
-
-                            <div class="security-event-summary"
-                                style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size: 0.85rem;">
-                                Showing <strong id="securityEventVisibleCount"
-                                    style="color: var(--text-primary);">0</strong>
-                                of <strong id="securityEventTotalCount" style="color: var(--text-primary);">0</strong>
-                                events
-                            </div>
-
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Event</th>
-                                            <th>IP / Location</th>
-                                            <th>Timestamp</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="securityEventsTable">
-                                        <tr>
-                                            <td colspan="3" style="text-align:center; color: var(--text-secondary);">
-                                                Loading security events...</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                                <button id="securityEventFilterReset"
+                                    style="background:none; border:none; color:var(--text-muted); cursor:pointer;">Reset</button>
                             </div>
                         </div>
-                    </div>
-                </div>
-                <div id="profileAccountContent" class="tab-content" style="display: none;">
-                    <div class="card" id="emailVerificationCard" style="margin-bottom: 1.5rem;">
-                        <div class="card-header">
-                            <span class="card-header-icon">✅</span>
-                            Email Verification
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">Keep
-                                your account recovery secure by maintaining a verified email address.</div>
-                            <div class="account-status-row"
-                                style="display: flex; justify-content: space-between; align-items: center;">
-                                <div id="emailVerificationStatus" class="account-status-value"
-                                    style="font-weight: bold;">Loading verification status...</div>
-                                <button type="button" class="btn btn-secondary" id="resendVerificationBtn">Resend
-                                    Verification Email</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card" id="changeEmailCard" style="margin-bottom: 1.5rem; display: none;">
-                        <div class="card-header">
-                            <span class="card-header-icon">✉️</span>
-                            Change Email
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">Update
-                                your account email address. After changing, you'll receive a verification email at the
-                                new address.</div>
-                            <div style="display:grid; gap:0.9rem;">
-                                <div>
-                                    <label class="form-label">Current Email</label>
-                                    <div id="changeEmailCurrentValue" class="form-input"
-                                        style="background: var(--bg-secondary);">Loading...</div>
-                                </div>
 
-                                <form id="changeEmailForm" style="display:grid; gap:0.6rem;">
-                                    <div>
-                                        <label class="form-label" for="newEmail">New Email</label>
-                                        <input id="newEmail" class="form-input" type="email"
-                                            placeholder="you@example.com" required>
-                                    </div>
-                                    <div>
-                                        <label class="form-label" for="confirmNewEmail">Confirm New Email</label>
-                                        <input id="confirmNewEmail" class="form-input" type="email"
-                                            placeholder="you@example.com" required>
-                                        <div id="emailMatchIndicator"
-                                            style="margin-top:0.35rem; color:var(--text-secondary); font-size:0.9rem;">
-                                        </div>
-                                    </div>
-                                    <div style="display:flex; gap:0.5rem; align-items:center;">
-                                        <button id="changeEmailSubmitBtn" class="btn btn-primary" type="submit">
-                                            <span id="changeEmailBtnText">Change Email</span>
-                                            <span id="changeEmailLoading" class="hidden"
-                                                style="margin-left:0.5rem;">⏳</span>
-                                        </button>
-                                        <div style="color:var(--text-secondary); font-size:0.9rem;">We'll send a
-                                            verification link to the new address.</div>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card" id="changePasswordCard" style="margin-bottom: 1.5rem; display: none;">
-                        <div class="card-header">
-                            <span class="card-header-icon">🔐</span>
-                            Change Password
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">
-                                Update your password to keep your account secure.
-                            </div>
-
-                            <form id="changePasswordForm" style="display:grid; gap:0.9rem;">
-                                <div>
-                                    <label class="form-label" for="currentPassword">Current Password</label>
-                                    <div style="display:flex; gap:0.5rem;">
-                                        <input id="currentPassword" class="form-input" type="password"
-                                            placeholder="Enter current password" required
-                                            autocomplete="current-password" style="flex:1;"
-                                            onkeyup="handleCapsLock(event)" onkeydown="handleCapsLock(event)">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="togglePasswordVisibility('currentPassword')">Show</button>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label class="form-label" for="newPassword">New Password</label>
-                                    <div style="display:flex; gap:0.5rem;">
-                                        <input id="newPassword" class="form-input" type="password"
-                                            placeholder="Enter new password" required autocomplete="new-password"
-                                            style="flex:1;"
-                                            oninput="updatePasswordStrength(this.value); validatePasswordMatch();"
-                                            onkeyup="handleCapsLock(event)" onkeydown="handleCapsLock(event)">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="togglePasswordVisibility('newPassword')">Show</button>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label class="form-label" for="confirmPassword">Confirm New Password</label>
-                                    <div style="display:flex; gap:0.5rem;">
-                                        <input id="confirmPassword" class="form-input" type="password"
-                                            placeholder="Confirm new password" required autocomplete="new-password"
-                                            style="flex:1;" oninput="validatePasswordMatch();"
-                                            onkeyup="handleCapsLock(event)" onkeydown="handleCapsLock(event)">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="togglePasswordVisibility('confirmPassword')">Show</button>
-                                    </div>
-                                    <div id="matchIndicator" class="password-match-indicator"></div>
-                                </div>
-
-                                <div id="capsLockWarning" class="caps-lock-warning" style="display:none;">
-                                    ⚠️ Caps Lock is on
-                                </div>
-
-                                <div id="newPasswordRequirements" class="password-requirements">
-                                    <strong style="color:var(--text-primary);">Password requirements</strong>
-                                    <span
-                                        title="Allowed special characters: ! @ # $ % ^ &amp; * ( ) _ + - = [ ] { } ; ' : &quot; \ | , . &lt; &gt; / ?"
-                                        style="margin-left:0.35rem; color:var(--text-secondary); font-size:0.85rem; cursor:help;">ⓘ</span>
-                                    <div class="requirement"><span id="check-length"
-                                            class="requirement-check">✓</span><span>At least 8 characters</span></div>
-                                    <div class="requirement"><span id="check-upper"
-                                            class="requirement-check">✓</span><span>One uppercase letter</span></div>
-                                    <div class="requirement"><span id="check-lower"
-                                            class="requirement-check">✓</span><span>One lowercase letter</span></div>
-                                    <div class="requirement"><span id="check-number"
-                                            class="requirement-check">✓</span><span>One number</span></div>
-                                    <div class="requirement"><span id="check-special"
-                                            class="requirement-check">✓</span><span>One special character (e.g., ! @ # $
-                                            % ^ &amp; * ( ) _ + - = [ ] { } ; ' : " \ | , . &lt; &gt; / ?)</span></div>
-                                </div>
-
-                                <div>
-                                    <div class="password-strength-meter">
-                                        <div id="strengthBar" class="strength-bar"></div>
-                                    </div>
-                                    <div id="strengthText" class="password-strength-text"></div>
-                                </div>
-
-                                <div class="password-quick-actions">
-                                    <button type="button" class="btn btn-secondary"
-                                        onclick="generateStrongPassword()">Generate
-                                        Strong Password</button>
-                                    <button type="button" class="btn btn-secondary"
-                                        onclick="copyGeneratedPassword()">Copy
-                                        Generated Password</button>
-                                    <label class="show-all-passwords-toggle">
-                                        <input id="showAllPasswordsToggle" type="checkbox"
-                                            onchange="toggleAllPasswords(this.checked)">
-                                        <span class="toggle-switch"><span class="toggle-thumb"></span></span>
-                                        <span class="toggle-text">Show all passwords</span>
-                                    </label>
-                                </div>
-
-                                <div style="display:flex; gap:0.5rem; align-items:center;">
-                                    <button id="changePasswordSubmitBtn" class="btn btn-primary" type="submit" disabled>
-                                        <span id="changePasswordBtnText">Change Password</span>
-                                        <span id="changePasswordLoading" class="hidden"
-                                            style="margin-left:0.5rem;">⏳</span>
-                                    </button>
-                                    <div style="color:var(--text-secondary); font-size:0.9rem;">You'll stay signed in on
-                                        this session after a successful update.</div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                <div id="profileGeoContent" class="tab-content" style="display: none;">
-                    <div class="card" id="geoSnapshotCard" style="margin-bottom: 1.5rem;">
-                        <div class="card-header">
-                            <span class="card-header-icon">🌍</span>
-                            Login Geo Snapshot
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div class="section-intro" style="color: var(--text-secondary); margin-bottom: 1rem;">
-                                Approximate network/location intelligence for the latest authentication signals.</div>
-                            <div id="loginGeoSnapshot" class="profile-status-panel"
-                                style="background: var(--bg-card-hover); padding: 1.5rem; border-radius: var(--radius-md); text-align: center; color: var(--text-secondary);">
-                                Loading location snapshot...
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="profileRecoveryContent" class="tab-content" style="display: none;">
-                    <div class="card" id="accountRecoveryCard" style="margin-bottom: 1.5rem;">
-                        <div class="card-header">
-                            <span class="card-header-icon">🧷</span>
-                            Account Recovery
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.5rem;">
-                            <div class="recovery-layout recovery-workspace">
-                                <section class="recovery-ops-header" aria-label="Recovery Operations Overview"
-                                    style="margin-bottom: 1.5rem;">
-                                    <div class="recovery-ops-main">
-                                        <h3 class="recovery-ops-title"
-                                            style="margin: 0 0 0.5rem 0; font-size: 1.2rem; color: var(--text-primary);">
-                                            Emergency Access Console</h3>
-                                        <p class="recovery-ops-subtitle"
-                                            style="margin: 0; color: var(--text-secondary); line-height: 1.5;">Maintain
-                                            recovery readiness with posture visibility, lifecycle guidance, and secure
-                                            one-time code handling.</p>
-                                    </div>
-                                </section>
-
-                                <div class="recovery-action-row"
-                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-                                    <div class="recovery-title-stack">
-                                        <div class="recovery-title"
-                                            style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
-                                            Recovery Code Operations</div>
-                                        <div class="recovery-action-note"
-                                            style="font-size: 0.85rem; color: var(--text-secondary);">Generate a new
-                                            code set to rotate access and invalidate previously issued recovery codes.
-                                        </div>
-                                    </div>
-                                    <button class="btn btn-secondary"
-                                        onclick="generateRecoveryCodesForAccount()">Generate Recovery Codes</button>
-                                </div>
-
-                                <div class="recovery-main-grid"
-                                    style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 1.5rem;">
-                                    <div id="recoveryStatusBox" class="recovery-status-shell"
-                                        style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card);">
-                                        Recovery status loading...
-                                    </div>
-                                    <aside class="recovery-practices"
-                                        style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card-hover);">
-                                        <strong class="recovery-practices-title"
-                                            style="display: block; margin-bottom: 0.75rem; color: var(--text-primary);">Recovery
-                                            Best Practices</strong>
-                                        <ul class="recovery-practices-list"
-                                            style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
-                                            <li>Store codes in an encrypted password manager or offline secure location.
-                                            </li>
-                                            <li>Treat each code as sensitive one-time emergency access material.</li>
-                                            <li>Rotate immediately if compromise is suspected or after major account
-                                                changes.</li>
-                                        </ul>
-                                    </aside>
-                                </div>
-
-                                <div id="recoveryCodesWrap" class="recovery-codes-wrap"
-                                    style="display: none; margin-top: 1.5rem;">
-                                    <label class="form-label" for="recoveryCodesOutput">Your New Recovery Codes (store
-                                        these securely)</label>
-                                    <textarea id="recoveryCodesOutput" class="form-input sensitive-blur" rows="6"
-                                        readonly onclick="this.classList.toggle('revealed')"
-                                        style="font-family: monospace; letter-spacing: 0.1em; text-align: center; font-size: 1.1rem; cursor: pointer; filter: blur(5px); transition: filter 0.3s;"></textarea>
-                                    <div class="recovery-codes-note"
-                                        style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; text-align: center;">
-                                        Click the box to reveal codes.</div>
-                                    <div class="recovery-codes-actions"
-                                        style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
-                                        <button class="btn btn-secondary" onclick="downloadRecoveryCodes()">Download
-                                            Codes</button>
-                                        <button class="btn btn-primary" onclick="copyRecoveryCodes()">Copy Recovery
-                                            Codes</button>
-                                    </div>
+                        <div class="stats-grid"
+                            style="grid-template-columns: repeat(4, 1fr); gap:1rem; margin-bottom:1.5rem;">
+                            <div class="metric-card" style="padding:1rem;">
+                                <div class="metric-label" style="font-size:0.7em;">Total Events</div>
+                                <div class="metric-value" style="font-size:1.4rem;" id="securityEventsMetricTotal">-
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="profileDiscordContent" class="tab-content" style="display: none;">
-                    <div class="card" id="discordLinkCard" style="margin-bottom: 1.5rem;">
-                        <div class="card-header">
-                            <span class="card-header-icon">🔗</span>
-                            Linked Discord Account
-                        </div>
-                        <div class="profile-card-body discord-workspace-v2" style="padding: 1.5rem;">
-                            <section class="discord-ops-header" aria-label="Discord Identity Overview"
-                                style="margin-bottom: 1.5rem;">
-                                <div class="discord-ops-main">
-                                    <h3 class="discord-ops-title"
-                                        style="margin: 0 0 0.5rem 0; font-size: 1.2rem; color: var(--text-primary);">
-                                        Discord Connection Console</h3>
-                                    <p class="discord-ops-subtitle"
-                                        style="margin: 0; color: var(--text-secondary); line-height: 1.5;">Link this
-                                        profile to a Discord identity for trusted ownership context, profile visibility,
-                                        and account continuity checks.</p>
-                                </div>
-                            </section>
-                            <div id="discordLinkStatus" class="discord-status-shell"
-                                style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; background: var(--bg-card); margin-bottom: 1rem;">
-                                Discord link status loading...
+                            <div class="metric-card" style="padding:1rem;">
+                                <div class="metric-label" style="font-size:0.7em;">Warnings</div>
+                                <div class="metric-value" style="font-size:1.4rem; color:#fbbf24;"
+                                    id="securityEventsMetricWarnings">-</div>
                             </div>
-                            <div id="discordProfileRefreshMeta"
-                                style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Last
-                                refreshed: --</div>
-                            <div id="discordOAuthHostWarning" class="profile-status-panel"
-                                style="display:none; background: var(--color-orange); color: white; padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+                            <div class="metric-card" style="padding:1rem;">
+                                <div class="metric-label" style="font-size:0.7em;">Success</div>
+                                <div class="metric-value" style="font-size:1.4rem; color:#4ade80;"
+                                    id="securityEventsMetricSuccess">-</div>
                             </div>
-                            <div class="discord-action-row" style="display: flex; gap: 1rem;">
-                                <button id="discordAuthorizeBtn" class="btn btn-primary"
-                                    onclick="startDiscordOAuthLink()">Authorize with Discord</button>
-                                <button id="discordUnlinkBtn" class="btn btn-danger" onclick="unlinkDiscordAccount()"
-                                    style="display: none;">Unlink</button>
+                            <div class="metric-card" style="padding:1rem;">
+                                <div class="metric-label" style="font-size:0.7em;">Latest</div>
+                                <div class="metric-value" style="font-size:0.9rem; margin-top:0.25rem;"
+                                    id="securityEventsMetricLatest">-</div>
                             </div>
                         </div>
+                        <span id="securityEventVisibleCount" style="display:none"></span>
+                        <span id="securityEventTotalCount" style="display:none"></span>
+
+                        <div id="securityEventTypeFilters"
+                            style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+                            <button class="security-events-chip active btn-brand"
+                                style="font-size:0.75rem; padding:0.25rem 0.75rem; background:rgba(255,255,255,0.1);"
+                                data-event-filter="all">All</button>
+                            <button class="security-events-chip btn-brand"
+                                style="font-size:0.75rem; padding:0.25rem 0.75rem; background:rgba(255,255,255,0.05);"
+                                data-event-filter="LOGIN_SUCCESS">Logins</button>
+                            <button class="security-events-chip btn-brand"
+                                style="font-size:0.75rem; padding:0.25rem 0.75rem; background:rgba(255,255,255,0.05);"
+                                data-event-filter="LOGIN_FAILED">Failures</button>
+                        </div>
+                        <input type="text" id="securityEventSearch" class="form-input" placeholder="Search logs..."
+                            style="margin-bottom:1rem;">
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Event</th>
+                                    <th>Origin</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="securityEventsTable">
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
 
-            <div id="sessionDetailsDrawer" style="display:none; position:fixed; inset:0; z-index:1200;">
-                <div onclick="closeSessionDetails()" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);">
-                </div>
-                <aside
-                    style="position:absolute; top:0; right:0; width:min(440px, 100%); height:100%; background:var(--bg-card); border-left:1px solid var(--border-color); box-shadow: var(--shadow-lg); padding:1rem; overflow-y:auto;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                        <h3 style="margin:0; font-size:1.1rem; color: var(--text-primary);">Session Details</h3>
-                        <button class="btn btn-secondary btn-sm" onclick="closeSessionDetails()">Close</button>
-                    </div>
-                    <div id="sessionDetailsBody" style="display:grid; gap:0.7rem; color:var(--text-secondary);"></div>
-                </aside>
-            </div>
-            <div id="passwordConfirmModal" class="modal-overlay"
-                style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1300; align-items:center; justify-content:center;">
-                <div class="modal-box"
-                    style="background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); width:min(400px, 90%); box-shadow:var(--shadow-lg);">
-                    <h3 class="modal-title" style="margin:0 0 0.5rem 0; color:var(--text-primary);">Confirm Password
-                    </h3>
-                    <p style="color:var(--text-secondary); margin-bottom:1.5rem; font-size:0.9rem;">Please enter your
-                        current password to continue.</p>
-                    <form id="passwordConfirmForm" onsubmit="handlePasswordConfirm(event)">
-                        <div class="form-group" style="margin-bottom:1.5rem;">
-                            <input type="password" id="confirmPasswordInput" class="form-input"
-                                placeholder="Current Password" required autocomplete="current-password"
-                                style="width:100%;">
+            <div id="profileAccountContent" class="tab-content">
+                <div class="glass-panel" id="changeEmailCard">
+                    <div class="panel-heading">Change Email Address</div>
+                    <form id="changeEmailForm">
+                        <div class="form-group">
+                            <label class="form-label">Current Email</label>
+                            <div id="changeEmailCurrentValue"
+                                style="padding:0.75rem; background:rgba(255,255,255,0.05); border-radius:8px; color:#fff;">
+                                --</div>
                         </div>
-                        <div class="modal-actions" style="display:flex; justify-content:flex-end; gap:1rem;">
-                            <button type="button" class="btn btn-secondary"
-                                onclick="closePasswordModal()">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Confirm</button>
+                        <div class="form-group">
+                            <label class="form-label">New Email Address</label>
+                            <input type="email" id="newEmail" class="form-input" required>
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">Confirm New Email</label>
+                            <input type="email" id="confirmNewEmail" class="form-input" required>
+                            <div id="emailMatchIndicator" style="margin-top:0.5rem; font-size:0.85rem;"></div>
+                        </div>
+                        <button type="submit" id="changeEmailSubmitBtn" class="btn-brand">
+                            <span id="changeEmailBtnText">Update Email</span>
+                            <span id="changeEmailLoading" class="hidden"><i class="fas fa-spinner fa-spin"></i></span>
+                        </button>
                     </form>
+                    <div id="emailVerificationCard"
+                        style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span id="emailVerificationStatus" style="color:var(--text-muted);">Checking
+                                verification...</span>
+                            <button id="resendVerificationBtn" class="btn-brand"
+                                style="background:transparent; border:1px solid rgba(99,102,241,0.5);">Resend
+                                Verification</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" id="changePasswordCard">
+                    <div class="panel-heading">
+                        <i class="fas fa-lock label-icon"></i> Change Password
+                    </div>
+
+                    <div class="change-password-layout">
+                        <form id="changePasswordForm" class="change-password-form">
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <i class="fas fa-key label-icon"></i> Current Password
+                                </label>
+                                <div class="input-wrapper">
+                                    <input type="password" id="currentPassword" class="form-input"
+                                        placeholder="Enter current password" required>
+                                    <button type="button" class="password-toggle"
+                                        onclick="togglePasswordVisibility('currentPassword', this)">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <i class="fas fa-unlock-alt label-icon"></i> New Password
+                                </label>
+                                <div class="input-wrapper">
+                                    <input type="password" id="newPassword" class="form-input"
+                                        placeholder="Enter new strong password" required>
+                                    <button type="button" class="password-toggle"
+                                        onclick="togglePasswordVisibility('newPassword', this)">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+
+                                <div class="password-strength-meter">
+                                    <div id="strengthBar" class="strength-bar" style="width: 0%"></div>
+                                </div>
+                                <div id="strengthText" class="password-strength-text">Password Strength: Too Weak</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <i class="fas fa-check-circle label-icon"></i> Confirm Password
+                                </label>
+                                <div class="input-wrapper">
+                                    <input type="password" id="confirmPassword" class="form-input"
+                                        placeholder="Confirm new password" required>
+                                    <button type="button" class="password-toggle"
+                                        onclick="togglePasswordVisibility('confirmPassword', this)">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <div id="matchIndicator" class="password-match-indicator"></div>
+                            </div>
+
+                            <div class="password-quick-actions">
+                                <label class="show-all-passwords-toggle">
+                                    <input type="checkbox" id="showAllPasswordsToggle"
+                                        onchange="toggleAllPasswords(this.checked)">
+                                    <span class="toggle-switch">
+                                        <span class="toggle-thumb"></span>
+                                    </span>
+                                    <span class="toggle-text">Show All Passwords</span>
+                                </label>
+
+                                <button type="button" onclick="generateStrongPassword()"
+                                    class="btn btn-secondary btn-sm"
+                                    style="margin-left:auto; display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.8rem; border-radius: 6px; background: rgba(99, 102, 241, 0.1); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2);">
+                                    <i class="fas fa-magic"></i> Generate Unique
+                                </button>
+                            </div>
+
+                            <div style="margin-top: 1.5rem;">
+                                <button type="submit" id="changePasswordSubmitBtn" class="btn btn-primary"
+                                    style="width: 100%; justify-content: center;">
+                                    <span id="changePasswordBtnText">Update Password</span>
+                                    <span id="changePasswordLoading" class="hidden"><i
+                                            class="fas fa-spinner fa-spin"></i></span>
+                                </button>
+                            </div>
+
+                            <div id="newPasswordRequirements" style="display:none;"></div>
+                        </form>
+
+                        <div class="password-help-panel">
+                            <h4><i class="fas fa-shield-alt"></i> Secure Password Tips</h4>
+                            <ul>
+                                <li>Use at least 12 characters</li>
+                                <li>Include uppercase & lowercase letters</li>
+                                <li>Add numbers & special symbols (!@#$)</li>
+                                <li>Avoid using personal dates or names</li>
+                            </ul>
+                            <div class="password-help-note">
+                                <i class="fas fa-info-circle"></i> Passwords are encrypted with industry-standard
+                                hashing before storage. We recommend rotating your password every 90 days.
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <div id="profileGeoContent" class="tab-content">
+                <div class="glass-panel" id="geoSnapshotCard">
+                    <div id="loginGeoSnapshot">Loading Geo Intelligence...</div>
+                </div>
+            </div>
+
+            <div id="profileRecoveryContent" class="tab-content">
+                <div class="glass-panel" id="accountRecoveryCard">
+                    <div class="panel-heading">Recovery Codes</div>
+                    <div id="recoveryStatusBox" style="margin-bottom:2rem;"></div>
+
+                    <div style="display:flex; gap:1rem; margin-bottom:1.5rem;">
+                        <button onclick="generateRecoveryCodesForAccount()" class="btn-brand">
+                            <i class="fas fa-sync"></i> Generate New Codes
+                        </button>
+                        <button onclick="downloadRecoveryCodes()" class="btn-brand"
+                            style="background:rgba(255,255,255,0.1);">
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                    </div>
+
+                    <div id="recoveryCodesWrap" style="display:none;">
+                        <textarea id="recoveryCodesOutput" readonly class="form-input"
+                            style="height:150px; font-family:monospace; margin-bottom:1rem;"></textarea>
+                        <button onclick="copyRecoveryCodes()" class="btn-brand" style="width:100%;">Copy to
+                            Clipboard</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="profileDiscordContent" class="tab-content">
+                <div class="glass-panel" id="discordLinkCard">
+                    <div class="panel-heading">Discord Integration</div>
+                    <div id="discordLinkBanner" class="hidden"
+                        style="margin-bottom:1.5rem; background:rgba(88, 101, 242, 0.1); border:1px solid #5865F2; padding:1rem; border-radius:12px; align-items:center; gap:1rem;">
+                        <i class="fab fa-discord" style="font-size:1.5rem; color:#5865F2;"></i>
+                        <span style="flex:1;">Enhance your account security by linking Discord.</span>
+                        <button id="discordLinkBannerAction" class="btn-brand" style="background:#5865F2;">Link
+                            Now</button>
+                        <button id="discordLinkBannerClose"
+                            style="background:none; border:none; color:#fff; cursor:pointer;">&times;</button>
+                    </div>
+
+                    <div id="discordLinkStatus">Loading connection status...</div>
+
+                    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid rgba(255,255,255,0.1);">
+                        <div id="discordOAuthHostWarning"
+                            style="color:#fca5a5; font-size:0.9rem; margin-bottom:1rem; display:none;"></div>
+                        <button id="discordAuthorizeBtn" onclick="startDiscordOAuthLink()" class="btn-brand"
+                            style="background:#5865F2;">
+                            <i class="fab fa-discord"></i> Authorize with Discord
+                        </button>
+                        <button id="discordUnlinkBtn" onclick="unlinkDiscordAccount()" class="btn-brand"
+                            style="background:rgba(239, 68, 68, 0.2); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.4); display:none;">
+                            Unlink Account
+                        </button>
+                        <div id="discordProfileRefreshMeta"
+                            style="margin-top:0.75rem; font-size:0.8rem; color:var(--text-muted);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel" id="userActionsCard" style="display:none; border-color:rgba(239, 68, 68, 0.4);">
+                <div class="panel-heading" style="color:#fca5a5;">Administrative Actions</div>
+                <div style="display:flex; gap:1rem;">
+                    <button onclick="warnUser()" class="btn-brand"
+                        style="background:rgba(245, 158, 11, 0.2); color:#fbbf24; border:1px solid rgba(245, 158, 11, 0.4);">Warn
+                        User</button>
+                    <button onclick="banUser()" class="btn-brand"
+                        style="background:rgba(239, 68, 68, 0.2); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.4);">Ban
+                        User</button>
+                </div>
+            </div>
+
+        </section>
     </main>
 
-    <footer class="page-footer">
-        <div class="footer-links">
-            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
-            <span class="footer-sep">•</span>
-            <a href="/changelog">Changelog</a>
-            <span class="footer-sep">•</span>
-            <a href="/privacy-policy">Privacy Policy</a>
-            <span class="footer-sep">•</span>
-            <a href="/license">License</a>
+    <div id="passwordConfirmModal"
+        style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:100; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
+        <div
+            style="background:#1a1b26; padding:2rem; border-radius:16px; border:1px solid rgba(255,255,255,0.1); width:100%; max-width:400px;">
+            <h3 style="margin-top:0;">Confirm Password</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem;">Please enter your current password to continue.</p>
+            <form onsubmit="handlePasswordConfirm(event)">
+                <input type="password" id="confirmPasswordInput" class="form-input" placeholder="Current Password"
+                    required>
+                <div style="display:flex; justify-content:flex-end; gap:1rem; margin-top:1.5rem;">
+                    <button type="button" onclick="closePasswordModal()"
+                        style="background:none; border:none; color:#94a3b8; cursor:pointer;">Cancel</button>
+                    <button type="submit" class="btn-brand">Confirm</button>
+                </div>
+            </form>
         </div>
-    </footer>
-    <script src="/public/version.js"></script>
+    </div>
+
+    <div id="sessionDetailsDrawer"
+        style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:90;">
+        <div
+            style="position:absolute; right:0; top:0; bottom:0; width:100%; max-width:400px; background:#18181b; border-left:1px solid rgba(255,255,255,0.1); padding:2rem; animation:slideInLeft 0.3s;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:2rem;">
+                <h3>Session Details</h3>
+                <button onclick="closeSessionDetails()"
+                    style="background:none; border:none; color:#fff; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <div id="sessionDetailsBody"
+                style="display:flex; flex-direction:column; gap:1rem; color:var(--text-muted); font-size:0.9rem;"></div>
+        </div>
+    </div>
+
+    <div id="confirmationModal" class="modal-wrapper" style="display:none; z-index: 10000;">
+        <div class="modal-overlay" onclick="closeConfirmModal()"></div>
+        <div class="notification-modal"
+            style="width: 400px; padding: 0; background: var(--bg-card); border: 1px solid var(--border-color); overflow: hidden;">
+            <div class="modal-header"
+                style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.2);">
+                <h3 id="confirmModalTitle"
+                    style="margin:0; font-size:1.1rem; color:var(--text-primary); font-weight: 600;">Confirm Action</h3>
+                <button type="button" class="modal-close" onclick="closeConfirmModal()"
+                    style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size: 1.2rem;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body"
+                style="padding: 1.5rem; color: var(--text-secondary); line-height: 1.5; font-size: 0.95rem;">
+                <p id="confirmModalMessage" style="margin:0;">Are you sure you want to proceed?</p>
+            </div>
+            <div class="modal-footer"
+                style="padding: 1rem 1.5rem; background: var(--bg-secondary); border-top: 1px solid var(--border-color); display:flex; justify-content:flex-end; gap:0.75rem;">
+                <button type="button" class="btn btn-secondary" onclick="closeConfirmModal()"
+                    style="padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem;">Cancel</button>
+                <button type="button" id="confirmModalActionBtn" class="btn btn-primary"
+                    style="padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem;">Confirm</button>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

@@ -1,8 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { ROLES: { moderatorRoleId } } = require("../../Config/constants");
 
-// Lets you delete a message by its link
-// Handy for cleaning up stuff in other channels
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('deletemsg')

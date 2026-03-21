@@ -31,11 +31,11 @@ module.exports = {
         });
 
         console.log('\n');
-        console.log(colors.cyan + colors.bright + '╔════════════════════════════════════════════════════════════════╗' + colors.reset);
-        console.log(colors.cyan + '║' + colors.reset + '                                                                ' + colors.cyan + '║' + colors.reset);
-        console.log(colors.cyan + '║' + colors.green + colors.bright + '                ✅ BOT STARTUP COMPLETE                      ' + colors.cyan + '║' + colors.reset);
-        console.log(colors.cyan + '║' + colors.reset + '                                                                ' + colors.cyan + '║' + colors.reset);
-        console.log(colors.cyan + colors.bright + '╚════════════════════════════════════════════════════════════════╝' + colors.reset);
+        console.log(colors.cyan + colors.bright + '+----------------------------------------------------------------+' + colors.reset);
+        console.log(colors.cyan + '|' + colors.reset + '                                                                ' + colors.cyan + '|' + colors.reset);
+        console.log(colors.cyan + '|' + colors.green + colors.bright + '                ✅ BOT STARTUP COMPLETE                      ' + colors.cyan + '|' + colors.reset);
+        console.log(colors.cyan + '|' + colors.reset + '                                                                ' + colors.cyan + '|' + colors.reset);
+        console.log(colors.cyan + colors.bright + '+----------------------------------------------------------------+' + colors.reset);
         console.log('');
         console.log(colors.yellow + colors.bright + '📊 Stats:' + colors.reset);
         console.log(colors.blue + '  ├─ 🎮 Commands:  ' + colors.bright + colors.green + commands + colors.reset + colors.dim + ' loaded' + colors.reset);

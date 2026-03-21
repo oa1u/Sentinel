@@ -1,6 +1,14 @@
 {
-    "verifiedRoleId": "VERIFIED_ROLE_ID_HERE",
-    "moderatorRoleId": "MODERATOR_ROLE_ID_HERE",
-    "administratorRoleId": "ADMINISTRATOR_ROLE_ID_HERE",
-    "supportTeamRoleId": "SUPPORT_TEAM_ROLE_ID_HERE"
+    "verifiedRoleId": "VERIFIED_ROLE_ID",
+    "moderatorRoleId": "MODERATOR_ROLE_ID",
+    "administratorRoleId": "ADMINISTRATOR_ROLE_ID",
+    "supportTeamRoleId": "SUPPORT_TEAM_ROLE_ID",
+    "level5RoleId": "LEVEL_5_ROLE_ID",
+    "level10RoleId": "LEVEL_10_ROLE_ID",
+    "level25RoleId": "LEVEL_25_ROLE_ID",
+    "level50RoleId": "LEVEL_50_ROLE_ID",
+    "level75RoleId": "LEVEL_75_ROLE_ID",
+    "level100RoleId": "LEVEL_100_ROLE_ID",
+    "quarantineRoleId": "ANTIRAID_QUARANTINE_ROLE_ID",
+    "protectedRoleIds": ["PROTECTED_ROLE_ID_1", "PROTECTED_ROLE_ID_2"]
 }

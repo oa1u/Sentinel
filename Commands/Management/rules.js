@@ -9,7 +9,6 @@ module.exports = {
     .setDescription('Post server rules to the rules channel'),
 
   async execute(interaction) {
-    // Only admins are allowed to use this command.
     const Prohibited = new EmbedBuilder()
       .setColor(0xF04747)
       .setTitle(`❌ No Permission`)
@@ -20,7 +19,6 @@ module.exports = {
     }
 
     try {
-      // Grab the rules from the config file so we can show them.
       const rulesPath = path.join(__dirname, '../../Config/constants/rules.json');
       const rulesConfig = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
       const rules = rulesConfig.rules;
@@ -34,7 +32,6 @@ module.exports = {
         return interaction.reply({ embeds: [NoRules], flags: MessageFlags.Ephemeral });
       }
 
-      // Try to find the rules channel in the server so we know where to post.
       const rulesChannel = await interaction.guild.channels.fetch(rulesChannelId).catch(() => null);
 
       if (!rulesChannel) {
@@ -46,10 +43,8 @@ module.exports = {
         return interaction.reply({ embeds: [NoChannel], flags: MessageFlags.Ephemeral });
       }
 
-      // Build the message(s) to display the rules.
       const rulesEmbeds = [];
 
-      // Add a title at the top of the embed.
       const titleEmbed = new EmbedBuilder()
         .setColor(0x3498DB)
         .setTitle('📋 Server Rules')
@@ -58,7 +53,6 @@ module.exports = {
 
       rulesEmbeds.push(titleEmbed);
 
-      // Add all the rules as fields in one embed for clarity.
       const rulesEmbed = new EmbedBuilder()
         .setColor(0x2ECC71)
         .setFooter({ text: 'Server Rules' });
@@ -73,10 +67,8 @@ module.exports = {
 
       rulesEmbeds.push(rulesEmbed);
 
-      // Post the rules in the correct channel.
       await rulesChannel.send({ embeds: rulesEmbeds });
 
-      // Let the admin know the command worked.
       const Success = new EmbedBuilder()
         .setColor(0x2ECC71)
         .setTitle('✅ Success')

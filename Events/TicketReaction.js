@@ -2,8 +2,8 @@ const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { CHANNELS: { ticketCategoryId, ticketLogChannelId }, ROLES: { supportTeamRoleId } } = require("../Config/constants");
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 
-// Ticket reaction handler — manages close reactions on ticket channels.
-// Users or staff can close tickets with the ❌ reaction and the handler archives the transcript.
+// Ticket reaction handler - manages close reactions on ticket channels.
+// Users or staff can close tickets with the - reaction and the handler archives the transcript.
 module.exports = {
     name: "messageReactionAdd",
     disabled: true,
@@ -17,7 +17,7 @@ module.exports = {
         // Ignore any reactions made by bots.
         if (user.bot) return;
 
-        // We only care about the ❌ emoji for closing tickets.
+        // We only care about the - emoji for closing tickets.
         if (reaction.emoji.name !== '❌') return;
 
         // Fetch the full reaction/message if Discord gave us a partial object.
@@ -62,7 +62,7 @@ module.exports = {
         const ticketData = await MySQLDatabaseManager.getTicket(channel.id) || {};
 
         // Build a transcript text file from recent messages for the log.
-        let transcript = `📋 Ticket Transcript - ${channel.name}\n`;
+        let transcript = `📋 Ticket Transcript ❌ ${channel.name}\n`;
         transcript += `─────────────────\n\n`;
         transcript += `🎫 Info:\n`;
         transcript += `   • Ticket Owner: ${ticketData.userName || 'Unknown'} (${ticketData.userId || 'N/A'})\n`;

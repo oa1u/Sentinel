@@ -144,8 +144,17 @@ async function runChannelRevival(client) {
     const selected = candidates[Math.floor(Math.random() * candidates.length)];
     const message = messages[Math.floor(Math.random() * messages.length)];
 
-    await selected.send({ content: message }).catch((err) => {
-        console.error(`[ChannelRevival] Failed to send revival message: ${err.message}`);
+    // Send as an embed for better appearance
+    const { EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('✨ Let’s Get the Conversation Started!')
+        .setDescription(message)
+        .setFooter({ text: 'Your response could inspire someone today!' })
+        .setTimestamp();
+
+    await selected.send({ embeds: [embed] }).catch((err) => {
+        console.error(`[ChannelRevival] Failed to send revival embed: ${err.message}`);
     });
 
     lastRevivalByChannel.set(selected.id, Date.now());

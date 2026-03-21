@@ -22,14 +22,11 @@ module.exports = {
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
-        // Import caseId generator
         const { generateCaseId } = require('../../Events/caseId');
 
         try {
-            // Generate a unique case ID for this suggestion
             const caseId = generateCaseId('SUGGEST', 8);
 
-            // Create suggestion in database and store caseId
             const suggestionId = await MySQLDatabaseManager.createSuggestion(
                 guildId,
                 userId,
@@ -38,7 +35,6 @@ module.exports = {
                 caseId
             );
 
-            // Create embed (improved)
             const embed = new EmbedBuilder()
                 .setColor(0x5865F2)
                 .setAuthor({
@@ -55,7 +51,6 @@ module.exports = {
                 .setFooter({ text: `Case ID: ${caseId} • Vote using the reactions below!` })
                 .setTimestamp();
 
-            // Send embed to suggestion channel
             const suggestionChannel = interaction.guild.channels.cache.get(suggestionChannelId);
             if (!suggestionChannel) {
                 return await interaction.reply({
@@ -67,10 +62,8 @@ module.exports = {
             await msg.react('👍');
             await msg.react('👎');
 
-            // Update suggestion with message ID
             await MySQLDatabaseManager.updateSuggestionMessageId(suggestionId, msg.id);
 
-            // Confirm to user (improved)
             await interaction.reply({
                 embeds: [
                     new EmbedBuilder()

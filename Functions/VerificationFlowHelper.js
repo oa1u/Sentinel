@@ -2,7 +2,7 @@ const { isVerificationSessionActive } = require('./VerificationSessionManager');
 const { MISC: miscConfig } = require('../Config/constants');
 
 const verificationConfig = miscConfig?.verification || {};
-const CHALLENGE_TIMEOUT_MS = Math.max(60 * 1000, Math.min(20 * 60 * 1000, Number(verificationConfig.challengeTimeoutMs) || 10 * 60 * 1000));
+const CHALLENGE_TIMEOUT_MS = 300000; // 5 minutes
 const MAX_WRONG_ATTEMPTS_PER_STEP = Math.max(1, Math.min(10, Number(verificationConfig.maxWrongAttemptsPerStep) || 3));
 const STRICT_ACCOUNT_AGE_DAYS = Math.max(0, Math.min(365, Number(verificationConfig.strictAccountAgeDays) || 7));
 

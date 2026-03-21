@@ -1,7 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { CHANNELS: { serverLogChannelId } } = require("../Config/constants");
 
-// Log when roles are created — include role settings and current member count.
 module.exports = (client) => {
     client.on("roleCreate", async (role) => {
         const logs = client.channels.cache.get(serverLogChannelId);

@@ -118,6 +118,7 @@ class MySQLConnection {
             const userInfoColumnsToAdd = [
                 { name: 'nickname', type: 'VARCHAR(255) DEFAULT NULL' },
                 { name: 'bio', type: 'TEXT DEFAULT NULL' },
+                { name: 'avatar', type: 'VARCHAR(512) DEFAULT NULL' },
                 { name: 'message_streak', type: 'INT NOT NULL DEFAULT 0' },
                 { name: 'message_streak_best', type: 'INT NOT NULL DEFAULT 0' },
                 { name: 'message_streak_last_day', type: 'BIGINT DEFAULT NULL' },

@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 
-// Get a random fact from an API—sometimes they're actually pretty cool!
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('fact')

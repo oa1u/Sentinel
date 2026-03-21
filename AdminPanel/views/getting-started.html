@@ -1,553 +1,568 @@
 <!DOCTYPE html>
-<!-- Getting Started — onboarding instructions for new admins using the panel. -->
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="websiteNameTitle">Getting Started</title>
+    <title id="websiteNameTitle">Documentation - Getting Started</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+
     <link rel="stylesheet" href="/css/style.css">
 
+
     <style>
-        .getting-started-wrap {
-            max-width: 980px;
-            margin-top: 0.9rem;
-            margin-bottom: 2rem;
-            display: grid;
-            gap: 1.2rem;
-        }
-
-        .gs-card {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
-            background: var(--bg-card);
-            padding: 1rem;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .gs-hero {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
-            background: linear-gradient(145deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-            padding: 1.5rem 1.35rem;
-            display: grid;
-            gap: 0.55rem;
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .gs-hero::after {
-            content: '';
-            position: absolute;
-            right: -70px;
-            top: -70px;
-            width: 210px;
-            height: 210px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(91, 127, 255, 0.22) 0%, rgba(91, 127, 255, 0) 70%);
-            pointer-events: none;
-        }
-
-        .gs-eyebrow {
-            margin: 0;
-            color: var(--color-blue);
-            font-size: 0.76rem;
-            letter-spacing: 0.03em;
-            text-transform: uppercase;
-            font-weight: 700;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: fit-content;
-            border: 1px solid rgba(91, 127, 255, 0.32);
-            background: rgba(91, 127, 255, 0.14);
-            border-radius: 999px;
-            padding: 0.28rem 0.68rem;
-        }
-
-        .gs-hero h1 {
-            margin: 0;
-            font-size: 1.8rem;
-            line-height: 1.2;
-            color: var(--text-primary);
-            position: relative;
-            z-index: 1;
-        }
-
-        .gs-hero-subtitle {
-            margin: 0;
-            color: var(--text-secondary);
-            line-height: 1.58;
-            font-size: 0.95rem;
-            max-width: 760px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .gs-pill-row {
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-left: 4px solid var(--docs-accent);
+            padding: 1.25rem;
+            border-radius: var(--radius-md);
+            margin: 1.5rem 0;
             display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
-            position: relative;
-            z-index: 1;
-        }
-
-        .gs-pill {
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            border: 1px solid var(--border-color);
-            background: var(--bg-secondary);
-            border-radius: 999px;
-            padding: 0.22rem 0.48rem;
-            text-transform: uppercase;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-        }
-
-        .gs-layout {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
             gap: 1rem;
-            align-items: start;
+            align-items: flex-start;
         }
 
-        .gs-main-card {
-            display: grid;
-            gap: 0.92rem;
-            padding: 1.15rem;
+        .info-box.warning {
+            background: rgba(255, 170, 0, 0.1);
+            border-color: rgba(255, 170, 0, 0.2);
+            border-left-color: #f59e0b;
         }
 
-        .gs-section-head {
-            display: flex;
-            align-items: flex-end;
-            justify-content: space-between;
-            gap: 0.8rem;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.68rem;
+        .info-box-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+            flex-shrink: 0;
+            padding-top: 0.2rem;
         }
 
-        .gs-section-meta {
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
-        .gs-side-card {
-            position: sticky;
-            top: 1.25rem;
-        }
-
-        .gs-section-title {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.15rem;
-        }
-
-        .gs-copy {
-            margin: 0;
+        .info-content {
+            font-size: 0.95rem;
             color: var(--text-secondary);
             line-height: 1.6;
-            font-size: 0.9rem;
         }
 
-        .gs-list {
-            margin: 0.6rem 0 0;
-            padding-left: 1.05rem;
-            color: var(--text-secondary);
-            line-height: 1.72;
-            font-size: 0.9rem;
-            display: grid;
-            gap: 0.24rem;
-        }
-
-        .gs-mini-kpis {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.42rem;
-        }
-
-        .gs-mini-kpi {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            background: var(--bg-secondary);
-            padding: 0.48rem 0.52rem;
-            min-height: 62px;
-        }
-
-        .gs-mini-kpi strong {
+        .info-box-title {
             display: block;
-            color: var(--text-secondary);
-            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+            text-transform: uppercase;
+            font-size: 0.75rem;
             letter-spacing: 0.05em;
-            text-transform: uppercase;
-            margin-bottom: 0.2rem;
         }
 
-        .gs-mini-kpi span {
-            color: var(--text-primary);
-            font-size: 0.85rem;
-            font-weight: 650;
-            line-height: 1.35;
+        :root {
+            --docs-sidebar-width: 280px;
+            --docs-accent: var(--color-blue);
+            --docs-accent-soft: rgba(59, 130, 246, 0.1);
         }
 
-        .gs-list-advanced {
-            margin-top: 0.65rem;
-            padding-left: 0;
-            list-style: none;
-            gap: 0.52rem;
+        .docs-container {
+            display: grid;
+            grid-template-columns: var(--docs-sidebar-width) 1fr;
+            gap: 2rem;
+            align-items: start;
+            min-height: calc(100vh - 140px);
+            margin-top: 2rem;
+            margin-bottom: 4rem;
         }
 
-        .gs-list-advanced>li {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-            padding: 0.58rem 0.68rem 0.58rem 0.82rem;
-            line-height: 1.55;
+        .docs-sidebar {
+            position: sticky;
+            top: 100px;
+            background: rgba(22, 22, 26, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .docs-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .docs-sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .docs-sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .docs-sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .docs-search {
             position: relative;
-            transition: transform 0.16s ease, border-color 0.16s ease;
+            margin-bottom: 2rem;
         }
 
-        .gs-list-advanced>li::before {
-            content: '';
-            position: absolute;
-            left: 0.45rem;
-            top: 0.58rem;
-            bottom: 0.58rem;
-            width: 2px;
-            border-radius: 999px;
-            background: var(--border-color);
+        .docs-search-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 0.9rem 1rem 0.9rem 2.8rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
-        .gs-list-advanced>li:hover {
+        .docs-search-input:focus {
+            border-color: var(--docs-accent);
+            outline: none;
+            background: rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 0 1px var(--docs-accent), inset 0 2px 4px rgba(0, 0, 0, 0.2);
             transform: translateY(-1px);
-            border-color: var(--text-secondary);
         }
 
-        .gs-stage-rail {
-            margin-top: 0.55rem;
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.38rem;
+        .docs-search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 1rem;
+            pointer-events: none;
+            transition: color 0.3s;
+            font-style: normal;
         }
 
-        .gs-stage-chip {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            background: var(--bg-card);
-            color: var(--text-secondary);
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.03em;
-            text-transform: uppercase;
-            text-align: center;
-            padding: 0.3rem 0.42rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+        .docs-search-input:focus+.docs-search-icon {
+            color: var(--docs-accent);
+            filter: drop-shadow(0 0 5px var(--docs-accent));
         }
 
-        .gs-stage-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            margin-bottom: 0.2rem;
+        .docs-nav-group {
+            margin-bottom: 2rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        .gs-stage-left {
-            display: flex;
-            align-items: center;
-            gap: 0.42rem;
-            min-width: 0;
+        .docs-nav-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
         }
 
-        .gs-stage-number {
-            width: 1.25rem;
-            height: 1.25rem;
-            border-radius: 999px;
-            border: 1px solid var(--border-color);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--color-blue);
-            font-size: 0.7rem;
-            font-weight: 800;
-            flex-shrink: 0;
-            background: rgba(91, 127, 255, 0.12);
-        }
-
-        .gs-list-title {
-            display: inline-block;
-            color: var(--text-primary);
-            font-weight: 650;
-            font-size: 0.86rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .gs-impact {
-            border: 1px solid rgba(91, 127, 255, 0.3);
-            border-radius: 999px;
-            background: rgba(91, 127, 255, 0.12);
-            color: var(--color-blue);
-            font-size: 0.68rem;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            font-weight: 750;
-            padding: 0.2rem 0.42rem;
-            white-space: nowrap;
-        }
-
-        .gs-checkpoints {
-            margin: 0.35rem 0 0;
-            padding-left: 1rem;
-            display: grid;
-            gap: 0.22rem;
-            font-size: 0.84rem;
-            color: var(--text-secondary);
-        }
-
-        .gs-readiness-shell {
-            margin-top: 0.65rem;
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-            padding: 0.85rem;
-            display: grid;
-            gap: 0.65rem;
-        }
-
-        .gs-readiness-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.6rem;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.55rem;
-        }
-
-        .gs-readiness-title {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            font-weight: 700;
-        }
-
-        .gs-readiness-tag {
-            border: 1px solid rgba(91, 127, 255, 0.32);
-            background: rgba(91, 127, 255, 0.12);
-            color: var(--color-blue);
-            border-radius: 999px;
-            padding: 0.2rem 0.48rem;
-            font-size: 0.68rem;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            font-weight: 750;
-            white-space: nowrap;
-        }
-
-        .gs-readiness-actions {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
-        .gs-readiness-hint {
-            margin: 0;
-            font-size: 0.83rem;
-            color: var(--text-secondary);
-            line-height: 1.52;
-        }
-
-        .gs-progress-wrap {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            padding: 0.58rem;
-            background: var(--bg-card);
-            display: grid;
-            gap: 0.4rem;
-        }
-
-        .gs-progress-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-        }
-
-        .gs-progress-track {
-            width: 100%;
-            height: 8px;
-            border-radius: 999px;
-            background: var(--bg-secondary);
-            overflow: hidden;
-            border: 1px solid var(--border-color);
-        }
-
-        .gs-progress-bar {
-            width: 0%;
-            height: 100%;
-            border-radius: inherit;
-            background: var(--color-blue);
-            transition: width 0.2s ease;
-        }
-
-        .gs-readiness-summary {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.34rem;
-        }
-
-        .gs-readiness-chip {
-            border: 1px solid var(--border-color);
-            border-radius: 999px;
-            padding: 0.22rem 0.5rem;
-            font-size: 0.74rem;
-            color: var(--text-secondary);
-            background: var(--bg-card);
-        }
-
-        .gs-readiness-list {
-            margin: 0;
-            padding: 0;
-            list-style: none;
-            display: grid;
-            gap: 0.38rem;
-            max-height: 300px;
-            overflow: auto;
-        }
-
-        .gs-readiness-item {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            padding: 0.52rem 0.58rem;
-            background: var(--bg-card);
-        }
-
-        .gs-readiness-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-        }
-
-        .gs-readiness-label {
-            font-size: 0.83rem;
-            color: var(--text-primary);
-            font-weight: 650;
-            word-break: break-word;
-        }
-
-        .gs-readiness-state {
-            font-size: 0.69rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-secondary);
-            white-space: nowrap;
-        }
-
-        .gs-readiness-message {
-            margin: 0.28rem 0 0;
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            line-height: 1.45;
-        }
-
-        .gs-links {
-            margin-top: 0.65rem;
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.5rem;
-        }
-
-        .gs-links .btn {
-            width: 100%;
-            justify-content: center;
-        }
-
-        .gs-side-stack {
-            display: grid;
-            gap: 0.55rem;
-        }
-
-        .gs-side-item {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-            padding: 0.65rem 0.72rem;
-            color: var(--text-secondary);
-            font-size: 0.86rem;
-            line-height: 1.55;
-        }
-
-        .gs-side-item strong {
-            display: block;
-            color: var(--text-primary);
-            margin-bottom: 0.26rem;
+        .docs-nav-title {
             font-size: 0.75rem;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.12em;
+            color: var(--docs-accent);
+            filter: brightness(1.2);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            padding-left: 0.8rem;
+            opacity: 0.9;
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
         }
 
-        @media (max-width: 960px) {
-            .gs-layout {
-                grid-template-columns: 1fr;
+        .docs-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            cursor: pointer;
+            margin-bottom: 4px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid transparent;
+        }
+
+        .docs-nav-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .docs-nav-item.active {
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), transparent);
+            color: var(--docs-accent);
+            font-weight: 600;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+        }
+
+        .docs-nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 10%;
+            height: 80%;
+            width: 3px;
+            background: var(--docs-accent);
+            border-radius: 0 4px 4px 0;
+            box-shadow: 0 0 8px var(--docs-accent);
+        }
+
+        .docs-nav-item i {
+            width: 20px;
+            text-align: center;
+            opacity: 0.8;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+            font-style: normal;
+            display: inline-block;
+            filter: grayscale(1) opacity(0.7);
+        }
+
+        .docs-nav-item:hover i {
+            transform: scale(1.15) rotate(5deg);
+            opacity: 1;
+            filter: none;
+        }
+
+        .docs-nav-item.active i {
+            opacity: 1;
+            transform: scale(1.15);
+            filter: none;
+        }
+
+        .docs-content {
+            background: rgba(22, 22, 26, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            padding: 4rem;
+            min-height: 600px;
+            position: relative;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .docs-section {
+            display: none;
+            animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .docs-section.active {
+            display: block;
+        }
+
+        .docs-breadcrumbs {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .breadcrumb-sep {
+            font-size: 0.8rem;
+            opacity: 0.4;
+        }
+
+        .breadcrumb-active {
+            color: var(--docs-accent);
+            font-weight: 600;
+        }
+
+        .docs-header {
+            margin-bottom: 3rem;
+        }
+
+        .docs-header h1 {
+            font-size: 2.75rem;
+            margin: 0 0 1rem 0;
+            color: var(--text-primary);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            background: linear-gradient(to bottom right, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .docs-header p {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin: 0;
+            line-height: 1.6;
+            max-width: 800px;
+        }
+
+        .docs-block {
+            margin-bottom: 3.5rem;
+        }
+
+        .docs-block h2 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            scroll-margin-top: 120px;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .docs-anchor {
+            opacity: 0;
+            color: var(--text-muted);
+            font-size: 1rem;
+            transition: opacity 0.2s;
+            text-decoration: none;
+        }
+
+        .docs-block h2:hover .docs-anchor {
+            opacity: 0.5;
+        }
+
+        .docs-anchor:hover {
+            opacity: 1 !important;
+            color: var(--docs-accent);
+        }
+
+        .docs-block h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            margin-top: 2.5rem;
+            letter-spacing: -0.01em;
+        }
+
+        .docs-block p {
+            line-height: 1.8;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            max-width: 75ch;
+        }
+
+        .docs-block ul,
+        .docs-block ol {
+            margin-left: 1.5rem;
+            margin-bottom: 2rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        .docs-block li {
+            margin-bottom: 0.75rem;
+            position: relative;
+        }
+
+        .docs-block li::marker {
+            color: var(--docs-accent);
+        }
+
+        .code-wrapper {
+            position: relative;
+            margin: 2rem 0;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            background: #0d1117;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1.25rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'Consolas', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+        }
+
+        .code-block {
+            padding: 1.5rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.95rem;
+            color: #c9d1d9;
+            overflow-x: auto;
+            margin: 0;
+            white-space: pre;
+            line-height: 1.6;
+        }
+
+        .quick-links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 3rem 0;
+        }
+
+        .quick-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .quick-card:hover {
+            border-color: var(--docs-accent);
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.04);
+            box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.3);
+        }
+
+        .quick-card:active {
+            transform: translateY(-2px);
+        }
+
+        .quick-card-icon {
+            width: 54px;
+            height: 54px;
+            background: var(--bg-primary);
+            color: var(--docs-accent);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .quick-card:hover .quick-card-icon {
+            transform: scale(1.1) rotate(-5deg);
+            background: var(--docs-accent);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+        }
+
+
+        .quick-card h4 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .quick-card p {
+            margin: 0;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .docs-feedback {
+            margin-top: 5rem;
+            padding-top: 3rem;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .docs-feedback p {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .feedback-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        .btn-feedback {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.6rem 1.5rem;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .btn-feedback:hover {
+            border-color: var(--text-primary);
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+        }
+
+        .btn-feedback.active {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--docs-accent);
+            border-color: var(--docs-accent);
+        }
+
+        .btn-feedback.active i {
+            animation: bounce 0.4s;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: scale(1);
             }
 
-            .gs-side-card {
-                position: static;
-            }
-
-            .gs-links {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .gs-mini-kpis {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-
-            .gs-stage-rail {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+            50% {
+                transform: scale(1.3);
             }
         }
 
-        @media (max-width: 720px) {
-            .gs-hero {
-                padding: 1.05rem;
-            }
-
-            .gs-hero h1 {
-                font-size: 1.45rem;
-            }
-
-            .gs-card {
-                padding: 0.9rem;
-            }
-
-            .gs-links {
+        @media (max-width: 900px) {
+            .docs-container {
                 grid-template-columns: 1fr;
             }
 
-            .gs-mini-kpis {
-                grid-template-columns: 1fr;
+            .docs-sidebar {
+                position: relative;
+                top: 0;
+                margin-bottom: 2rem;
+                max-height: none;
+                border: 1px solid var(--border-color);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
             }
 
-            .gs-stage-rail {
-                grid-template-columns: 1fr;
-            }
-
-            .gs-stage-top {
-                align-items: flex-start;
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
         }
     </style>
@@ -556,12 +571,12 @@
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo">🚀 Getting Started</div>
+            <div class="logo"><span id="PanelEmoji">📘</span> Documentation</div>
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
                 <a href="/admin" class="nav-link" id="adminLink">Admin</a>
-                <a href="/owner" class="nav-link" id="ownerLink">Owner</a>
+                <a href="/owner" class="nav-link" id="ownerNavLink">Owner</a>
             </nav>
             <div class="user-info">
                 <div class="user-dropdown">
@@ -589,163 +604,427 @@
         </div>
     </header>
 
-    <main class="container getting-started-wrap">
-        <section class="gs-hero">
-            <p class="gs-eyebrow">Getting Started</p>
-            <h1>Minimal Launch Guide</h1>
-            <p class="gs-hero-subtitle">This page keeps setup simple: complete the quick start checklist, run the Config
-                Readiness Check, and then continue to the dashboard once everything passes.</p>
-            <div class="gs-pill-row">
-                <span class="gs-pill">~10–15 min</span>
-                <span class="gs-pill">Owner/Admin</span>
-                <span class="gs-pill">Config + Security First</span>
-            </div>
-        </section>
-
-        <div class="gs-layout">
-            <section class="gs-card gs-main-card">
-                <div class="gs-section-head">
-                    <h2 class="gs-section-title">Quick Start Checklist</h2>
-                    <span class="gs-section-meta">4 Stages</span>
-                </div>
-                <p class="gs-copy">Complete these before opening access to your full team.</p>
-                <div class="gs-mini-kpis" aria-label="Checklist Overview">
-                    <div class="gs-mini-kpi">
-                        <strong>Estimated Time</strong>
-                        <span>10–15 min</span>
-                    </div>
-                    <div class="gs-mini-kpi">
-                        <strong>Minimum Role</strong>
-                        <span>Admin / Owner</span>
-                    </div>
-                    <div class="gs-mini-kpi">
-                        <strong>Goal</strong>
-                        <span>Ready for controlled go-live</span>
-                    </div>
-                </div>
-                <div class="gs-stage-rail" aria-label="Checklist Stages">
-                    <span class="gs-stage-chip">1. Prep</span>
-                    <span class="gs-stage-chip">2. Access</span>
-                    <span class="gs-stage-chip">3. Security</span>
-                    <span class="gs-stage-chip">4. Validate</span>
-                </div>
-                <ul class="gs-list gs-list-advanced">
-                    <li>
-                        <div class="gs-stage-top">
-                            <div class="gs-stage-left">
-                                <span class="gs-stage-number">1</span>
-                                <span class="gs-list-title">Environment Prep</span>
-                            </div>
-                            <span class="gs-impact">Medium Impact</span>
-                        </div>
-                        Confirm bot token, panel secrets, and database credentials are present and non-placeholder.
-                        <ul class="gs-checkpoints">
-                            <li>Validate Config credentials keys are set for this environment.</li>
-                            <li>Ensure required JSON config files parse and contain expected IDs.</li>
-                        </ul>
-                    </li>
-                    <li>
-                        <div class="gs-stage-top">
-                            <div class="gs-stage-left">
-                                <span class="gs-stage-number">2</span>
-                                <span class="gs-list-title">Access & Routing</span>
-                            </div>
-                            <span class="gs-impact">High Impact</span>
-                        </div>
-                        Verify role visibility and permission boundaries before onboarding moderators.
-                        <ul class="gs-checkpoints">
-                            <li>Confirm owner/admin/moderator routes display correctly by role.</li>
-                            <li>Confirm unauthorized accounts are blocked from gated pages.</li>
-                        </ul>
-                    </li>
-                    <li>
-                        <div class="gs-stage-top">
-                            <div class="gs-stage-left">
-                                <span class="gs-stage-number">3</span>
-                                <span class="gs-list-title">Security Baseline</span>
-                            </div>
-                            <span class="gs-impact">High Impact</span>
-                        </div>
-                        Lock down privileged operations so incident recovery is reliable.
-                        <ul class="gs-checkpoints">
-                            <li>Enable 2FA for privileged panel accounts and store recovery codes safely.</li>
-                            <li>Review active sessions and revoke unknown or stale sessions.</li>
-                        </ul>
-                    </li>
-                    <li>
-                        <div class="gs-stage-top">
-                            <div class="gs-stage-left">
-                                <span class="gs-stage-number">4</span>
-                                <span class="gs-list-title">Operational Validation</span>
-                            </div>
-                            <span class="gs-impact">High Impact</span>
-                        </div>
-                        Run readiness + one live workflow to confirm auditability.
-                        <ul class="gs-checkpoints">
-                            <li>Run the Config Readiness Check and clear all fail states.</li>
-                            <li>Execute one moderation action and verify logging shows actor, target, and reason.</li>
-                        </ul>
-                    </li>
-                </ul>
-
-                <div class="gs-readiness-shell" id="gsReadinessShell">
-                    <div class="gs-readiness-head">
-                        <h3 class="gs-readiness-title">Config Readiness Check</h3>
-                        <span class="gs-readiness-tag">Live Scan</span>
-                    </div>
-                    <div class="gs-readiness-actions">
-                        <p class="gs-readiness-hint" id="gsReadinessHint">No scan yet. Click Run Check to begin.</p>
-                        <button class="btn btn-primary" id="gsConfigReadinessRun" type="button">Run Check</button>
-                    </div>
-
-                    <div class="gs-progress-wrap" id="gsReadinessProgressWrap">
-                        <div class="gs-progress-header">
-                            <span id="gsReadinessProgressLabel">Waiting</span>
-                            <strong id="gsReadinessProgressValue">0%</strong>
-                        </div>
-                        <div class="gs-progress-track" aria-hidden="true">
-                            <div class="gs-progress-bar" id="gsReadinessProgressBar"></div>
-                        </div>
-                    </div>
-
-                    <div class="gs-readiness-summary" id="gsReadinessSummary">
-                        <span class="gs-readiness-chip">Score: —</span>
-                        <span class="gs-readiness-chip">Pass: —</span>
-                        <span class="gs-readiness-chip">Warn: —</span>
-                        <span class="gs-readiness-chip">Fail: —</span>
-                    </div>
-
-                    <ul class="gs-readiness-list" id="gsReadinessList">
-                        <li class="gs-readiness-item">
-                            <div class="gs-readiness-top">
-                                <span class="gs-readiness-label">Readiness output appears here</span>
-                                <span class="gs-readiness-state">idle</span>
-                            </div>
-                            <p class="gs-readiness-message">The scanner checks Config files and reports actionable
-                                pass/warn/fail results.</p>
-                        </li>
-                    </ul>
-                </div>
-            </section>
-
-            <aside class="gs-card gs-side-card">
-                <h2 class="gs-section-title">Need Help?</h2>
-                <p class="gs-copy">If readiness fails, focus on missing credentials, invalid JSON, and incorrect
-                    channel/role IDs first.</p>
-                <div class="gs-side-stack">
-                    <div class="gs-side-item"><strong>Most common blocker</strong>Missing or malformed values in
-                        `Config/credentials.env`.</div>
-                    <div class="gs-side-item"><strong>Fast recovery</strong>Fix failed checks, rerun scanner, then test
-                        one moderation command.</div>
+    <main class="container">
+        <div class="docs-container">
+            <aside class="docs-sidebar">
+                <div class="docs-search">
+                    <span class="docs-search-icon">🔍</span>
+                    <input type="text" class="docs-search-input" placeholder="Search documentation..." id="docsSearch"
+                        onkeyup="filterDocs()">
                 </div>
 
-                <div class="gs-links">
-                    <a href="/dashboard" class="btn btn-secondary">Dashboard</a>
-                    <a href="/features" class="btn btn-secondary">Features</a>
-                    <a href="/faq" class="btn btn-secondary">FAQ</a>
-                    <a href="/changelog" class="btn btn-secondary">Changelog</a>
+                <div class="docs-nav-group">
+                    <div class="docs-nav-title">Introduction</div>
+                    <a class="docs-nav-item active" onclick="showSection('overview', this)">
+                        <i>📋</i> Overview
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('installation', this)">
+                        <i>🚀</i> Installation
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('configuration', this)">
+                        <i>⚙️</i> Configuration
+                    </a>
+                </div>
+
+                <div class="docs-nav-group">
+                    <div class="docs-nav-title">Core Features</div>
+                    <a class="docs-nav-item" onclick="showSection('moderation', this)">
+                        <i>🛡️</i> Moderation
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('automod', this)">
+                        <i>🤖</i> AutoMod
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('leveling', this)">
+                        <i>⭐</i> Leveling & XP
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('tickets', this)">
+                        <i>🎫</i> Ticket System
+                    </a>
+                </div>
+
+                <div class="docs-nav-group">
+                    <div class="docs-nav-title">Advanced</div>
+                    <a class="docs-nav-item" onclick="showSection('permissions', this)">
+                        <i>🔐</i> Permissions
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('api', this)">
+                        <i>💻</i> Admin API
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('troubleshooting', this)">
+                        <i>🔧</i> Troubleshooting
+                    </a>
                 </div>
             </aside>
+
+            <div class="docs-content">
+                <div class="docs-breadcrumbs">
+                    <span>Docs</span>
+                    <span class="breadcrumb-sep">/</span>
+                    <span id="breadcrumbCurrent" class="breadcrumb-active">Overview</span>
+                </div>
+
+                <div id="overview" class="docs-section active">
+                    <div class="docs-header">
+                        <h1>Hi! Welcome to Sentinel.</h1>
+                        <p>This is your personal guide to setting up and running your own private discord bot.</p>
+                    </div>
+
+                    <div class="quick-links-grid">
+                        <a onclick="showSection('installation', findNavLink('installation'))" class="quick-card">
+                            <div class="quick-card-icon">🚀</div>
+                            <h4>Get Started</h4>
+                            <p>Jump right into the installation steps.</p>
+                        </a>
+                        <a onclick="showSection('configuration', findNavLink('configuration'))" class="quick-card">
+                            <div class="quick-card-icon">⚙️</div>
+                            <h4>Config</h4>
+                            <p>Learn how to tweak the settings.</p>
+                        </a>
+                        <a onclick="showSection('api', findNavLink('api'))" class="quick-card">
+                            <div class="quick-card-icon">💻</div>
+                            <h4>For Developers</h4>
+                            <p>Check out the API docs.</p>
+                        </a>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>What is this? <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Sentinel is a Discord bot that you host yourself. Unlike those big public bots that are in
+                            millions of servers, Sentinel is designed to live in <strong>just one place</strong>: your
+                            server.</p>
+                        <p>Because it's private, you don't have to share resources with anyone else. It's faster, more
+                            secure, and you have complete control over every single piece of data it handles.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Why self-host? <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Running your own bot might seem like extra work, but it pays off:</p>
+                        <ul>
+                            <li><strong>It's YOURS:</strong> You own the code, the data, and the database. No more
+                                worrying about a public bot going down or selling your data.</li>
+                            <li><strong>Zero Latency:</strong> Since it only serves your community, it responds
+                                instantly.</li>
+                            <li><strong>Custom Fit:</strong> Features are built specifically for the way a single
+                                community operates, rather than trying to please everyone.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>What can it do? <a href="#" class="docs-anchor">#</a></h2>
+                        <ul>
+                            <li><strong>Keep things safe:</strong> Tools to warn, mute, and ban troublemakers.</li>
+                            <li><strong>Stop spam:</strong> Auto-filters for bad words, caps, and spamming.</li>
+                            <li><strong>Help your members:</strong> A private ticket system for support.</li>
+                            <li><strong>Fun stuff:</strong> XP and leveling to keep chat active.</li>
+                            <li><strong>Easy management:</strong> This dashboard you're looking at right now!</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="installation" class="docs-section">
+                    <div class="docs-header">
+                        <h1>How do I install it?</h1>
+                        <p>Setting up your private bot is easier than you think.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Prerequisites <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Before we start, make sure you have these things ready:</p>
+                        <ul>
+                            <li><strong>Node.js v16+</strong>: This is the engine that runs javascript. If you don't
+                                have it, google "Install Node.js".</li>
+                            <li><strong>A Discord Application</strong>: Go to the <a
+                                    href="https://discord.com/developers" target="_blank"
+                                    style="color:var(--docs-accent);">Discord Developer Portal</a> and make a new
+                                application. That's your bot!</li>
+                            <li><strong>MySQL Database:</strong> You'll need a database to store levels and warnings.
+                                Setting up XAMPP or installing MySQL server is usually the easiest way.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Setup Steps <a href="#" class="docs-anchor">#</a></h2>
+                        <ol>
+                            <li>Download the code and unzip it somewhere safe.</li>
+                            <li>Open a terminal in that folder and install the dependencies:</li>
+                        </ol>
+
+                        <div class="code-wrapper">
+                            <div class="code-header">
+                                <span>TERMINAL</span>
+                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                            </div>
+                            <div class="code-block">npm install</div>
+                        </div>
+
+                        <ol start="3">
+                            <li>Now, let's create the database tables automatically:</li>
+                        </ol>
+
+                        <div class="code-wrapper">
+                            <div class="code-header">
+                                <span>TERMINAL</span>
+                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                            </div>
+                            <div class="code-block">npm run setup</div>
+                        </div>
+
+                        <ol start="4">
+                            <li>Fill in your secrets (Token, DB password) in <span
+                                    class="inline-code">Config/credentials.env</span>.</li>
+                            <li>Start the bot!</li>
+                        </ol>
+
+                        <div class="code-wrapper">
+                            <div class="code-header">
+                                <span>TERMINAL</span>
+                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                            </div>
+                            <div class="code-block">npm start</div>
+                        </div>
+
+                        <div class="info-box">
+                            <div class="info-box-icon">💡</div>
+                            <div class="info-content">
+                                <span class="info-box-title">Pro Tip</span>
+                                If you're running this on a VPS or server, use something like <strong>PM2</strong> so it
+                                restarts if it crashes.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="configuration" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Configuring your Bot</h1>
+                        <p>Making sure Sentinel knows where its home is.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>The Important Secrets <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Open up <span class="inline-code">Config/credentials.env</span>. This is where the magic keys
+                            live. <br><strong>Do not share this file with anyone!</strong> It contains your bot token
+                            and database passwords.</p>
+
+                        <div class="code-wrapper">
+                            <div class="code-header">
+                                <span>CONFIG/CREDENTIALS.ENV</span>
+                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                            </div>
+                            <div class="code-block"><span class="hl-keyword">DISCORD_TOKEN</span>=<span
+                                    class="hl-string">put_your_bot_token_here</span>
+                                <span class="hl-keyword">MYSQL_HOST</span>=<span class="hl-string">localhost</span>
+                                <span class="hl-keyword">MYSQL_USER</span>=<span class="hl-string">root</span>
+                                <span class="hl-keyword">MYSQL_PASSWORD</span>=<span
+                                    class="hl-string">your_db_password</span>
+                                <span class="hl-keyword">MYSQL_DATABASE</span>=<span
+                                    class="hl-string">discord_bot</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>General Settings <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Next, check <span class="inline-code">Config/main.json</span>. This is where you tell the bot
+                            which server it belongs to. Since Sentinel is private, it needs to know your <strong>Server
+                                ID</strong> (Guild ID) so it can ignore commands from anywhere else.</p>
+
+                        <div class="code-wrapper">
+                            <div class="code-header">
+                                <span>CONFIG/MAIN.JSON</span>
+                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                            </div>
+                            <div class="code-block">{
+                                <span class="hl-keyword">"serverID"</span>: <span
+                                    class="hl-string">"YOUR_SERVER_ID_GOES_HERE"</span>,
+                                <span class="hl-keyword">"OwnerID"</span>: <span
+                                    class="hl-string">"YOUR_PERSONAL_ID"</span>,
+                                <span class="hl-keyword">"botName"</span>: <span class="hl-string">"My Awesome
+                                    Bot"</span>,
+                                <span class="hl-keyword">"PanelEmoji"</span>: <span class="hl-string">"🛡️"</span>
+                                }
+                            </div>
+                        </div>
+
+                        <ul>
+                            <li><span class="inline-code">serverID</span>: Right-click your server icon and click "Copy
+                                ID". Paste it here.</li>
+                            <li><span class="inline-code">OwnerID</span>: Right-click your own profile and copy your ID.
+                                This gives you full admin access to the dashboard.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="moderation" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Moderation Tools</h1>
+                        <p>Keeping your server clean and friendly.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>The Basics <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Most of the time, you'll be using these simple slash commands to manage users:</p>
+                        <ul>
+                            <li><span class="inline-code">/warn @user [reason]</span>: Adds a warning to their record.
+                            </li>
+                            <li><span class="inline-code">/mute @user [duration] [reason]</span>: Time-out a user so
+                                they can't type.</li>
+                            <li><span class="inline-code">/kick @user [reason]</span>: Kick them out (they can rejoin).
+                            </li>
+                            <li><span class="inline-code">/ban @user [reason]</span>: Ban them permanently.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Tracking Cases <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Sentinel remembers everything. Every time you warn or ban someone, it creates a <strong>Case
+                                ID</strong>. You can look these up later if you forget why someone was banned, or if
+                            they appeal.</p>
+
+                        <div class="code-wrapper">
+                            <div class="code-header">
+                                <span>COMMANDS</span>
+                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                            </div>
+                            <div class="code-block">/case view [case_id]</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="automod" class="docs-section">
+                    <div class="docs-header">
+                        <h1>AutoMod</h1>
+                        <p>Let the bot do the heavy lifting.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Protection Profiles <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Different days call for different rules. You can set up profiles like "relaxed" or
+                            "strict". If a raid happens, you can switch to "strict" instantly from the panel to stop
+                            the chaos.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>What it filters <a href="#" class="docs-anchor">#</a></h2>
+                        <ul>
+                            <li><strong>Spammers:</strong> People sending messages too fast.</li>
+                            <li><strong>YELLING:</strong> Blocks messages with too many CAPS.</li>
+                            <li><strong>Bad Language:</strong> Automatically deletes words you've blacklisted.</li>
+                            <li><strong>Invite Links:</strong> Stops people from advertising other servers.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="leveling" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Leveling System</h1>
+                        <p>Give your active members some shine.</p>
+                    </div>
+                    <div class="docs-block">
+                        <p>People love seeing numbers go up. Users earn XP just by chatting. You can control how fast
+                            they level up and add a cooldown so people don't spam just for points.</p>
+                        <h3>Rewards</h3>
+                        <p>You can set it up so users automatically get a cool role (like "Regular" or "Veteran") when
+                            they hit a certain level. Check <span class="inline-code">Config/leveling.json</span> to set
+                            the rewards.</p>
+                    </div>
+                </div>
+
+                <div id="tickets" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Ticket System</h1>
+                        <p>Private support channels for your members.</p>
+                    </div>
+                    <div class="docs-block">
+                        <p>Sometimes users need to talk to staff privately. Instead of messy DMs, they can open a
+                            ticket. Sentinel creates a private channel just for them and the staff team.</p>
+                        <h3>Cool Features</h3>
+                        <ul>
+                            <li><strong>Transcripts:</strong> When you close a ticket, Sentinel saves a pretty HTML file
+                                of the whole conversation, just in case you need it later.</li>
+                            <li><strong>Categories:</strong> You can have different types of tickets, ranging from
+                                "Low", "Medium", to "High", depending on how important the user thinks the issue is.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+
+                <div id="permissions" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Who can do what?</h1>
+                        <p>Understanding the roles for this dashboard.</p>
+                    </div>
+                    <div class="docs-block">
+                        <ul>
+                            <li><strong>Owner:</strong> That's you. You can do literally everything.</li>
+                            <li><strong>Admin:</strong> Your right-hand people. They can change settings and ban people.
+                            </li>
+                            <li><strong>Moderator:</strong> The enforcers. They can warn, mute, and handle tickets, but
+                                they can't break the bot settings.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="api" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Developer API</h1>
+                        <p>For when you want to build cool integrations.</p>
+                    </div>
+                    <div class="docs-block">
+                        <p>Only mess with the api's if you know what youre doing, be careful!</p>
+                        <div class="info-box warning">
+                            <div class="info-box-icon">⚠️</div>
+                            <div class="info-content">
+                                <span class="info-box-title">Heads Up</span>
+                                This API is mostly for the dashboard itself, so it might change without warning. Use at
+                                your own risk!
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="troubleshooting" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Help! It's broken!</h1>
+                        <p>Common problems and how to fix them.</p>
+                    </div>
+                    <div class="docs-block">
+                        <h2>The Big One <a href="#" class="docs-anchor">#</a></h2>
+                        <div class="info-box warning">
+                            <div class="info-box-icon">⚠️</div>
+                            <div class="info-content">
+                                <span class="info-box-title">Remember</span>
+                                Sentinel is a <strong>private bot</strong>. It only works in the server ID you put in
+                                the config. If you invite it to a second server, it will just sit there and ignore
+                                everyone.
+                            </div>
+                        </div>
+
+                        <h3>It's online, but ignoring me? <a href="#" class="docs-anchor">#</a></h3>
+                        <p>If the console says "Bot is ready!" but commands aren't working:</p>
+                        <ul>
+                            <li><strong>Check Intents:</strong> Did you enable "Privileged Intents" (the toggles) in the
+                                Discord Developer Portal? You need those.</li>
+                            <li><strong>Check Roles:</strong> Is the bot's role <em>above</em> the person you're trying
+                                to ban? It can't moderate people higher than itself.</li>
+                        </ul>
+
+                        <h3>Where are my slash commands? <a href="#" class="docs-anchor">#</a></h3>
+                        <p>Sometimes Discord takes a minute. Since Sentinel registers commands instantly to your
+                            specific guild ID, they should be there. Try restarting the bot. If that fails, kick the bot
+                            and re-invite it.</p>
+                    </div>
+                </div>
+
+                <div class="docs-feedback">
+                    <p>Was this page helpful?</p>
+                    <div class="feedback-buttons">
+                        <button class="btn-feedback" onclick="submitFeedback(true)">👍 Yes</button>
+                        <button class="btn-feedback" onclick="submitFeedback(false)">👎 No</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -761,11 +1040,186 @@
         </div>
     </footer>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/public/notifications.js" defer></script>
     <script src="/public/shared.js"></script>
-    <script src="/public/getting-started.js" defer></script>
     <script src="/public/version.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof initPage === 'function') initPage();
+
+            const hash = window.location.hash.substring(1);
+            if (hash) {
+                const section = document.getElementById(hash);
+                if (section && section.classList.contains('docs-section')) {
+                    const navLink = findNavLink(hash);
+                    showSection(hash, navLink);
+                }
+            } else {
+                const navLink = findNavLink('overview');
+                showSection('overview', navLink);
+            }
+        });
+
+        function findNavLink(sectionId) {
+            const links = document.querySelectorAll('.docs-nav-item');
+            for (let link of links) {
+                if (link.getAttribute('onclick') && link.getAttribute('onclick').includes(`'${sectionId}'`)) {
+                    return link;
+                }
+            }
+            return null;
+        }
+
+        function showSection(sectionId, navElement) {
+            document.querySelectorAll('.docs-section').forEach(el => {
+                el.classList.remove('active');
+                el.style.animation = 'none';
+                el.offsetHeight;
+                el.style.animation = null;
+            });
+
+            const target = document.getElementById(sectionId);
+            if (target) {
+                target.classList.add('active');
+                window.location.hash = sectionId;
+
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            document.querySelectorAll('.docs-nav-item').forEach(el => el.classList.remove('active'));
+            if (navElement) {
+                navElement.classList.add('active');
+
+                const breadcrumbTitle = document.getElementById('breadcrumbCurrent');
+                if (breadcrumbTitle) {
+                    breadcrumbTitle.textContent = navElement.textContent.trim();
+                }
+            }
+        }
+
+        function filterDocs() {
+            const input = document.getElementById('docsSearch');
+            const filter = input.value.toUpperCase();
+            const navGroups = document.querySelectorAll('.docs-nav-group');
+
+            navGroups.forEach(group => {
+                const items = group.querySelectorAll('.docs-nav-item');
+                let hasVisibleItems = false;
+
+                items.forEach(item => {
+                    const txtValue = item.textContent || item.innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        item.style.display = "";
+                        hasVisibleItems = true;
+                    } else {
+                        item.style.display = "none";
+                    }
+                });
+
+                const title = group.querySelector('.docs-nav-title');
+                if (title) {
+                    title.style.display = hasVisibleItems ? "" : "none";
+                }
+            });
+        }
+
+        function copyCode(btn) {
+            const wrapper = btn.closest('.code-wrapper');
+            const codeBlock = wrapper.querySelector('.code-block');
+            const text = codeBlock.innerText;
+
+            navigator.clipboard.writeText(text).then(() => {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '✅ Copied!';
+                btn.style.color = 'var(--color-green)';
+                btn.style.borderColor = 'var(--color-green)';
+
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.style.color = '';
+                    btn.style.borderColor = '';
+                }, 2000);
+            });
+        }
+
+        function submitFeedback(isPositive) {
+            const btns = document.querySelectorAll('.btn-feedback');
+            btns.forEach(b => b.classList.remove('active'));
+
+            const index = isPositive ? 0 : 1;
+            if (btns[index]) btns[index].classList.add('active');
+
+            if (typeof window.showToast === 'function') {
+                window.showToast('success', 'Thank You', 'Your feedback has been recorded.');
+            } else {
+                const feedbackContainer = document.querySelector('.docs-feedback');
+                const msg = document.createElement('div');
+                msg.textContent = "Thanks for your feedback!";
+                msg.style.color = "var(--color-green)";
+                msg.style.marginTop = "1rem";
+                msg.style.animation = "fadeIn 0.5s";
+
+                const oldMsg = feedbackContainer.querySelector('div[style*="color: var(--color-green)"]');
+                if (oldMsg) oldMsg.remove();
+
+                feedbackContainer.appendChild(msg);
+            }
+        }
+
+        async function initPage() {
+            try {
+                const res = await fetch("/api/account/info");
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const safeText = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = val;
+                };
+
+                safeText("headerUsername", data.username || "User");
+                safeText("headerRole", (data.role || "user").toUpperCase());
+                safeText("dropdownUsername", data.username || "User");
+                safeText("dropdownRole", (data.role || "user").toUpperCase());
+
+                const moderatorLink = document.getElementById("moderatorLink");
+                const adminLink = document.getElementById("adminLink");
+                const ownerNavLink = document.getElementById("ownerNavLink");
+                const analyticsLink = document.getElementById("analyticsLink");
+
+                const role = data.role || 'user';
+                const isMod = ["moderator", "admin", "owner"].includes(role);
+                const isAdmin = ["admin", "owner"].includes(role);
+                const isOwner = (role === "owner");
+
+                if (moderatorLink) moderatorLink.style.display = isMod ? "block" : "none";
+                if (adminLink) adminLink.style.display = isAdmin ? "block" : "none";
+                if (ownerNavLink) ownerNavLink.style.display = isOwner ? "block" : "none";
+                if (analyticsLink) analyticsLink.style.display = isOwner ? "block" : "none";
+
+            } catch (err) {
+                console.error("Failed to init page", err);
+            }
+        }
+
+        function toggleUserDropdown() {
+            const menu = document.getElementById("userDropdownMenu");
+            const trigger = document.querySelector(".user-dropdown-trigger");
+            if (menu) menu.classList.toggle("show");
+            if (trigger) trigger.classList.toggle("active");
+        }
+
+        document.addEventListener("click", function (event) {
+            const dropdown = document.querySelector(".user-dropdown");
+            if (dropdown && !dropdown.contains(event.target)) {
+                document.getElementById("userDropdownMenu")?.classList.remove("show");
+                document.querySelector(".user-dropdown-trigger")?.classList.remove("active");
+            }
+        });
+
+        function logout() {
+            window.location.href = "/logout";
+        }
+    </script>
 </body>
 
 </html>

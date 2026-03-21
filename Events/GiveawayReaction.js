@@ -1,7 +1,7 @@
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 
 // Tracks reactions on giveaway messages and records entries in the giveaway database.
-// React with 🎉 to enter — this adds the user to the persistent entries table.
+// React with 🎉 to enter - this adds the user to the persistent entries table.
 module.exports = {
     name: 'messageReactionAdd',
     disabled: true,
@@ -9,7 +9,7 @@ module.exports = {
     call: async (client, args) => {
         const [reaction, user] = args;
 
-        // Ignore bot reactions—they can't win giveaways!
+        // Ignore bot reactions-they can't win giveaways!
         if (user.bot) return;
 
         // If the reaction is partial, fetch the full data so we can work with it.

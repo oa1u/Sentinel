@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Appeals — view and process user appeals in a centralized workflow. -->
 <html lang="en">
 
 <head>
@@ -36,7 +35,7 @@
         }
 
         body {
-            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            background: var(--bg-primary);
             color: var(--color-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             min-height: 100vh;
@@ -48,7 +47,6 @@
             margin: 0 auto;
         }
 
-        /* Header Section */
         .header-section {
             text-align: center;
             margin-bottom: 3rem;
@@ -86,7 +84,6 @@
             color: var(--color-muted);
         }
 
-        /* Action Tabs */
         .action-tabs {
             display: flex;
             gap: 1rem;
@@ -138,7 +135,6 @@
             color: var(--color-muted);
         }
 
-        /* Content Panels */
         .content-panel {
             display: none;
             animation: fadeIn 0.4s ease;
@@ -160,7 +156,6 @@
             }
         }
 
-        /* Card Container */
         .card-grid {
             display: grid;
             grid-template-columns: 1fr 350px;
@@ -192,7 +187,6 @@
             top: 2rem;
         }
 
-        /* Progress Wizard */
         .wizard-progress {
             display: flex;
             justify-content: space-between;
@@ -257,7 +251,6 @@
             font-weight: 600;
         }
 
-        /* Form Styling */
         .form-section {
             display: none;
         }
@@ -370,7 +363,6 @@
             color: var(--color-red);
         }
 
-        /* Quality Analyzer */
         .quality-analyzer {
             background: var(--bg-tertiary);
             border: 1px solid var(--color-border);
@@ -438,7 +430,6 @@
             font-size: 1rem;
         }
 
-        /* Navigation Buttons */
         .form-nav {
             display: flex;
             gap: 1rem;
@@ -501,7 +492,6 @@
             box-shadow: 0 5px 15px rgba(34, 197, 94, 0.3);
         }
 
-        /* Sidebar Sections */
         .sidebar-section {
             margin-bottom: 1.5rem;
         }
@@ -564,7 +554,6 @@
             line-height: 1.6;
         }
 
-        /* Messages */
         .message {
             padding: 1.25rem;
             border-radius: 0.5rem;
@@ -615,7 +604,6 @@
             color: var(--color-blue);
         }
 
-        /* Status Checker Results */
         .status-result {
             background: var(--bg-tertiary);
             border: 1px solid var(--color-border);
@@ -678,7 +666,6 @@
             font-weight: 500;
         }
 
-        /* Appeal History */
         .history-list {
             display: flex;
             flex-direction: column;
@@ -727,7 +714,6 @@
             color: var(--color-muted);
         }
 
-        /* Loading Spinner */
         .loading {
             display: none;
             text-align: center;
@@ -861,7 +847,6 @@
             line-height: 1.6;
         }
 
-        /* Responsive */
         @media (max-width: 768px) {
             body {
                 padding: 1rem 0.5rem;
@@ -909,14 +894,12 @@
 
 <body>
     <div class="main-container">
-        <!-- Header -->
         <div class="header-section">
             <div class="header-logo">⚖️</div>
             <h1 class="header-title">Advanced Ban Appeal System</h1>
             <p class="header-subtitle">Submit appeals, check status, and view your appeal history</p>
         </div>
 
-        <!-- Action Tabs -->
         <div class="action-tabs">
             <div class="action-tab active" onclick="switchPanel('submit', event)">
                 <div class="action-tab-icon">📝</div>
@@ -941,11 +924,9 @@
             </div>
         </div>
 
-        <!-- Submit Appeal Panel -->
         <div id="submitPanel" class="content-panel active">
             <div class="card-grid">
                 <div class="main-card">
-                    <!-- Progress Wizard -->
                     <div class="wizard-progress">
                         <div class="wizard-step active" data-step="1">
                             <div class="wizard-step-circle">1</div>
@@ -965,14 +946,13 @@
                         </div>
                     </div>
 
-                    <!-- Messages -->
                     <div id="successMessage" class="message success">
                         <span style="font-size: 1.5rem;">✅</span>
                         <span id="successText">Your appeal has been submitted successfully!</span>
                     </div>
 
                     <div id="errorMessage" class="message error">
-                        <span style="font-size: 1.5rem;">❌</span>
+                        <span style="font-size: 1.5rem;">-</span>
                         <span id="errorText">An error occurred. Please try again.</span>
                     </div>
 
@@ -981,7 +961,6 @@
                         <span id="warningText">You already have a pending appeal.</span>
                     </div>
 
-                    <!-- Form Step 1: Account Info -->
                     <div class="form-section active" data-step="1">
                         <h2 class="form-section-title">
                             <span>👤</span>
@@ -1035,7 +1014,6 @@
                         </div>
                     </div>
 
-                    <!-- Form Step 2: Ban Details -->
                     <div class="form-section" data-step="2">
                         <h2 class="form-section-title">
                             <span>🚫</span>
@@ -1074,7 +1052,6 @@
                         </div>
                     </div>
 
-                    <!-- Form Step 3: Appeal Reason -->
                     <div class="form-section" data-step="3">
                         <h2 class="form-section-title">
                             <span>✍️</span>
@@ -1101,7 +1078,6 @@
                             <div id="reasonValidation" class="form-validation"></div>
                         </div>
 
-                        <!-- Quality Analyzer -->
                         <div class="quality-analyzer" id="qualityAnalyzer" style="display: none;">
                             <div class="quality-header">
                                 <div class="quality-title">
@@ -1150,7 +1126,6 @@
                         </div>
                     </div>
 
-                    <!-- Form Step 4: Review & Submit -->
                     <div class="form-section" data-step="4">
                         <h2 class="form-section-title">
                             <span>✅</span>
@@ -1223,7 +1198,6 @@
                     </div>
                 </div>
 
-                <!-- Sidebar -->
                 <div class="sidebar-card">
                     <div class="sidebar-section">
                         <div class="sidebar-title">⏱️ Review Timeline</div>
@@ -1275,7 +1249,7 @@
                         <div class="sidebar-title">⚠️ Important Notes</div>
                         <div class="sidebar-list">
                             <div class="sidebar-item">
-                                <div class="sidebar-item-icon">❌</div>
+                                <div class="sidebar-item-icon">-</div>
                                 <div>Only one pending appeal allowed</div>
                             </div>
                             <div class="sidebar-item">
@@ -1292,7 +1266,6 @@
             </div>
         </div>
 
-        <!-- Check Status Panel -->
         <div id="statusPanel" class="content-panel">
             <div class="card-grid">
                 <div class="main-card">
@@ -1308,7 +1281,7 @@
                     </div>
 
                     <div id="statusErrorMessage" class="message error">
-                        <span style="font-size: 1.5rem;">❌</span>
+                        <span style="font-size: 1.5rem;">-</span>
                         <span id="statusErrorText">No appeal found.</span>
                     </div>
 
@@ -1339,7 +1312,6 @@
                         <p style="margin-top: 1rem; color: var(--color-muted);">Checking appeal status...</p>
                     </div>
 
-                    <!-- Status Result -->
                     <div id="statusResult" class="status-result">
                         <div id="statusBadge" class="status-badge pending">
                             <span>⏳</span>
@@ -1386,7 +1358,7 @@
                                 </div>
                             </div>
                             <div class="sidebar-item">
-                                <div class="sidebar-item-icon">❌</div>
+                                <div class="sidebar-item-icon">-</div>
                                 <div>
                                     <div style="font-weight: 500; color: var(--color-red);">Denied</div>
                                     <div style="font-size: 0.85rem; color: var(--color-muted);">Appeal rejected</div>
@@ -1406,7 +1378,6 @@
             </div>
         </div>
 
-        <!-- Appeal History Panel -->
         <div id="historyPanel" class="content-panel">
             <div class="card-grid">
                 <div class="main-card">
@@ -1417,7 +1388,7 @@
                     <p class="form-section-desc">View all appeals you've submitted from this account.</p>
 
                     <div id="historyErrorMessage" class="message error">
-                        <span style="font-size: 1.5rem;">❌</span>
+                        <span style="font-size: 1.5rem;">-</span>
                         <span id="historyErrorText">Failed to load history.</span>
                     </div>
 
@@ -1440,7 +1411,6 @@
                         <p style="margin-top: 1rem; color: var(--color-muted);">Loading your appeal history...</p>
                     </div>
 
-                    <!-- History Results -->
                     <div id="historyResults" style="display: none; margin-top: 2rem;">
                         <h3
                             style="font-size: 1.25rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -1488,7 +1458,6 @@
         </div>
     </div>
 
-    <!-- Rules Modal -->
     <div id="rulesModal" class="modal-overlay" onclick="closeRulesModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
             <div class="modal-header">
@@ -1518,7 +1487,6 @@
             requestSeq: 0
         };
 
-        // Get CSRF Token
         async function getAppealCsrfToken(forceRefresh = false) {
             if (appealCsrfToken && !forceRefresh) return appealCsrfToken;
             if (!window.AdminPanel?.api?.getCsrfToken) return '';
@@ -1534,52 +1502,41 @@
             return '';
         }
 
-        // Panel Switching
         function switchPanel(panel, event) {
-            // Update tabs
             document.querySelectorAll('.action-tab').forEach(tab => tab.classList.remove('active'));
             event?.currentTarget?.classList.add('active');
 
-            // Update panels
             document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
             document.getElementById(panel + 'Panel').classList.add('active');
 
-            // Reset messages
             hideAllMessages();
         }
 
-        // Step Navigation
         function nextStep(step) {
             if (step === 4) {
                 updateReview();
             }
 
-            // Hide current step
             document.querySelector(`.form-section[data-step="${currentStep}"]`).classList.remove('active');
             document.querySelector(`.wizard-step[data-step="${currentStep}"]`).classList.remove('active');
             document.querySelector(`.wizard-step[data-step="${currentStep}"]`).classList.add('completed');
 
-            // Show next step
             currentStep = step;
             document.querySelector(`.form-section[data-step="${step}"]`).classList.add('active');
             document.querySelector(`.wizard-step[data-step="${step}"]`).classList.add('active');
 
-            // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function prevStep(step) {
-            // Hide current step
             document.querySelector(`.form-section[data-step="${currentStep}"]`).classList.remove('active');
             document.querySelector(`.wizard-step[data-step="${currentStep}"]`).classList.remove('active');
 
-            // Show previous step
             currentStep = step;
             document.querySelector(`.form-section[data-step="${step}"]`).classList.add('active');
             document.querySelector(`.wizard-step[data-step="${step}"]`).classList.add('active');
             document.querySelector(`.wizard-step[data-step="${step}"]`).classList.remove('completed');
 
-            // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
@@ -1656,7 +1613,6 @@
             }, 300);
         }
 
-        // Validation Functions
         function validateStep(step) {
             if (step === 1) {
                 const userTag = document.getElementById('userTag').value.trim();
@@ -1665,7 +1621,6 @@
 
                 let valid = true;
 
-                // Validate username
                 if (userTag.length === 0) {
                     setValidation('userTag', null);
                     valid = false;
@@ -1676,7 +1631,6 @@
                     setValidation('userTag', true, 'Valid username');
                 }
 
-                // Validate user ID
                 if (userId.length === 0) {
                     setValidation('userId', null);
                     valid = false;
@@ -1687,7 +1641,6 @@
                     setValidation('userId', true, 'Valid User ID');
                 }
 
-                // Validate email (required)
                 if (email.length === 0) {
                     setValidation('email', null);
                     valid = false;
@@ -1775,11 +1728,10 @@
                 input.classList.remove('valid');
                 input.classList.add('invalid');
                 validation.className = 'form-validation error';
-                validation.innerHTML = `<span>✗</span><span>${message}</span>`;
+                validation.innerHTML = `<span>-</span><span>${message}</span>`;
             }
         }
 
-        // Appeal Quality Analyzer
         function analyzeAppealQuality() {
             const reasonInput = document.getElementById('reason');
             const reason = String(reasonInput?.value || '').trim();
@@ -1877,7 +1829,6 @@
             validateStep(3);
         }
 
-        // Update Review Step
         function updateReview() {
             document.getElementById('reviewUsername').textContent = document.getElementById('userTag').value.trim();
             document.getElementById('reviewUserId').textContent = document.getElementById('userId').value.trim();
@@ -1887,7 +1838,6 @@
             document.getElementById('reviewReason').textContent = document.getElementById('reason').value.trim();
         }
 
-        // Submit Appeal
         async function submitAppeal() {
             const userTag = document.getElementById('userTag').value.trim();
             const userId = document.getElementById('userId').value.trim();
@@ -1919,7 +1869,6 @@
                 return;
             }
 
-            // Show loading
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('loadingBox').classList.add('show');
 
@@ -1955,7 +1904,6 @@
                 }
 
                 if (response.ok) {
-                    // Reset form
                     document.getElementById('userTag').value = '';
                     document.getElementById('userId').value = '';
                     document.getElementById('caseId').value = '';
@@ -1965,7 +1913,6 @@
                     document.getElementById('charCount').textContent = '0';
                     document.getElementById('qualityAnalyzer').style.display = 'none';
 
-                    // Reset wizard
                     document.querySelectorAll('.wizard-step').forEach(step => {
                         step.classList.remove('active', 'completed');
                     });
@@ -1978,7 +1925,6 @@
 
                     showMessage('success', '✨ Your appeal has been submitted successfully! Check the "Check Status" tab to track progress.');
 
-                    // Scroll to message
                     setTimeout(() => {
                         document.getElementById('successMessage').scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }, 100);
@@ -2005,7 +1951,6 @@
             }
         }
 
-        // Check Appeal Status
         async function checkAppealStatus() {
             const caseId = document.getElementById('statusCaseId').value.trim();
             const userId = document.getElementById('statusUserId').value.trim();
@@ -2029,7 +1974,6 @@
                 if (response.ok && data.success) {
                     const appeal = data.appeal;
 
-                    // Update status badge
                     const badgeEl = document.getElementById('statusBadge');
                     badgeEl.className = `status-badge ${appeal.status}`;
 
@@ -2042,12 +1986,11 @@
                         badgeIcon = '✅';
                         badgeText = 'Accepted';
                     } else if (appeal.status === 'denied') {
-                        badgeIcon = '❌';
+                        badgeIcon = '-';
                         badgeText = 'Denied';
                     }
                     badgeEl.innerHTML = `<span>${badgeIcon}</span><span>${badgeText}</span>`;
 
-                    // Update details
                     document.getElementById('statusResultCaseId').textContent = appeal.caseId;
                     document.getElementById('statusResultSubmitted').textContent = new Date(appeal.submittedAt).toLocaleString();
 
@@ -2078,7 +2021,6 @@
             }
         }
 
-        // Load Appeal History
         async function loadAppealHistory() {
             const userId = document.getElementById('historyUserId').value.trim();
 
@@ -2118,7 +2060,7 @@
                                 statusIcon = '✅';
                                 statusText = 'Accepted';
                             } else if (appeal.status === 'denied') {
-                                statusIcon = '❌';
+                                statusIcon = '-';
                                 statusText = 'Denied';
                             }
 
@@ -2167,7 +2109,6 @@
             }
         }
 
-        // Message Helpers
         function showMessage(type, text) {
             hideAllMessages();
 
@@ -2219,30 +2160,60 @@
             document.getElementById('historyErrorMessage').classList.remove('show');
         }
 
-        // Rules Modal
+        function sanitizeHTML(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         async function showRulesModal(event) {
-            event.preventDefault();
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
 
             const modal = document.getElementById('rulesModal');
             const rulesContent = document.getElementById('rulesContent');
 
-            if (modal.classList.contains('show')) {
+            if (!modal || modal.classList.contains('show')) {
                 return;
             }
 
             modal.classList.add('show');
             document.body.style.overflow = 'hidden';
 
+            rulesContent.innerHTML = `
+                <div style="text-align: center; color: var(--color-muted);">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 1rem;">Loading rules...</p>
+                </div>
+            `;
+
             try {
-                const { response, data: rules } = await window.AdminPanel.api.getJson('/api/rules');
-                if (!response.ok) throw new Error('Failed to load rules');
+                const { response, data } = await window.AdminPanel.api.getJson('/api/rules');
+
+                if (!response || !response.ok) {
+                    throw new Error('Failed to load rules');
+                }
+
+                const rules = Array.isArray(data) ? data : [];
+
+                if (rules.length === 0) {
+                    rulesContent.innerHTML = `
+                        <div style="text-align: center; color: var(--color-muted);">
+                            <p>No server rules available at this time.</p>
+                        </div>
+                    `;
+                    return;
+                }
 
                 let rulesHTML = '';
                 rules.forEach(rule => {
                     rulesHTML += `
                         <div class="rule-item">
-                            <div class="rule-title">Rule #${rule.number}: ${rule.title}</div>
-                            <div class="rule-description">${rule.description}</div>
+                            <div class="rule-title">Rule #${rule.number}: ${sanitizeHTML(rule.title)}</div>
+                            <div class="rule-description">${sanitizeHTML(rule.description)}</div>
                         </div>
                     `;
                 });
@@ -2252,7 +2223,7 @@
                 console.error('Error loading rules:', error);
                 rulesContent.innerHTML = `
                     <div style="text-align: center; color: var(--color-red);">
-                        <p>❌ Failed to load server rules.</p>
+                        <p>- Failed to load server rules.</p>
                         <p style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--color-muted);">Please contact an administrator.</p>
                     </div>
                 `;
@@ -2269,14 +2240,12 @@
             document.body.style.overflow = '';
         }
 
-        // Keyboard shortcuts
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 closeRulesModal();
             }
         });
 
-        // Character counter
         const reasonInput = document.getElementById('reason');
         reasonInput.addEventListener('input', () => {
             analyzeAppealQuality();

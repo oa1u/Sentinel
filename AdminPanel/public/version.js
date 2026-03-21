@@ -1,4 +1,3 @@
-// Defensive check: Only run if document.addEventListener exists
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('DOMContentLoaded', async () => {
         try {
@@ -7,7 +6,6 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
             const data = await res.json();
             const version = data.Version || data.version || null;
             if (version) {
-                // Try to find a footer element
                 const footer = document.querySelector('.page-footer .footer-links');
                 if (footer && !footer.querySelector('.footer-version')) {
                     const versionSpan = document.createElement('span');
@@ -21,7 +19,6 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
                 }
             }
         } catch (e) {
-            // Fail silently
         }
     });
 }

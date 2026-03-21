@@ -19,8 +19,6 @@ const TICKET_OPEN_MAX_ATTEMPTS = 4;
 const TICKET_CREATION_COOLDOWN_MS = 2 * 60 * 1000;
 const DUPLICATE_REASON_WINDOW_MS = 15 * 60 * 1000;
 
-// This is the ticket system for user support—create tickets, get help, and track everything.
-// Creates private channels, logs transcripts, and keeps track of ticket status.
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ticket')
@@ -94,7 +92,6 @@ async function openTicket(interaction) {
     const reason = interaction.options.getString('reason');
     const priority = interaction.options.getString('priority');
 
-    // Double check that the user actually wrote something before submitting.
     if (!reason || reason.trim().length === 0) {
       return await interaction.editReply({ embeds: [createErrorEmbed('Invalid Input', 'Please provide a reason for your ticket.')] });
     }
@@ -151,7 +148,6 @@ async function openTicket(interaction) {
       return await interaction.editReply({ embeds: [errorEmbed] });
     }
 
-    // Check if the user already has a ticket open—only one at a time!
     try {
       const allTickets = await MySQLDatabaseManager.getAllTickets().catch(() => []);
       const existingTicket = allTickets.find(t => t.userId === interaction.user.id && t.status !== 'closed');
@@ -430,7 +426,6 @@ async function closeTicket(interaction) {
   setTimeout(async () => {
     try {
       await interaction.channel.delete();
-      // Keep ticket record for transcript viewer.
     } catch (err) {
       console.error(`Failed to delete ticket channel: ${err.message}`);
     }

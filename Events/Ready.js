@@ -28,7 +28,7 @@ module.exports = {
         startBirthdayAnnouncements(client);
 
         // Cache existing invites for invite tracking.
-        InviteTracker.primeAllGuildInvites(client).catch(() => {});
+        InviteTracker.primeAllGuildInvites(client).catch(() => { });
     }
 };
 

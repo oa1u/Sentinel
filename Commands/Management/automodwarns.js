@@ -104,7 +104,6 @@ module.exports = {
         ),
     category: 'management',
     async execute(interaction) {
-        // Require administrator role or permissions
         const member = interaction.member;
         const hasAdminRole = member.roles.cache.has(adminRoleId);
         const hasAdminPerm = member.permissions.has('Administrator');

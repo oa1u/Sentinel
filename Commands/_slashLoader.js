@@ -2,7 +2,7 @@ const { resolve, relative } = require('path');
 const fs = require('fs');
 const { readdir } = require('fs').promises;
 
-// ANSI Color codes
+// ANSI colors for loader output
 const colors = {
 	reset: '\x1b[0m',
 	bright: '\x1b[1m',
@@ -56,7 +56,6 @@ async function load(collection) {
 		try {
 			const fileStart = Date.now();
 
-			// Ensure file edits are picked up on subsequent loads.
 			delete require.cache[require.resolve(fn)];
 			const command = require(fn);
 			const relFile = relative(process.cwd(), fn).replace(/\\/g, '/');
@@ -67,7 +66,6 @@ async function load(collection) {
 				continue;
 			}
 
-			// Validate command has required data
 			if (!command.data) {
 				throw new Error('Missing "data" property (SlashCommandBuilder)');
 			}
@@ -106,7 +104,7 @@ async function load(collection) {
 			errorCount++;
 			const relFile = relative(process.cwd(), fn).replace(/\\/g, '/');
 			errors.push({ file: relFile, error: err?.message || String(err) });
-			console.log(`  ${colors.red}❌${colors.reset} ${relFile}: ${colors.red}${err?.message || err}${colors.reset}`);
+			console.log(`  ${colors.red}-${colors.reset} ${relFile}: ${colors.red}${err?.message || err}${colors.reset}`);
 		}
 	}
 
@@ -116,7 +114,6 @@ async function load(collection) {
 		.sort((a, b) => b.ms - a.ms)
 		.slice(0, 5);
 
-	// Single line summary
 	const categoryList = Array.from(categories.keys()).sort().join(', ');
 	const errorMsg = errorCount > 0 ? ` ${colors.yellow}(${errorCount} error${errorCount !== 1 ? 's' : ''})${colors.reset}` : '';
 	const skipMsg = skippedCount > 0 ? ` ${colors.yellow}(${skippedCount} skipped)${colors.reset}` : '';

@@ -4,9 +4,550 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="websiteNameTitle">Analytics</title>
+    <title id="websiteNameTitle">Analytics Dashboard</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --glass-bg: rgba(30, 30, 36, 0.7);
+            --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+            --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+
+        .dashboard-container {
+            padding: 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .welcome-section {
+            margin-bottom: 2rem;
+            background: var(--accent-gradient);
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            color: white;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .welcome-section::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.6;
+            z-index: 1;
+        }
+
+        .welcome-text {
+            position: relative;
+            z-index: 2;
+        }
+
+        .welcome-text h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 0;
+            line-height: 1.2;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .welcome-text p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .sys-status-badge {
+            position: relative;
+            z-index: 2;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .sys-dot {
+            width: 8px;
+            height: 8px;
+            background: #4ade80;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #4ade80;
+        }
+
+        .tabs-container-scroll {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: rgba(20, 20, 25, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+            margin-bottom: 2rem;
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.85rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+            background: transparent;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #e2e8f0;
+            transform: translateY(-1px);
+        }
+
+        .tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0px;
+            left: 15%;
+            right: 15%;
+            height: 3px;
+            background: var(--tab-color, #fff);
+            border-radius: 10px 10px 0 0;
+            box-shadow: 0 -2px 10px var(--tab-color);
+        }
+
+        .tab-icon {
+            font-size: 1.1em;
+            margin-right: 0;
+            transition: transform 0.3s ease;
+        }
+
+        .tab:hover .tab-icon {
+            transform: scale(1.1);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .kpi-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: var(--glass-border);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .kpi-icon-wrapper {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-right: 1.25rem;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .kpi-content h3 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+            line-height: 1.2;
+            color: white;
+        }
+
+        .kpi-content p {
+            color: #9ca3af;
+            margin: 0;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .content-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: var(--glass-border);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: var(--glass-border);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: white;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .btn-glass {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+            font-size: 0.875rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-glass:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: #667eea;
+            border: none;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #764ba2;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+            border-radius: 0.75rem;
+            border: var(--glass-border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: rgba(0, 0, 0, 0.3);
+            text-align: left;
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: var(--glass-border);
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: var(--glass-border);
+            color: var(--text-main);
+            vertical-align: middle;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .glass-input {
+            background: rgba(0, 0, 0, 0.2);
+            border: var(--glass-border);
+            color: white;
+            padding: 0.6rem 1rem;
+            border-radius: 0.5rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .glass-input:focus {
+            border-color: #667eea;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .welcome-section {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .section-header {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .action-buttons {
+                justify-content: center;
+            }
+        }
+
+        .alerts-dashboard-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .alerts-dashboard-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .alert-settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1.5rem;
+        }
+
+        .alert-setting-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+            padding: 1.25rem;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .alert-setting-card:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .alert-setting-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .alert-type-badge {
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+            letter-spacing: 0.02em;
+        }
+
+        .alert-enabled-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 99px;
+            font-weight: 600;
+        }
+
+        .alert-enabled-badge.enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .alert-enabled-badge.disabled {
+            background: rgba(148, 163, 184, 0.15);
+            color: #94a3b8;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .alert-setting-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .alert-info-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+
+        .alert-info-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 0.25rem;
+            text-transform: uppercase;
+        }
+
+        .alert-info-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .alert-setting-footer {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-edit-threshold {
+            flex: 1;
+            background: rgba(59, 130, 246, 0.1);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 0.5rem;
+            font-size: 0.85rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-edit-threshold:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-alert-toggle {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            color: #cbd5e1;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.5rem;
+            font-size: 0.85rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-alert-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+    </style>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -14,6 +555,7 @@
     <script src="/public/shared.js"></script>
     <script src="/public/version.js"></script>
     <script src="/public/owner.js" defer></script>
+    <script src="/public/analytics.js" defer></script>
 </head>
 
 <body>
@@ -29,8 +571,8 @@
             <div class="user-info">
                 <div class="user-dropdown">
                     <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
-                        <span class="username" id="userDisplay">Loading...</span>
-                        <span class="role-badge" id="roleDisplay">OWNER</span>
+                        <span class="username" id="headerUsername">Loading...</span>
+                        <span class="role-badge" id="headerRole">OWNER</span>
                         <span class="dropdown-arrow">▼</span>
                     </div>
                     <div class="user-dropdown-menu" id="userDropdownMenu">
@@ -52,651 +594,61 @@
         </div>
     </div>
 
-    <div class="container">
-        <div class="message error hidden" id="errorMsg"></div>
-        <div class="message success hidden" id="successMsg"></div>
+    <div class="dashboard-container">
 
-        <div class="tabs" id="ownerTabs" style="margin-bottom:2.5rem;">
-            <button class="tab active" data-tab="notifications" style="--tab-color:#a78bfa;"><span
-                    class="tab-icon">🔔</span>
-                <span>Notification Center</span></button>
-            <button class="tab" data-tab="email-analytics" style="--tab-color:#5b7fff;"><span class="tab-icon">📧</span>
-                <span>Email Analytics</span></button>
-            <button class="tab" data-tab="verification-analytics" style="--tab-color:#5bffb8;"><span
-                    class="tab-icon">✅</span>
-                <span>Verification Analytics</span></button>
-            <button class="tab" data-tab="alert-analytics" style="--tab-color:#ff5b5b;"><span class="tab-icon">🚨</span>
-                <span>Alert Analytics</span></button>
+        <div class="welcome-section">
+            <div class="welcome-text">
+                <h1>Analytics Center</h1>
+                <p>Real-time performance monitoring and deep ecosystem insights</p>
+            </div>
+            <div id="systemHealthIndicator" class="sys-status-badge">
+                <div class="sys-dot"></div>
+                <span>System Operational</span>
+            </div>
         </div>
 
-        <style>
-            .tabs {
-                display: flex;
-                gap: 0.6rem;
-                border: 1px solid var(--border-color);
-                border-radius: var(--radius-lg);
-                background: var(--bg-secondary);
-                margin: 2rem 0 1.35rem 0;
-                padding: 0.55rem;
-                align-items: center;
-                flex-wrap: wrap;
-            }
+        <div class="tabs-container-scroll" id="ownerTabs">
+            <button class="tab active" data-tab="notifications" style="--tab-color:#ffd45b;"><span>🔔</span>
+                Notification Center</button>
+            <button class="tab" data-tab="email-analytics" style="--tab-color:#ffffff;"><span>📧</span> Email</button>
+            <button class="tab" data-tab="verification-analytics" style="--tab-color:#5bffb8;"><span>✅</span>
+                Verification</button>
+            <button class="tab" data-tab="alert-analytics" style="--tab-color:#a70808;"><span>🚨</span> Alerts</button>
+            <button class="tab" data-tab="system-health" style="--tab-color:#0887c7;"><span>🖥️</span> System
+                Health</button>
+        </div>
 
-            .tab {
-                background: transparent;
-                border: 1px solid transparent;
-                outline: none;
-                color: var(--text-secondary);
-                font-size: 1rem;
-                font-weight: 600;
-                padding: 0.62rem 0.95rem;
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                transition: color 0.2s, background 0.2s, border-color 0.2s, transform 0.2s;
-                display: flex;
-                align-items: center;
-                gap: 0.55rem;
-                position: relative;
-                min-height: 42px;
-            }
-
-            .tab.active {
-                color: var(--tab-color, #5b7fff);
-                background: var(--bg-card);
-                border-color: var(--border-color);
-                z-index: 2;
-            }
-
-            .tab:not(.active):hover {
-                color: var(--tab-color, #5b7fff);
-                background: var(--bg-card-hover);
-                border-color: var(--border-color);
-                transform: translateY(-1px);
-            }
-
-            .tab.active::after {
-                content: '';
-                position: absolute;
-                left: 0.7rem;
-                right: 0.7rem;
-                bottom: 0.28rem;
-                height: 2px;
-                border-radius: 999px;
-                background: var(--tab-color, var(--color-blue));
-            }
-
-            .tab .tab-icon {
-                font-size: 1.06rem;
-                margin-right: 0;
-                vertical-align: middle;
-            }
-
-            .tab-content {
-                display: none;
-                margin-top: 0.3rem;
-            }
-
-            .tab-content.active {
-                display: block;
-            }
-
-            .tab-content>.card {
-                border: 1px solid var(--border-color);
-                background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-                box-shadow: var(--shadow-md);
-            }
-
-            .tab-content>.card .card-header {
-                border-bottom: 1px solid var(--border-color);
-                padding-bottom: 0.9rem;
-                margin-bottom: 1.1rem;
-            }
-
-            .tab-content>.card .table-container {
-                border: 1px solid var(--border-color);
-                border-radius: var(--radius-md);
-                overflow: hidden;
-                background: var(--bg-card);
-            }
-
-            .tab-content>.card .table-container table {
-                background: transparent;
-            }
-
-            .tab-content>.card .table-container th {
-                background: var(--bg-secondary);
-                color: var(--text-primary);
-            }
-
-            .tab-content>.card .table-container td {
-                color: var(--text-secondary);
-            }
-
-            .tab-content>.card .table-container tr:hover {
-                background: var(--bg-card-hover);
-            }
-
-            .security-sessions-note {
-                margin: 0 0 0.9rem;
-                color: var(--text-secondary);
-                font-size: 0.93rem;
-            }
-
-            .alert-stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 1rem;
-                margin-bottom: 1.5rem;
-            }
-
-            .alert-stat-card {
-                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-                border: 1px solid var(--border-color);
-                border-radius: 12px;
-                padding: 1.25rem;
-                display: flex;
-                align-items: center;
-                gap: 1rem;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .alert-stat-card:hover {
-                transform: translateY(-4px);
-                box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-                border-color: rgba(91, 127, 255, 0.3);
-            }
-
-            .alert-stat-icon {
-                width: 52px;
-                height: 52px;
-                border-radius: 12px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 1.6rem;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-                flex-shrink: 0;
-            }
-
-            .alert-stat-content {
-                flex: 1;
-            }
-
-            .alert-stat-value {
-                font-size: 1.8rem;
-                font-weight: 800;
-                color: var(--text-primary);
-                line-height: 1;
-                margin-bottom: 0.25rem;
-            }
-
-            .alert-stat-label {
-                font-size: 0.85rem;
-                font-weight: 600;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-filters-bar {
-                background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
-                border: 1px solid var(--border-color);
-                border-radius: 12px;
-                padding: 1.25rem;
-                margin-bottom: 1.5rem;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: 1rem;
-            }
-
-            .alert-filter-group {
-                display: flex;
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-
-            .alert-filter-label {
-                font-size: 0.8rem;
-                font-weight: 700;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-filter-select {
-                padding: 0.75rem 1rem;
-                border: 2px solid var(--border-color);
-                border-radius: 8px;
-                background: var(--bg-card);
-                color: var(--text-primary);
-                font-size: 0.9rem;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                font-weight: 600;
-            }
-
-            .alert-filter-select:focus {
-                outline: none;
-                border-color: #667eea;
-                box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-            }
-
-            .alert-filter-actions {
-                display: flex;
-                gap: 0.75rem;
-            }
-
-            .btn-alert-refresh {
-                padding: 0.75rem 1.25rem;
-                border: 2px solid var(--color-blue);
-                border-radius: 8px;
-                background: linear-gradient(135deg, var(--color-blue) 0%, #5568d3 100%);
-                color: white;
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                white-space: nowrap;
-            }
-
-            .btn-alert-refresh:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 16px rgba(91, 127, 255, 0.4);
-            }
-
-            .btn-alert-export {
-                padding: 0.75rem 1.25rem;
-                border: 2px solid var(--border-color);
-                border-radius: 8px;
-                background: var(--bg-card);
-                color: var(--text-primary);
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                white-space: nowrap;
-            }
-
-            .btn-alert-export:hover {
-                background: var(--bg-secondary);
-                border-color: var(--color-blue);
-                color: var(--color-blue);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            }
-
-            .alert-settings-list {
-                display: grid;
-                gap: 1rem;
-            }
-
-            .alert-setting-card {
-                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-                border: 2px solid var(--border-color);
-                border-radius: 12px;
-                padding: 1.5rem;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .alert-setting-card:hover {
-                border-color: rgba(102, 126, 234, 0.5);
-                transform: translateY(-2px);
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-            }
-
-            .alert-setting-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 1rem;
-            }
-
-            .alert-setting-title {
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
-            }
-
-            .alert-type-badge {
-                display: inline-flex;
-                align-items: center;
-                padding: 0.5rem 1rem;
-                border-radius: 8px;
-                font-size: 0.9rem;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-type-badge.cpu {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-            }
-
-            .alert-type-badge.memory {
-                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                color: white;
-            }
-
-            .alert-type-badge.error_rate {
-                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-                color: white;
-            }
-
-            .alert-type-badge.rate_limit {
-                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-                color: white;
-            }
-
-            .alert-type-badge.database {
-                background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-                color: white;
-            }
-
-            .alert-enabled-badge {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.35rem;
-                padding: 0.4rem 0.85rem;
-                border-radius: 6px;
-                font-size: 0.75rem;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-enabled-badge.enabled {
-                background: rgba(40, 167, 69, 0.15);
-                color: #28a745;
-                border: 1px solid rgba(40, 167, 69, 0.3);
-            }
-
-            .alert-enabled-badge.disabled {
-                background: rgba(108, 117, 125, 0.15);
-                color: #6c757d;
-                border: 1px solid rgba(108, 117, 125, 0.3);
-            }
-
-            .alert-setting-body {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 1rem;
-                padding: 1rem;
-                background: var(--bg-secondary);
-                border-radius: 8px;
-                border: 1px solid var(--border-color);
-                margin-bottom: 1rem;
-            }
-
-            .alert-info-item {
-                display: flex;
-                flex-direction: column;
-                gap: 0.25rem;
-            }
-
-            .alert-info-label {
-                font-size: 0.75rem;
-                font-weight: 700;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .alert-info-value {
-                font-size: 0.9rem;
-                font-weight: 600;
-                color: var(--text-primary);
-            }
-
-            .alert-setting-footer {
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
-            }
-
-            .btn-alert-edit {
-                flex: 1;
-                padding: 0.65rem 1rem;
-                border: 2px solid var(--color-blue);
-                border-radius: 8px;
-                background: linear-gradient(135deg, var(--color-blue) 0%, #5568d3 100%);
-                color: white;
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            .btn-alert-edit:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 16px rgba(91, 127, 255, 0.4);
-            }
-
-            .btn-alert-toggle {
-                padding: 0.65rem 1rem;
-                border: 2px solid var(--border-color);
-                border-radius: 8px;
-                background: var(--bg-card);
-                color: var(--text-primary);
-                font-size: 0.85rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            .btn-alert-toggle:hover {
-                background: var(--bg-secondary);
-                transform: translateY(-2px);
-            }
-
-            .active-alerts-list {
-                display: grid;
-                gap: 1rem;
-            }
-
-            .active-alert-card {
-                background: linear-gradient(135deg, rgba(220, 53, 69, 0.08) 0%, rgba(220, 53, 69, 0.04) 100%);
-                border: 2px solid rgba(220, 53, 69, 0.3);
-                border-radius: 12px;
-                padding: 1.25rem;
-                position: relative;
-            }
-
-            .active-alert-card::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 3px;
-                background: linear-gradient(90deg, #dc3545, #c82333);
-            }
-
-            .active-alert-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 0.75rem;
-            }
-
-            .active-alert-type {
-                font-size: 1rem;
-                font-weight: 700;
-                color: var(--text-primary);
-            }
-
-            .active-alert-severity {
-                padding: 0.35rem 0.75rem;
-                border-radius: 6px;
-                font-size: 0.75rem;
-                font-weight: 700;
-                text-transform: uppercase;
-            }
-
-            .active-alert-severity.critical {
-                background: #dc3545;
-                color: white;
-            }
-
-            .active-alert-severity.warning {
-                background: #ffc107;
-                color: #222;
-            }
-
-            .active-alert-message {
-                color: var(--text-secondary);
-                margin-bottom: 0.75rem;
-            }
-
-            .active-alert-footer {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                font-size: 0.85rem;
-                color: var(--text-secondary);
-            }
-
-            .btn-resolve-alert {
-                padding: 0.5rem 1rem;
-                border: 2px solid #28a745;
-                border-radius: 8px;
-                background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-                color: white;
-                font-size: 0.8rem;
-                font-weight: 700;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            .btn-resolve-alert:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
-            }
-
-            .email-analytics-toolbar {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 0.75rem;
-                margin-bottom: 1rem;
-                padding: 0.9rem 1rem;
-                border: 1px solid var(--border-color);
-                border-radius: 10px;
-                background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
-                flex-wrap: wrap;
-            }
-
-            .email-analytics-toolbar-title {
-                color: var(--text-secondary);
-                font-size: 0.92rem;
-                font-weight: 600;
-            }
-
-            .email-analytics-toolbar-actions {
-                display: flex;
-                gap: 0.6rem;
-                align-items: center;
-            }
-
-            .email-stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 0.85rem;
-                margin-bottom: 1rem;
-            }
-
-            .email-stat-card {
-                border: 1px solid var(--border-color);
-                border-radius: 10px;
-                background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-                padding: 0.95rem 1rem;
-                display: grid;
-                gap: 0.3rem;
-            }
-
-            .email-stat-label {
-                color: var(--text-secondary);
-                font-size: 0.78rem;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-            .email-stat-value {
-                color: var(--text-primary);
-                font-size: 1.5rem;
-                font-weight: 800;
-                line-height: 1;
-            }
-
-            .email-chart-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 1rem;
-                margin-bottom: 1rem;
-            }
-
-            .email-chart-card {
-                border: 1px solid var(--border-color);
-                border-radius: 10px;
-                background: var(--bg-card);
-                padding: 0.8rem 0.9rem 0.9rem;
-            }
-
-            .email-chart-title {
-                color: var(--text-primary);
-                font-weight: 700;
-                font-size: 0.95rem;
-                margin-bottom: 0.35rem;
-            }
-
-            .email-template-legend {
-                margin-top: 0.6rem;
-                color: var(--text-secondary);
-                font-size: 0.88rem;
-                line-height: 1.65;
-            }
-
-            @media (max-width: 1200px) {
-                .email-chart-grid {
-                    grid-template-columns: 1fr;
-                }
-            }
-        </style>
 
         <div id="notifications" class="tab-content active">
-            <div class="card">
-                <div class="card-header"
-                    style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                    <span><span class="card-header-icon">🔔</span>Notification Center</span>
-                    <div style="display:flex;gap:0.5rem;align-items:center;">
-                        <button class="btn btn-secondary btn-sm" type="button"
-                            onclick="loadOwnerNotificationHistory()">Refresh</button>
-                        <button class="btn btn-danger btn-sm" type="button"
-                            onclick="clearOwnerNotificationHistory()">Clear</button>
+            <div class="content-card">
+                <div class="section-header">
+                    <div class="section-title"><span style="font-size:1.5rem;">🔔</span> Notification History</div>
+                    <div class="action-buttons">
+                        <button class="btn-glass" onclick="loadOwnerNotificationHistory()">🔄 Refresh</button>
+                        <button class="btn-glass" onclick="clearOwnerNotificationHistory()"
+                            style="color:#ef4444; border-color: rgba(239, 68, 68, 0.3);">🗑️ Clear</button>
                     </div>
                 </div>
-                <div style="display:grid;grid-template-columns:1.5fr 0.9fr 0.9fr;gap:0.6rem;margin-bottom:0.75rem;">
-                    <input id="ownerNotificationSearch" class="form-input" type="text"
+
+                <div class="filters-grid" style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap;">
+                    <input id="ownerNotificationSearch" class="glass-input" style="flex:1;" type="text"
                         placeholder="Search title or message...">
-                    <select id="ownerNotificationTypeFilter" class="form-input">
+                    <select id="ownerNotificationTypeFilter" class="glass-input">
                         <option value="all">All Types</option>
                         <option value="info">Info</option>
                         <option value="success">Success</option>
                         <option value="warning">Warning</option>
                         <option value="error">Error</option>
                     </select>
-                    <select id="ownerNotificationSourceFilter" class="form-input">
+                    <select id="ownerNotificationSourceFilter" class="glass-input">
                         <option value="all">All Sources</option>
                         <option value="toast">Toast</option>
                         <option value="system">System</option>
                         <option value="action">Action</option>
                     </select>
                 </div>
-                <div style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:0.6rem;"
-                    id="ownerNotificationHistoryUpdated">Last updated: --</div>
-                <div class="table-container">
+
+                <div class="table-responsive">
                     <table>
                         <thead>
                             <tr>
@@ -714,363 +666,346 @@
                         </tbody>
                     </table>
                 </div>
+                <div style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted); text-align:right;"
+                    id="ownerNotificationHistoryUpdated">Last updated: --</div>
             </div>
         </div>
 
         <div id="email-analytics" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">📧</span>
-                    Email Analytics (30d Delivery Intelligence)
-                </div>
-
-                <div class="email-analytics-toolbar">
-                    <div class="email-analytics-toolbar-title">Advanced delivery performance and template engagement
-                        metrics</div>
-                    <div class="email-analytics-toolbar-actions">
-                        <button class="btn-alert-refresh" onclick="loadEmailAnalyticsPie()"
-                            title="Refresh email analytics">🔄 Refresh</button>
-                        <button class="btn-alert-export" onclick="exportEmailRecentCsv()"
-                            title="Export recent deliveries">📄 Export Recent</button>
+            <div class="dashboard-grid">
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color: #6366f1; background: rgba(99, 102, 241, 0.1);">📨</div>
+                    <div class="kpi-content">
+                        <h3 id="emailSummaryTotal">0</h3>
+                        <p>Total Sent (30d)</p>
                     </div>
                 </div>
-
-                <div class="email-stats-grid">
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Total Sent (30d)</div>
-                        <div class="email-stat-value" id="emailSummaryTotal">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Success Rate</div>
-                        <div class="email-stat-value" id="emailSummarySuccessRate">0%</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Last 24h</div>
-                        <div class="email-stat-value" id="emailSummaryLast24h">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Failures + Blocks</div>
-                        <div class="email-stat-value" id="emailSummaryFailures">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Transient Fails</div>
-                        <div class="email-stat-value" id="emailSummaryTransientFails">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Permanent Fails</div>
-                        <div class="email-stat-value" id="emailSummaryPermanentFails">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Avg Latency (ms)</div>
-                        <div class="email-stat-value" id="emailSummaryAvgLatency">0</div>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color: #10b981; background: rgba(16, 185, 129, 0.1);">✅</div>
+                    <div class="kpi-content">
+                        <h3 id="emailSummarySuccessRate">0%</h3>
+                        <p>Success Rate</p>
                     </div>
                 </div>
-
-                <div class="email-chart-grid">
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Template Distribution (30d)</div>
-                        <div style="margin: 1rem auto; max-width: 460px;">
-                            <canvas id="emailAnalyticsPieChart" style="max-height: 330px;"></canvas>
-                        </div>
-                        <div id="emailAnalyticsPieLegend" class="email-template-legend"></div>
-                    </div>
-
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Delivery Trend (14d)</div>
-                        <div style="margin: 1rem auto; max-width: 100%;">
-                            <canvas id="emailAnalyticsTrendChart" style="max-height: 330px;"></canvas>
-                        </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color: #f59e0b; background: rgba(245, 158, 11, 0.1);">⏱️</div>
+                    <div class="kpi-content">
+                        <h3 id="emailSummaryLast24h">0</h3>
+                        <p>Last 24h</p>
                     </div>
                 </div>
-
-                <div class="card" style="margin-top: 1rem;">
-                    <div class="card-header">
-                        <span class="card-header-icon">📊</span>
-                        Template Performance Breakdown
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Template</th>
-                                    <th>Total</th>
-                                    <th>Sent</th>
-                                    <th>Failed</th>
-                                    <th>Blocked</th>
-                                    <th>Success %</th>
-                                </tr>
-                            </thead>
-                            <tbody id="emailTemplateBreakdownBody">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">Loading template breakdown...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color: #ef4444; background: rgba(239, 68, 68, 0.1);">🚫</div>
+                    <div class="kpi-content">
+                        <h3 id="emailSummaryFailures">0</h3>
+                        <p>Failed / Blocked</p>
                     </div>
                 </div>
+            </div>
 
-                <div class="email-chart-grid" style="margin-top: 1rem;">
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Failure Category Breakdown (30d)</div>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Category</th>
-                                        <th>Count</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="emailFailureCategoryBody">
-                                    <tr>
-                                        <td colspan="2" class="text-center text-muted">Loading failure categories...
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Top Failing Recipient Domains (30d)</div>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Domain</th>
-                                        <th>Total</th>
-                                        <th>Failed+Blocked</th>
-                                        <th>Failure %</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="emailFailingDomainBody">
-                                    <tr>
-                                        <td colspan="4" class="text-center text-muted">Loading failing domains...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+            <div class="dashboard-grid">
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 style="font-size:1.5rem;" id="emailSummaryTransientFails">0</h3>
+                        <p>Transient Failures</p>
                     </div>
                 </div>
-
-                <div class="card" style="margin-top: 1rem;">
-                    <div class="card-header">
-                        <span class="card-header-icon">🕒</span>
-                        Recent Email Deliveries
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Recipient</th>
-                                    <th>Template</th>
-                                    <th>Status</th>
-                                    <th>Subject</th>
-                                    <th>Error</th>
-                                </tr>
-                            </thead>
-                            <tbody id="emailRecentTableBody">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">Loading recent deliveries...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 style="font-size:1.5rem;" id="emailSummaryPermanentFails">0</h3>
+                        <p>Permanent Failures</p>
                     </div>
                 </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 style="font-size:1.5rem;" id="emailSummaryAvgLatency">0</h3>
+                        <p>Avg Latency (ms)</p>
+                    </div>
+                </div>
+            </div>
 
-                <div id="emailAnalyticsPieLastUpdated" class="text-secondary"
-                    style="margin-top: 0.75rem; margin-bottom: 0.1rem; text-align: center;">Last updated: --</div>
+            <div class="section-header" style="margin-top:2rem;">
+                <div class="section-title">Visual Insights</div>
+                <div class="action-buttons">
+                    <button class="btn-glass btn-primary" onclick="loadEmailAnalyticsPie()">🔄 Refresh Data</button>
+                    <button class="btn-glass" onclick="exportEmailRecentCsv()">📄 Export CSV</button>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="content-card">
+                    <h3 style="margin-top:0;">Template Distribution</h3>
+                    <div class="chart-wrapper"><canvas id="emailAnalyticsPieChart"></canvas></div>
+                    <div id="emailAnalyticsPieLegend"></div>
+                </div>
+                <div class="content-card">
+                    <h3 style="margin-top:0;">Delivery Trends (14d)</h3>
+                    <div class="chart-wrapper"><canvas id="emailAnalyticsTrendChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <div class="section-title" style="margin-bottom:1rem;">Recent Deliveries</div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Recipient</th>
+                                <th>Template</th>
+                                <th>Status</th>
+                                <th>Subject</th>
+                                <th>Error</th>
+                            </tr>
+                        </thead>
+                        <tbody id="emailRecentTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="emailAnalyticsPieLastUpdated" class="last-updated"
+                    style="text-align:right; margin-top:0.5rem; font-size:0.8rem; opacity:0.7;">Updated: --</div>
+            </div>
+
+            <div style="display:none;">
+                <table>
+                    <tbody id="emailTemplateBreakdownBody"></tbody>
+                    <tbody id="emailFailureCategoryBody"></tbody>
+                    <tbody id="emailFailingDomainBody"></tbody>
+                </table>
             </div>
         </div>
 
         <div id="verification-analytics" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">✅</span>
-                    Verification Analytics
+            <div class="section-header">
+                <div class="section-title">Verification Intelligence</div>
+                <div class="action-buttons">
+                    <button class="btn-glass btn-primary" onclick="loadVerificationAnalytics()">🔄 Refresh</button>
+                    <button class="btn-glass" onclick="exportVerificationEventsCsv()">📄 Export CSV</button>
                 </div>
+            </div>
 
-                <div class="email-analytics-toolbar">
-                    <div class="email-analytics-toolbar-title">Track verification performance, fallback usage, and
-                        challenge distribution.</div>
-                    <div class="email-analytics-toolbar-actions">
-                        <button class="btn-alert-refresh" onclick="loadVerificationAnalytics()"
-                            title="Refresh verification analytics">🔄 Refresh</button>
-                        <button class="btn-alert-export" onclick="exportVerificationEventsCsv()"
-                            title="Export verification events">📄 Export Recent</button>
-                    </div>
-                </div>
-
-                <div class="email-stats-grid">
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Sessions Started</div>
-                        <div class="email-stat-value" id="verificationSummarySessions">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Success Rate</div>
-                        <div class="email-stat-value" id="verificationSummarySuccessRate">0%</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Fallback Used</div>
-                        <div class="email-stat-value" id="verificationSummaryFallback">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Timeouts</div>
-                        <div class="email-stat-value" id="verificationSummaryTimeouts">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Penalties Applied</div>
-                        <div class="email-stat-value" id="verificationSummaryPenalties">0</div>
-                    </div>
-                    <div class="email-stat-card">
-                        <div class="email-stat-label">Staff Overrides</div>
-                        <div class="email-stat-value" id="verificationSummaryOverrides">0</div>
+            <div class="dashboard-grid">
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#6366f1; background:rgba(99, 102, 241, 0.1);">🆔</div>
+                    <div class="kpi-content">
+                        <h3 id="verificationSummarySessions">0</h3>
+                        <p>Total Sessions</p>
                     </div>
                 </div>
-
-                <div class="email-chart-grid">
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Challenge Type Distribution</div>
-                        <div style="margin: 1rem auto; max-width: 460px;">
-                            <canvas id="verificationChallengePieChart" style="max-height: 330px;"></canvas>
-                        </div>
-                        <div id="verificationChallengeLegend" class="email-template-legend"></div>
-                    </div>
-
-                    <div class="email-chart-card">
-                        <div class="email-chart-title">Mode Breakdown</div>
-                        <div id="verificationModeBreakdown" class="email-template-legend" style="padding: 1rem;">Loading
-                            mode breakdown...</div>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#10b981; background:rgba(16, 185, 129, 0.1);">✨</div>
+                    <div class="kpi-content">
+                        <h3 id="verificationSummarySuccessRate">0%</h3>
+                        <p>Success Rate</p>
                     </div>
                 </div>
-
-                <div class="card" style="margin-top: 1rem;">
-                    <div class="card-header">
-                        <span class="card-header-icon">🕒</span>
-                        Recent Verification Events
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>User</th>
-                                    <th>Type</th>
-                                    <th>Mode</th>
-                                    <th>Challenge</th>
-                                    <th>Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody id="verificationRecentTableBody">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">Loading recent verification events...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="text-secondary" style="padding: 0.75rem 0.25rem 0; font-size: 0.9rem;">
-                        Export includes the currently loaded recent events (up to 25 rows).
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#f59e0b; background:rgba(245, 158, 11, 0.1);">🛡️</div>
+                    <div class="kpi-content">
+                        <h3 id="verificationSummaryFallback">0</h3>
+                        <p>Fallback Usage</p>
                     </div>
                 </div>
+            </div>
 
-                <div id="verificationAnalyticsLastUpdated" class="text-secondary"
-                    style="margin-top: 0.75rem; margin-bottom: 0.1rem; text-align: center;">Last updated: --</div>
+            <div class="dashboard-grid">
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 id="verificationSummaryTimeouts">0</h3>
+                        <p>Timeouts</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 id="verificationSummaryPenalties">0</h3>
+                        <p>Penalties</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 id="verificationSummaryOverrides">0</h3>
+                        <p>Manual Overrides</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="content-card">
+                    <h3>Challenge Distribution</h3>
+                    <div class="chart-wrapper"><canvas id="verificationChallengePieChart"></canvas></div>
+                    <div id="verificationChallengeLegend"></div>
+                </div>
+                <div class="content-card">
+                    <h3>Mode Breakdown</h3>
+                    <div id="verificationModeBreakdown" style="padding:1rem;">Loading...</div>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <h3>Recent Verification Events</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>User</th>
+                                <th>Type</th>
+                                <th>Mode</th>
+                                <th>Challenge</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="verificationRecentTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading events...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="verificationAnalyticsLastUpdated"
+                    style="text-align:right; margin-top:0.5rem; font-size:0.8rem; opacity:0.7;">Updated: --</div>
             </div>
         </div>
 
         <div id="alert-analytics" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-header-icon">&#128680;</span>
-                    Alert Settings Management & Analytics
+            <div class="section-header">
+                <div class="section-title">System Alerts</div>
+                <div class="action-buttons">
+                    <button class="btn-glass" onclick="loadAlertAnalytics()">Refresh</button>
+                    <button class="btn-glass" onclick="exportAlertSettings()">Export</button>
                 </div>
-                <p class="security-sessions-note">Monitor and configure system alert settings with real-time analytics
-                    and active alert tracking.</p>
+            </div>
 
-                <div class="alert-stats-grid">
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">&#9881;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="totalAlertSettings">0</div>
-                            <div class="alert-stat-label">Total Settings</div>
-                        </div>
-                    </div>
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">&#9989;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="enabledAlertSettings">0</div>
-                            <div class="alert-stat-label">Enabled</div>
-                        </div>
-                    </div>
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);">&#128683;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="activeAlertsCount">0</div>
-                            <div class="alert-stat-label">Active Alerts</div>
-                        </div>
-                    </div>
-                    <div class="alert-stat-card">
-                        <div class="alert-stat-icon"
-                            style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">&#128200;</div>
-                        <div class="alert-stat-content">
-                            <div class="alert-stat-value" id="recentAlertsCount">0</div>
-                            <div class="alert-stat-label">Recent (30d)</div>
-                        </div>
+            <div class="dashboard-grid">
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#3b82f6; background:rgba(59, 130, 246, 0.1);">⚙️</div>
+                    <div class="kpi-content">
+                        <h3 id="totalAlertSettings">0</h3>
+                        <p>Total Configurations</p>
                     </div>
                 </div>
-
-                <div class="alert-filters-bar">
-                    <div class="alert-filter-group">
-                        <label for="alertStatusFilter" class="alert-filter-label">&#128269; Filter</label>
-                        <select id="alertStatusFilter" class="alert-filter-select" onchange="filterAlertSettings()">
-                            <option value="all">All Settings</option>
-                            <option value="enabled">Enabled Only</option>
-                            <option value="disabled">Disabled Only</option>
-                        </select>
-                    </div>
-                    <div class="alert-filter-actions">
-                        <button class="btn-alert-refresh" onclick="loadAlertAnalytics()"
-                            title="Refresh alert data">&#128472; Refresh</button>
-                        <button class="btn-alert-export" onclick="exportAlertSettings()"
-                            title="Export settings">&#128196; Export</button>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#10b981; background:rgba(16, 185, 129, 0.1);">✅</div>
+                    <div class="kpi-content">
+                        <h3 id="enabledAlertSettings">0</h3>
+                        <p>Enabled</p>
                     </div>
                 </div>
-                <p class="security-sessions-note" id="alertMonitorStatusText">Alert monitor status: checking...</p>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#ef4444; background:rgba(239, 68, 68, 0.1);">🚨</div>
+                    <div class="kpi-content">
+                        <h3 id="activeAlertsCount" style="color:#ef4444;">0</h3>
+                        <p>Currently Active</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#f59e0b; background:rgba(245, 158, 11, 0.1);">⚡</div>
+                    <div class="kpi-content">
+                        <h3 id="recentAlertsCount">0</h3>
+                        <p>Triggered (30d)</p>
+                    </div>
+                </div>
+            </div>
 
-                <div class="alert-settings-list" id="alertSettingsContainer">
-                    <div class="loading show">Loading alert settings...</div>
+
+            <div class="alerts-dashboard-container">
+                <div class="visual-column">
+                    <div class="content-card">
+                        <div class="section-header" style="margin-bottom:1rem; border:none; padding-bottom:0;">
+                            <h3>Configuration</h3>
+                            <div class="filters-grid" style="margin:0;">
+                                <select id="alertStatusFilter" class="glass-input" onchange="filterAlertSettings()"
+                                    style="padding:0.4rem 0.8rem;">
+                                    <option value="all">All Settings</option>
+                                    <option value="enabled">Enabled Only</option>
+                                    <option value="disabled">Disabled Only</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="alert-settings-grid" id="alertSettingsContainer">
+                            <p class="text-muted">Loading...</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="card" style="margin-top: 2rem; border: 2px solid rgba(220, 53, 69, 0.3);">
-                    <div class="card-header"
-                        style="background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%);">
-                        <span class="card-header-icon">&#128165;</span>
-                        Active Alerts Requiring Attention
+                <div class="status-column">
+                    <div class="content-card" style="border-left: 4px solid #ef4444; margin-bottom:1.5rem;">
+                        <div class="section-title" style="margin-bottom:0.5rem; color:#ef4444;">
+                            <span style="font-size:1.2rem;">⚠️</span> Output Stream
+                        </div>
+                        <div id="activeAlertsContainer"
+                            style="font-family:monospace; font-size:0.9rem; max-height:200px; overflow-y:auto;">
+                            <p class="text-muted">Loading...</p>
+                        </div>
                     </div>
-                    <div class="active-alerts-list" id="activeAlertsContainer">
-                        <div class="loading show">Loading active alerts...</div>
+
+                    <div id="alertMonitorStatusText" class="content-card"
+                        style="padding:1rem; font-family:monospace; font-size:0.85rem; color:var(--text-muted); line-height:1.6;">
+                        Waiting for monitor status...
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-    <footer class="page-footer">
-        <div class="footer-links">
-            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
-            <span class="footer-sep">•</span>
-            <a href="/changelog">Changelog</a>
-            <span class="footer-sep">•</span>
-            <a href="/privacy-policy">Privacy Policy</a>
-            <span class="footer-sep">•</span>
-            <a href="/license">License</a>
-        </div>
-    </footer>
 
-    <script src="/public/analytics.js"></script>
+        <div id="system-health" class="tab-content">
+            <div class="section-header">
+                <div class="section-title">System Health Monitor</div>
+                <button class="btn-glass btn-primary" onclick="window.toggleSystemMonitor()" id="sysMonitorToggle">▶
+                    Start Monitor</button>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 id="sysMemUsage">0%</h3>
+                        <p>Memory Usage</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 id="sysLoadAvg">0</h3>
+                        <p>CPU Load (1m)</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 id="sysUptime">0h</h3>
+                        <p>System Uptime</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <h3 id="botUptime">0h</h3>
+                        <p>Bot Uptime</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <h3>Memory Usage Trend</h3>
+                <div class="chart-wrapper">
+                    <canvas id="systemMemoryChart"></canvas>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <h3>System Information</h3>
+                <div class="table-responsive">
+                    <table>
+                        <tbody id="systemInfoTableBody">
+                            <tr>
+                                <td class="text-center text-muted">Waiting for monitor start...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
 </body>
 
 </html>

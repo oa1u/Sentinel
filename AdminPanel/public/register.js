@@ -1,4 +1,3 @@
-// Handles registration page logic, including invite code validation and password strength checking
 
 const registerBtn = document.getElementById('registerBtn');
 const passwordInput = document.getElementById('password');
@@ -22,7 +21,6 @@ const captchaState = {
     enabled: true
 };
 
-// Set up event listeners for registration form
 registerBtn.addEventListener('click', handleRegister);
 const registerForm = document.getElementById('registerForm');
 if (registerForm) registerForm.addEventListener('submit', handleRegister);
@@ -48,11 +46,9 @@ document.querySelectorAll('.password-toggle').forEach((btn) => {
         const input = targetId ? document.getElementById(targetId) : null;
         if (!input) return;
 
-        // Toggle input type
         const isPassword = input.type === 'password';
         input.type = isPassword ? 'text' : 'password';
 
-        // Set icon based on state
         btn.textContent = input.type === 'password' ? '👁️' : '👁️';
     });
 });
@@ -208,7 +204,6 @@ async function loadCaptchaChallenge(force = false) {
 
 async function handleRegister(e) {
     e.preventDefault();
-    // console.log removed for production
 
     const username = document.getElementById('username').value.trim();
     const email = document.getElementById('email').value.trim();
@@ -243,7 +238,6 @@ async function handleRegister(e) {
         return;
     }
 
-    // Check password requirements
     if (password.length < 8) {
         ui?.showMessage(errorMsg, 'Password must be at least 8 characters long', 'error');
         return;
@@ -269,7 +263,6 @@ async function handleRegister(e) {
         return;
     }
 
-    // Ask for confirmation before creating the account (typed username + acknowledgement)
     try {
         const confirmation = await showPromptModal({
             title: 'Confirm Account Creation',
@@ -288,11 +281,9 @@ async function handleRegister(e) {
         });
 
         if (!confirmation) {
-            // User cancelled confirmation
             return;
         }
     } catch (err) {
-        // If modal system fails, fall back to native confirm
         if (!confirm(`Create account for ${username}?`)) return;
     }
 
@@ -302,7 +293,6 @@ async function handleRegister(e) {
     ui?.hideMessage(successMsg);
 
     try {
-        // console.log removed for production
         const { response, data } = await api.postJson('/api/register', {
             username,
             email,
@@ -313,13 +303,11 @@ async function handleRegister(e) {
         });
 
         if (response.ok && data?.success) {
-            // console.log removed for production
             ui?.showMessage(successMsg, 'Account created! Redirecting to login...', 'success');
             setTimeout(() => {
                 window.location.href = '/login';
             }, 2000);
         } else {
-            // console.log removed for production
             await loadCaptchaChallenge(true);
             ui?.showMessage(errorMsg, data?.error || 'Registration failed', 'error');
         }

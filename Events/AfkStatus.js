@@ -75,7 +75,9 @@ module.exports = {
                 const backEmbed = new EmbedBuilder()
                     .setColor(0x43B581)
                     .setTitle('👋 Welcome Back')
-                    .setDescription(`${message.author}, your AFK status has been removed.`)
+                    .setDescription(`**${message.author}**, your AFK status has been removed.`)
+                    .setThumbnail(message.author.displayAvatarURL())
+                    .setFooter({ text: 'AFK System • Status Cleared', iconURL: message.guild.iconURL() })
                     .setTimestamp();
 
                 await message.channel.send({ embeds: [backEmbed] }).catch(() => null);
@@ -137,6 +139,7 @@ module.exports = {
                     .setColor(0xFAA61A)
                     .setTitle('💤 AFK Notice')
                     .setDescription(compactLines.join('\n') + (compactMoreCount ? `\n\n...and **${compactMoreCount}** more AFK user(s).` : ''))
+                    .setFooter({ text: 'AFK System • Compact Mode', iconURL: message.guild.iconURL() })
                     .setTimestamp();
 
                 await message.channel.send({ embeds: [compactEmbed] }).catch(() => null);
@@ -147,18 +150,20 @@ module.exports = {
                     .setColor(0x5865F2)
                     .setTitle('💤 AFK Details')
                     .setDescription('Some mentioned users are currently AFK.')
+                    .setFooter({ text: 'AFK System • Rich Mode', iconURL: message.guild.iconURL() })
                     .setTimestamp();
 
                 for (const record of richRecords) {
                     richEmbed.addFields({
-                        name: getAfkDisplayLabel(record),
-                        value: `Reason: ${record.reason}\nSince: ${buildRelativeTime(record.since)} (${buildAbsoluteTime(record.since)})`
+                        name: `**${getAfkDisplayLabel(record)}**`,
+                        value: `**Reason:** ${record.reason}\n**Since:** ${buildRelativeTime(record.since)} (${buildAbsoluteTime(record.since)})`,
+                        inline: false
                     });
                 }
 
                 const richMoreCount = Math.max(recordsToNotify.filter(record => record.mentionsMode === 'rich').length - richRecords.length, 0);
                 if (richMoreCount > 0) {
-                    richEmbed.setFooter({ text: `+${richMoreCount} more AFK user(s) omitted.` });
+                    richEmbed.setFooter({ text: `+${richMoreCount} more AFK user(s) omitted.`, iconURL: message.guild.iconURL() });
                 }
 
                 await message.channel.send({ embeds: [richEmbed] }).catch(() => null);
@@ -174,6 +179,7 @@ module.exports = {
                     .setColor(0xFAA61A)
                     .setTitle('💤 AFK Notice')
                     .setDescription(fallbackLines.join('\n') + (fallbackMoreCount ? `\n\n...and **${fallbackMoreCount}** more AFK user(s).` : ''))
+                    .setFooter({ text: 'AFK System • Fallback Mode', iconURL: message.guild.iconURL() })
                     .setTimestamp();
 
                 await message.channel.send({ embeds: [fallbackEmbed] }).catch(() => null);

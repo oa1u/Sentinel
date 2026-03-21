@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Moderation Playbook — guidelines and standard operating procedures for moderators. -->
 <html lang="en">
 
 <head>
@@ -7,185 +6,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="websiteNameTitle">Moderation Playbook</title>
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/playbook.css">
 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .playbook-intro-card {
-            margin-bottom: 1rem;
+        .playbook-tab-content {
+            display: none;
         }
 
-        .playbook-intro-note {
-            color: var(--text-secondary);
-            font-size: 0.88rem;
-            line-height: 1.55;
-            margin: 0.45rem 0 0;
+        .playbook-tab-content.active {
+            display: block;
+            animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        .playbook-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 0.8rem;
-            margin-top: 0.85rem;
-        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
 
-        .playbook-mini-card {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            background: var(--bg-secondary);
-            padding: 0.75rem;
-        }
-
-        .playbook-mini-card h4 {
-            margin: 0 0 0.3rem;
-            color: var(--text-primary);
-            font-size: 0.9rem;
-        }
-
-        .playbook-mini-card p {
-            margin: 0;
-            color: var(--text-secondary);
-            font-size: 0.84rem;
-            line-height: 1.5;
-        }
-
-        .playbook-scenario-wrap {
-            display: grid;
-            gap: 1rem;
-        }
-
-        .playbook-scenario-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.6rem;
-            flex-wrap: wrap;
-        }
-
-        .playbook-severity {
-            border: 1px solid var(--border-color);
-            border-radius: 999px;
-            padding: 0.2rem 0.6rem;
-            font-size: 0.74rem;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            background: var(--bg-card);
-            color: var(--text-secondary);
-        }
-
-        .playbook-severity.medium {
-            border-color: rgba(245, 158, 11, 0.35);
-            background: rgba(245, 158, 11, 0.12);
-            color: var(--color-orange);
-        }
-
-        .playbook-severity.high {
-            border-color: rgba(239, 68, 68, 0.35);
-            background: rgba(239, 68, 68, 0.12);
-            color: var(--color-red);
-        }
-
-        .playbook-severity.critical {
-            border-color: rgba(220, 38, 38, 0.45);
-            background: rgba(220, 38, 38, 0.16);
-            color: var(--color-red);
-        }
-
-        .playbook-first2 {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            background: var(--bg-card);
-            padding: 0.85rem;
-        }
-
-        .playbook-first2 h4 {
-            margin: 0 0 0.45rem;
-            color: var(--text-primary);
-            font-size: 0.92rem;
-        }
-
-        .playbook-first2 p {
-            margin: 0 0 0.45rem;
-            font-size: 0.84rem;
-            color: var(--text-secondary);
-            line-height: 1.5;
-        }
-
-        .playbook-actions-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 0.9rem;
-        }
-
-        .playbook-action-card {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            background: var(--bg-secondary);
-            padding: 0.9rem;
-        }
-
-        .playbook-action-title {
-            margin: 0 0 0.45rem;
-            color: var(--text-primary);
-            font-size: 0.95rem;
-        }
-
-        .playbook-list {
-            margin: 0;
-            padding-left: 1rem;
-            color: var(--text-secondary);
-            font-size: 0.87rem;
-            line-height: 1.6;
-            display: grid;
-            gap: 0.25rem;
-        }
-
-        .playbook-summary {
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            padding: 0.85rem;
-            background: linear-gradient(160deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-            color: var(--text-secondary);
-            font-size: 0.88rem;
-            line-height: 1.55;
-        }
-
-        .playbook-summary strong {
-            color: var(--text-primary);
-        }
-
-        .playbook-quick-reference {
-            margin-top: 1rem;
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            background: var(--bg-secondary);
-            padding: 0.9rem;
-        }
-
-        .playbook-quick-reference h3 {
-            margin: 0 0 0.5rem;
-            color: var(--text-primary);
-            font-size: 1rem;
-        }
-
-        .playbook-badges {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.4rem;
-        }
-
-        .playbook-badge {
-            border: 1px solid var(--border-color);
-            border-radius: 999px;
-            padding: 0.2rem 0.55rem;
-            font-size: 0.74rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            background: var(--bg-card);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/shared.js"></script>
     <script src="/public/notifications.js" defer></script>
@@ -195,7 +43,7 @@
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo">🛡️ Moderation Playbook</div>
+            <div class="logo"><span id="PanelEmoji">🛡️</span> Moderation Playbook</div>
             <nav class="header-nav">
                 <a href="/dashboard" class="nav-link">Dashboard</a>
                 <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
@@ -232,301 +80,323 @@
         <div class="message error hidden" id="errorMsg"></div>
         <div class="message success hidden" id="successMsg"></div>
 
-        <div class="profile-layout">
-            <aside class="profile-sidebar">
-                <div class="profile-user-card playbook-intro-card">
-                    <div class="profile-avatar-large">🛡️</div>
-                    <div class="profile-name-large">Moderation Playbook</div>
-                    <div class="profile-role-badge">Scenario Response Guide</div>
-                    <p class="playbook-intro-note">Use this workspace for consistent decisions, safer escalation, and
-                        reliable case documentation across your team.</p>
-                </div>
+        <div class="playbook-layout">
+            <aside class="playbook-sidebar">
+                <div class="docs-sidebar">
+                    <div class="docs-search">
+                        <span class="docs-search-icon">🔍</span>
+                        <input type="text" class="docs-search-input" placeholder="Search playbook..."
+                            id="playbookSearch">
+                    </div>
 
-                <nav class="profile-nav-menu" id="playbookTabs">
-                    <button class="profile-nav-item active" data-playbook-tab="overview">
-                        <span class="profile-nav-icon">📘</span> Core Framework
-                    </button>
-                    <button class="profile-nav-item" data-playbook-tab="spamraid">
-                        <span class="profile-nav-icon">🚨</span> Spam / Raid
-                    </button>
-                    <button class="profile-nav-item" data-playbook-tab="harassment">
-                        <span class="profile-nav-icon">🧱</span> Harassment
-                    </button>
-                    <button class="profile-nav-item" data-playbook-tab="hate">
-                        <span class="profile-nav-icon">⛔</span> Hate Speech
-                    </button>
-                    <button class="profile-nav-item" data-playbook-tab="selfharm">
-                        <span class="profile-nav-icon">🆘</span> Self-Harm Risk
-                    </button>
-                    <button class="profile-nav-item" data-playbook-tab="appeals">
-                        <span class="profile-nav-icon">⚖️</span> Appeals
-                    </button>
-                </nav>
+                    <div class="docs-nav-group">
+                        <div class="docs-nav-title">Staff Handbook</div>
+                        <a class="docs-nav-item active" data-playbook-tab="overview">
+                            <i>📋</i> Core Framework
+                        </a>
+                    </div>
+
+                    <div class="docs-nav-group">
+                        <div class="docs-nav-title">Standard Procedures</div>
+                        <a class="docs-nav-item" data-playbook-tab="spam">
+                            <i>🤖</i> Spam & Raids
+                        </a>
+                        <a class="docs-nav-item" data-playbook-tab="harassment">
+                            <i>🛡️</i> Harassment
+                        </a>
+                        <a class="docs-nav-item" data-playbook-tab="content">
+                            <i>🔞</i> NSFW / Content
+                        </a>
+                        <a class="docs-nav-item" data-playbook-tab="appeals">
+                            <i>📜</i> Appeals Guide
+                        </a>
+                    </div>
+                </div>
             </aside>
 
-            <div class="profile-content-area">
-                <div id="playbookOverviewContent" class="tab-content active">
-                    <div class="card">
-                        <div class="card-header"><span class="card-header-icon">🧭</span> Moderation Decision Framework
+            <section class="playbook-content">
+
+                <div id="playbookOverviewContent" class="playbook-tab-content active">
+
+                    <div class="playbook-card" style="border-left: 4px solid var(--color-blue);">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">Moderation Philosophy</div>
+                                <div class="playbook-card-subtitle">The Core 4-Step Engagement Process</div>
+                            </div>
+                            <span class="severity-badge"
+                                style="color: var(--color-blue); background: rgba(114, 137, 218, 0.1);">Universal</span>
                         </div>
-                        <div class="profile-card-body" style="padding: 1.2rem;">
-                            <p class="playbook-intro-note" style="margin-top: 0;">Apply the same sequence for every
-                                case: verify context, contain immediate harm, decide proportionate action, then document
-                                clearly.</p>
-                            <div class="playbook-grid">
-                                <article class="playbook-mini-card">
-                                    <h4>1) Verify Context</h4>
-                                    <p>Check full message history, timestamps, previous warnings, and whether this is a
-                                        repeated pattern.</p>
-                                </article>
-                                <article class="playbook-mini-card">
-                                    <h4>2) Contain Harm</h4>
-                                    <p>Stop active disruption first: remove harmful content, mute/timeout if needed, and
-                                        lock impacted channels.</p>
-                                </article>
-                                <article class="playbook-mini-card">
-                                    <h4>3) Decide Action</h4>
-                                    <p>Use proportional enforcement: warning for first low-risk violations, stronger
-                                        actions for severe or repeated abuse.</p>
-                                </article>
-                                <article class="playbook-mini-card">
-                                    <h4>4) Record & Communicate</h4>
-                                    <p>Log actor, target, evidence, rule violated, and action rationale so appeals can
-                                        be reviewed fairly.</p>
-                                </article>
+
+                        <div class="framework-grid">
+                            <div class="framework-card step-1">
+                                <div class="framework-step">Step 01</div>
+                                <div class="framework-title">Understand First</div>
+                                <div class="framework-desc">Take a breath and check the context. Look at what happened
+                                    right before the incident, account ages, and history. There's almost always a bigger
+                                    picture.</div>
+                            </div>
+                            <div class="framework-card step-2">
+                                <div class="framework-step">Step 02</div>
+                                <div class="framework-title">Stop the Bleeding</div>
+                                <div class="framework-desc">If things are getting out of hand, hit pause. Use a quick
+                                    timeout or delete messages to stop active harm before it escalates.</div>
+                            </div>
+                            <div class="framework-card step-3">
+                                <div class="framework-step">Step 03</div>
+                                <div class="framework-title">Be Fair & Consistent</div>
+                                <div class="framework-desc">Guide your actions using our Matrix below. Treat everyone on
+                                    the server the exact same way, regardless of who they are.</div>
+                            </div>
+                            <div class="framework-card step-4">
+                                <div class="framework-step">Step 04</div>
+                                <div class="framework-title">Leave a Trail</div>
+                                <div class="framework-desc">Write down why you took action like someone else has to read
+                                    it tomorrow. Clear logs make appeals so much easier to handle.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="playbook-card">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">Escalation Matrix</div>
+                                <div class="playbook-card-subtitle">Standard penalties for common offense tiers</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <div class="matrix-row">
+                                <span class="matrix-offense">Minor Offense (spam, rude, caps)</span>
+                                <span class="severity-badge low">Warn / 1h Timeout</span>
+                            </div>
+                            <div class="matrix-row">
+                                <span class="matrix-offense">Moderate Offense (harassment, slurs, advertising)</span>
+                                <span class="severity-badge medium">24h Timeout / Kick</span>
+                            </div>
+                            <div class="matrix-row">
+                                <span class="matrix-offense">Severe Offense (raid, nsfw, threats)</span>
+                                <span class="severity-badge high">Ban</span>
+                            </div>
+                            <div class="matrix-row">
+                                <span class="matrix-offense">Critical Offense (doxxing, illegal content)</span>
+                                <span class="severity-badge critical">Perm Ban + Report</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="playbookSpamContent" class="playbook-tab-content">
+
+                    <div class="playbook-card severity-critical" data-keywords="raid spam bot link mass mention">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">Mass Mention Spam / Raids</div>
+                                <div class="playbook-card-subtitle">Detected via AutoMod or sudden influx of pings</div>
+                            </div>
+                            <span class="severity-badge critical">Critical</span>
+                        </div>
+
+                        <div class="playbook-card-body">
+                            <p style="margin-bottom: 1rem; line-height: 1.6;">
+                                If you suddenly see multiple users or generic bot accounts dropping a ton of @everyone
+                                pings or repeating the same message holding links, you're likely looking at a raid.
+                                Don't panic, just lock it down.
+                            </p>
+
+                            <div class="playbook-section">
+                                <div class="playbook-section-header"><i class="fas fa-bolt"></i> Immediate Action</div>
+                                <div class="command-box" style="margin-bottom: 0.5rem">
+                                    <span class="command-text">/lockdown channel:#general duration:30m</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/lockdown channel:#general duration:30m')"><i
+                                            class="fas fa-copy"></i></button>
+                                </div>
+                                <div class="command-box">
+                                    <span class="command-text">/slowmode channel:#general amount:30s</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/slowmode channel:#general amount:30s')"><i
+                                            class="fas fa-copy"></i></button>
+                                </div>
                             </div>
 
-                            <div class="playbook-quick-reference">
-                                <h3>Quick Reference</h3>
-                                <div class="playbook-badges">
-                                    <span class="playbook-badge">Evidence First</span>
-                                    <span class="playbook-badge">Least Privilege</span>
-                                    <span class="playbook-badge">Consistent Outcomes</span>
-                                    <span class="playbook-badge">Document Every Action</span>
+                            <div class="playbook-section">
+                                <div class="playbook-section-header"><i class="fas fa-gavel"></i> Enforcement</div>
+                                <div class="command-box">
+                                    <span class="command-text">/ban user:Id reason:Raiding / Automated Spam
+                                        Account</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/ban user:Id reason:Raiding / Automated Spam Account')"><i
+                                            class="fas fa-copy"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="playbook-card severity-high" data-keywords="dm advertising scam phishing">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">DM Advertising / Phishing</div>
+                                <div class="playbook-card-subtitle">User reports of unsolicited DMs</div>
+                            </div>
+                            <span class="severity-badge high">High</span>
+                        </div>
+                        <div class="playbook-card-body">
+                            <p style="line-height: 1.6;">You'll usually see this from compromised accounts that joined a
+                                while ago but suddenly start dropping "Free Nitro" links or sketchy crypto invites in
+                                member DMs. Act fast before someone clicks.</p>
+                            <div class="playbook-section">
+                                <div class="playbook-section-header"><i class="fas fa-terminal"></i> Command</div>
+                                <div class="command-box">
+                                    <span class="command-text">/ban user:Id reason:DM Advertising / Compromised
+                                        Account</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/ban user:Id reason:DM Advertising / Compromised Account')"><i
+                                            class="fas fa-copy"></i></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="playbookSpamraidContent" class="tab-content">
-                    <div class="card">
-                        <div class="card-header"><span class="card-header-icon">🚨</span> Spam / Raid Scenario</div>
-                        <div class="profile-card-body" style="padding: 1.2rem;">
-                            <div class="playbook-scenario-wrap">
-                                <div class="playbook-scenario-head">
-                                    <span class="playbook-severity high">Severity: High</span>
+                <div id="playbookHarassmentContent" class="playbook-tab-content">
+                    <div class="playbook-card severity-medium" data-keywords="toxic bullying rude insult">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">General Toxicity</div>
+                                <div class="playbook-card-subtitle">Personal attacks, insults, or excessive rudeness
                                 </div>
-                                <div class="playbook-summary"><strong>Objective:</strong> Stop active disruption quickly
-                                    and restore normal operations with minimal collateral damage.</div>
-                                <div class="playbook-first2">
-                                    <h4>First 2 Minutes</h4>
-                                    <p>Contain spread first, then recover visibility.</p>
-                                    <ul class="playbook-list">
-                                        <li>Lock high-traffic channels or apply aggressive slowmode.</li>
-                                        <li>Mass-timeout obvious spam accounts and pause invites if required.</li>
-                                        <li>Assign one mod to enforcement and one mod to evidence logging.</li>
-                                    </ul>
+                            </div>
+                            <span class="severity-badge medium">Medium</span>
+                        </div>
+                        <div class="playbook-card-body">
+                            <p style="line-height: 1.6;">People get heated, but there's a line. If someone is turning a
+                                normal debate into personal attacks, name-calling, or making it impossible for others to
+                                chat comfortably, step in.</p>
+                            <div class="playbook-section">
+                                <div class="playbook-section-header"><i class="fas fa-clock"></i> First Offense</div>
+                                <div class="command-box">
+                                    <span class="command-text">/timeout user:Id duration:1h reason:Rude behavior / Cool
+                                        down</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/timeout user:Id duration:1h reason:Rude behavior / Cool down')"><i
+                                            class="fas fa-copy"></i></button>
                                 </div>
-                                <div class="playbook-actions-grid">
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Immediate Actions (0-2 min)</h4>
-                                        <ul class="playbook-list">
-                                            <li>Enable slowmode or temporarily lock affected channels.</li>
-                                            <li>Timeout or remove obvious raid/spam accounts in waves.</li>
-                                            <li>Disable invite links if attack appears coordinated.</li>
-                                        </ul>
-                                    </article>
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Stabilization (2-10 min)</h4>
-                                        <ul class="playbook-list">
-                                            <li>Review audit log for mass joins and role abuse signals.</li>
-                                            <li>Tune automod thresholds for links, mentions, and repeated text.</li>
-                                            <li>Post a short status update for members.</li>
-                                        </ul>
-                                    </article>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="playbook-card severity-critical" data-keywords="slur hate speech racism">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">Hate Speech</div>
+                                <div class="playbook-card-subtitle">Slurs, discriminatory remarks, or hate symbols</div>
+                            </div>
+                            <span class="severity-badge critical">Zero Tolerance</span>
+                        </div>
+                        <div class="playbook-card-body">
+                            <p style="line-height: 1.6;">This is non-negotiable. If you see someone dropping slurs, hate
+                                symbols, or attacking someone based on their race, identity, or orientation remove them
+                                immediately. No warnings needed here.</p>
+                            <div class="playbook-section">
+                                <div class="playbook-section-header"><i class="fas fa-gavel"></i> Enforcement</div>
+                                <div class="command-box">
+                                    <span class="command-text">/ban user:Id reason:Hate Speech / Violated ToS</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/ban user:Id reason:Hate Speech / Violated ToS')"><i
+                                            class="fas fa-copy"></i></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="playbookHarassmentContent" class="tab-content">
-                    <div class="card">
-                        <div class="card-header"><span class="card-header-icon">🧱</span> Harassment / Bullying Scenario
+                <div id="playbookContentContent" class="playbook-tab-content">
+                    <div class="playbook-card severity-high" data-keywords="nsfw gore porn explicit">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">NSFW / Shock Content</div>
+                                <div class="playbook-card-subtitle">Dealing with explicit imagery or hardcore gore</div>
+                            </div>
+                            <span class="severity-badge high">High</span>
                         </div>
-                        <div class="profile-card-body" style="padding: 1.2rem;">
-                            <div class="playbook-scenario-wrap">
-                                <div class="playbook-scenario-head">
-                                    <span class="playbook-severity high">Severity: High</span>
+                        <div class="playbook-card-body">
+                            <p style="line-height: 1.6;">If someone posts explicit content or intense gore outside of
+                                designated channels (or at all, if your server bans it outright), you need to wipe it
+                                from the screen fast so others don't have to see it.</p>
+                            <div class="playbook-section">
+                                <div class="playbook-section-header"><i class="fas fa-trash"></i> Cleanup</div>
+                                <div class="command-box">
+                                    <span class="command-text">/clear amount:10 target:User</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/clear amount:10 target:User')"><i
+                                            class="fas fa-copy"></i></button>
                                 </div>
-                                <div class="playbook-summary"><strong>Objective:</strong> Protect the targeted user,
-                                    stop repeated abuse, and maintain a documented behavior trail.</div>
-                                <div class="playbook-first2">
-                                    <h4>First 2 Minutes</h4>
-                                    <p>Protect targeted users and preserve evidence before cleanup.</p>
-                                    <ul class="playbook-list">
-                                        <li>Capture relevant messages and IDs before deletion or edits.</li>
-                                        <li>Separate aggressor from target with timeout or channel restriction.</li>
-                                        <li>Notify another moderator for second-review if severity is unclear.</li>
-                                    </ul>
-                                </div>
-                                <div class="playbook-actions-grid">
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Evidence & Safety</h4>
-                                        <ul class="playbook-list">
-                                            <li>Capture messages, attachments, and timestamps before deletion.</li>
-                                            <li>Separate involved users and remove public escalation.</li>
-                                            <li>Check prior warnings and related incidents.</li>
-                                        </ul>
-                                    </article>
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Enforcement</h4>
-                                        <ul class="playbook-list">
-                                            <li>Issue warning for first lower-severity offense.</li>
-                                            <li>Use timeout for repeated targeted behavior.</li>
-                                            <li>Escalate to ban for severe or persistent harassment.</li>
-                                        </ul>
-                                    </article>
+                            </div>
+                            <div class="playbook-section">
+                                <div class="playbook-section-header"><i class="fas fa-gavel"></i> Penalty</div>
+                                <div class="command-box">
+                                    <span class="command-text">/ban user:Id reason:NSFW Content posted in non-NSFW
+                                        channel</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/ban user:Id reason:NSFW Content posted in non-NSFW channel')"><i
+                                            class="fas fa-copy"></i></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="playbookHateContent" class="tab-content">
-                    <div class="card">
-                        <div class="card-header"><span class="card-header-icon">⛔</span> Hate Speech / Extremism
-                            Scenario</div>
-                        <div class="profile-card-body" style="padding: 1.2rem;">
-                            <div class="playbook-scenario-wrap">
-                                <div class="playbook-scenario-head">
-                                    <span class="playbook-severity critical">Severity: Critical</span>
+                <div id="playbookAppealsContent" class="playbook-tab-content">
+                    <div class="playbook-card" style="border-left: 4px solid var(--color-purple);"
+                        data-keywords="appeal review">
+                        <div class="playbook-card-header">
+                            <div class="playbook-card-title-group">
+                                <div class="playbook-card-title">Appeal Review Process</div>
+                                <div class="playbook-card-subtitle">How to assess unban requests</div>
+                            </div>
+                            <span class="severity-badge"
+                                style="color:var(--color-purple); background:rgba(128,0,128,0.1)">Procedure</span>
+                        </div>
+                        <div class="playbook-card-body">
+                            <div class="framework-grid">
+                                <div class="framework-card">
+                                    <div class="framework-step">Check 1</div>
+                                    <div class="framework-title">Cool Down Period</div>
+                                    <div class="framework-desc">Have they been away long enough to think about it?
+                                        Generally, we look for at least 30 days unless there's hard proof we made a
+                                        mistake up front.</div>
                                 </div>
-                                <div class="playbook-summary"><strong>Objective:</strong> Remove harmful content
-                                    immediately and enforce a strict, policy-aligned response.</div>
-                                <div class="playbook-first2">
-                                    <h4>First 2 Minutes</h4>
-                                    <p>Immediate removal and strict enforcement are the priority.</p>
-                                    <ul class="playbook-list">
-                                        <li>Delete visible harmful content and snapshot evidence internally.</li>
-                                        <li>Apply policy-level action without delay for severe hate content.</li>
-                                        <li>Escalate to senior staff if there are threat indicators.</li>
-                                    </ul>
+                                <div class="framework-card">
+                                    <div class="framework-step">Check 2</div>
+                                    <div class="framework-title">Taking Responsibility</div>
+                                    <div class="framework-desc">Do they own up to what they did? If our logs show they
+                                        broke a rule but their appeal says "I didn't do anything," that's usually a
+                                        quick denial.</div>
                                 </div>
-                                <div class="playbook-actions-grid">
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Critical Response</h4>
-                                        <ul class="playbook-list">
-                                            <li>Delete hateful content and preserve evidence for case records.</li>
-                                            <li>Apply immediate severe action according to policy baseline.</li>
-                                            <li>Escalate to admin/owner if content implies threats.</li>
-                                        </ul>
-                                    </article>
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Post-Action Follow-up</h4>
-                                        <ul class="playbook-list">
-                                            <li>Document exact rule violated and rationale for action.</li>
-                                            <li>Review related channels for coordinated behavior.</li>
-                                            <li>Reinforce community standards if incident was visible.</li>
-                                        </ul>
-                                    </article>
+                                <div class="framework-card">
+                                    <div class="framework-step">Check 3</div>
+                                    <div class="framework-title">Attitude Matters</div>
+                                    <div class="framework-desc">Are they respectfully asking for a second chance? If an
+                                        appeal comes in full of anger or insults, close it immediately.</div>
+                                </div>
+                            </div>
+                            <div class="playbook-section" style="margin-top:2rem">
+                                <div class="playbook-section-header"><i class="fas fa-reply"></i> Standard Acceptance
+                                </div>
+                                <div class="command-box">
+                                    <span class="command-text">/unban user:Id reason:Appeal Accepted - [Mod Name]</span>
+                                    <button class="command-copy-btn"
+                                        onclick="copyToClipboard('/unban user:Id reason:Appeal Accepted - [Mod Name]')"><i
+                                            class="fas fa-copy"></i></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="playbookSelfharmContent" class="tab-content">
-                    <div class="card">
-                        <div class="card-header"><span class="card-header-icon">🆘</span> Self-Harm Risk Scenario</div>
-                        <div class="profile-card-body" style="padding: 1.2rem;">
-                            <div class="playbook-scenario-wrap">
-                                <div class="playbook-scenario-head">
-                                    <span class="playbook-severity critical">Severity: Critical</span>
-                                </div>
-                                <div class="playbook-summary"><strong>Objective:</strong> Prioritize user safety, reduce
-                                    harm exposure, and escalate urgently using your server policy.</div>
-                                <div class="playbook-first2">
-                                    <h4>First 2 Minutes</h4>
-                                    <p>Treat this as urgent safety handling with calm escalation.</p>
-                                    <ul class="playbook-list">
-                                        <li>Assign a senior moderator to direct the response immediately.</li>
-                                        <li>Move interaction to a private support context where possible.</li>
-                                        <li>Share approved support resources and start internal handoff notes.</li>
-                                    </ul>
-                                </div>
-                                <div class="playbook-actions-grid">
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Safety First</h4>
-                                        <ul class="playbook-list">
-                                            <li>Move discussion to private, supportive communication where possible.
-                                            </li>
-                                            <li>Share approved crisis resources and encourage reaching trusted help.
-                                            </li>
-                                            <li>Escalate internally to senior staff immediately.</li>
-                                        </ul>
-                                    </article>
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Moderation Boundaries</h4>
-                                        <ul class="playbook-list">
-                                            <li>Do not dismiss or challenge distress statements.</li>
-                                            <li>Avoid public debate around the incident.</li>
-                                            <li>Log actions and handoff notes for continuity.</li>
-                                        </ul>
-                                    </article>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="playbookAppealsContent" class="tab-content">
-                    <div class="card">
-                        <div class="card-header"><span class="card-header-icon">⚖️</span> Appeals Handling Scenario
-                        </div>
-                        <div class="profile-card-body" style="padding: 1.2rem;">
-                            <div class="playbook-scenario-wrap">
-                                <div class="playbook-scenario-head">
-                                    <span class="playbook-severity medium">Severity: Medium</span>
-                                </div>
-                                <div class="playbook-summary"><strong>Objective:</strong> Review cases neutrally,
-                                    evaluate new evidence, and make consistent final decisions.</div>
-                                <div class="playbook-first2">
-                                    <h4>First 2 Minutes</h4>
-                                    <p>Set review scope, then validate evidence quality.</p>
-                                    <ul class="playbook-list">
-                                        <li>Open original case log and confirm rule references.</li>
-                                        <li>Separate new evidence from unsupported claims.</li>
-                                        <li>Assign independent reviewer if the original moderator is involved.</li>
-                                    </ul>
-                                </div>
-                                <div class="playbook-actions-grid">
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Review Workflow</h4>
-                                        <ul class="playbook-list">
-                                            <li>Verify original evidence and rule mapping.</li>
-                                            <li>Check whether punishment level matched violation severity.</li>
-                                            <li>Prioritize new verifiable evidence provided in appeal.</li>
-                                        </ul>
-                                    </article>
-                                    <article class="playbook-action-card">
-                                        <h4 class="playbook-action-title">Decision Outcomes</h4>
-                                        <ul class="playbook-list">
-                                            <li>Uphold action when evidence and policy alignment are clear.</li>
-                                            <li>Reduce action where severity was overestimated.</li>
-                                            <li>Revoke action only when the case is materially unsound.</li>
-                                        </ul>
-                                    </article>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            </section>
         </div>
     </main>
-
     <footer class="page-footer">
         <div class="footer-links">
             <span>© 2026 <strong><span class="websiteName"></span></strong></span>
@@ -538,7 +408,6 @@
             <a href="/license">License</a>
         </div>
     </footer>
-
     <script src="/public/version.js"></script>
 </body>
 

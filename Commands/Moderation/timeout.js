@@ -6,7 +6,6 @@ const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbe
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const AdminPanelHelper = require("../../Functions/AdminPanelHelper");
 
-// Turns things like "30m", "2h", or "7d" into minutes
 function parseDuration(input) {
   const match = input.match(/^(\d+)([mhdw])$/i);
   if (!match) return null;
@@ -14,7 +13,6 @@ function parseDuration(input) {
   const value = parseInt(match[1], 10);
   const unit = match[2].toLowerCase();
 
-  // Convert everything to minutes
   switch (unit) {
     case 'm': return value;
     case 'h': return value * 60;
@@ -45,7 +43,6 @@ module.exports = {
     ),
   category: 'moderation',
   async execute(interaction) {
-    // Respond right away so Discord doesn't time out while we process
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => { });
     }
@@ -54,7 +51,6 @@ module.exports = {
     const durationInput = interaction.options.getString('duration');
     const reason = interaction.options.getString('reason') || 'No reason provided';
 
-    // See if the duration they gave us is valid
     const duration = parseDuration(durationInput);
     if (!duration) {
       return sendWarningReply(
@@ -69,7 +65,6 @@ module.exports = {
       );
     }
 
-    // Discord won't let you timeout for less than a minute
     if (duration < 1) {
       return sendWarningReply(
         interaction,
@@ -78,7 +73,6 @@ module.exports = {
       );
     }
 
-    // Discord's hard limit is 28 days (40320 minutes)
     if (duration > 40320) {
       const days = Math.floor(duration / 1440);
       return sendWarningReply(
@@ -89,12 +83,10 @@ module.exports = {
       );
     }
 
-    // Check permissions and hierarchy
     if (!await canModerateMember(interaction, targetUser, 'timeout')) {
       return;
     }
 
-    // Make sure they're actually in the server (can't timeout someone who left)
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
       await sendWarningReply(
@@ -105,7 +97,6 @@ module.exports = {
       return;
     }
 
-    // Check if member is already timed out
     if (targetMember.isCommunicationDisabled()) {
       await sendWarningReply(
         interaction,
@@ -115,14 +106,11 @@ module.exports = {
       return;
     }
 
-    // Generate case ID
     const caseID = generateCaseId('TIMEOUT');
 
-    // Calculate timeout duration in milliseconds
     const timeoutMs = duration * 60 * 1000;
     const expiresAt = Date.now() + timeoutMs;
 
-    // Create logging embed
     const logEmbed = createModerationEmbed({
       action: '⏱️ Time Out',
       target: targetUser,
@@ -135,7 +123,6 @@ module.exports = {
       { name: '📅 Expires', value: `<t:${Math.floor(expiresAt / 1000)}:R>`, inline: true }
     );
 
-    // Send DM to user
     const durationText = moment.duration(duration, 'minutes').format('d[d] h[h] m[m]');
     const dmEmbed = createModerationDmEmbed({
       actionTitle: 'Communication Timeout Notice',
@@ -159,10 +146,8 @@ module.exports = {
 
     const dmSent = await sendModerationDM(targetUser, dmEmbed);
 
-    // Log the action
     await logModerationAction(interaction, logEmbed);
 
-    // Add to database
     addCase(targetUser.id, caseID, {
       moderator: interaction.user.id,
       moderatorTag: interaction.user.username,
@@ -175,7 +160,6 @@ module.exports = {
       expiresAt: expiresAt
     });
 
-    // Add to timeouts tracking table
     try {
       await AdminPanelHelper.addTimeout({
         userId: targetUser.id,
@@ -192,11 +176,9 @@ module.exports = {
       console.error('[timeout] Failed to add timeout to database:', err.message);
     }
 
-    // Perform the timeout
     try {
       await targetMember.timeout(timeoutMs, reason);
 
-      // Send success response
       await sendSuccessReply(
         interaction,
         '⏱️ Member Timed Out',

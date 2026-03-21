@@ -137,7 +137,7 @@ module.exports = {
                         : item.daysUntil === 1
                             ? 'in 1 day'
                             : `in ${item.daysUntil} days`;
-                    return `• <@${item.user_id}> — **${formatBirthday(item.month, item.day)}** (${whenText})`;
+                    return `• <@${item.user_id}> - **${formatBirthday(item.month, item.day)}** (${whenText})`;
                 });
 
                 const moreCount = Math.max(upcoming.length - 20, 0);

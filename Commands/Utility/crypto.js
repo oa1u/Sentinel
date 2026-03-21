@@ -1,7 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 
-// Check cryptocurrency prices using the CoinGecko API—see what's up with your favorite coins.
-// Look up prices in different currencies—BTC, ETH, USD, and more.
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('crypto')

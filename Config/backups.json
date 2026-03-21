@@ -1,6 +1,6 @@
 {
 	"enabled": true,
-	"intervalMinutes": 10080,
+	"intervalMinutes": 60,
 	"retentionCount": 10,
 	"tables": [
 		"active_alerts",
@@ -8,6 +8,7 @@
 		"admin_invite_codes",
 		"admin_users",
 		"alert_settings",
+		"anti_raid_events",
 		"audit_logs",
 		"automod_violations",
 		"automod_violation_reviews",
@@ -15,14 +16,22 @@
 		"birthdays",
 		"birthday_announcements",
 		"economy_balances",
+		"economy_boosts",
+		"economy_bounties",
+		"economy_fraud_flags",
+		"economy_interest_runs",
+		"economy_inventory",
+		"economy_quest_progress",
 		"economy_transactions",
 		"email_delivery_logs",
+		"ghost_pings",
 		"giveaways",
 		"giveaway_entries",
 		"invite_usage",
 		"join_to_create",
 		"kicks",
 		"levels",
+		"manual_lockdowns",
 		"member_activity",
 		"moderation_incidents",
 		"polls",
@@ -44,5 +53,5 @@
 		"verification_analytics_totals",
 		"warns"
 	],
-	"format": "json"
+	"format": "sql"
 }

@@ -20,9 +20,18 @@ module.exports = {
     name: 'guildMemberAdd',
     runOnce: false,
     async execute(member, client) {
+        // Run Invite tracking instantly (deduplicated)
+        const inviteInfo = await InviteTracker.handleMemberJoin(member).catch(() => null);
+
+        // Evaluate anti-raid triggers BEFORE executing heavy visual processes
+        const isQuarantined = await AntiRaid.handleMemberJoin(member, inviteInfo).catch(() => false);
+
+        // If system is locked down or they were quarantined, abort further automated onboarding
+        if (isQuarantined) {
+            return;
+        }
+
         await invokeHandler(GuildMemberWelcome, member, client, 'GuildMemberWelcome');
         await invokeHandler(Verification, member, client, 'verification');
-        const inviteInfo = await InviteTracker.handleMemberJoin(member).catch(() => null);
-        await AntiRaid.handleMemberJoin(member, inviteInfo).catch(() => { });
     }
 };

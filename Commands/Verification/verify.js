@@ -65,7 +65,6 @@ module.exports = {
     .setDescription('Verify yourself by completing a multi-step anti-bot check'),
   category: 'verification',
   async execute(interaction) {
-    // Check if command is used in verification channel
     if (interaction.channelId !== verificationChannelId) {
       return sendErrorReply(
         interaction,
@@ -92,7 +91,6 @@ module.exports = {
       );
     }
 
-    // Check if member is still in guild (prevent verifying non-members)
     if (!member || !member.guild) {
       return sendErrorReply(
         interaction,
@@ -101,7 +99,6 @@ module.exports = {
       );
     }
 
-    // Check if user is already verified
     if (member.roles.cache.has(verifiedRoleId)) {
       const alreadyVerifiedEmbed = new EmbedBuilder()
         .setColor(0x43B581)
@@ -157,7 +154,6 @@ module.exports = {
       reason: `sessionId=${session.sessionId}`
     }).catch(() => { });
 
-    // Generate new captcha
     const captcha = new CaptchaGenerator()
       .setDimension(600, 600)
       .setCaptcha({
@@ -182,7 +178,6 @@ module.exports = {
     }
 
     try {
-      // Send captcha image as an embed in log channel
       const captchaAttachment = new AttachmentBuilder(captchaBuffer, { name: "captcha.png" });
       const captchaEmbed = new EmbedBuilder()
         .setTitle("🧩 Captcha Generated")
@@ -298,7 +293,7 @@ module.exports = {
           .setDescription(
             captchaAttempt.status === 'max_attempts'
               ? 'Too many wrong captcha attempts. Run `/verify` to start again.'
-              : 'Captcha step timed out. Run `/verify` to start again.'
+              : 'You did not complete the captcha verification within the time limit. This check ensures you are not a robot. Please run `/verify` to try again.'
           );
 
         await activeChannel.send({ embeds: [timeoutEmbed] }).catch(() => { });

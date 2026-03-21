@@ -1,7 +1,7 @@
 const { EmbedBuilder, ChannelType } = require('discord.js');
 const { CHANNELS: { serverLogChannelId } } = require("../Config/constants");
 
-// Log when channels are created — post a detailed embed to the server log channel.
+// Log when channels are created - post a detailed embed to the server log channel.
 module.exports = (client) => {
     client.on("channelCreate", async (channel) => {
         const logs = client.channels.cache.get(serverLogChannelId);

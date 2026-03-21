@@ -19,7 +19,7 @@ function parseArtistTitle(input) {
     const cleaned = cleanTrackTitle(input);
     if (!cleaned) return { artist: null, title: null };
 
-    const separators = [' - ', ' — ', ' – ', ' | ', ' : '];
+    const separators = [' - ', ' – ', ' — ', ' | ', ' : '];
     for (const separator of separators) {
         const split = cleaned.split(separator);
         if (split.length >= 2) {

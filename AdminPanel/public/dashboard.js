@@ -1,6 +1,6 @@
 function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    const elements = document.querySelectorAll(`#${id}`);
+    elements.forEach(el => el.textContent = value);
 }
 
 function formatNumber(value) {
@@ -20,6 +20,19 @@ function toggleUserDropdown() {
 
 function closePunishmentHistory() {
     const modal = document.getElementById('punishmentHistoryModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function showDashboardInfo(title, description) {
+    const modal = document.getElementById('infoModal');
+    if (!modal) return;
+    document.getElementById('infoModalTitle').textContent = title;
+    document.getElementById('infoModalText').textContent = description;
+    modal.style.display = 'flex';
+}
+
+function closeInfoModal() {
+    const modal = document.getElementById('infoModal');
     if (modal) modal.style.display = 'none';
 }
 
@@ -108,7 +121,151 @@ async function loadDashboardStats() {
     setText('banRate', `${Number.isFinite(banRate) ? banRate.toFixed(2) : '0.00'}%`);
     setText('summaryActiveReminders', formatNumber(activeReminders));
 
+    setText('statAdminCount', formatNumber(stats.adminCount || 0));
+    setText('statTopUser', stats.topUserName || 'None');
+    setText('statMostWarned', stats.mostWarnedUserName || 'None');
+
     setDbStatus(combined.dbHealth);
+
+    try {
+        renderRiskMatrix(levels, warns);
+        renderRetentionChart(levels);
+    } catch (e) {
+        console.error("Error rendering advanced dashboard components:", e);
+    }
+}
+
+let riskMatrixChart = null;
+let retentionChart = null;
+
+function renderRiskMatrix(levelsList, warnsList) {
+    const ctx = document.getElementById('riskMatrixChart');
+    if (!ctx) return;
+
+    if (riskMatrixChart) riskMatrixChart.destroy();
+
+    const userData = {};
+
+    (levelsList || []).forEach(u => {
+        userData[u.userId || u.user_id] = {
+            x: u.level || 0,
+            y: 0,
+            r: 5,
+            userId: u.userId || u.user_id
+        };
+    });
+
+    (warnsList || []).forEach(w => {
+        const uid = w.userId || w.user_id;
+        if (!userData[uid]) {
+            userData[uid] = { x: 0, y: 0, r: 5, userId: uid };
+        }
+        userData[uid].y = Number(w.warnCount) || 0;
+    });
+
+    const dataset = Object.values(userData).filter(p => p.x > 0 || p.y > 0);
+
+    const pointColors = dataset.map(p => {
+        if (p.y > 5) return 'rgba(239, 68, 68, 0.8)';
+        if (p.y > 2) return 'rgba(245, 158, 11, 0.8)';
+        if (p.x > 10) return 'rgba(16, 185, 129, 0.8)';
+        return 'rgba(59, 130, 246, 0.6)';
+    });
+
+    riskMatrixChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'User Analysis',
+                data: dataset,
+                backgroundColor: pointColors,
+                borderColor: 'transparent',
+                pointHoverRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `User: ${ctx.raw.userId} (Lvl: ${ctx.raw.x}, Warns: ${ctx.raw.y})`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Experience Level (Loyalty)', color: '#6b7280' },
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#9ca3af' },
+                    beginAtZero: true
+                },
+                y: {
+                    title: { display: true, text: 'Warning Count (Risk)', color: '#6b7280' },
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#9ca3af' },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function renderRetentionChart(levelsList) {
+    const ctx = document.getElementById('retentionChart');
+    if (!ctx) return;
+
+    if (retentionChart) retentionChart.destroy();
+
+    let buckets = { 'New (1-5)': 0, 'Regular (6-15)': 0, 'Veteran (16-30)': 0, 'Elite (30+)': 0 };
+
+    (levelsList || []).forEach(u => {
+        const lvl = u.level || 0;
+        if (lvl <= 5) buckets['New (1-5)']++;
+        else if (lvl <= 15) buckets['Regular (6-15)']++;
+        else if (lvl <= 30) buckets['Veteran (16-30)']++;
+        else buckets['Elite (30+)']++;
+    });
+
+    retentionChart = new Chart(ctx, {
+        type: 'polarArea',
+        data: {
+            labels: Object.keys(buckets),
+            datasets: [{
+                data: Object.values(buckets),
+                backgroundColor: [
+                    'rgba(59, 130, 246, 0.5)',
+                    'rgba(16, 185, 129, 0.5)',
+                    'rgba(139, 92, 246, 0.5)',
+                    'rgba(245, 158, 11, 0.5)'
+                ],
+                borderWidth: 1,
+                borderColor: [
+                    'rgba(59, 130, 246, 1)',
+                    'rgba(16, 185, 129, 1)',
+                    'rgba(139, 92, 246, 1)',
+                    'rgba(245, 158, 11, 1)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: { display: false, backdropColor: 'transparent' }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { color: '#9ca3af', font: { size: 11 } }
+                }
+            }
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

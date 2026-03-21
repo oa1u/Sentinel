@@ -83,7 +83,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle('🗺️ Timezone Info')
+            .setTitle('🕒 Timezone Info')
             .setDescription(`Timezone for **${targetUser.tag}**`)
             .addFields(
                 { name: 'Timezone', value: resolved, inline: true },

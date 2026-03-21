@@ -35,14 +35,15 @@
         }
     };
 
-    // Load PanelEmoji from config and set it
     fetch('/Config/main.json')
-        .then(response => response.json())
-        .then(config => {
+        .then((response) => {
+            if (!response.ok) throw new Error(`Config request failed with status ${response.status}`);
+            return response.json();
+        })
+        .then((config) => {
             if (config.PanelEmoji) {
                 ui.setPanelEmoji(config.PanelEmoji);
             }
-            // Populate `.websiteName` placeholders on pages that include this shared script
             try {
                 const websiteName = config.websiteName;
                 if (websiteName) {
@@ -50,12 +51,10 @@
                         const nodes = document.querySelectorAll('.websiteName');
                         if (nodes && nodes.length) nodes.forEach(n => { n.textContent = websiteName; });
 
-                        // Also support pages that use an ID-based placeholder for the website name
                         try {
                             const footer = document.getElementById('websiteNameFooter');
                             if (footer) footer.textContent = websiteName;
                         } catch (e) {
-                            // ignore
                         }
                     };
                     if (document.readyState === 'loading') {
@@ -65,10 +64,8 @@
                     }
                 }
             } catch (e) {
-                // ignore DOM issues in non-browser contexts
             }
 
-            // Set the document title using the same rules previously in AdminPanelHelper.browser.js
             try {
                 const websiteName = config.websiteName;
                 const titleElem = document.getElementById('websiteNameTitle');
@@ -86,8 +83,10 @@
                     }
                 }
             } catch (e) {
-                // ignore title-setting failures
             }
+        })
+        .catch((error) => {
+            console.warn('Failed to load shared panel config:', error);
         });
 
     function isMutatingMethod(method) {
@@ -236,7 +235,6 @@
         const ageMs = Date.now() - timestamp;
         if (ageMs < 0) return false;
 
-        // Server max age is 60 minutes; refresh early to avoid 403 + retry noise.
         const refreshBeforeMs = 55 * 60 * 1000;
         return ageMs >= refreshBeforeMs;
     }
@@ -333,7 +331,6 @@
         const { response, data } = await requestJson('/api/account/info');
         if (!response || !response.ok) return {};
         if (typeof data === 'object' && data !== null) {
-            // If backend returns {success: true, ...}, remove only-success objects
             if (data.username && data.role) return data;
             return {};
         }

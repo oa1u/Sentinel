@@ -8,12 +8,21 @@ const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 // Here's how we generate a random string using crypto.
 function makeid(length = 10, charset = CHARSET) {
   if (!length || length < 1) return '';
-  const bytes = crypto.randomBytes(length);
-  const result = [];
-  for (let i = 0; i < length; i++) {
-    result.push(charset[bytes[i] % charset.length]);
+  let result = '';
+
+  // Prevent modulo bias by dropping bytes that don't fit evenly into the charset length
+  const maxValidByte = 256 - (256 % charset.length);
+
+  while (result.length < length) {
+    // Generate extra bytes to account for dropped ones
+    const bytes = crypto.randomBytes(length * 2);
+    for (let i = 0; i < bytes.length && result.length < length; i++) {
+      if (bytes[i] < maxValidByte) {
+        result += charset[bytes[i] % charset.length];
+      }
+    }
   }
-  return result.join('');
+  return result;
 }
 
 // This builds a unique case ID, like WARN-XXXXXXXX, for tracking moderation cases.

@@ -1,11 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
-// Use number emojis for poll options—makes voting easy and clear.
 const EMOJI_MAP = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
-// Poll system with create, end, and results subcommands.
-// Tracks votes in the database so you can see results later.
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('poll')
@@ -65,7 +62,6 @@ async function createPoll(interaction) {
 
   const options = optionsStr.split('|').map(o => o.trim()).filter(Boolean);
 
-  // You need at least 2 options for a poll to make sense.
   if (options.length < 2) {
     return interaction.reply({
       content: '❌ You need at least 2 options for a poll!',
@@ -73,7 +69,6 @@ async function createPoll(interaction) {
     });
   }
 
-  // Discord only lets us use 10 emojis for polls.
   if (options.length > 10) {
     return interaction.reply({
       content: '❌ Maximum 10 options allowed!',
@@ -81,7 +76,6 @@ async function createPoll(interaction) {
     });
   }
 
-  // Format the poll options with number emojis.
   const optionsText = options.map((opt, i) => `${EMOJI_MAP[i]} ${opt}`).join('\n');
 
   const embed = new EmbedBuilder()
@@ -105,12 +99,10 @@ async function createPoll(interaction) {
   });
   const msg = response?.resource?.message || await interaction.fetchReply();
 
-  // Add emoji reactions so people can vote.
   for (let i = 0; i < options.length; i++) {
     await msg.react(EMOJI_MAP[i]);
   }
 
-  // Store the poll in the database for tracking.
   await MySQLDatabaseManager.createPoll(
     msg.id,
     interaction.guild.id,
@@ -120,7 +112,6 @@ async function createPoll(interaction) {
     duration ? new Date(Date.now() + duration * 60000) : null
   );
 
-  // Schedule the poll to auto-end if a duration is set.
   if (duration) {
     setTimeout(async () => {
       await endPollById(msg.id, interaction.channel);
@@ -191,7 +182,7 @@ async function showResults(interaction) {
     for (let i = 0; i < EMOJI_MAP.length; i++) {
       const reaction = reactions.get(EMOJI_MAP[i]);
       if (reaction) {
-        const count = reaction.count - 1; // Subtract bot's reaction
+        const count = reaction.count - 1;
         results.push(count);
         totalVotes += count;
       }
@@ -205,7 +196,7 @@ async function showResults(interaction) {
     }
 
     const embed = message.embeds[0];
-    const options = embed.description.split('\n').map(line => line.substring(2)); // Remove emoji prefix
+    const options = embed.description.split('\n').map(line => line.substring(2));
 
     const resultsText = results.map((count, i) => {
       const percentage = ((count / totalVotes) * 100).toFixed(1);
@@ -240,10 +231,8 @@ async function endPollById(pollId, channel) {
     const message = await channel.messages.fetch(pollId);
     if (!message || !message.embeds[0]) return;
 
-    // Mark the poll as ended in the database.
     await MySQLDatabaseManager.endPoll(pollId);
 
-    // Calculate poll results.
     const reactions = message.reactions.cache;
     const results = [];
     let totalVotes = 0;
@@ -278,7 +267,6 @@ async function endPollById(pollId, channel) {
       winnerText = '🤝 **Tie:** ' + winnerIndices.map(i => options[i]).join(' & ');
     }
 
-    // Update the poll embed with new info.
     const updatedEmbed = EmbedBuilder.from(embed)
       .setColor(0x57F287)
       .spliceFields(1, 1, { name: '⏱️ Status', value: '🔴 **Ended**', inline: true })

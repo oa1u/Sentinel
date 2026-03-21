@@ -57,7 +57,7 @@ module.exports = {
                 { name: '🔥 Current Streak', value: `**${streak}** day${streak === 1 ? '' : 's'}`, inline: true },
                 { name: '🏆 Best Streak', value: `**${best}** day${best === 1 ? '' : 's'}`, inline: true },
                 { name: '📌 Status', value: status, inline: true },
-                { name: '🗓️ Last Active Day (UTC)', value: lastActiveText, inline: false }
+                { name: '📅 Last Active Day (UTC)', value: lastActiveText, inline: false }
             )
             .setTimestamp();
 

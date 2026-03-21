@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
-const { CHANNELS: { levelUpLogChannelId, welcomeChannelId, serverLogChannelId, rulesChannelId }, LEVELING: { config: CONFIG, multipliers: MULTIPLIERS, levelRoles: LEVEL_ROLES }, MISC: misc } = require('../Config/constants');
+const { CHANNELS: { levelUpLogChannelId, welcomeChannelId, serverLogChannelId, rulesChannelId }, LEVELING: { config: CONFIG, multipliers: MULTIPLIERS }, ROLES, MISC: misc } = require('../Config/constants');
 
 // Leveling system: awards XP for messages, tracks progress, and handles level-up notifications and rewards.
 // TODO: Add per-channel/admin-configurable XP multipliers for finer control.
@@ -221,8 +221,8 @@ async function sendLevelUpNotification(message, userData, newLevel) {
 
     // Apply any configured role reward for the new level.
     const levelRoleKey = `level${newLevel}RoleId`;
-    if (LEVEL_ROLES[levelRoleKey]) {
-        const role = message.guild.roles.cache.get(LEVEL_ROLES[levelRoleKey]);
+    if (ROLES[levelRoleKey]) {
+        const role = message.guild.roles.cache.get(ROLES[levelRoleKey]);
         if (role) {
             try {
                 await message.member.roles.add(role);

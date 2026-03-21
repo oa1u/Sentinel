@@ -11,7 +11,7 @@ module.exports = (client) => {
         if (!logs) return;
 
         const embed = new EmbedBuilder()
-            .setTitle('🗑️ Scheduled Event Deleted')
+            .setTitle('❌ Scheduled Event Deleted')
             .setColor(LOG_COLORS.DELETE)
             .setDescription('A scheduled event was deleted.')
             .addFields(

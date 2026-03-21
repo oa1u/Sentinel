@@ -16,7 +16,6 @@
             <h1 style="margin-bottom: 12px; color: var(--text-primary);">Discord Link Failed</h1>
             <p id="error-message" style="color: var(--text-secondary);"></p>
             <script>
-                // Map error codes to user-friendly messages
                 const errorMessages = {
                     already_linked: "That Discord account is already linked to another admin panel account.<br>Return to your admin panel tab, refresh, and try again.",
                     session_expired: "Your session expired before the Discord link could complete. Please try again.",
@@ -24,7 +23,6 @@
                     oauth_failed: "Discord OAuth failed. Please try again.",
                     default: "The Discord link was unsuccessful. Please try again."
                 };
-                // Get the reason from the URL
                 const params = new URLSearchParams(window.location.search);
                 const reason = params.get('reason');
                 document.getElementById('error-message').innerHTML =

@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { CHANNELS: { serverLogChannelId } } = require("../Config/constants");
 
-// Log when new custom emojis are added — include metadata and a thumbnail.
+// Log when new custom emojis are added - include metadata and a thumbnail.
 module.exports = (client) => {
     client.on("emojiCreate", async (emoji) => {
         const logs = client.channels.cache.get(serverLogChannelId);

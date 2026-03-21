@@ -1,15 +1,9 @@
-const fs = require('fs');
-const path = require('path');
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
 
-const ANALYTICS_FILE = path.join(__dirname, '..', 'Config', 'verificationAnalytics.json');
-const MAX_RECENT_EVENTS = 300;
 const VERIFICATION_ANALYTICS_TOTALS_TABLE = 'verification_analytics_totals';
 const VERIFICATION_ANALYTICS_EVENTS_TABLE = 'verification_analytics_events';
 
 let verificationAnalyticsDbInitPromise = null;
-let verificationAnalyticsDbBackfillPromise = null;
-let verificationAnalyticsDbUnavailableLogged = false;
 
 function getDefaultAnalytics() {
     return {
@@ -40,60 +34,6 @@ function getDefaultAnalytics() {
         recent: [],
         updatedAt: null
     };
-}
-
-async function ensureAnalyticsFile() {
-    try {
-        await fs.promises.access(ANALYTICS_FILE);
-    } catch {
-        await fs.promises.mkdir(path.dirname(ANALYTICS_FILE), { recursive: true });
-        await fs.promises.writeFile(ANALYTICS_FILE, JSON.stringify(getDefaultAnalytics(), null, 2), 'utf8');
-    }
-}
-
-async function readAnalytics() {
-    await ensureAnalyticsFile();
-    try {
-        const raw = await fs.promises.readFile(ANALYTICS_FILE, 'utf8');
-        const parsed = JSON.parse(raw);
-        return {
-            ...getDefaultAnalytics(),
-            ...parsed,
-            totals: {
-                ...getDefaultAnalytics().totals,
-                ...(parsed?.totals || {})
-            },
-            breakdown: {
-                ...getDefaultAnalytics().breakdown,
-                ...(parsed?.breakdown || {}),
-                challengeTypes: {
-                    ...getDefaultAnalytics().breakdown.challengeTypes,
-                    ...(parsed?.breakdown?.challengeTypes || {})
-                },
-                verificationModes: {
-                    ...getDefaultAnalytics().breakdown.verificationModes,
-                    ...(parsed?.breakdown?.verificationModes || {})
-                }
-            },
-            recent: Array.isArray(parsed?.recent) ? parsed.recent : []
-        };
-    } catch {
-        return getDefaultAnalytics();
-    }
-}
-
-async function writeAnalytics(data) {
-    const payload = {
-        ...getDefaultAnalytics(),
-        ...data,
-        updatedAt: new Date().toISOString()
-    };
-    await fs.promises.writeFile(ANALYTICS_FILE, JSON.stringify(payload, null, 2), 'utf8');
-}
-
-function incrementIfExists(container, key) {
-    if (!container || !Object.prototype.hasOwnProperty.call(container, key)) return;
-    container[key] += 1;
 }
 
 function normalizeAnalyticsEvent(event = {}) {
@@ -147,12 +87,6 @@ function mapTotalsRowToSummary(row = {}) {
         captchaStepPassed: toSafeNumber(row.captcha_step_passed),
         challengeStepPassed: toSafeNumber(row.challenge_step_passed)
     };
-}
-
-function logVerificationAnalyticsDbFallback(error) {
-    if (verificationAnalyticsDbUnavailableLogged) return;
-    verificationAnalyticsDbUnavailableLogged = true;
-    console.warn('[VerificationAnalytics] Falling back to file storage:', error?.message || error);
 }
 
 async function ensureVerificationAnalyticsDbReady() {
@@ -221,104 +155,8 @@ async function ensureVerificationAnalyticsDbReady() {
     }
 }
 
-async function maybeBackfillVerificationAnalyticsFromFile() {
-    if (verificationAnalyticsDbBackfillPromise) {
-        return verificationAnalyticsDbBackfillPromise;
-    }
-
-    verificationAnalyticsDbBackfillPromise = (async () => {
-        const [totalsRow] = await MySQLDatabaseManager.connection.query(
-            `SELECT sessions_started, successes, failures, timeouts, fallback_used,
-                    role_assignment_failures, penalties_applied, staff_overrides,
-                    multi_step_challenges, captcha_step_passed, challenge_step_passed
-             FROM ${VERIFICATION_ANALYTICS_TOTALS_TABLE}
-             WHERE id = 1
-             LIMIT 1`
-        );
-
-        const [eventCountRow] = await MySQLDatabaseManager.connection.query(
-            `SELECT COUNT(*) AS totalCount FROM ${VERIFICATION_ANALYTICS_EVENTS_TABLE}`
-        );
-
-        const totalCount = Number(eventCountRow?.totalCount || 0);
-        const totalsSnapshot = mapTotalsRowToSummary(totalsRow || {});
-        const totalsSum = Object.values(totalsSnapshot).reduce((sum, value) => sum + Number(value || 0), 0);
-
-        if (totalsSum > 0 || totalCount > 0) {
-            return;
-        }
-
-        const fileAnalytics = await readAnalytics();
-        const fileTotals = fileAnalytics?.totals || {};
-        const updatedAt = fileAnalytics?.updatedAt ? new Date(fileAnalytics.updatedAt) : null;
-        const safeUpdatedAt = updatedAt && Number.isFinite(updatedAt.getTime()) ? updatedAt : null;
-
-        await MySQLDatabaseManager.connection.query(
-            `UPDATE ${VERIFICATION_ANALYTICS_TOTALS_TABLE}
-             SET sessions_started = ?,
-                 successes = ?,
-                 failures = ?,
-                 timeouts = ?,
-                 fallback_used = ?,
-                 role_assignment_failures = ?,
-                 penalties_applied = ?,
-                 staff_overrides = ?,
-                 multi_step_challenges = ?,
-                 captcha_step_passed = ?,
-                 challenge_step_passed = ?,
-                 updated_at = COALESCE(?, CURRENT_TIMESTAMP)
-             WHERE id = 1`,
-            [
-                toSafeNumber(fileTotals.sessionsStarted),
-                toSafeNumber(fileTotals.successes),
-                toSafeNumber(fileTotals.failures),
-                toSafeNumber(fileTotals.timeouts),
-                toSafeNumber(fileTotals.fallbackUsed),
-                toSafeNumber(fileTotals.roleAssignmentFailures),
-                toSafeNumber(fileTotals.penaltiesApplied),
-                toSafeNumber(fileTotals.staffOverrides),
-                toSafeNumber(fileTotals.multiStepChallenges),
-                toSafeNumber(fileTotals.captchaStepPassed),
-                toSafeNumber(fileTotals.challengeStepPassed),
-                safeUpdatedAt
-            ]
-        );
-
-        const recentEvents = Array.isArray(fileAnalytics?.recent) ? fileAnalytics.recent.slice(0, MAX_RECENT_EVENTS) : [];
-        for (const row of recentEvents) {
-            const event = normalizeAnalyticsEvent(row);
-            await MySQLDatabaseManager.connection.query(
-                `INSERT INTO ${VERIFICATION_ANALYTICS_EVENTS_TABLE}
-                    (event_timestamp, event_type, user_id, username, guild_id, guild_name, mode, challenge_type, duration_ms, reason)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    event.timestamp,
-                    event.type,
-                    event.userId,
-                    event.username,
-                    event.guildId,
-                    event.guildName,
-                    event.mode,
-                    event.challengeType,
-                    event.durationMs,
-                    event.reason
-                ]
-            );
-        }
-    })();
-
-    try {
-        await verificationAnalyticsDbBackfillPromise;
-        return true;
-    } catch (error) {
-        verificationAnalyticsDbBackfillPromise = null;
-        throw error;
-    }
-}
-
 async function recordVerificationEventToDatabase(event = {}) {
     await ensureVerificationAnalyticsDbReady();
-    await maybeBackfillVerificationAnalyticsFromFile();
 
     const normalized = normalizeAnalyticsEvent(event);
     const increments = getEventIncrementMap(normalized.type);
@@ -374,7 +212,6 @@ async function recordVerificationEventToDatabase(event = {}) {
 
 async function getVerificationAnalyticsFromDatabase({ days = 30 } = {}) {
     await ensureVerificationAnalyticsDbReady();
-    await maybeBackfillVerificationAnalyticsFromFile();
 
     const safeDays = Math.max(1, Math.min(365, Number(days) || 30));
     const cutoffDate = new Date(Date.now() - (safeDays * 24 * 60 * 60 * 1000));
@@ -488,53 +325,7 @@ async function getVerificationAnalyticsFromDatabase({ days = 30 } = {}) {
 }
 
 async function recordVerificationEvent(event = {}) {
-    try {
-        await recordVerificationEventToDatabase(event);
-        return;
-    } catch (error) {
-        logVerificationAnalyticsDbFallback(error);
-    }
-
-    const analytics = await readAnalytics();
-    const nowIso = new Date().toISOString();
-
-    const eventType = String(event.type || '').trim();
-    const mode = String(event.mode || '').trim();
-    const challengeType = String(event.challengeType || '').trim();
-
-    if (eventType === 'session_started') analytics.totals.sessionsStarted += 1;
-    if (eventType === 'success') analytics.totals.successes += 1;
-    if (eventType === 'failure') analytics.totals.failures += 1;
-    if (eventType === 'timeout') analytics.totals.timeouts += 1;
-    if (eventType === 'fallback_used') analytics.totals.fallbackUsed += 1;
-    if (eventType === 'role_assignment_failed') analytics.totals.roleAssignmentFailures += 1;
-    if (eventType === 'penalty_applied') analytics.totals.penaltiesApplied += 1;
-    if (eventType === 'staff_override') analytics.totals.staffOverrides += 1;
-    if (eventType === 'step_captcha_passed') analytics.totals.captchaStepPassed += 1;
-    if (eventType === 'step_challenge_passed') analytics.totals.challengeStepPassed += 1;
-    if (eventType === 'multi_step_issued') analytics.totals.multiStepChallenges += 1;
-
-    incrementIfExists(analytics.breakdown.verificationModes, mode);
-    incrementIfExists(analytics.breakdown.challengeTypes, challengeType);
-
-    analytics.recent.unshift({
-        timestamp: nowIso,
-        type: eventType || 'unknown',
-        userId: event.userId || null,
-        username: event.username || null,
-        guildId: event.guildId || null,
-        guildName: event.guildName || null,
-        mode: mode || null,
-        challengeType: challengeType || null,
-        durationMs: Number.isFinite(Number(event.durationMs)) ? Number(event.durationMs) : null,
-        reason: event.reason || null
-    });
-
-    if (analytics.recent.length > MAX_RECENT_EVENTS) {
-        analytics.recent.length = MAX_RECENT_EVENTS;
-    }
-
-    await writeAnalytics(analytics);
+    await recordVerificationEventToDatabase(event);
 }
 
 function toSafeNumber(value) {
@@ -543,62 +334,7 @@ function toSafeNumber(value) {
 }
 
 async function getVerificationAnalytics({ days = 30 } = {}) {
-    try {
-        return await getVerificationAnalyticsFromDatabase({ days });
-    } catch (error) {
-        logVerificationAnalyticsDbFallback(error);
-    }
-
-    const analytics = await readAnalytics();
-    const safeDays = Math.max(1, Math.min(365, Number(days) || 30));
-    const cutoff = Date.now() - (safeDays * 24 * 60 * 60 * 1000);
-
-    const recentWindow = analytics.recent.filter((item) => {
-        const ts = new Date(item.timestamp).getTime();
-        return Number.isFinite(ts) && ts >= cutoff;
-    });
-
-    const summary = {
-        sessionsStarted: toSafeNumber(analytics.totals.sessionsStarted),
-        successes: toSafeNumber(analytics.totals.successes),
-        failures: toSafeNumber(analytics.totals.failures),
-        timeouts: toSafeNumber(analytics.totals.timeouts),
-        fallbackUsed: toSafeNumber(analytics.totals.fallbackUsed),
-        roleAssignmentFailures: toSafeNumber(analytics.totals.roleAssignmentFailures),
-        penaltiesApplied: toSafeNumber(analytics.totals.penaltiesApplied),
-        staffOverrides: toSafeNumber(analytics.totals.staffOverrides),
-        multiStepChallenges: toSafeNumber(analytics.totals.multiStepChallenges),
-        captchaStepPassed: toSafeNumber(analytics.totals.captchaStepPassed),
-        challengeStepPassed: toSafeNumber(analytics.totals.challengeStepPassed)
-    };
-
-    const successRate = summary.sessionsStarted > 0
-        ? Number(((summary.successes / summary.sessionsStarted) * 100).toFixed(1))
-        : 0;
-
-    const windowStats = {
-        totalEvents: recentWindow.length,
-        successes: recentWindow.filter((row) => row.type === 'success').length,
-        failures: recentWindow.filter((row) => row.type === 'failure').length,
-        timeouts: recentWindow.filter((row) => row.type === 'timeout').length,
-        fallbackUsed: recentWindow.filter((row) => row.type === 'fallback_used').length
-    };
-
-    return {
-        success: true,
-        days: safeDays,
-        summary: {
-            ...summary,
-            successRate
-        },
-        window: windowStats,
-        breakdown: {
-            challengeTypes: analytics.breakdown.challengeTypes,
-            verificationModes: analytics.breakdown.verificationModes
-        },
-        recent: analytics.recent.slice(0, 60),
-        updatedAt: analytics.updatedAt
-    };
+    return getVerificationAnalyticsFromDatabase({ days });
 }
 
 module.exports = {

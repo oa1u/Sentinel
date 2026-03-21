@@ -49,9 +49,11 @@ async function handleMessage(message) {
             const embed = new EmbedBuilder()
                 .setColor(0x43B581)
                 .setTitle('🍀 Lucky Drop!')
-                .setDescription(`${message.author} found **${amount}** coins!`)
+                .setDescription(`**${message.author}** found **${amount}** coins!`)
+                .setThumbnail(message.author.displayAvatarURL())
+                .setFooter({ text: 'Economy Reward • Lucky Drop', iconURL: message.guild.iconURL() })
                 .setTimestamp();
-            await message.channel.send({ embeds: [embed] }).catch(() => {});
+            await message.channel.send({ embeds: [embed] }).catch(() => { });
         }
 
         return { type: 'coins', amount };
@@ -64,9 +66,11 @@ async function handleMessage(message) {
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle('✨ Lucky XP!')
-            .setDescription(`${message.author} gained **${xp} XP**!`)
+            .setDescription(`**${message.author}** gained **${xp} XP**!`)
+            .setThumbnail(message.author.displayAvatarURL())
+            .setFooter({ text: 'Leveling Reward • Lucky XP', iconURL: message.guild.iconURL() })
             .setTimestamp();
-        await message.channel.send({ embeds: [embed] }).catch(() => {});
+        await message.channel.send({ embeds: [embed] }).catch(() => { });
     }
 
     return { type: 'xp', amount: xp };

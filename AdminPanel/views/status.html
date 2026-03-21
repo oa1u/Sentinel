@@ -20,7 +20,6 @@
         </div>
     </div>
     <script>
-        // window.statusPageData should be set by the backend or inline script
         if (window.statusPageData) {
             document.getElementById('status-title').textContent = window.statusPageData.title || 'Status';
             document.getElementById('status-message').innerHTML = window.statusPageData.message || '';

@@ -7,8 +7,6 @@ const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbe
 const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
-// Warns a user and keeps track in the database
-// Too many warnings can trigger auto-punishments
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warn')
@@ -32,12 +30,10 @@ module.exports = {
     const targetUser = interaction.options.getUser('user');
     const reasonInput = interaction.options.getString('reason');
 
-    // Check permissions and hierarchy
     if (!await canModerateMember(interaction, targetUser, 'warn')) {
       return;
     }
 
-    // Fetch member to verify they exist in guild
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
       await sendWarningReply(
@@ -48,10 +44,8 @@ module.exports = {
       return;
     }
 
-    // Generate case ID
     const caseId = generateCaseId('WARN');
 
-    // Create logging embed
     const logEmbed = createModerationEmbed({
       action: '⚠️ Warning',
       target: targetUser,
@@ -61,7 +55,6 @@ module.exports = {
       color: 0xFAA61A
     });
 
-    // Send DM to user
     const dmEmbed = createModerationDmEmbed({
       actionTitle: 'Warning Notice',
       actionEmoji: '⚠️',
@@ -79,10 +72,8 @@ module.exports = {
 
     const dmSent = await sendModerationDM(targetUser, dmEmbed);
 
-    // Log the action
     await logModerationAction(interaction, logEmbed);
 
-    // Add to database
     addCase(targetUser.id, caseId, {
       moderator: interaction.user.id,
       moderatorTag: interaction.user.username,
@@ -92,7 +83,6 @@ module.exports = {
       type: 'WARN'
     });
 
-    // Add warning to MySQL database
     try {
       const query = `
         INSERT INTO warns (user_id, case_id, reason, moderator_id, moderator_name, type, timestamp, created_at)
@@ -110,7 +100,6 @@ module.exports = {
       console.error('[warn] Failed to add warning to database:', err.message);
     }
 
-    // Send success response
     await sendSuccessReply(
       interaction,
       '✅ Warning Issued',

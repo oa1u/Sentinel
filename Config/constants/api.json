@@ -1,4 +1,5 @@
 {
-	"weatherapikey": "##REPLACE-WITH-YOUR-OWN-KEY##",
-	"riddleApiUrl": "https://riddles-api.vercel.app/random"
+	"weatherapikey": "https://openweathermap.org/api - Create a free account to get an API key",
+	"riddleApiUrl": "https://riddles-api.vercel.app/random",
+	"steamapikey": "##REPLACE-WITH-YOUR-STEAM-API-KEY##"
 }

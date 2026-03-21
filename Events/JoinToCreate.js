@@ -18,7 +18,7 @@ module.exports = {
   call: async (client, args) => {
     const [oldState, newState] = args;
 
-    // If there's no old/new state, ignore — nothing for us to do.
+    // If there's no old/new state, ignore - nothing for us to do.
     if (!oldState && !newState) return;
 
     const oldChannelId = oldState?.channelId || null;
@@ -169,10 +169,20 @@ async function notifyNewOwner(newOwnerMember, guild, channel) {
   const guildName = String(guild?.name || 'this server');
   const channelName = String(channel?.name || 'your voice channel');
 
-  await newOwnerMember.user.send(
-    `You are now the owner of **${channelName}** in **${guildName}**.\n` +
-    `You can use the /voice commands to manage it (name, limit, lock, permit, reject, delete).`
-  ).catch(() => {
+  const { EmbedBuilder } = require('discord.js');
+  const embed = new EmbedBuilder()
+    .setTitle('Room Ownership Granted')
+    .setDescription(`You are now the owner of **${channelName}** in **${guildName}**.`)
+    .addFields([
+      {
+        name: 'Room Management',
+        value: 'You can use the `/voice` commands to manage it:\n• `/voice name`\n• `/voice limit`\n• `/voice lock`\n• `/voice permit`\n• `/voice reject`\n• `/voice delete`'
+      }
+    ])
+    .setColor(0x5865F2)
+    .setFooter({ text: 'Enjoy your new room!' });
+
+  await newOwnerMember.user.send({ embeds: [embed] }).catch(() => {
     // User may have DMs closed; this notification is optional.
   });
 }

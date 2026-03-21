@@ -126,8 +126,184 @@ class MySQLDatabaseManager {
     }
 
     async initialize() {
-        return await this.connection.connect();
+        const connected = await this.connection.connect();
+        if (connected) {
+            await this.ensureAvatarColumn();
+            await this.createGhostPingTable();
+            await this.createSnipeTable();
+        }
+        return connected;
     }
+
+    async createGhostPingTable() {
+        const query = `
+            CREATE TABLE IF NOT EXISTS ghost_pings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(20) NOT NULL,
+                user_tag VARCHAR(100),
+                content TEXT,
+                mentions TEXT,
+                channel_id VARCHAR(20),
+                channel_name VARCHAR(100) NULL,
+                type VARCHAR(20) DEFAULT 'GHOST_PING',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        `;
+        try {
+            await this.connection.query(query);
+
+            // Check for existing columns to avoid duplicate column errors logging
+            const columnsResult = await this.connection.query("SHOW COLUMNS FROM ghost_pings");
+            // Some mysql drivers return [rows, fields], others just rows. Account for both:
+            const columns = Array.isArray(columnsResult) && Array.isArray(columnsResult[0]) ? columnsResult[0] : columnsResult;
+            const columnNames = Array.isArray(columns) ? columns.map(col => col.Field) : [];
+
+            // Add channel_name column if missing
+            if (columnNames.length > 0 && !columnNames.includes('channel_name')) {
+                try {
+                    await this.connection.query("ALTER TABLE ghost_pings ADD COLUMN channel_name VARCHAR(100) NULL");
+                } catch (err) {
+                    if (err.code !== 'ER_DUP_FIELDNAME') console.error('Error adding channel_name column:', err);
+                }
+            }
+
+            // Add type column if missing
+            if (columnNames.length > 0 && !columnNames.includes('type')) {
+                try {
+                    await this.connection.query("ALTER TABLE ghost_pings ADD COLUMN type VARCHAR(20) DEFAULT 'GHOST_PING'");
+                } catch (err) {
+                    if (err.code !== 'ER_DUP_FIELDNAME') console.error('Error adding type column:', err);
+                }
+            }
+
+            console.log('Ghost ping table ensured.');
+        } catch (error) {
+            console.error('Error creating ghost_pings table:', error);
+        }
+    }
+
+    async createSnipeTable() {
+        const query = `
+            CREATE TABLE IF NOT EXISTS snipes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(20) NOT NULL,
+                user_tag VARCHAR(100),
+                content TEXT,
+                channel_id VARCHAR(20),
+                channel_name VARCHAR(100) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        `;
+        try {
+            await this.connection.query(query);
+            console.log('Snipe table ensured.');
+        } catch (error) {
+            console.error('Error creating snipes table:', error);
+        }
+    }
+
+    async ensureGhostPingChannelName() {
+        // Redundant, now handled cleanly in createGhostPingTable
+    }
+
+    async logGhostPing(userId, userTag, content, mentions, channelId, channelName = null, type = 'GHOST_PING') {
+        try {
+            const query = `
+                INSERT INTO ghost_pings (user_id, user_tag, content, mentions, channel_id, channel_name, type)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `;
+            await this.connection.query(query, [userId, userTag, content, mentions, channelId, channelName, type]);
+            return true;
+        } catch (error) {
+            console.error('Error logging ghost ping:', error);
+            return false;
+        }
+    }
+
+    async getAllGhostPings(limit = 50) {
+        try {
+            const query = `
+                SELECT id, user_id, user_tag, content, mentions, channel_id, channel_name, type, created_at
+                FROM ghost_pings
+                ORDER BY created_at DESC
+                LIMIT ?
+            `;
+            const rows = await this.query(query, [limit]);
+            return rows.map(r => ({
+                id: r.id,
+                userId: r.user_id,
+                userTag: r.user_tag,
+                content: r.content,
+                mentions: r.mentions, // Assuming simple string or JSON string
+                channelId: r.channel_id,
+                channelName: r.channel_name,
+                type: r.type,
+                createdAt: r.created_at
+            }));
+        } catch (error) {
+            console.error('Error fetching ghost pings:', error);
+            return [];
+        }
+    }
+
+    async clearGhostPings() {
+        try {
+            await this.connection.query('TRUNCATE TABLE ghost_pings');
+            return true;
+        } catch (error) {
+            console.error('Error clearing ghost pings:', error);
+            return false;
+        }
+    }
+
+    async logSnipe(userId, userTag, content, channelId, channelName = null) {
+        try {
+            const query = `
+                INSERT INTO snipes (user_id, user_tag, content, channel_id, channel_name)
+                VALUES (?, ?, ?, ?, ?)
+            `;
+            await this.connection.query(query, [userId, userTag, content, channelId, channelName]);
+            return true;
+        } catch (error) {
+            console.error('Error logging snipe:', error);
+            return false;
+        }
+    }
+
+    async getAllSnipes(limit = 50) {
+        try {
+            const query = `
+                SELECT id, user_id, user_tag, content, channel_id, channel_name, created_at
+                FROM snipes
+                ORDER BY created_at DESC
+                LIMIT ?
+            `;
+            const rows = await this.query(query, [limit]);
+            return rows.map(r => ({
+                id: r.id,
+                userId: r.user_id,
+                userTag: r.user_tag,
+                content: r.content,
+                channelId: r.channel_id,
+                channelName: r.channel_name,
+                createdAt: r.created_at
+            }));
+        } catch (error) {
+            console.error('Error fetching snipes:', error);
+            return [];
+        }
+    }
+
+    async clearSnipes() {
+        try {
+            await this.connection.query('TRUNCATE TABLE snipes');
+            return true;
+        } catch (error) {
+            console.error('Error clearing snipes:', error);
+            return false;
+        }
+    }
+
 
     async query(sql, params = [], options = {}) {
         const {
@@ -236,8 +412,9 @@ class MySQLDatabaseManager {
     // userId: Discord user ID
     // username: Discord username
     // isBot: Whether the user is a bot
+    // avatar: Optional avatar URL (default: null)
     // Returns true if successful.
-    async addUserInfo(userId, username, isBot = false) {
+    async addUserInfo(userId, username, isBot = false, avatar = null) {
         try {
             const validId = this.validateDiscordId(userId);
             if (!validId) {
@@ -245,13 +422,36 @@ class MySQLDatabaseManager {
                 return false;
             }
             const safeUsername = username ? this.validateTextInput(String(username), 255) : null;
+            const safeAvatar = avatar ? this.validateTextInput(String(avatar), 512) : null;
 
-            await this.connection.query(
-                `INSERT INTO userinfo (user_id, username, is_bot)
-                 VALUES (?, ?, ?)
-                 ON DUPLICATE KEY UPDATE username = ?, last_seen = NOW()`,
-                [validId, safeUsername, isBot ? 1 : 0, safeUsername]
-            );
+            const performQuery = async () => {
+                if (safeAvatar) {
+                    await this.connection.query(
+                        `INSERT INTO userinfo (user_id, username, is_bot, avatar)
+                         VALUES (?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE username = ?, avatar = ?, last_seen = NOW()`,
+                        [validId, safeUsername, isBot ? 1 : 0, safeAvatar, safeUsername, safeAvatar]
+                    );
+                } else {
+                    await this.connection.query(
+                        `INSERT INTO userinfo (user_id, username, is_bot)
+                         VALUES (?, ?, ?)
+                         ON DUPLICATE KEY UPDATE username = ?, last_seen = NOW()`,
+                        [validId, safeUsername, isBot ? 1 : 0, safeUsername]
+                    );
+                }
+            };
+
+            try {
+                await performQuery();
+            } catch (queryError) {
+                if (String(queryError.message).includes("Unknown column 'avatar'")) {
+                    await this.ensureAvatarColumn();
+                    await performQuery();
+                } else {
+                    throw queryError;
+                }
+            }
 
             this.invalidateCacheByPrefix(this.getCacheKey('userinfo', `${validId}:`));
             return true;
@@ -262,6 +462,22 @@ class MySQLDatabaseManager {
                 return false;
             }
             console.error(`[MySQLDatabaseManager] Error adding user to userinfo: ${error.message}`);
+            return false;
+        }
+    }
+
+    async ensureAvatarColumn() {
+        try {
+            await this.connection.pool.execute(`
+                ALTER TABLE userinfo 
+                ADD COLUMN IF NOT EXISTS avatar VARCHAR(512) NULL
+            `);
+            return true;
+        } catch (error) {
+            if (error.code === 'ER_DUP_FIELDNAME' || String(error.message || '').includes('Duplicate column')) {
+                return true;
+            }
+            console.error(`[MySQLDatabaseManager] Error ensuring avatar column: ${error.message}`);
             return false;
         }
     }
@@ -4507,6 +4723,25 @@ class MySQLDatabaseManager {
         }
     }
 
+    async getAllSuggestions(limit = 50) {
+        try {
+            // Updated query to include reaction counts
+            const query = `
+                SELECT s.*, 
+                   (SELECT COUNT(*) FROM suggestion_reactions WHERE suggestion_id = s.suggestion_id AND vote = 'upvote') AS upvotes,
+                   (SELECT COUNT(*) FROM suggestion_reactions WHERE suggestion_id = s.suggestion_id AND vote = 'downvote') AS downvotes
+                FROM suggestions s
+                ORDER BY s.created_at DESC
+                LIMIT ?
+            `;
+            const results = await this.connection.query(query, [limit]);
+            return results;
+        } catch (error) {
+            console.error('Error getting all suggestions:', error);
+            return [];
+        }
+    }
+
     async getSuggestionByCaseId(caseId) {
         try {
             const results = await this.connection.query(
@@ -4548,8 +4783,8 @@ class MySQLDatabaseManager {
         try {
             await this.connection.query(
                 `UPDATE suggestions SET status = ?, admin_response = ?, responded_by = ?, resolved_at = NOW()
-                 WHERE suggestion_id = ?`,
-                [status, adminResponse, respondedBy, suggestionId]
+                 WHERE suggestion_id = ? OR case_id = ?`,
+                [status, adminResponse, respondedBy, suggestionId, suggestionId]
             );
             return true;
         } catch (error) {

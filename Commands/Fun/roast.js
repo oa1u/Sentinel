@@ -1,7 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 
-// Backup roast lines in case the API doesn't work—so you can always roast someone.
-// Tried to keep these roasts pretty mild. No hard feelings!
 const fallbackRoasts = [
   "I'd agree with you, but then we'd both be wrong.",
   "You're not stupid; you just have bad luck thinking.",
