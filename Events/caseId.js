@@ -9,10 +9,10 @@ const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 function makeid(length = 10, charset = CHARSET) {
   if (!length || length < 1) return '';
   let result = '';
-
+  
   // Prevent modulo bias by dropping bytes that don't fit evenly into the charset length
   const maxValidByte = 256 - (256 % charset.length);
-
+  
   while (result.length < length) {
     // Generate extra bytes to account for dropped ones
     const bytes = crypto.randomBytes(length * 2);

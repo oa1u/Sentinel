@@ -239,7 +239,7 @@ async function registerCommands({ commandsOverride = null, skipIfUnchanged = fal
   const GUILD_ID = process.env.GUILD_ID;
 
   if (!TOKEN || !CLIENT_ID) {
-    console.error('🗑️ Missing TOKEN or CLIENT_ID in environment variables');
+    console.error('🗑️Missing TOKEN or CLIENT_ID in environment variables');
     return false;
   }
 
@@ -269,7 +269,7 @@ async function registerCommands({ commandsOverride = null, skipIfUnchanged = fal
     lastRegisteredCommandSignature = signature;
     return true;
   } catch (error) {
-    console.error('🗑️ Error registering commands:', error.message);
+    console.error('🗑️Error registering commands:', error.message);
     return false;
   }
 }
@@ -371,7 +371,7 @@ async function initializeBot() {
     await jobScheduler.start();
     client.jobScheduler = jobScheduler;
   } catch (error) {
-    console.error('🗑️ Fatal error during bot initialization:', error);
+    console.error('🗑️Fatal error during bot initialization:', error);
     process.exit(1);
   }
 }
@@ -430,7 +430,7 @@ function startRuntimeHealthMonitor() {
             consecutiveDatabaseHealthFailures = 0;
             console.log('✅ Database reconnection successful');
           } else {
-            console.error('🗑️ Database reconnection attempt failed');
+            console.error('🗑️Database reconnection attempt failed');
           }
         }
       }
@@ -540,7 +540,7 @@ async function gracefulShutdown(reason = 'shutdown', exitCode = 0) {
         console.warn('⚠️  Failed to close database connection cleanly:', closeError.message);
       }
     } catch (error) {
-      console.error('🗑️ Error during graceful shutdown:', error.message || error);
+      console.error('🗑️Error during graceful shutdown:', error.message || error);
     }
   })();
 
@@ -974,7 +974,7 @@ client.on("interactionCreate", async (interaction) => {
         if (handled) return;
       }
     } catch (error) {
-      console.error('🗑️ Error handling button interaction:', error.message || error);
+      console.error('🗑️Error handling button interaction:', error.message || error);
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: '- There was an error while processing that button.',
@@ -1090,14 +1090,14 @@ function validateEnvironment() {
   }
 
   if (missing.length > 0) {
-    console.error('🗑️ Missing required environment variables:');
+    console.error('🗑️Missing required environment variables:');
     missing.forEach(item => console.error(`   - ${item}`));
     console.error('\n📖 Please configure these in Config/credentials.env\n');
     process.exit(1);
   }
 
   if (empty.length > 0) {
-    console.error('🗑️ Empty environment variables (must have values):');
+    console.error('🗑️Empty environment variables (must have values):');
     empty.forEach(item => console.error(`   - ${item}`));
     console.error('\n📖 Please add values in Config/credentials.env\n');
     process.exit(1);
@@ -1156,7 +1156,7 @@ client.once("clientReady", () => {
 });
 
 client.on('error', (err) => {
-  console.error('🗑️ Client error:', err.message);
+  console.error('🗑️Client error:', err.message);
 });
 client.on('warn', (msg) => {
   console.warn('⚠️  Client warn:', msg);
@@ -1173,7 +1173,7 @@ client.on('shardResume', (shardId, replayedEvents) => {
 
 // Log unhandled promise rejections and optionally exit to avoid inconsistent state.
 process.on('unhandledRejection', async (err) => {
-  console.error('🗑️ Unhandled Promise Rejection:', err);
+  console.error('🗑️Unhandled Promise Rejection:', err);
   if (EXIT_ON_UNHANDLED_REJECTION) {
     await gracefulShutdown('unhandledRejection', 1);
   }
@@ -1181,7 +1181,7 @@ process.on('unhandledRejection', async (err) => {
 
 // Log uncaught exceptions and optionally exit to prevent the bot from running in a bad state.
 process.on('uncaughtException', async (err) => {
-  console.error('🗑️ Uncaught Exception:', err);
+  console.error('🗑️Uncaught Exception:', err);
   if (EXIT_ON_UNCAUGHT_EXCEPTION) {
     await gracefulShutdown('uncaughtException', 1);
   }
@@ -1217,7 +1217,7 @@ process.on('SIGTERM', async () => {
       }
     }
   } catch (err) {
-    console.error('🗑️ Fatal error during startup:', err.message);
+    console.error('🗑️Fatal error during startup:', err.message);
     process.exit(1);
   }
 })();

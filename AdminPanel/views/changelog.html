@@ -110,6 +110,30 @@
                             <div class="changelog-entry-header">
                                 <div class="changelog-entry-badge">NEW</div>
                                 <div>
+                                    <h3>Update 8.1.0</h3>
+                                    <p>Website features + Commands.</p>
+                                </div>
+                                <span class="changelog-entry-date">March 2026</span>
+                            </div>
+                            <ul class="changelog-item-list">
+                                <li><span class="tag tag-feature">Feature</span>Discord server backup system - Discord
+                                    command and in the owner section of the webpage (Might need more testing)</li>
+                                <li><span class="tag tag-feature">Feature</span>Added an avatar section system.</li>
+                                <li><span class="tag tag-feature">Feature</span>Removed /Userinfo command and changed it
+                                    to a /profile command thats slightly more advanced and better</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>Improved /steam command.</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>Reworked the help command.</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>Improved CaseID - Updated the
+                                    moderation database tables.</li>
+                                <li><span class="tag tag-bugfix">Fix</span>Bunch of smaller stability and fixes
+                                    across the bot and panel.</li>
+                            </ul>
+                        </div>
+
+                        <div class="changelog-entry-card">
+                            <div class="changelog-entry-header">
+
+                                <div>
                                     <h3>Major Update 8.0.0</h3>
                                     <p>Reliability, QoL fixes, Commands.</p>
                                 </div>
@@ -293,6 +317,20 @@
                                             unstable.</p>
                                     </div>
                                 </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-medium">In Progress</span>
+                                    <div>
+                                        <strong>Antiraid</strong>
+                                        <p>Still in development and may not be complete or stable.</p>
+                                    </div>
+                                </div>
+                                <div class="changelog-issue-row">
+                                    <span class="issue-pill issue-medium">In Progress</span>
+                                    <div>
+                                        <strong>Server backup system</strong>
+                                        <p>Still in development and may not be complete or stable.</p>
+                                    </div>
+                                </div>
 
 
                                 <div class="changelog-issue-footer">
@@ -344,20 +382,8 @@
                                             maintainability.</p>
                                     </div>
                                 </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-low">Later</span>
-                                    <div>
-                                        <strong>Case ID System</strong>
-                                        <p>Improve the Case ID system</p>
-                                    </div>
-                                </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-low">Later</span>
-                                    <div>
-                                        <strong>More Fun/Utility commands</strong>
-                                        <p>Add more commands that are either fun or provide utility to users.</p>
-                                    </div>
-                                </div>
+
+
                                 <div class="changelog-issue-row">
                                     <span class="issue-pill issue-low">Later</span>
                                     <div>
@@ -396,14 +422,7 @@
                                             accuracy and efficiency.</p>
                                     </div>
                                 </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-low">Later</span>
-                                    <div>
-                                        <strong>Profile Command</strong>
-                                        <p>Add a cleaner member profile command that shows level progress, streak,
-                                            reputation, join date, and earned badges in one place.</p>
-                                    </div>
-                                </div>
+
                                 <div class="changelog-issue-row">
                                     <span class="issue-pill issue-low">Later</span>
                                     <div>
@@ -420,14 +439,7 @@
                                         </p>
                                     </div>
                                 </div>
-                                <div class="changelog-issue-row">
-                                    <span class="issue-pill issue-low">Later</span>
-                                    <div>
-                                        <strong>Server Backup System</strong>
-                                        <p>Implement a server backup system that allows you to backup the server
-                                            channels, roles, settings etc</p>
-                                    </div>
-                                </div>
+
                                 <div class="changelog-issue-footer">
                                     <span>Roadmap reviewed monthly</span>
                                     <span>Priorities may shift</span>
@@ -934,6 +946,71 @@
             transform: scale(1.2);
         }
 
+        .changelog-entry-card.is-collapsible {
+            gap: 1rem;
+        }
+
+        .changelog-entry-toggle {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+            border-radius: 999px;
+            padding: 0.45rem 0.8rem;
+            font: inherit;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        }
+
+        .changelog-entry-toggle:hover {
+            background: rgba(59, 130, 246, 0.12);
+            border-color: rgba(59, 130, 246, 0.28);
+            color: var(--text-primary);
+        }
+
+        .changelog-entry-toggle:focus-visible {
+            outline: 2px solid rgba(59, 130, 246, 0.45);
+            outline-offset: 2px;
+        }
+
+        .changelog-entry-toggle .collapsible-card-toggle-icon {
+            width: 0.55rem;
+            height: 0.55rem;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(45deg) translateY(-1px);
+            transition: transform 0.2s ease;
+        }
+
+        .changelog-entry-card.is-collapsed .changelog-entry-toggle .collapsible-card-toggle-icon {
+            transform: rotate(-45deg) translateY(1px);
+        }
+
+        .changelog-entry-body {
+            display: grid;
+            grid-template-rows: 1fr;
+            transition: grid-template-rows 0.25s ease, opacity 0.2s ease;
+        }
+
+        .changelog-entry-body-inner {
+            overflow: hidden;
+            min-height: 0;
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .changelog-entry-card.is-collapsed .changelog-entry-body {
+            grid-template-rows: 0fr;
+            opacity: 0;
+        }
+
         .changelog-entry-header {
             display: flex;
             align-items: center;
@@ -1293,6 +1370,10 @@
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 1rem;
+            }
+
+            .changelog-entry-toggle {
+                margin-left: 0;
             }
 
             .changelog-entry-badge,

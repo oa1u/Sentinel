@@ -3,6 +3,9 @@ let securityEventsData = [];
 let securityEventsAutoRefreshTimer = null;
 let securityEventsAutoRefreshIntervalMs = 30000;
 let backupTablesCache = [];
+let serverBackupGuildsCache = [];
+let activeServerBackupRestoreOperationId = null;
+const SERVER_BACKUP_RESTORE_OPERATION_STORAGE_KEY = 'owner_server_backup_restore_operation_v1';
 const OWNER_NOTIFICATION_STORAGE_KEY = 'owner_notification_center_v1';
 const ownerNotificationFeedState = {
     events: [],
@@ -18,6 +21,14 @@ function escapeNotificationCell(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function normalizeAdminAvatarUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    if (raw.startsWith('/')) return raw;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return null;
 }
 
 function formatOwnerNotificationTime(timestamp) {
@@ -69,6 +80,41 @@ function loadOwnerNotificationFeed() {
     } catch (error) {
         console.warn('Failed to load notification center feed:', error);
     }
+}
+
+function persistActiveServerBackupRestoreOperationId(operationId) {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        const normalizedId = String(operationId || '').trim();
+        if (!normalizedId) {
+            localStorage.removeItem(SERVER_BACKUP_RESTORE_OPERATION_STORAGE_KEY);
+            return;
+        }
+        localStorage.setItem(SERVER_BACKUP_RESTORE_OPERATION_STORAGE_KEY, normalizedId);
+    } catch (error) {
+        console.warn('Failed to persist server backup restore operation id:', error);
+    }
+}
+
+function loadPersistedServerBackupRestoreOperationId() {
+    try {
+        if (typeof localStorage === 'undefined') return '';
+        return String(localStorage.getItem(SERVER_BACKUP_RESTORE_OPERATION_STORAGE_KEY) || '').trim();
+    } catch (error) {
+        console.warn('Failed to load persisted server backup restore operation id:', error);
+        return '';
+    }
+}
+
+function clearPersistedServerBackupRestoreOperationId() {
+    persistActiveServerBackupRestoreOperationId('');
+}
+
+function setServerBackupRestoreButtonBusyState(isBusy) {
+    const restoreBtn = document.getElementById('restoreServerBackupBtn');
+    if (!restoreBtn) return;
+    restoreBtn.disabled = Boolean(isBusy);
+    restoreBtn.textContent = isBusy ? 'Restoring...' : 'Restore Selected Backup';
 }
 
 function recordOwnerNotificationEvent(entry, options = {}) {
@@ -1305,6 +1351,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (tabName === 'system') {
                     loadBackupTables();
                     loadBackupStatus();
+                    loadServerBackupStatus();
                 }
             }
         });
@@ -1328,8 +1375,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     const runBackupBtn = document.getElementById('runBackupBtn');
     const saveBackupConfigBtn = document.getElementById('saveBackupConfigBtn');
     const backupSelectAll = document.getElementById('backupTablesSelectAll');
+    const runServerBackupBtn = document.getElementById('runServerBackupBtn');
+    const saveServerBackupConfigBtn = document.getElementById('saveServerBackupConfigBtn');
+    const previewServerBackupBtn = document.getElementById('previewServerBackupBtn');
+    const serverBackupPreflightBtn = document.getElementById('serverBackupPreflightBtn');
+    const inspectServerBackupBtn = document.getElementById('inspectServerBackupBtn');
+    const restoreServerBackupBtn = document.getElementById('restoreServerBackupBtn');
+    initBackupModeTabs();
     runBackupBtn?.addEventListener('click', () => runBackupNow());
     saveBackupConfigBtn?.addEventListener('click', () => saveBackupSettings());
+    runServerBackupBtn?.addEventListener('click', () => runServerBackupNow());
+    saveServerBackupConfigBtn?.addEventListener('click', () => saveServerBackupSettings());
+    previewServerBackupBtn?.addEventListener('click', () => previewServerBackupDiff());
+    serverBackupPreflightBtn?.addEventListener('click', () => runServerBackupRestorePreflight());
+    inspectServerBackupBtn?.addEventListener('click', () => inspectSelectedServerBackup());
+    restoreServerBackupBtn?.addEventListener('click', () => restoreServerBackup());
     backupSelectAll?.addEventListener('change', () => {
         const list = document.getElementById('backupTablesList');
         if (!list) return;
@@ -1345,6 +1405,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await loadBackupTables();
+    await loadServerBackupStatus();
+    await resumeServerBackupRestoreOperationFromStorage();
 
     function getTerminalLogDownloadName(response) {
         const header = response?.headers?.get('content-disposition') || '';
@@ -1629,6 +1691,33 @@ function switchTab(e, tabName) {
         if (typeof window.loadCaptchaPolicy === 'function') window.loadCaptchaPolicy();
         else if (typeof loadCaptchaPolicy === 'function') loadCaptchaPolicy();
     }
+}
+
+function setBackupModeTab(mode = 'database') {
+    const normalizedMode = mode === 'server' ? 'server' : 'database';
+
+    document.querySelectorAll('.backup-mode-tab').forEach((button) => {
+        button.classList.toggle('active', button.dataset.backupMode === normalizedMode);
+    });
+
+    document.querySelectorAll('.backup-mode-panel').forEach((panel) => {
+        panel.classList.toggle('active', panel.id === `backupMode${normalizedMode === 'server' ? 'Server' : 'Database'}`);
+    });
+}
+
+function initBackupModeTabs() {
+    const tabButtons = document.querySelectorAll('.backup-mode-tab');
+    if (!tabButtons.length) {
+        return;
+    }
+
+    tabButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            setBackupModeTab(button.dataset.backupMode);
+        });
+    });
+
+    setBackupModeTab(document.querySelector('.backup-mode-tab.active')?.dataset.backupMode || 'database');
 }
 
 window.diagnosticsAutoRefreshIntervalId = window.diagnosticsAutoRefreshIntervalId || null;
@@ -2039,6 +2128,7 @@ function formatBackupBytes(bytes) {
 
 function renderBackupFiles(files) {
     const list = document.getElementById('backupFilesList');
+    updateBackupModeDatabaseMeta({ fileCount: Array.isArray(files) ? files.length : 0 });
     if (!list) return;
     if (!Array.isArray(files) || files.length === 0) {
         list.textContent = 'No backups yet.';
@@ -2087,6 +2177,9 @@ function updateBackupStatus(state = {}) {
     const noteEl = document.getElementById('backupStatusNote');
     const headerStatusEl = document.getElementById('backupHeaderStatus');
     const headerLastRunEl = document.getElementById('backupHeaderLastRun');
+    const statusCardEl = document.getElementById('backupStatusCard');
+    const nextRunCardEl = document.getElementById('backupNextRunCard');
+    const lastResultCardEl = document.getElementById('backupLastResultCard');
 
     const rawStatus = state.running ? 'Running' : (state.lastRunStatus || 'Idle');
     const normalized = String(rawStatus || 'Idle').toLowerCase();
@@ -2099,6 +2192,21 @@ function updateBackupStatus(state = {}) {
         idle: 'backup-pill--idle'
     };
     const pillClass = pillClassMap[normalized] || 'backup-pill--idle';
+    const cardClassMap = {
+        running: 'is-running',
+        success: 'is-success',
+        warning: 'is-warning',
+        failed: 'is-error',
+        error: 'is-error',
+        idle: 'is-neutral'
+    };
+    const resultNormalized = String(state.lastRunStatus || 'Idle').toLowerCase();
+
+    const applyStatState = (element, stateName) => {
+        if (!element) return;
+        element.classList.remove('is-running', 'is-success', 'is-warning', 'is-error', 'is-neutral');
+        element.classList.add(cardClassMap[stateName] || 'is-neutral');
+    };
 
     if (statusEl) {
         statusEl.textContent = rawStatus;
@@ -2109,6 +2217,10 @@ function updateBackupStatus(state = {}) {
     if (noteEl) {
         noteEl.textContent = state.lastRunError || 'Backups use the server-side MySQL tools.';
     }
+
+    applyStatState(statusCardEl, normalized);
+    applyStatState(nextRunCardEl, state.running ? 'running' : (state.nextRunAt ? 'success' : 'idle'));
+    applyStatState(lastResultCardEl, resultNormalized);
 
     if (headerStatusEl) {
         headerStatusEl.textContent = rawStatus;
@@ -2193,6 +2305,7 @@ async function loadBackupTables() {
         backupTablesCache = Array.isArray(data.tables) ? data.tables : [];
         renderBackupTables(backupTablesCache);
         updateBackupTableCount();
+        updateBackupModeDatabaseMeta({ tableCount: backupTablesCache.length });
     } catch (error) {
         console.error('Error loading backup tables:', error);
     }
@@ -2254,6 +2367,1022 @@ async function runBackupNow() {
             runBtn.disabled = false;
             runBtn.textContent = 'Start Backup';
         }
+    }
+}
+
+function renderServerBackupFiles(files) {
+    const list = document.getElementById('serverBackupFilesList');
+    updateBackupModeServerMeta({ fileCount: Array.isArray(files) ? files.length : 0 });
+    if (!list) return;
+    if (!Array.isArray(files) || files.length === 0) {
+        list.innerHTML = '<div class="server-backup-empty">No server backups yet.</div>';
+        renderServerBackupInspection(null);
+        return;
+    }
+
+    list.innerHTML = `<div class="server-backup-files-grid">${files.slice(0, 8).map((file) => {
+        const name = file?.name || 'server-backup.json';
+        const size = formatBackupBytes(file?.size || 0);
+        const created = formatBackupTime(file?.createdAt || null);
+        const downloadUrl = `/api/owner/server-backups/download?file=${encodeURIComponent(name)}`;
+        const manifestUrl = `/api/owner/server-backups/download-manifest?file=${encodeURIComponent(name)}`;
+        const subtitle = file?.label || file?.notes || 'No label or notes';
+        return `
+            <div class="server-backup-file-card">
+                <div class="server-backup-file-top">
+                    <div class="backup-file-meta">
+                        <div class="server-backup-file-kicker">Snapshot</div>
+                        <div class="backup-file-name">${escapeNotificationCell(name)}</div>
+                        <div class="server-backup-file-meta-line">
+                            <span>Created ${escapeNotificationCell(created)}</span>
+                            <span>Size ${escapeNotificationCell(size)}</span>
+                        </div>
+                        <div class="server-backup-file-subtitle">${escapeNotificationCell(subtitle)}</div>
+                    </div>
+                    <div class="server-backup-action-group">
+                        <button class="btn btn-sm btn-secondary server-backup-inspect-btn" type="button" data-backup-file="${escapeNotificationCell(name)}">Inspect</button>
+                        ${file?.manifestAvailable ? `<a class="btn btn-sm btn-secondary" href="${manifestUrl}">Manifest</a>` : ''}
+                        <a class="btn btn-sm btn-secondary" href="${downloadUrl}">Download</a>
+                    </div>
+                </div>
+                <div class="server-backup-file-flags">
+                    <span class="server-backup-flag ${file?.valid ? 'is-good' : 'is-warning'}">${file?.valid ? 'healthy snapshot' : 'needs review'}</span>
+                    <span class="server-backup-flag">warnings ${Number(file?.warningCount || 0)}</span>
+                    <span class="server-backup-flag">errors ${Number(file?.errorCount || 0)}</span>
+                    <span class="server-backup-flag ${file?.manifestSigned && file?.manifestValid ? 'is-good' : ''}">${file?.manifestAvailable ? (file?.manifestSigned ? 'signed manifest' : 'manifest ready') : 'no manifest'}</span>
+                </div>
+            </div>
+        `;
+    }).join('')}</div>`;
+
+    list.querySelectorAll('.server-backup-inspect-btn').forEach((button) => {
+        button.addEventListener('click', async (event) => {
+            const target = event.currentTarget;
+            const fileName = String(target?.dataset?.backupFile || '').trim();
+            if (!fileName) {
+                profileShowError('Backup file is missing');
+                return;
+            }
+
+            await window.inspectServerBackupFileByName(fileName);
+        });
+    });
+}
+
+function renderServerBackupAnalytics(analytics = null) {
+    const container = document.getElementById('serverBackupAnalyticsGrid');
+    if (!container) return;
+    if (!analytics) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const cards = [
+        { label: 'Snapshots', value: String(analytics.snapshotCount || 0), state: 'info' },
+        { label: 'Healthy', value: String(analytics.healthyCount || 0), state: 'good' },
+        { label: 'Warnings', value: String(analytics.warningCount || 0), state: Number(analytics.warningCount || 0) > 0 ? 'warning' : 'neutral' },
+        { label: 'Average Size', value: formatBackupBytes(analytics.averageSize || 0), state: 'neutral' },
+        { label: 'Latest Label', value: analytics.latestLabel || 'None', state: 'info' },
+        { label: 'Runs', value: `M:${analytics.triggerBreakdown?.manual || 0} S:${analytics.triggerBreakdown?.scheduled || 0} C:${analytics.triggerBreakdown?.command || 0}`, state: 'neutral' },
+        { label: 'Signed', value: String(analytics.signedCount || 0), state: Number(analytics.signedCount || 0) > 0 ? 'good' : 'neutral' }
+    ];
+
+    container.innerHTML = cards.map((card) => `
+        <div class="server-backup-analytics-item is-${escapeNotificationCell(card.state)}">
+            <strong>${escapeNotificationCell(card.label)}</strong>
+            <span>${escapeNotificationCell(card.value)}</span>
+        </div>
+    `).join('');
+}
+
+function renderServerBackupTimeline(timeline = []) {
+    const container = document.getElementById('serverBackupTimelineList');
+    if (!container) return;
+    if (!Array.isArray(timeline) || timeline.length === 0) {
+        container.className = 'server-backup-inspection-empty';
+        container.textContent = 'Timeline entries appear after at least two snapshots exist.';
+        return;
+    }
+
+    container.className = 'server-backup-timeline-list';
+    container.innerHTML = timeline.map((entry) => `
+        <div class="server-backup-timeline-item">
+            <div class="server-backup-timeline-head">
+                <strong>${escapeNotificationCell(entry.currentLabel || entry.currentFile || 'Snapshot')}</strong>
+                <span>${escapeNotificationCell(formatBackupTime(entry.currentCreatedAt || null))}</span>
+            </div>
+            <div class="server-backup-timeline-subtitle">Compared to ${escapeNotificationCell(entry.previousLabel || entry.previousFile || 'previous snapshot')}</div>
+            <div class="server-backup-timeline-metrics">
+                <div class="server-backup-timeline-metric">
+                    <strong>Total Changes</strong>
+                    <span>${escapeNotificationCell(String(Number(entry.totalChanges || 0)))}</span>
+                </div>
+                <div class="server-backup-timeline-metric">
+                    <strong>Roles + / ~ / -</strong>
+                    <span>${escapeNotificationCell(`${Number(entry.summary?.rolesAdded || 0)}/${Number(entry.summary?.rolesChanged || 0)}/${Number(entry.summary?.rolesRemoved || 0)}`)}</span>
+                </div>
+                <div class="server-backup-timeline-metric">
+                    <strong>Channels + / ~ / -</strong>
+                    <span>${escapeNotificationCell(`${Number(entry.summary?.channelsAdded || 0)}/${Number(entry.summary?.channelsChanged || 0)}/${Number(entry.summary?.channelsRemoved || 0)}`)}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderServerBackupInspection(inspection = null) {
+    const container = document.getElementById('serverBackupInspectionContent');
+    if (!container) return;
+
+    if (!inspection) {
+        container.className = 'server-backup-inspection-empty';
+        container.textContent = 'Select Inspect on a backup to view health, metadata, and warnings.';
+        return;
+    }
+
+    const validation = inspection.validation || {};
+    const summary = inspection.summary || {};
+    const manifest = inspection.manifest || {};
+    const warningItems = Array.isArray(validation.warnings) ? validation.warnings : [];
+    const errorItems = Array.isArray(validation.errors) ? validation.errors : [];
+    const statusText = validation.valid ? 'Healthy' : (errorItems.length ? 'Issues Found' : 'Needs Review');
+    const manifestText = manifest.available ? `${manifest.signed ? 'Signed' : 'Unsigned'} / ${manifest.valid ? 'Valid' : 'Review'}` : 'Missing';
+    const includedSections = Object.entries(summary.includes || {})
+        .filter(([, enabled]) => enabled)
+        .map(([key]) => key.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase()));
+    const includesText = includedSections.join(', ') || 'Nothing';
+    const healthScore = Math.max(
+        12,
+        Math.min(100, 100 - (errorItems.length * 28) - (warningItems.length * 9) - (manifest.available && !manifest.valid ? 12 : 0))
+    );
+    const scoreClass = validation.valid ? 'is-good' : (errorItems.length ? 'is-error' : 'is-warning');
+    const metadata = inspection.metadata || {};
+    const contextItems = [
+        { label: 'Snapshot File', value: inspection.file?.name || 'Unavailable' },
+        { label: 'Server', value: inspection.guild?.name || inspection.guild?.id || 'Unavailable' },
+        { label: 'Generated', value: formatBackupTime(inspection.generatedAt || inspection.file?.createdAt || null) },
+        { label: 'Requested By', value: inspection.requestedBy || 'System' },
+        { label: 'Trigger', value: inspection.trigger || 'Unknown' },
+        { label: 'Size', value: formatBackupBytes(inspection.file?.size || 0) }
+    ];
+
+    const inspectionCards = [
+        { label: 'Status', value: statusText, state: validation.valid ? 'good' : (errorItems.length ? 'error' : 'warning') },
+        { label: 'Version', value: String(inspection.version || 0), state: 'neutral' },
+        { label: 'Label', value: inspection.label || 'None', state: 'neutral' },
+        { label: 'Roles', value: String(summary.roles || 0), state: 'neutral' },
+        { label: 'Channels', value: String(summary.channels || 0), state: 'neutral' },
+        { label: 'Emojis', value: String(summary.emojis || 0), state: 'neutral' },
+        { label: 'Stickers', value: String(summary.stickers || 0), state: 'neutral' },
+        { label: 'Manifest', value: manifestText, state: manifest.available ? (manifest.valid ? 'good' : 'warning') : 'error' }
+    ];
+
+    container.className = '';
+    container.innerHTML = `
+        <div class="server-backup-inspection-layout">
+            <div class="server-backup-inspection-hero">
+                <div class="server-backup-inspection-kicker">Backup Inspection</div>
+                <div class="server-backup-inspection-headline">
+                    <div>
+                        <h4>${escapeNotificationCell(inspection.label || inspection.file?.name || 'Snapshot Overview')}</h4>
+                        <p>Review snapshot health, payload integrity, and restore readiness before using this backup.</p>
+                    </div>
+                    <div class="server-backup-inspection-score ${scoreClass}">
+                        <span>Health Score</span>
+                        <strong>${escapeNotificationCell(String(healthScore))}</strong>
+                    </div>
+                </div>
+                <div class="server-backup-inspection-health">
+                    <span class="server-backup-health-pill ${validation.valid ? 'is-good' : (errorItems.length ? 'is-error' : 'is-warning')}">${escapeNotificationCell(statusText)}</span>
+                    <span class="server-backup-health-pill ${manifest.available ? (manifest.valid ? 'is-good' : 'is-warning') : 'is-error'}">${escapeNotificationCell(manifestText)}</span>
+                    <span class="server-backup-health-pill ${warningItems.length ? 'is-warning' : ''}">Warnings ${escapeNotificationCell(String(warningItems.length))}</span>
+                    <span class="server-backup-health-pill ${errorItems.length ? 'is-error' : ''}">Errors ${escapeNotificationCell(String(errorItems.length))}</span>
+                </div>
+                <div class="server-backup-inspection-context-grid">
+                    ${contextItems.map((item) => `
+                        <div class="server-backup-inspection-context-card">
+                            <strong>${escapeNotificationCell(item.label)}</strong>
+                            <span>${escapeNotificationCell(item.value)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="server-backup-inspection-meta">
+                <div class="server-backup-inspection-block server-backup-inspection-block--feature">
+                    <div class="server-backup-inspection-block-header">
+                        <strong>Included Structure</strong>
+                        <span>${escapeNotificationCell(String(includedSections.length))} section${includedSections.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div class="server-backup-inspection-tags">
+                        ${includedSections.length ? includedSections.map((item) => `<span class="server-backup-inspection-tag">${escapeNotificationCell(item)}</span>`).join('') : '<span class="server-backup-inspection-tag">Nothing</span>'}
+                    </div>
+                </div>
+                <div class="server-backup-inspection-block">
+                    <div class="server-backup-inspection-block-header">
+                        <strong>Snapshot Context</strong>
+                        <span>Notes and manifest metadata</span>
+                    </div>
+                    <div class="server-backup-inspection-stack">
+                        <div class="server-backup-inspection-item"><strong>Notes</strong><span>${escapeNotificationCell(inspection.notes || 'None')}</span></div>
+                        <div class="server-backup-inspection-item"><strong>Manifest Schema</strong><span>${escapeNotificationCell(manifest.schema || 'Unavailable')}</span></div>
+                        <div class="server-backup-inspection-item"><strong>Manifest Version</strong><span>${escapeNotificationCell(String(manifest.version || metadata.manifestVersion || 'N/A'))}</span></div>
+                        <div class="server-backup-inspection-item"><strong>Included Summary</strong><span>${escapeNotificationCell(includesText)}</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="server-backup-inspection-grid">
+            ${inspectionCards.map((card) => `
+                <div class="server-backup-inspection-item ${card.state === 'neutral' ? '' : `is-${card.state}`}">
+                    <strong>${escapeNotificationCell(card.label)}</strong>
+                    <span>${escapeNotificationCell(card.value)}</span>
+                </div>
+            `).join('')}
+        </div>
+        <div class="server-backup-inspection-split">
+            <div class="server-backup-inspection-block">
+                <div class="server-backup-inspection-block-header">
+                    <strong>Warnings</strong>
+                    <span>${escapeNotificationCell(String(warningItems.length))} item${warningItems.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="server-backup-inspection-list is-warning">${warningItems.length ? warningItems.map((item) => `<div>${escapeNotificationCell(item)}</div>`).join('') : '<div>None</div>'}</div>
+            </div>
+            <div class="server-backup-inspection-block">
+                <div class="server-backup-inspection-block-header">
+                    <strong>Errors</strong>
+                    <span>${escapeNotificationCell(String(errorItems.length))} item${errorItems.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="server-backup-inspection-list is-error">${errorItems.length ? errorItems.map((item) => `<div>${escapeNotificationCell(item)}</div>`).join('') : '<div>None</div>'}</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderServerBackupPreflight(preflight = null) {
+    const container = document.getElementById('serverBackupPreflightResults');
+    if (!container) return;
+
+    if (!preflight) {
+        container.className = 'server-backup-inspection-empty';
+        container.textContent = 'Run a preflight check before restoring to score risk against the current server.';
+        return;
+    }
+
+    container.className = '';
+    const warningItems = Array.isArray(preflight.warnings) ? preflight.warnings : [];
+    const errorItems = Array.isArray(preflight.errors) ? preflight.errors : [];
+    const diffSummary = preflight.diffSummary || {};
+    const riskScore = Number(preflight.score || 0);
+    let riskLevelLabel = 'Safe';
+    let riskScoreClass = 'is-good';
+
+    if (riskScore >= 50) {
+        riskLevelLabel = 'Critical';
+        riskScoreClass = 'is-error';
+    } else if (riskScore >= 28) {
+        riskLevelLabel = 'High Risk';
+        riskScoreClass = 'is-error';
+    } else if (riskScore >= 12) {
+        riskLevelLabel = 'Caution';
+        riskScoreClass = 'is-warning';
+    }
+
+    const validationHealthy = Boolean(preflight.validation?.valid);
+    const summaryCards = [
+        { label: 'Settings Changed', value: Number(diffSummary.settingsChanged || 0), state: Number(diffSummary.settingsChanged || 0) > 0 ? 'warning' : 'neutral' },
+        { label: 'Roles Added', value: Number(diffSummary.rolesAdded || 0), state: Number(diffSummary.rolesAdded || 0) > 0 ? 'warning' : 'neutral' },
+        { label: 'Roles Changed', value: Number(diffSummary.rolesChanged || 0), state: Number(diffSummary.rolesChanged || 0) > 0 ? 'warning' : 'neutral' },
+        { label: 'Roles Removed', value: Number(diffSummary.rolesRemoved || 0), state: Number(diffSummary.rolesRemoved || 0) > 0 ? 'error' : 'neutral' },
+        { label: 'Channels Added', value: Number(diffSummary.channelsAdded || 0), state: Number(diffSummary.channelsAdded || 0) > 0 ? 'warning' : 'neutral' },
+        { label: 'Channels Changed', value: Number(diffSummary.channelsChanged || 0), state: Number(diffSummary.channelsChanged || 0) > 0 ? 'warning' : 'neutral' },
+        { label: 'Channels Removed', value: Number(diffSummary.channelsRemoved || 0), state: Number(diffSummary.channelsRemoved || 0) > 0 ? 'error' : 'neutral' },
+        { label: 'Emoji or Sticker Drift', value: Number(diffSummary.emojisAdded || 0) + Number(diffSummary.emojisChanged || 0) + Number(diffSummary.emojisRemoved || 0) + Number(diffSummary.stickersAdded || 0) + Number(diffSummary.stickersChanged || 0) + Number(diffSummary.stickersRemoved || 0), state: (Number(diffSummary.emojisAdded || 0) + Number(diffSummary.emojisChanged || 0) + Number(diffSummary.emojisRemoved || 0) + Number(diffSummary.stickersAdded || 0) + Number(diffSummary.stickersChanged || 0) + Number(diffSummary.stickersRemoved || 0)) > 0 ? 'warning' : 'neutral' }
+    ];
+
+    container.innerHTML = `
+        <div class="server-backup-inspection-layout">
+            <div class="server-backup-inspection-hero">
+                <div class="server-backup-inspection-kicker">Restore Preflight</div>
+                <div class="server-backup-inspection-headline">
+                    <div>
+                        <h4>Restore Risk Review</h4>
+                        <p>Compare the selected backup against the current server state before applying structural changes. Scores under 12 are usually safe, while scores above 28 need careful review.</p>
+                    </div>
+                    <div class="server-backup-inspection-score ${riskScoreClass}">
+                        <span>Risk Score</span>
+                        <strong>${escapeNotificationCell(String(riskScore))}</strong>
+                    </div>
+                </div>
+                <div class="server-backup-inspection-health">
+                    <span class="server-backup-health-pill ${riskScoreClass}">${escapeNotificationCell(riskLevelLabel)}</span>
+                    <span class="server-backup-health-pill ${validationHealthy ? 'is-good' : (errorItems.length ? 'is-error' : 'is-warning')}">${escapeNotificationCell(validationHealthy ? 'Validation Healthy' : 'Validation Needs Review')}</span>
+                    <span class="server-backup-health-pill ${warningItems.length ? 'is-warning' : ''}">Warnings ${escapeNotificationCell(String(warningItems.length))}</span>
+                    <span class="server-backup-health-pill ${errorItems.length ? 'is-error' : ''}">Errors ${escapeNotificationCell(String(errorItems.length))}</span>
+                </div>
+                <div class="server-backup-preflight-grid">
+                    <div class="server-backup-preflight-box"><strong>Settings Drift</strong><span>${escapeNotificationCell(String(diffSummary.settingsChanged || 0))}</span></div>
+                    <div class="server-backup-preflight-box"><strong>Role Drift</strong><span>${escapeNotificationCell(`${Number(diffSummary.rolesAdded || 0) + Number(diffSummary.rolesChanged || 0) + Number(diffSummary.rolesRemoved || 0)}`)}</span></div>
+                    <div class="server-backup-preflight-box"><strong>Channel Drift</strong><span>${escapeNotificationCell(`${Number(diffSummary.channelsAdded || 0) + Number(diffSummary.channelsChanged || 0) + Number(diffSummary.channelsRemoved || 0)}`)}</span></div>
+                    <div class="server-backup-preflight-box"><strong>Emoji or Sticker Drift</strong><span>${escapeNotificationCell(String(Number(diffSummary.emojisAdded || 0) + Number(diffSummary.emojisChanged || 0) + Number(diffSummary.emojisRemoved || 0) + Number(diffSummary.stickersAdded || 0) + Number(diffSummary.stickersChanged || 0) + Number(diffSummary.stickersRemoved || 0)))}</span></div>
+                </div>
+            </div>
+            <div class="server-backup-inspection-meta">
+                <div class="server-backup-inspection-block server-backup-inspection-block--feature">
+                    <div class="server-backup-inspection-block-header">
+                        <strong>Preflight Notes</strong>
+                        <span>${escapeNotificationCell(String((preflight.reasons || []).length))} item${(preflight.reasons || []).length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div class="server-backup-inspection-list">${(preflight.reasons || []).length ? preflight.reasons.map((item) => `<div>${escapeNotificationCell(item)}</div>`).join('') : '<div>No notable risks detected.</div>'}</div>
+                </div>
+            </div>
+        </div>
+        <div class="server-backup-inspection-grid">
+            ${summaryCards.map((card) => `
+                <div class="server-backup-inspection-item ${card.state === 'neutral' ? '' : `is-${card.state}`}">
+                    <strong>${escapeNotificationCell(card.label)}</strong>
+                    <span>${escapeNotificationCell(String(card.value))}</span>
+                </div>
+            `).join('')}
+        </div>
+        <div class="server-backup-inspection-split">
+            <div class="server-backup-inspection-block">
+                <div class="server-backup-inspection-block-header">
+                    <strong>Validation Warnings</strong>
+                    <span>${escapeNotificationCell(String(warningItems.length))} item${warningItems.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="server-backup-inspection-list is-warning">${warningItems.length ? warningItems.map((item) => `<div>${escapeNotificationCell(item)}</div>`).join('') : '<div>None</div>'}</div>
+            </div>
+            <div class="server-backup-inspection-block">
+                <div class="server-backup-inspection-block-header">
+                    <strong>Validation Errors</strong>
+                    <span>${escapeNotificationCell(String(errorItems.length))} item${errorItems.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="server-backup-inspection-list is-error">${errorItems.length ? errorItems.map((item) => `<div>${escapeNotificationCell(item)}</div>`).join('') : '<div>None</div>'}</div>
+            </div>
+        </div>
+    `;
+}
+
+function getServerBackupRestoreExclusions() {
+    return {
+        excludeRoles: String(document.getElementById('serverBackupExcludeRolesInput')?.value || '').trim(),
+        excludeChannels: String(document.getElementById('serverBackupExcludeChannelsInput')?.value || '').trim()
+    };
+}
+
+async function inspectSelectedServerBackup() {
+    const file = String(document.getElementById('serverBackupSourceSelect')?.value || '').trim();
+    if (!file) {
+        profileShowError('Select a backup first');
+        return;
+    }
+    await window.inspectServerBackupFileByName(file);
+}
+
+window.inspectServerBackupFileByName = async function inspectServerBackupFileByName(file) {
+    const safeFile = String(file || '').trim();
+    if (!safeFile) {
+        renderServerBackupInspection(null);
+        return;
+    }
+
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson(`/api/owner/server-backups/inspect?file=${encodeURIComponent(safeFile)}`);
+        if (!response.ok) {
+            profileShowError(data?.error || 'Failed to inspect backup');
+            return;
+        }
+        renderServerBackupInspection(data.inspection || null);
+    } catch (error) {
+        console.error('Error inspecting server backup:', error);
+        profileShowError('Failed to inspect backup');
+    }
+};
+
+function renderServerBackupFileSelectors(files = []) {
+    const sourceSelect = document.getElementById('serverBackupSourceSelect');
+    const targetSelect = document.getElementById('serverBackupCompareTargetSelect');
+    const restoreSelect = document.getElementById('serverBackupRestoreSelect');
+    const normalizedFiles = Array.isArray(files) ? files : [];
+
+    const fileOptions = normalizedFiles.map((file) => {
+        const name = escapeNotificationCell(file?.name || 'backup.json');
+        return `<option value="${name}">${name}</option>`;
+    }).join('');
+
+    if (sourceSelect) {
+        const current = sourceSelect.value;
+        sourceSelect.innerHTML = `<option value="">Select a backup</option>${fileOptions}`;
+        if (current) sourceSelect.value = current;
+    }
+
+    if (targetSelect) {
+        const current = targetSelect.value || 'live';
+        targetSelect.innerHTML = `<option value="live">Current Server State</option>${fileOptions}`;
+        if (current) targetSelect.value = current;
+    }
+
+    if (restoreSelect) {
+        const current = restoreSelect.value;
+        restoreSelect.innerHTML = `<option value="">Select a backup</option>${fileOptions}`;
+        if (current) restoreSelect.value = current;
+    }
+}
+
+async function runServerBackupRestorePreflight() {
+    const file = String(document.getElementById('serverBackupRestoreSelect')?.value || '').trim();
+    if (!file) {
+        profileShowError('Select a backup to preflight');
+        return;
+    }
+
+    try {
+        const exclusions = getServerBackupRestoreExclusions();
+        const params = new URLSearchParams({ file });
+        if (exclusions.excludeRoles) params.set('excludeRoles', exclusions.excludeRoles);
+        if (exclusions.excludeChannels) params.set('excludeChannels', exclusions.excludeChannels);
+
+        const { response, data } = await window.AdminPanel.api.getJson(`/api/owner/server-backups/preflight?${params.toString()}`);
+        if (!response.ok) {
+            profileShowError(data?.error || 'Failed to run restore preflight');
+            return;
+        }
+        renderServerBackupPreflight(data.preflight || null);
+        profileShowSuccess('Restore preflight updated');
+    } catch (error) {
+        console.error('Error running restore preflight:', error);
+        profileShowError('Failed to run restore preflight');
+    }
+}
+
+function getServerBackupIncludeSelections() {
+    return {
+        settings: Boolean(document.getElementById('serverBackupIncludeSettings')?.checked),
+        roles: Boolean(document.getElementById('serverBackupIncludeRoles')?.checked),
+        channels: Boolean(document.getElementById('serverBackupIncludeChannels')?.checked),
+        emojis: Boolean(document.getElementById('serverBackupIncludeEmojis')?.checked),
+        stickers: Boolean(document.getElementById('serverBackupIncludeStickers')?.checked),
+        permissionOverwrites: Boolean(document.getElementById('serverBackupIncludePermissionOverwrites')?.checked)
+    };
+}
+
+function applyServerBackupIncludes(includes = {}) {
+    const normalized = {
+        settings: includes?.settings !== false,
+        roles: includes?.roles !== false,
+        channels: includes?.channels !== false,
+        emojis: includes?.emojis !== false,
+        stickers: includes?.stickers !== false,
+        permissionOverwrites: includes?.permissionOverwrites !== false
+    };
+
+    const pairs = [
+        ['serverBackupIncludeSettings', normalized.settings],
+        ['serverBackupIncludeRoles', normalized.roles],
+        ['serverBackupIncludeChannels', normalized.channels],
+        ['serverBackupIncludeEmojis', normalized.emojis],
+        ['serverBackupIncludeStickers', normalized.stickers],
+        ['serverBackupIncludePermissionOverwrites', normalized.permissionOverwrites]
+    ];
+
+    pairs.forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) element.checked = Boolean(value);
+    });
+}
+
+function getServerBackupRestoreSelections() {
+    return {
+        restoreSettings: Boolean(document.getElementById('serverBackupRestoreSettings')?.checked),
+        restoreRoles: Boolean(document.getElementById('serverBackupRestoreRoles')?.checked),
+        restoreChannels: Boolean(document.getElementById('serverBackupRestoreChannels')?.checked),
+        restoreEmojis: Boolean(document.getElementById('serverBackupRestoreEmojis')?.checked),
+        restoreStickers: Boolean(document.getElementById('serverBackupRestoreStickers')?.checked),
+        applyPermissionOverwrites: Boolean(document.getElementById('serverBackupRestorePermissionOverwrites')?.checked),
+        ...getServerBackupRestoreExclusions()
+    };
+}
+
+function formatServerBackupRestoreLabel(value, fallback = 'Pending') {
+    const text = String(value || '').trim();
+    if (!text) return fallback;
+    return text
+        .replace(/[-_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatServerBackupRestoreProgress(progress = null) {
+    if (!progress || typeof progress !== 'object') {
+        return '--';
+    }
+
+    const processed = Number.isFinite(Number(progress.processed)) ? Number(progress.processed) : null;
+    const total = Number.isFinite(Number(progress.total)) ? Number(progress.total) : null;
+    const percent = Number.isFinite(Number(progress.percent)) ? Number(progress.percent) : null;
+
+    if (processed !== null && total !== null && total > 0) {
+        return `${processed} / ${total}${percent !== null ? ` (${percent}%)` : ''}`;
+    }
+
+    if (percent !== null) {
+        return `${percent}%`;
+    }
+
+    return '--';
+}
+
+function buildServerBackupRestoreSummaryHtml(summary = {}) {
+    const warningItems = Array.isArray(summary.warnings) ? summary.warnings : [];
+    return `
+        Settings updated: <strong>${Number(summary.settingsUpdated || 0)}</strong><br>
+        Roles created/updated/skipped/failed: <strong>${Number(summary.rolesCreated || 0)}</strong> / <strong>${Number(summary.rolesUpdated || 0)}</strong> / <strong>${Number(summary.rolesSkipped || 0)}</strong> / <strong>${Number(summary.rolesFailed || 0)}</strong><br>
+        Channels created/updated/skipped/failed: <strong>${Number(summary.channelsCreated || 0)}</strong> / <strong>${Number(summary.channelsUpdated || 0)}</strong> / <strong>${Number(summary.channelsSkipped || 0)}</strong> / <strong>${Number(summary.channelsFailed || 0)}</strong><br>
+        Overwrite syncs: <strong>${Number(summary.overwriteSyncs || 0)}</strong><br>
+        Emojis created/failed: <strong>${Number(summary.emojisCreated || 0)}</strong> / <strong>${Number(summary.emojisFailed || 0)}</strong><br>
+        Stickers created/failed: <strong>${Number(summary.stickersCreated || 0)}</strong> / <strong>${Number(summary.stickersFailed || 0)}</strong>
+        ${warningItems.length ? `<div class="server-backup-inspection-list is-warning" style="margin-top:0.85rem;">${warningItems.map((item) => `<div>${escapeNotificationCell(item)}</div>`).join('')}</div>` : ''}
+    `;
+}
+
+function renderServerBackupRestoreOperation(operation = null) {
+    const resultEl = document.getElementById('serverBackupRestoreResults');
+    if (!resultEl) return;
+
+    if (!operation) {
+        resultEl.innerHTML = 'Restore is non-destructive: it creates or updates matching roles and channels instead of deleting extra server content.';
+        return;
+    }
+
+    const progress = operation.progress || {};
+    const status = formatServerBackupRestoreLabel(operation.status, 'Queued');
+    const phase = formatServerBackupRestoreLabel(progress.phase || operation.phase, 'Queued');
+    const progressText = formatServerBackupRestoreProgress(progress);
+    const message = escapeNotificationCell(progress.message || operation.message || 'Restore is queued.');
+    const currentLabel = progress.currentLabel ? `<div>Current item: <strong>${escapeNotificationCell(progress.currentLabel)}</strong></div>` : '';
+    const updatedAt = operation.updatedAt ? `<div>Last update: <strong>${escapeNotificationCell(formatBackupTime(operation.updatedAt))}</strong></div>` : '';
+    const events = Array.isArray(operation.events) ? operation.events.slice(0, 6) : [];
+    const errorBlock = operation.status === 'failed' && operation.error
+        ? `<div class="server-backup-inspection-list is-error" style="margin-top:0.85rem;"><div>${escapeNotificationCell(operation.error)}</div></div>`
+        : '';
+    const summaryBlock = operation.status === 'completed' && operation.summary
+        ? `<div style="margin-top:0.85rem;">${buildServerBackupRestoreSummaryHtml(operation.summary)}</div>`
+        : '';
+    const recentActivityBlock = events.length
+        ? `
+            <div class="server-backup-inspection-block" style="margin-top:0.85rem;">
+                <div class="server-backup-inspection-block-header">
+                    <strong>Recent Activity</strong>
+                    <span>${escapeNotificationCell(String(events.length))} item${events.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="server-backup-inspection-list">${events.map((event) => {
+            const eventMessage = escapeNotificationCell(event.message || `${formatServerBackupRestoreLabel(event.phase, 'Step')} update`);
+            const eventProgress = formatServerBackupRestoreProgress(event);
+            const eventLabel = event.currentLabel ? ` <strong>${escapeNotificationCell(event.currentLabel)}</strong>` : '';
+            const eventSuffix = eventProgress !== '--' ? ` <span style="color:#94a3b8;">(${escapeNotificationCell(eventProgress)})</span>` : '';
+            return `<div>${eventMessage}${eventLabel}${eventSuffix}</div>`;
+        }).join('')}</div>
+            </div>
+        `
+        : '';
+
+    resultEl.innerHTML = `
+        <div style="display:grid; gap:0.85rem;">
+            <div class="server-backup-preflight-grid">
+                <div class="server-backup-preflight-box"><strong>Status</strong><span>${escapeNotificationCell(status)}</span></div>
+                <div class="server-backup-preflight-box"><strong>Phase</strong><span>${escapeNotificationCell(phase)}</span></div>
+                <div class="server-backup-preflight-box"><strong>Progress</strong><span>${escapeNotificationCell(progressText)}</span></div>
+            </div>
+            <div class="server-backup-inspection-list">
+                <div>${message}</div>
+                ${currentLabel}
+                ${updatedAt}
+            </div>
+            ${errorBlock}
+            ${summaryBlock}
+            ${recentActivityBlock}
+        </div>
+    `;
+}
+
+function sleepOwnerPanel(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function pollServerBackupRestoreOperation(operationId, options = {}) {
+    const safeOperationId = String(operationId || '').trim();
+    if (!safeOperationId) {
+        throw new Error('Missing restore operation ID');
+    }
+
+    const startedAt = Date.now();
+    const intervalMs = Math.max(500, Number(options.intervalMs) || 1000);
+    const timeoutMs = Math.max(30000, Number(options.timeoutMs) || (15 * 60 * 1000));
+    activeServerBackupRestoreOperationId = safeOperationId;
+    persistActiveServerBackupRestoreOperationId(safeOperationId);
+    setServerBackupRestoreButtonBusyState(true);
+
+    while (activeServerBackupRestoreOperationId === safeOperationId) {
+        const { response, data } = await window.AdminPanel.api.getJson(`/api/owner/server-backups/restore-status?operationId=${encodeURIComponent(safeOperationId)}`);
+        if (!response.ok) {
+            throw new Error(data?.error || 'Failed to fetch restore status');
+        }
+
+        const operation = data.operation || null;
+        renderServerBackupRestoreOperation(operation);
+        if (!operation) {
+            throw new Error('Restore operation was not found');
+        }
+
+        if (operation.status === 'completed' || operation.status === 'failed') {
+            activeServerBackupRestoreOperationId = null;
+            clearPersistedServerBackupRestoreOperationId();
+            setServerBackupRestoreButtonBusyState(false);
+            return operation;
+        }
+
+        if ((Date.now() - startedAt) > timeoutMs) {
+            activeServerBackupRestoreOperationId = null;
+            throw new Error('Timed out while waiting for restore progress');
+        }
+
+        await sleepOwnerPanel(intervalMs);
+    }
+
+    throw new Error('Restore polling stopped unexpectedly');
+}
+
+async function resumeServerBackupRestoreOperationFromStorage() {
+    const operationId = loadPersistedServerBackupRestoreOperationId();
+    if (!operationId) {
+        return null;
+    }
+
+    try {
+        const operation = await pollServerBackupRestoreOperation(operationId, {
+            intervalMs: 1000,
+            timeoutMs: 15 * 60 * 1000
+        });
+
+        if (operation.status === 'failed') {
+            profileShowError(operation.error || 'Server backup restore failed');
+            return operation;
+        }
+
+        const warnings = Array.isArray(operation.summary?.warnings) ? operation.summary.warnings : [];
+        profileShowSuccess(warnings.length ? 'Server backup restore completed with warnings' : 'Server backup restore completed');
+        await loadServerBackupStatus();
+        return operation;
+    } catch (error) {
+        console.error('Failed to resume server backup restore operation:', error);
+        clearPersistedServerBackupRestoreOperationId();
+        activeServerBackupRestoreOperationId = null;
+        setServerBackupRestoreButtonBusyState(false);
+        return null;
+    }
+}
+
+function renderServerBackupDiff(diff = null) {
+    const container = document.getElementById('serverBackupDiffResults');
+    if (!container) return;
+    if (!diff || !diff.summary) {
+        container.textContent = 'No diff preview available.';
+        return;
+    }
+
+    const blocks = [
+        {
+            title: 'Settings',
+            items: diff.details?.settingsChanged || []
+        },
+        {
+            title: 'Roles Added',
+            items: diff.details?.roles?.added || []
+        },
+        {
+            title: 'Roles Removed',
+            items: diff.details?.roles?.removed || []
+        },
+        {
+            title: 'Roles Changed',
+            items: diff.details?.roles?.changed || []
+        },
+        {
+            title: 'Channels Added',
+            items: diff.details?.channels?.added || []
+        },
+        {
+            title: 'Channels Removed',
+            items: diff.details?.channels?.removed || []
+        },
+        {
+            title: 'Channels Changed',
+            items: diff.details?.channels?.changed || []
+        },
+        {
+            title: 'Emojis Added',
+            items: diff.details?.emojis?.added || []
+        },
+        {
+            title: 'Stickers Added',
+            items: diff.details?.stickers?.added || []
+        }
+    ];
+
+    const summary = diff.summary;
+    container.innerHTML = `
+        <div style="display:grid; gap:1rem;">
+            <div style="padding:0.9rem; border:1px solid rgba(255,255,255,0.08); border-radius:12px; background:rgba(255,255,255,0.02);">
+                <div style="font-size:0.9rem; color:#94a3b8; margin-bottom:0.5rem;">Comparing <strong>${escapeNotificationCell(diff.sourceLabel || 'Source')}</strong> against <strong>${escapeNotificationCell(diff.targetLabel || 'Target')}</strong></div>
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.75rem;">
+                    <div><strong>${summary.settingsChanged || 0}</strong><br><span style="color:#94a3b8;">settings changed</span></div>
+                    <div><strong>${summary.rolesAdded || 0}/${summary.rolesChanged || 0}/${summary.rolesRemoved || 0}</strong><br><span style="color:#94a3b8;">roles + / ~ / -</span></div>
+                    <div><strong>${summary.channelsAdded || 0}/${summary.channelsChanged || 0}/${summary.channelsRemoved || 0}</strong><br><span style="color:#94a3b8;">channels + / ~ / -</span></div>
+                    <div><strong>${summary.emojisAdded || 0}/${summary.emojisChanged || 0}/${summary.emojisRemoved || 0}</strong><br><span style="color:#94a3b8;">emojis + / ~ / -</span></div>
+                    <div><strong>${summary.stickersAdded || 0}/${summary.stickersChanged || 0}/${summary.stickersRemoved || 0}</strong><br><span style="color:#94a3b8;">stickers + / ~ / -</span></div>
+                </div>
+            </div>
+            ${blocks.map((block) => {
+        if (!Array.isArray(block.items) || block.items.length === 0) return '';
+        return `
+                    <div style="padding:0.9rem; border:1px solid rgba(255,255,255,0.08); border-radius:12px; background:rgba(255,255,255,0.02);">
+                        <div style="font-weight:700; color:#fff; margin-bottom:0.5rem;">${escapeNotificationCell(block.title)}</div>
+                        <div style="display:grid; gap:0.3rem; color:#cbd5e1;">${block.items.slice(0, 20).map((item) => `<div>• ${escapeNotificationCell(item)}</div>`).join('')}</div>
+                    </div>
+                `;
+    }).join('')}
+        </div>
+    `;
+}
+
+function renderServerBackupGuildLabel(guilds = [], effectiveGuildId = '') {
+    const label = document.getElementById('serverBackupGuildValue');
+    if (!label) return;
+    const match = Array.isArray(guilds)
+        ? guilds.find((guild) => String(guild?.id || '') === String(effectiveGuildId || ''))
+        : null;
+    const guildText = match?.name || effectiveGuildId || 'Unavailable';
+    label.textContent = guildText;
+    updateBackupModeServerMeta({ guildName: guildText });
+}
+
+function updateBackupModeDatabaseMeta({ tableCount, fileCount } = {}) {
+    const tableEl = document.getElementById('backupModeDatabaseCount');
+    const fileEl = document.getElementById('backupModeDatabaseFiles');
+
+    if (tableEl) {
+        const totalTables = Number.isFinite(Number(tableCount)) ? Number(tableCount) : backupTablesCache.length;
+        tableEl.textContent = `${totalTables} ${totalTables === 1 ? 'table' : 'tables'}`;
+    }
+
+    if (fileEl && Number.isFinite(Number(fileCount))) {
+        const totalFiles = Number(fileCount);
+        fileEl.textContent = `${totalFiles} ${totalFiles === 1 ? 'backup' : 'backups'}`;
+    }
+}
+
+function updateBackupModeServerMeta({ fileCount, guildName } = {}) {
+    const countEl = document.getElementById('backupModeServerCount');
+    const guildEl = document.getElementById('backupModeServerGuild');
+
+    if (countEl && Number.isFinite(Number(fileCount))) {
+        const totalFiles = Number(fileCount);
+        countEl.textContent = `${totalFiles} ${totalFiles === 1 ? 'snapshot' : 'snapshots'}`;
+    }
+
+    if (guildEl && typeof guildName === 'string' && guildName.trim()) {
+        guildEl.textContent = guildName.trim();
+    }
+}
+
+function applyServerBackupConfigToControls(config = {}, effectiveGuildId = '', guilds = []) {
+    const enabledToggle = document.getElementById('serverBackupEnabledToggle');
+    const intervalSelect = document.getElementById('serverBackupIntervalSelect');
+    const retentionInput = document.getElementById('serverBackupRetentionInput');
+
+    if (enabledToggle) enabledToggle.checked = Boolean(config?.enabled);
+    if (intervalSelect && config?.intervalMinutes) intervalSelect.value = String(config.intervalMinutes);
+    if (retentionInput && config?.retentionCount) retentionInput.value = String(config.retentionCount);
+    applyServerBackupIncludes(config?.includes || {});
+    renderServerBackupGuildLabel(guilds, effectiveGuildId);
+}
+
+function updateServerBackupStatus(state = {}) {
+    const statusEl = document.getElementById('serverBackupStatusValue');
+    const lastRunEl = document.getElementById('serverBackupLastRunValue');
+    const nextRunEl = document.getElementById('serverBackupNextRunValue');
+    const lastResultEl = document.getElementById('serverBackupLastResultValue');
+    const noteEl = document.getElementById('serverBackupStatusNote');
+    const headerStatusEl = document.getElementById('serverBackupHeaderStatus');
+    const headerLastRunEl = document.getElementById('serverBackupHeaderLastRun');
+    const statusCardEl = document.getElementById('serverBackupStatusCard');
+    const nextRunCardEl = document.getElementById('serverBackupNextRunCard');
+    const lastResultCardEl = document.getElementById('serverBackupLastResultCard');
+
+    const rawStatus = state.running ? 'Running' : (state.lastRunStatus || 'Idle');
+    const normalized = String(rawStatus || 'Idle').toLowerCase();
+    const pillClassMap = {
+        running: 'backup-pill--running',
+        success: 'backup-pill--success',
+        warning: 'backup-pill--warning',
+        failed: 'backup-pill--error',
+        error: 'backup-pill--error',
+        idle: 'backup-pill--idle'
+    };
+    const pillClass = pillClassMap[normalized] || 'backup-pill--idle';
+    const cardClassMap = {
+        running: 'is-running',
+        success: 'is-success',
+        warning: 'is-warning',
+        failed: 'is-error',
+        error: 'is-error',
+        idle: 'is-neutral'
+    };
+    const resultNormalized = String(state.lastRunStatus || 'Idle').toLowerCase();
+
+    const applyStatState = (element, stateName) => {
+        if (!element) return;
+        element.classList.remove('is-running', 'is-success', 'is-warning', 'is-error', 'is-neutral');
+        element.classList.add(cardClassMap[stateName] || 'is-neutral');
+    };
+
+    if (statusEl) statusEl.textContent = rawStatus;
+    if (lastRunEl) lastRunEl.textContent = formatBackupTime(state.lastRunAt);
+    if (nextRunEl) nextRunEl.textContent = formatBackupTime(state.nextRunAt);
+    if (lastResultEl) lastResultEl.textContent = state.lastRunStatus || '--';
+    if (noteEl) noteEl.textContent = state.lastRunError || 'Server backups save guild structure to JSON snapshots.';
+
+    applyStatState(statusCardEl, normalized);
+    applyStatState(nextRunCardEl, state.running ? 'running' : (state.nextRunAt ? 'success' : 'idle'));
+    applyStatState(lastResultCardEl, resultNormalized);
+
+    if (headerStatusEl) {
+        headerStatusEl.textContent = rawStatus;
+        headerStatusEl.classList.remove('backup-pill--running', 'backup-pill--success', 'backup-pill--warning', 'backup-pill--error', 'backup-pill--idle');
+        headerStatusEl.classList.add(pillClass);
+    }
+    if (headerLastRunEl) {
+        headerLastRunEl.textContent = `Last run: ${formatBackupTime(state.lastRunAt)}`;
+    }
+}
+
+async function loadServerBackupStatus() {
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/server-backups/status');
+        if (!response.ok || !data) return;
+        serverBackupGuildsCache = Array.isArray(data.guilds) ? data.guilds : [];
+        applyServerBackupConfigToControls(data.config || {}, data.effectiveGuildId || '', serverBackupGuildsCache);
+        updateServerBackupStatus(data.state || {});
+        renderServerBackupFiles(data.files || []);
+        renderServerBackupFileSelectors(data.files || []);
+        renderServerBackupAnalytics(data.analytics || null);
+        renderServerBackupTimeline(data.timeline || []);
+    } catch (error) {
+        console.error('Error loading server backup status:', error);
+    }
+}
+
+async function saveServerBackupSettings() {
+    const enabled = Boolean(document.getElementById('serverBackupEnabledToggle')?.checked);
+    const interval = Number(document.getElementById('serverBackupIntervalSelect')?.value || 0);
+    const retention = Number(document.getElementById('serverBackupRetentionInput')?.value || 0);
+
+    try {
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/server-backups/config', {
+            enabled,
+            intervalMinutes: interval,
+            retentionCount: retention,
+            includes: getServerBackupIncludeSelections()
+        });
+        if (!response.ok) {
+            profileShowError(data?.error || 'Failed to update server backup settings');
+            return;
+        }
+        serverBackupGuildsCache = Array.isArray(data.guilds) ? data.guilds : serverBackupGuildsCache;
+        applyServerBackupConfigToControls(data.config || {}, data.effectiveGuildId || '', serverBackupGuildsCache);
+        updateServerBackupStatus(data.state || {});
+        profileShowSuccess('Server backup settings updated');
+    } catch (error) {
+        console.error('Error saving server backup settings:', error);
+        profileShowError('Failed to update server backup settings');
+    }
+}
+
+async function runServerBackupNow() {
+    const runBtn = document.getElementById('runServerBackupBtn');
+    const label = String(document.getElementById('serverBackupLabelInput')?.value || '').trim();
+    const notes = String(document.getElementById('serverBackupNotesInput')?.value || '').trim();
+    if (runBtn) {
+        runBtn.disabled = true;
+        runBtn.textContent = 'Starting...';
+    }
+
+    try {
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/server-backups/run', {
+            includes: getServerBackupIncludeSelections(),
+            label,
+            notes
+        });
+        if (!response.ok) {
+            profileShowError(data?.error || 'Server backup failed');
+            return;
+        }
+        profileShowSuccess('Server backup completed');
+        const labelInput = document.getElementById('serverBackupLabelInput');
+        const notesInput = document.getElementById('serverBackupNotesInput');
+        if (labelInput) labelInput.value = '';
+        if (notesInput) notesInput.value = '';
+    } catch (error) {
+        console.error('Error running server backup:', error);
+        profileShowError('Server backup failed');
+    } finally {
+        await loadServerBackupStatus();
+        if (runBtn) {
+            runBtn.disabled = false;
+            runBtn.textContent = 'Start Server Backup';
+        }
+    }
+}
+
+async function previewServerBackupDiff() {
+    const source = String(document.getElementById('serverBackupSourceSelect')?.value || '').trim();
+    const target = String(document.getElementById('serverBackupCompareTargetSelect')?.value || 'live').trim();
+
+    if (!source) {
+        profileShowError('Select a source backup first');
+        return;
+    }
+
+    try {
+        const params = new URLSearchParams({ source, target: target || 'live' });
+        const { response, data } = await window.AdminPanel.api.getJson(`/api/owner/server-backups/diff?${params.toString()}`);
+        if (!response.ok) {
+            profileShowError(data?.error || 'Failed to preview backup diff');
+            return;
+        }
+        renderServerBackupDiff(data.diff || null);
+        profileShowSuccess('Backup diff preview updated');
+    } catch (error) {
+        console.error('Error previewing server backup diff:', error);
+        profileShowError('Failed to preview backup diff');
+    }
+}
+
+async function restoreServerBackup() {
+    const file = String(document.getElementById('serverBackupRestoreSelect')?.value || '').trim();
+
+    if (!file) {
+        profileShowError('Select a backup to restore');
+        return;
+    }
+
+    setServerBackupRestoreButtonBusyState(true);
+
+    try {
+        const payload = {
+            file,
+            ...getServerBackupRestoreSelections()
+        };
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/server-backups/restore', payload);
+        if (!response.ok) {
+            profileShowError(data?.error || 'Failed to restore backup');
+            return;
+        }
+
+        const queuedOperation = data.operation || null;
+        const operationId = String(data.operationId || queuedOperation?.id || '').trim();
+        persistActiveServerBackupRestoreOperationId(operationId);
+        renderServerBackupRestoreOperation(queuedOperation || {
+            status: 'queued',
+            phase: 'queued',
+            message: 'Restore queued.',
+            progress: {
+                phase: 'queued',
+                stage: 'queued',
+                message: 'Restore queued.',
+                processed: null,
+                total: null,
+                percent: null
+            },
+            events: []
+        });
+
+        const finalOperation = await pollServerBackupRestoreOperation(operationId);
+        if (finalOperation.status === 'failed') {
+            profileShowError(finalOperation.error || 'Failed to restore backup');
+            return;
+        }
+
+        const warnings = Array.isArray(finalOperation.summary?.warnings) ? finalOperation.summary.warnings : [];
+        profileShowSuccess(warnings.length ? 'Server backup restore completed with warnings' : 'Server backup restore completed');
+        await loadServerBackupStatus();
+    } catch (error) {
+        console.error('Error restoring server backup:', error);
+        clearPersistedServerBackupRestoreOperationId();
+        activeServerBackupRestoreOperationId = null;
+        profileShowError('Failed to restore backup');
+    } finally {
+        setServerBackupRestoreButtonBusyState(false);
     }
 }
 
@@ -2784,6 +3913,16 @@ function renderAdminUsersTable() {
         const isOwner = role === 'owner';
         const isSelected = adminUserState.selectedIds.has(userId);
         const initial = (user.username || '?').charAt(0).toUpperCase();
+        const panelAvatarUrl = normalizeAdminAvatarUrl(user.avatar_url);
+        const discordAvatarUrl = normalizeAdminAvatarUrl(user.discord_avatar_url);
+        const avatarUrl = panelAvatarUrl || discordAvatarUrl;
+        const isDiscordAvatarFallback = !panelAvatarUrl && Boolean(discordAvatarUrl);
+        const avatarMarkup = avatarUrl
+            ? `<img class="staff-avatar-image" src="${escapeOwnerHtml(avatarUrl)}" alt="${escapeOwnerHtml(user.username || 'User')} avatar">`
+            : `<div class="staff-avatar-placeholder">${initial}</div>`;
+        const avatarSourceBadge = isDiscordAvatarFallback
+            ? '<span class="staff-avatar-source-badge" title="Using linked Discord avatar">Discord avatar</span>'
+            : '';
         const userIdJs = escapeOwnerJsString(userId);
         const usernameJs = escapeOwnerJsString(user.username || '');
         const roleJs = escapeOwnerJsString(role);
@@ -2804,11 +3943,12 @@ function renderAdminUsersTable() {
             <div class="staff-row-card">
                 <div class="staff-user-info">
                     <input type="checkbox" class="admin-user-select" data-user-id="${escapeOwnerHtml(userId)}" ${isSelected ? 'checked' : ''} style="margin-right:1rem;">
-                    <div class="staff-avatar-placeholder">${initial}</div>
+                    ${avatarMarkup}
                     <div class="staff-details">
                         <div class="staff-name">
                             ${escapeOwnerHtml(user.username || 'Unknown')}
                             <span class="role-badge ${escapeOwnerHtml(role)}">${escapeOwnerHtml(role)}</span>
+                            ${avatarSourceBadge}
                         </div>
                         <div class="staff-meta">
                             <span>📅 ${createdText}</span>

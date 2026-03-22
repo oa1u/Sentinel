@@ -171,7 +171,7 @@ async function showResults(interaction) {
     if (!message || !message.embeds[0]) {
       return interaction.reply({
         content: '❌ Poll not found or has been deleted!',
-        ephemeral: true
+        flags: require('discord.js').MessageFlags.Ephemeral
       });
     }
 

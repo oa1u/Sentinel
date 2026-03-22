@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
-const AdminPanelHelper = require('../../Functions/AdminPanelHelper');
+const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const { sendErrorReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
 const { ROLES: { administratorRoleId, moderatorRoleId } } = require('../../Config/constants');
 
@@ -30,7 +30,7 @@ module.exports = {
         }
 
         try {
-            const activeTimeouts = await AdminPanelHelper.getActiveTimeouts();
+            const activeTimeouts = await DatabaseManager.getActiveTimeoutCases({ guildId: interaction.guild.id, limit: 200 });
 
             if (!activeTimeouts.length) {
                 return sendInfoReply(interaction, 'No Active Timeouts', 'There are no users currently timed out.');

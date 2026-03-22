@@ -198,6 +198,1276 @@
             color: var(--text-primary);
         }
 
+        .backup-mode-tabs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 0.85rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .backup-mode-tab {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.035), transparent 42%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0));
+            color: var(--text-primary);
+            padding: 1rem 1.1rem;
+            border-radius: 1rem;
+            cursor: pointer;
+            transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease, color 0.25s ease;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+            text-align: left;
+            min-height: 88px;
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+        }
+
+        .backup-mode-tab::before {
+            content: '';
+            position: absolute;
+            left: 1rem;
+            right: 1rem;
+            bottom: 0.6rem;
+            height: 3px;
+            border-radius: 999px;
+            background: var(--accent-gradient);
+            transform: scaleX(0.22);
+            transform-origin: left center;
+            opacity: 0;
+            transition: transform 0.25s ease, opacity 0.25s ease;
+        }
+
+        .backup-mode-tab::after {
+            content: '';
+            position: absolute;
+            inset: auto -18% -55% auto;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.03);
+            filter: blur(8px);
+            pointer-events: none;
+        }
+
+        .backup-mode-tab:hover {
+            color: var(--text-primary);
+            border-color: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+        }
+
+        .backup-mode-tab.active {
+            color: var(--text-primary);
+            background:
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent 42%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.01));
+            border-color: rgba(255, 255, 255, 0.14);
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+        }
+
+        .backup-mode-tab.active::before {
+            opacity: 1;
+            transform: scaleX(1);
+        }
+
+        .backup-mode-tab.active .backup-mode-icon {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.12);
+            color: var(--text-primary);
+        }
+
+        .backup-mode-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 1.35rem;
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+
+        .backup-mode-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 0.28rem;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .backup-mode-label {
+            font-size: 0.98rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            color: inherit;
+        }
+
+        .backup-mode-subtitle {
+            font-size: 0.82rem;
+            line-height: 1.45;
+            color: var(--text-secondary);
+        }
+
+        .backup-mode-tab.active .backup-mode-subtitle {
+            color: var(--text-secondary);
+        }
+
+        .backup-mode-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin-top: 0.15rem;
+        }
+
+        .backup-mode-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-height: 24px;
+            padding: 0.25rem 0.55rem;
+            border-radius: 999px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.73rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+
+        .backup-mode-tab.active .backup-mode-pill {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.12);
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 640px) {
+            .backup-mode-tabs {
+                grid-template-columns: 1fr;
+            }
+
+            .backup-mode-tab {
+                min-height: 78px;
+                padding: 0.9rem 1rem;
+            }
+        }
+
+        .backup-mode-panel {
+            display: none;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .backup-mode-panel.active {
+            display: block;
+        }
+
+        .minimal-section-card {
+            display: grid;
+            gap: 1rem;
+            margin-top: 0.25rem;
+        }
+
+        .server-backup-card {
+            position: relative;
+            overflow: hidden;
+            padding: 1.2rem;
+            border-radius: 24px;
+            border: 1px solid var(--border-color);
+            background:
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 34%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.14);
+        }
+
+        .server-backup-card::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 220px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent);
+            pointer-events: none;
+        }
+
+        .server-backup-card>* {
+            position: relative;
+            z-index: 1;
+        }
+
+        .minimal-server-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .minimal-server-identity {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.9rem;
+        }
+
+        .minimal-server-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            color: #e2e8f0;
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+            font-size: 1.35rem;
+            flex-shrink: 0;
+        }
+
+        .minimal-server-title {
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .minimal-server-title h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #fff;
+        }
+
+        .minimal-server-title p {
+            margin: 0;
+            font-size: 0.86rem;
+            color: #94a3b8;
+            max-width: 680px;
+        }
+
+        .minimal-server-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .minimal-server-meta-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.45rem 0.55rem;
+            border-radius: 999px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .minimal-server-caption {
+            font-size: 0.83rem;
+            color: #94a3b8;
+        }
+
+        .server-backup-shell {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .server-backup-primary-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.95fr);
+            gap: 1rem;
+            align-items: stretch;
+        }
+
+        .server-backup-panel {
+            padding: 1rem;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .server-backup-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.85rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .server-backup-panel-title {
+            display: grid;
+            gap: 0.22rem;
+        }
+
+        .server-backup-panel-title strong {
+            color: #fff;
+            font-size: 0.92rem;
+            letter-spacing: 0.02em;
+        }
+
+        .server-backup-panel-title span {
+            color: #94a3b8;
+            font-size: 0.8rem;
+            line-height: 1.45;
+        }
+
+        .server-backup-inline-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 0.3rem 0.65rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.74rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .minimal-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .minimal-stat {
+            padding: 0.95rem 1rem;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+            transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+        }
+
+        .minimal-stat.is-running {
+            border-color: rgba(56, 189, 248, 0.32);
+            background: linear-gradient(180deg, rgba(14, 165, 233, 0.14), rgba(8, 47, 73, 0.08));
+            box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.08), 0 12px 28px rgba(8, 47, 73, 0.18);
+        }
+
+        .minimal-stat.is-success {
+            border-color: rgba(74, 222, 128, 0.28);
+            background: linear-gradient(180deg, rgba(34, 197, 94, 0.12), rgba(20, 83, 45, 0.08));
+            box-shadow: inset 0 1px 0 rgba(134, 239, 172, 0.08), 0 12px 28px rgba(20, 83, 45, 0.16);
+        }
+
+        .minimal-stat.is-warning {
+            border-color: rgba(250, 204, 21, 0.28);
+            background: linear-gradient(180deg, rgba(234, 179, 8, 0.12), rgba(113, 63, 18, 0.08));
+            box-shadow: inset 0 1px 0 rgba(253, 224, 71, 0.08), 0 12px 28px rgba(120, 53, 15, 0.14);
+        }
+
+        .minimal-stat.is-error {
+            border-color: rgba(248, 113, 113, 0.28);
+            background: linear-gradient(180deg, rgba(239, 68, 68, 0.12), rgba(127, 29, 29, 0.08));
+            box-shadow: inset 0 1px 0 rgba(252, 165, 165, 0.08), 0 12px 28px rgba(127, 29, 29, 0.16);
+        }
+
+        .minimal-stat.is-neutral {
+            border-color: var(--border-color);
+            background: var(--bg-card, #1e1e24);
+        }
+
+        .minimal-stat-label {
+            font-size: 0.74rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .minimal-stat-value {
+            margin-top: 0.3rem;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1.3;
+        }
+
+        .minimal-server-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.85rem;
+            align-items: end;
+        }
+
+        .server-backup-settings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.85rem;
+        }
+
+        .server-backup-setting-stack {
+            display: grid;
+            gap: 0.85rem;
+        }
+
+        .minimal-setting {
+            padding: 0.85rem 0.95rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card, #1e1e24);
+        }
+
+        .minimal-setting.is-strong {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: var(--border-color);
+        }
+
+        .server-backup-scope-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        .server-backup-scope-item {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card, #1e1e24);
+        }
+
+        .server-backup-scope-item input {
+            margin: 0;
+            accent-color: #667eea;
+            transform: scale(1.05);
+        }
+
+        .server-backup-scope-item span {
+            color: #e2e8f0;
+            font-size: 0.86rem;
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+        .minimal-setting .form-label:last-child,
+        .minimal-setting .form-label {
+            margin-bottom: 0;
+        }
+
+        .minimal-setting .form-input {
+            margin-bottom: 0;
+        }
+
+        .minimal-section-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 0.65rem;
+        }
+
+        .minimal-section-label strong {
+            color: #e2e8f0;
+            font-size: 0.84rem;
+            letter-spacing: 0.03em;
+        }
+
+        .minimal-section-label span {
+            color: #94a3b8;
+            font-size: 0.78rem;
+        }
+
+        .minimal-include-grid {
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        }
+
+        .minimal-actions {
+            display: block;
+        }
+
+        .server-backup-composer {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(340px, 1.2fr) auto;
+            gap: 1rem;
+            align-items: end;
+            padding: 1.1rem;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            background:
+                radial-gradient(circle at left top, rgba(255, 255, 255, 0.04), transparent 38%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 14px 28px rgba(0, 0, 0, 0.12);
+        }
+
+        .server-backup-composer-copy {
+            display: grid;
+            gap: 0.3rem;
+            align-self: center;
+        }
+
+        .server-backup-composer-copy strong {
+            color: #fff;
+            font-size: 1rem;
+            letter-spacing: 0.02em;
+        }
+
+        .server-backup-composer-copy span {
+            color: #94a3b8;
+            font-size: 0.83rem;
+            line-height: 1.45;
+        }
+
+        .server-backup-composer-fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        .server-backup-composer-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .server-backup-composer-actions .btn {
+            min-width: 150px;
+            justify-content: center;
+        }
+
+        .minimal-actions-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .minimal-actions-group .btn {
+            min-width: 152px;
+            justify-content: center;
+        }
+
+        .server-backup-list-card .card-header,
+        .server-backup-advanced-card .card-header {
+            margin-bottom: 0.9rem;
+        }
+
+        .server-backup-card-note {
+            margin-top: -0.2rem;
+            margin-bottom: 0.9rem;
+            color: #94a3b8;
+            font-size: 0.84rem;
+            line-height: 1.45;
+        }
+
+        .server-backup-empty {
+            display: grid;
+            place-items: center;
+            min-height: 150px;
+            border: 1px dashed rgba(148, 163, 184, 0.18);
+            border-radius: 16px;
+            color: #94a3b8;
+            background: rgba(255, 255, 255, 0.02);
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .server-backup-inspection {
+            margin-top: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01));
+            padding: 1.05rem;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .server-backup-inspection-summary {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(320px, 1fr);
+            gap: 0.9rem;
+        }
+
+        .server-backup-inspection-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.9fr);
+            gap: 0.9rem;
+        }
+
+        .server-backup-inspection-hero {
+            padding: 1rem;
+            border-radius: 18px;
+            border: 1px solid var(--border-color);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .server-backup-inspection-headline {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .server-backup-inspection-score {
+            min-width: 112px;
+            padding: 0.8rem 0.9rem;
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            display: grid;
+            gap: 0.2rem;
+            text-align: right;
+        }
+
+        .server-backup-inspection-score span {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #94a3b8;
+        }
+
+        .server-backup-inspection-score strong {
+            font-size: 1.8rem;
+            line-height: 1;
+            color: #fff;
+        }
+
+        .server-backup-inspection-score.is-good {
+            border-color: rgba(74, 222, 128, 0.24);
+            background: linear-gradient(180deg, rgba(34, 197, 94, 0.16), rgba(255, 255, 255, 0.02));
+        }
+
+        .server-backup-inspection-score.is-warning {
+            border-color: rgba(250, 204, 21, 0.24);
+            background: linear-gradient(180deg, rgba(234, 179, 8, 0.14), rgba(255, 255, 255, 0.02));
+        }
+
+        .server-backup-inspection-score.is-error {
+            border-color: rgba(248, 113, 113, 0.24);
+            background: linear-gradient(180deg, rgba(239, 68, 68, 0.14), rgba(255, 255, 255, 0.02));
+        }
+
+        .server-backup-inspection-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #94a3b8;
+        }
+
+        .server-backup-inspection-hero h4 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #fff;
+        }
+
+        .server-backup-inspection-hero p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 0.84rem;
+            line-height: 1.5;
+        }
+
+        .server-backup-inspection-health {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+
+        .server-backup-health-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 0.32rem 0.7rem;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: #e2e8f0;
+            font-size: 0.76rem;
+            font-weight: 700;
+        }
+
+        .server-backup-health-pill.is-good {
+            border-color: rgba(74, 222, 128, 0.24);
+            background: rgba(34, 197, 94, 0.1);
+            color: #dcfce7;
+        }
+
+        .server-backup-health-pill.is-warning {
+            border-color: rgba(250, 204, 21, 0.24);
+            background: rgba(234, 179, 8, 0.1);
+            color: #fef3c7;
+        }
+
+        .server-backup-health-pill.is-error {
+            border-color: rgba(248, 113, 113, 0.24);
+            background: rgba(239, 68, 68, 0.1);
+            color: #fecaca;
+        }
+
+        .server-backup-inspection-meta {
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .server-backup-inspection-context-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.7rem;
+        }
+
+        .server-backup-inspection-context-card {
+            padding: 0.78rem 0.82rem;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.03);
+            display: grid;
+            gap: 0.25rem;
+        }
+
+        .server-backup-inspection-context-card strong {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .server-backup-inspection-context-card span {
+            color: #fff;
+            font-weight: 700;
+            line-height: 1.35;
+            word-break: break-word;
+        }
+
+        .server-backup-inspection-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .server-backup-inspection-item {
+            padding: 0.82rem 0.9rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card, #1e1e24);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .server-backup-inspection-item.is-good {
+            border-color: rgba(74, 222, 128, 0.2);
+            background: linear-gradient(180deg, rgba(34, 197, 94, 0.1), rgba(255, 255, 255, 0.01));
+        }
+
+        .server-backup-inspection-item.is-warning {
+            border-color: rgba(250, 204, 21, 0.2);
+            background: linear-gradient(180deg, rgba(234, 179, 8, 0.08), rgba(255, 255, 255, 0.01));
+        }
+
+        .server-backup-inspection-item.is-error {
+            border-color: rgba(248, 113, 113, 0.2);
+            background: linear-gradient(180deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.01));
+        }
+
+        .server-backup-inspection-item strong {
+            display: block;
+            font-size: 0.74rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.3rem;
+        }
+
+        .server-backup-inspection-item span {
+            color: #fff;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+
+        .server-backup-inspection-stack {
+            display: grid;
+            gap: 0.8rem;
+        }
+
+        .server-backup-inspection-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+        }
+
+        .server-backup-inspection-tag {
+            display: inline-flex;
+            align-items: center;
+            min-height: 30px;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            border: 1px solid rgba(96, 165, 250, 0.18);
+            background: rgba(59, 130, 246, 0.08);
+            color: #dbeafe;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .server-backup-inspection-block {
+            padding: 0.95rem 1rem;
+            border-radius: 18px;
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .server-backup-inspection-block--feature {
+            background:
+                radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 40%),
+                rgba(255, 255, 255, 0.02);
+        }
+
+        .server-backup-inspection-block-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .server-backup-inspection-block-header strong {
+            color: #fff;
+            font-size: 0.88rem;
+            letter-spacing: 0.02em;
+        }
+
+        .server-backup-inspection-block-header span {
+            color: #94a3b8;
+            font-size: 0.78rem;
+        }
+
+        .server-backup-inspection-list {
+            display: grid;
+            gap: 0.45rem;
+            color: #cbd5e1;
+            font-size: 0.88rem;
+        }
+
+        .server-backup-inspection-list div {
+            padding: 0.65rem 0.75rem;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+        }
+
+        .server-backup-inspection-list.is-warning div {
+            border-color: rgba(250, 204, 21, 0.16);
+            background: rgba(234, 179, 8, 0.06);
+        }
+
+        .server-backup-inspection-list.is-error div {
+            border-color: rgba(248, 113, 113, 0.16);
+            background: rgba(239, 68, 68, 0.06);
+        }
+
+        .server-backup-inspection-split {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.85rem;
+        }
+
+        .server-backup-analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .server-backup-analytics-item {
+            position: relative;
+            overflow: hidden;
+            padding: 0.9rem 0.95rem;
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .server-backup-analytics-item::before {
+            content: '';
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 3px;
+            background: rgba(148, 163, 184, 0.3);
+        }
+
+        .server-backup-analytics-item.is-info::before {
+            background: rgba(56, 189, 248, 0.72);
+        }
+
+        .server-backup-analytics-item.is-good::before {
+            background: rgba(74, 222, 128, 0.72);
+        }
+
+        .server-backup-analytics-item.is-warning::before {
+            background: rgba(250, 204, 21, 0.72);
+        }
+
+        .server-backup-analytics-item.is-neutral::before {
+            background: rgba(148, 163, 184, 0.42);
+        }
+
+        .server-backup-analytics-item strong {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.74rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .server-backup-analytics-item span {
+            color: #fff;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .server-backup-overview-grid {
+            display: grid;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .server-backup-section-shell {
+            padding: 1rem;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+        }
+
+        .server-backup-section-shell .minimal-section-label {
+            margin-bottom: 0.85rem;
+        }
+
+        .server-backup-files-grid {
+            display: grid;
+            gap: 0.85rem;
+        }
+
+        .server-backup-file-card {
+            padding: 0.95rem 1rem;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background:
+                radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 35%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+        }
+
+        .server-backup-file-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .server-backup-file-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #7dd3fc;
+        }
+
+        .server-backup-file-meta-line {
+            display: flex;
+            gap: 0.7rem;
+            flex-wrap: wrap;
+            color: #94a3b8;
+            font-size: 0.8rem;
+        }
+
+        .server-backup-file-meta-line span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .server-backup-action-group {
+            display: flex;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .server-backup-timeline-list {
+            display: grid;
+            gap: 0.8rem;
+        }
+
+        .server-backup-timeline-item {
+            padding: 0.95rem 1rem;
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .server-backup-timeline-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        .server-backup-timeline-head span {
+            color: #94a3b8;
+            font-size: 0.8rem;
+        }
+
+        .server-backup-timeline-subtitle {
+            margin-top: 0.35rem;
+            color: #94a3b8;
+            font-size: 0.82rem;
+        }
+
+        .server-backup-timeline-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin-top: 0.8rem;
+        }
+
+        .server-backup-timeline-metric {
+            padding: 0.7rem 0.75rem;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .server-backup-timeline-metric strong {
+            display: block;
+            margin-bottom: 0.25rem;
+            color: #94a3b8;
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .server-backup-timeline-metric span {
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .server-backup-file-subtitle {
+            color: #94a3b8;
+            font-size: 0.82rem;
+            line-height: 1.4;
+            margin-top: 0.2rem;
+        }
+
+        .server-backup-file-flags {
+            display: flex;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+            margin-top: 0.35rem;
+        }
+
+        .server-backup-flag {
+            display: inline-flex;
+            align-items: center;
+            min-height: 22px;
+            padding: 0.2rem 0.5rem;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.12);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            color: #cbd5e1;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        .server-backup-flag.is-good {
+            background: rgba(74, 222, 128, 0.14);
+            border-color: rgba(74, 222, 128, 0.24);
+            color: #dcfce7;
+        }
+
+        .server-backup-flag.is-warning {
+            background: rgba(250, 204, 21, 0.14);
+            border-color: rgba(250, 204, 21, 0.24);
+            color: #fef3c7;
+        }
+
+        .server-backup-preflight-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.9rem;
+        }
+
+        .server-backup-preflight-box {
+            padding: 0.75rem 0.85rem;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .server-backup-preflight-box strong {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.74rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .server-backup-preflight-box span {
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .server-backup-inspection-empty {
+            color: #94a3b8;
+            font-size: 0.88rem;
+        }
+
+        .minimal-disclosure {
+            margin-top: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+            overflow: hidden;
+        }
+
+        .minimal-disclosure summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 1rem 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            color: #e2e8f0;
+            font-weight: 700;
+        }
+
+        .minimal-disclosure-copy {
+            display: grid;
+            gap: 0.2rem;
+        }
+
+        .minimal-disclosure-copy small {
+            color: #94a3b8;
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+
+        .minimal-disclosure summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .minimal-disclosure summary::after {
+            content: '+';
+            color: #94a3b8;
+            font-size: 1.1rem;
+        }
+
+        .minimal-disclosure[open] summary::after {
+            content: '-';
+        }
+
+        .minimal-disclosure-body {
+            padding: 0 1.1rem 1.1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .minimal-disclosure-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        @media (max-width: 880px) {
+            .server-backup-inspection-summary {
+                grid-template-columns: 1fr;
+            }
+
+            .server-backup-inspection-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .server-backup-inspection-split {
+                grid-template-columns: 1fr;
+            }
+
+            .server-backup-primary-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .server-backup-settings-grid,
+            .server-backup-scope-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .minimal-disclosure-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .minimal-actions {
+                align-items: stretch;
+            }
+
+            .server-backup-composer {
+                grid-template-columns: 1fr;
+            }
+
+            .server-backup-composer-fields {
+                grid-template-columns: 1fr;
+            }
+
+            .server-backup-composer-actions {
+                justify-content: stretch;
+            }
+
+            .server-backup-composer-actions .btn {
+                flex: 1 1 180px;
+            }
+
+            .server-backup-file-top {
+                flex-direction: column;
+            }
+
+            .server-backup-action-group {
+                width: 100%;
+                justify-content: stretch;
+            }
+
+            .server-backup-action-group .btn {
+                flex: 1 1 140px;
+            }
+
+            .server-backup-timeline-metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .minimal-actions-group {
+                width: 100%;
+            }
+
+            .minimal-actions-group .btn {
+                flex: 1 1 180px;
+            }
+
+            .minimal-server-identity {
+                width: 100%;
+            }
+        }
+
 
         .tab-content {
             display: none;
@@ -814,6 +2084,16 @@
             text-transform: uppercase;
         }
 
+        .staff-avatar-image {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            object-fit: cover;
+            display: block;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
         .staff-details {
             display: flex;
             flex-direction: column;
@@ -834,6 +2114,18 @@
             color: var(--text-secondary);
             display: flex;
             gap: 1rem;
+        }
+
+        .staff-avatar-source-badge {
+            font-size: 0.68rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            color: #8bd3ff;
+            background: rgba(59, 130, 246, 0.16);
+            border: 1px solid rgba(96, 165, 250, 0.25);
+            white-space: nowrap;
         }
 
         .role-badge {
@@ -2084,162 +3376,485 @@
         </div>
 
         <div id="system" class="tab-content">
-            <div class="dashboard-grid" style="margin-bottom: 1.5rem;">
-                <div class="dashboard-card" style="grid-column: span 1;">
-                    <div class="card-header"><span class="card-header-icon">💾</span> Backup Status</div>
-                    <div style="display:grid; gap:0.9rem;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem;">
-                            <span
-                                style="color:#94a3b8; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.08em;">Current
-                                State</span>
-                            <span id="backupHeaderStatus" class="backup-pill backup-pill--idle">Idle</span>
-                        </div>
-                        <div id="backupHeaderLastRun" style="font-size:0.9rem; color:#cbd5e1;">Last run: --</div>
-                        <div
-                            style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.75rem;">
-                            <div
-                                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:0.9rem;">
-                                <div
-                                    style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
-                                    Status</div>
-                                <div id="backupStatusValue"
-                                    style="font-size:1.1rem; font-weight:700; color:#fff; margin-top:0.35rem;">Idle
-                                </div>
-                            </div>
-                            <div
-                                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:0.9rem;">
-                                <div
-                                    style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
-                                    Next Run</div>
-                                <div id="backupNextRunValue"
-                                    style="font-size:1.1rem; font-weight:700; color:#fff; margin-top:0.35rem;">--</div>
-                            </div>
-                            <div
-                                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:0.9rem;">
-                                <div
-                                    style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
-                                    Last Result</div>
-                                <div id="backupLastResultValue"
-                                    style="font-size:1.1rem; font-weight:700; color:#fff; margin-top:0.35rem;">--</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="dashboard-card" style="grid-column: span 2;">
-                    <div class="card-header"><span class="card-header-icon">⚙️</span> Backup Settings</div>
-                    <div
-                        style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; align-items:end;">
-                        <div>
-                            <label class="form-label"
-                                style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
-                                <span>Scheduled Backups</span>
-                                <label class="toggle-switch"><input type="checkbox" id="backupEnabledToggle"><span
-                                        class="toggle-slider"></span></label>
-                            </label>
-                        </div>
-                        <div>
-                            <label class="form-label">Interval</label>
-                            <select id="backupIntervalSelect" class="form-input">
-                                <option value="15">Every 15 minutes</option>
-                                <option value="30">Every 30 minutes</option>
-                                <option value="60" selected>Hourly</option>
-                                <option value="360">Every 6 hours</option>
-                                <option value="720">Every 12 hours</option>
-                                <option value="1440">Daily</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="form-label">Retention Count</label>
-                            <input id="backupRetentionInput" class="form-input" type="number" min="1" step="1"
-                                value="10">
-                        </div>
-                        <div>
-                            <label class="form-label">Format</label>
-                            <select id="backupFormatSelect" class="form-input">
-                                <option value="json" selected>JSON</option>
-                                <option value="sql">SQL</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
+            <div class="backup-mode-tabs" id="backupModeTabs">
+                <button type="button" class="backup-mode-tab active" data-backup-mode="database">
+                    <span class="backup-mode-icon">🗄️</span>
+                    <span class="backup-mode-copy">
+                        <span class="backup-mode-label">Database Backup</span>
+                        <span class="backup-mode-subtitle">Tables, export format, retention, and manual dump
+                            controls.</span>
+                        <span class="backup-mode-meta">
+                            <span class="backup-mode-pill" id="backupModeDatabaseCount">0 tables</span>
+                            <span class="backup-mode-pill" id="backupModeDatabaseFiles">0 backups</span>
+                        </span>
+                    </span>
+                </button>
+                <button type="button" class="backup-mode-tab" data-backup-mode="server">
+                    <span class="backup-mode-icon">🏗️</span>
+                    <span class="backup-mode-copy">
+                        <span class="backup-mode-label">Server Backup</span>
+                        <span class="backup-mode-subtitle">Guild structure snapshots for channels, roles, settings, and
+                            restore preview.</span>
+                        <span class="backup-mode-meta">
+                            <span class="backup-mode-pill" id="backupModeServerCount">0 snapshots</span>
+                            <span class="backup-mode-pill" id="backupModeServerGuild">Loading guild</span>
+                        </span>
+                    </span>
+                </button>
             </div>
 
-            <div class="dashboard-grid">
-                <div class="dashboard-card" style="grid-column: span 2;">
-                    <div class="card-header"
-                        style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
-                        <div style="display:flex; align-items:center; gap:1rem;">
-                            <div style="display:flex; align-items:center; gap:0.5rem;">
-                                <div
-                                    style="display:flex; align-items:center; justify-content:center; width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15)); border: 1px solid rgba(102, 126, 234, 0.33); color: #7393ff; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-                                        <path
-                                            d="M 3 5V18C2.9995 19.6556 7.02904 21 12 21C16.9709 21 21.0005 19.6556 21 18V5">
-                                        </path>
-                                    </svg>
+            <div id="backupModeDatabase" class="backup-mode-panel active">
+                <div class="dashboard-grid" style="margin-bottom: 1.5rem;">
+                    <div class="dashboard-card" style="grid-column: span 1;">
+                        <div class="card-header"><span class="card-header-icon">💾</span> Backup Status</div>
+                        <div style="display:grid; gap:0.9rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem;">
+                                <span
+                                    style="color:#94a3b8; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.08em;">Current
+                                    State</span>
+                                <span id="backupHeaderStatus" class="backup-pill backup-pill--idle">Idle</span>
+                            </div>
+                            <div id="backupHeaderLastRun" style="font-size:0.9rem; color:#cbd5e1;">Last run: --</div>
+                            <div
+                                style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.75rem;">
+                                <div class="minimal-stat" id="backupStatusCard">
+                                    <div
+                                        style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
+                                        Status</div>
+                                    <div id="backupStatusValue" class="minimal-stat-value">Idle</div>
                                 </div>
-                                <div>
-                                    <h3
-                                        style="margin: 0 0 0.25rem 0; font-size: 1.15rem; color: #fff; font-weight: 600; letter-spacing: 0.02em;">
-                                        Included Tables</h3>
-                                    <p style="margin: 0; font-size: 0.85rem; color: #9ca3af;">Choose which tables to
-                                        include in the backup.</p>
+                                <div class="minimal-stat" id="backupNextRunCard">
+                                    <div
+                                        style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
+                                        Next Run</div>
+                                    <div id="backupNextRunValue" class="minimal-stat-value">--</div>
+                                </div>
+                                <div class="minimal-stat" id="backupLastResultCard">
+                                    <div
+                                        style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
+                                        Last Result</div>
+                                    <div id="backupLastResultValue" class="minimal-stat-value">--</div>
                                 </div>
                             </div>
                         </div>
-                        <div style="margin-left:auto; margin-top: 0.25rem;">
-                            <label
-                                style="display:inline-flex; align-items:center; gap:0.6rem; font-size:0.9rem; cursor:pointer; background: rgba(255,255,255,0.03); padding: 0.5rem 1.2rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s ease;"
-                                onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='rgba(255,255,255,0.2)';"
-                                onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.1)';">
-                                <input type="checkbox" id="backupTablesSelectAll" class="backup-table-checkbox"
-                                    style="transform: scale(1.1); margin: 0; cursor: pointer; accent-color: #7393ff;">
-                                <span
-                                    style="font-weight: 600; color: #e2e8f0; letter-spacing: 0.02em; font-size: 0.85rem;">Select
-                                    All</span>
-                            </label>
-                        </div>
                     </div>
-                    <div style="font-size:0.9rem; color:#9ca3af; margin-bottom:0.5rem;">Choose which tables should be
-                        included in the backup:</div>
-                    <div class="backup-table-grid" id="backupTablesList">
-                        <div class="loading show">Loading tables...</div>
-                    </div>
-                    <div
-                        style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; border-top:1px solid var(--border-color); padding-top:1rem;">
-                        <span id="backupTableCount" style="color:#667eea; font-weight:600;">0 selected</span>
-                        <div style="display:flex; gap:1rem;">
-                            <button class="btn btn-primary" id="saveBackupConfigBtn">💾 Save Settings</button>
+                    <div class="dashboard-card" style="grid-column: span 2;">
+                        <div class="card-header"><span class="card-header-icon">⚙️</span> Backup Settings</div>
+                        <div
+                            style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; align-items:end;">
+                            <div>
+                                <label class="form-label"
+                                    style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+                                    <span>Scheduled Backups</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="backupEnabledToggle"><span
+                                            class="toggle-slider"></span></label>
+                                </label>
+                            </div>
+                            <div>
+                                <label class="form-label">Interval</label>
+                                <select id="backupIntervalSelect" class="form-input">
+                                    <option value="15">Every 15 minutes</option>
+                                    <option value="30">Every 30 minutes</option>
+                                    <option value="60" selected>Hourly</option>
+                                    <option value="360">Every 6 hours</option>
+                                    <option value="720">Every 12 hours</option>
+                                    <option value="1440">Daily</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Retention Count</label>
+                                <input id="backupRetentionInput" class="form-input" type="number" min="1" step="1"
+                                    value="10">
+                            </div>
+                            <div>
+                                <label class="form-label">Format</label>
+                                <select id="backupFormatSelect" class="form-input">
+                                    <option value="json" selected>JSON</option>
+                                    <option value="sql">SQL</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="dashboard-card">
-                    <div class="card-header"><span class="card-header-icon">⚡</span> Manual Backup</div>
-                    <div style="text-align:center; padding:2rem 0;">
-                        <div style="font-size:3rem; margin-bottom:1rem;">🚀</div>
-                        <p style="margin-bottom:1.5rem; color:#9ca3af;">Start a backup now using the currently selected
-                            tables.</p>
-                        <button class="btn btn-primary" id="runBackupBtn"
-                            style="width:100%; justify-content:center; padding:1rem;">Start Backup</button>
-                        <div style="margin-top:1rem; font-size:0.85rem; color:#64748b;" id="backupStatusNote"></div>
+                <div class="dashboard-grid">
+                    <div class="dashboard-card" style="grid-column: span 2;">
+                        <div class="card-header"
+                            style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+                            <div style="display:flex; align-items:center; gap:1rem;">
+                                <div style="display:flex; align-items:center; gap:0.5rem;">
+                                    <div
+                                        style="display:flex; align-items:center; justify-content:center; width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15)); border: 1px solid rgba(102, 126, 234, 0.33); color: #7393ff; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                                            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                                            <path
+                                                d="M 3 5V18C2.9995 19.6556 7.02904 21 12 21C16.9709 21 21.0005 19.6556 21 18V5">
+                                            </path>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3
+                                            style="margin: 0 0 0.25rem 0; font-size: 1.15rem; color: #fff; font-weight: 600; letter-spacing: 0.02em;">
+                                            Included Tables</h3>
+                                        <p style="margin: 0; font-size: 0.85rem; color: #9ca3af;">Choose which tables to
+                                            include in the backup.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="margin-left:auto; margin-top: 0.25rem;">
+                                <label
+                                    style="display:inline-flex; align-items:center; gap:0.6rem; font-size:0.9rem; cursor:pointer; background: rgba(255,255,255,0.03); padding: 0.5rem 1.2rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s ease;"
+                                    onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='rgba(255,255,255,0.2)';"
+                                    onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.1)';">
+                                    <input type="checkbox" id="backupTablesSelectAll" class="backup-table-checkbox"
+                                        style="transform: scale(1.1); margin: 0; cursor: pointer; accent-color: #7393ff;">
+                                    <span
+                                        style="font-weight: 600; color: #e2e8f0; letter-spacing: 0.02em; font-size: 0.85rem;">Select
+                                        All</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div style="font-size:0.9rem; color:#9ca3af; margin-bottom:0.5rem;">Choose which tables should
+                            be included in the backup:</div>
+                        <div class="backup-table-grid" id="backupTablesList">
+                            <div class="loading show">Loading tables...</div>
+                        </div>
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; border-top:1px solid var(--border-color); padding-top:1rem;">
+                            <span id="backupTableCount" style="color:#667eea; font-weight:600;">0 selected</span>
+                            <div style="display:flex; gap:1rem;">
+                                <button class="btn btn-primary" id="saveBackupConfigBtn">💾 Save Settings</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-card">
+                        <div class="card-header"><span class="card-header-icon">⚡</span> Manual Backup</div>
+                        <div style="text-align:center; padding:2rem 0;">
+                            <div style="font-size:3rem; margin-bottom:1rem;">🚀</div>
+                            <p style="margin-bottom:1.5rem; color:#9ca3af;">Start a backup now using the currently
+                                selected tables.</p>
+                            <button class="btn btn-primary" id="runBackupBtn"
+                                style="width:100%; justify-content:center; padding:1rem;">Start Backup</button>
+                            <div style="margin-top:1rem; font-size:0.85rem; color:#64748b;" id="backupStatusNote"></div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-card" style="grid-column: span 3;">
+                        <div class="card-header">
+                            <div style="display:flex; align-items:center; gap:0.5rem;"><span
+                                    class="card-header-icon">📦</span> Saved Backups</div>
+                            <div style="margin-left:auto; font-size:0.85rem; color:#666;" id="backupLastRunValue">Last
+                                run: -</div>
+                        </div>
+                        <div id="backupFilesList" class="table-container" style="max-height:400px; overflow-y:auto;">
+                            <div class="loading show" style="padding:2rem; text-align:center;">Loading saved backups...
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="dashboard-card" style="grid-column: span 3;">
-                    <div class="card-header">
-                        <div style="display:flex; align-items:center; gap:0.5rem;"><span
-                                class="card-header-icon">📦</span> Saved Backups</div>
-                        <div style="margin-left:auto; font-size:0.85rem; color:#666;" id="backupLastRunValue">Last run:
-                            -</div>
-                    </div>
-                    <div id="backupFilesList" class="table-container" style="max-height:400px; overflow-y:auto;">
-                        <div class="loading show" style="padding:2rem; text-align:center;">Loading saved backups...
+            </div>
+
+            <div id="backupModeServer" class="backup-mode-panel">
+                <div class="minimal-section-card">
+                    <div class="dashboard-card server-backup-card">
+                        <div class="server-backup-shell">
+                            <div class="minimal-server-header">
+                                <div class="minimal-server-identity">
+                                    <div class="minimal-server-icon">🏗️</div>
+                                    <div class="minimal-server-title">
+                                        <h3>Server Backup</h3>
+                                        <p>Schedule structure snapshots, review scope at a glance, and run a manual
+                                            snapshot without digging through the panel.</p>
+                                    </div>
+                                </div>
+                                <div class="minimal-server-meta">
+                                    <div class="minimal-server-meta-group">
+                                        <span id="serverBackupHeaderStatus"
+                                            class="backup-pill backup-pill--idle">Idle</span>
+                                        <span id="serverBackupHeaderLastRun" class="minimal-server-caption">Last run:
+                                            --</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="server-backup-primary-grid">
+                                <div class="server-backup-panel">
+                                    <div class="server-backup-panel-header">
+                                        <div class="server-backup-panel-title">
+                                            <strong>Run State</strong>
+                                            <span>Current health, next scheduled execution, and the latest
+                                                result.</span>
+                                        </div>
+                                        <span class="server-backup-inline-badge">Live Status</span>
+                                    </div>
+                                    <div class="minimal-stat-grid">
+                                        <div class="minimal-stat" id="serverBackupStatusCard">
+                                            <div class="minimal-stat-label">Status</div>
+                                            <div id="serverBackupStatusValue" class="minimal-stat-value">Idle</div>
+                                        </div>
+                                        <div class="minimal-stat" id="serverBackupNextRunCard">
+                                            <div class="minimal-stat-label">Next Run</div>
+                                            <div id="serverBackupNextRunValue" class="minimal-stat-value">--</div>
+                                        </div>
+                                        <div class="minimal-stat" id="serverBackupLastResultCard">
+                                            <div class="minimal-stat-label">Last Result</div>
+                                            <div id="serverBackupLastResultValue" class="minimal-stat-value">--</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="server-backup-panel">
+                                    <div class="server-backup-panel-header">
+                                        <div class="server-backup-panel-title">
+                                            <strong>Schedule</strong>
+                                            <span>Pick the guild, set cadence, and control retention from one
+                                                block.</span>
+                                        </div>
+                                    </div>
+                                    <div class="server-backup-setting-stack">
+                                        <div class="minimal-setting is-strong">
+                                            <label class="form-label"
+                                                style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+                                                <span>Scheduled Backups</span>
+                                                <label class="toggle-switch"><input type="checkbox"
+                                                        id="serverBackupEnabledToggle"><span
+                                                        class="toggle-slider"></span></label>
+                                            </label>
+                                        </div>
+                                        <div class="server-backup-settings-grid">
+                                            <div class="minimal-setting">
+                                                <label class="form-label">Guild</label>
+                                                <div id="serverBackupGuildValue" class="form-input"
+                                                    style="display:flex; align-items:center; min-height:42px; color:#e2e8f0;">
+                                                    Loading guild...</div>
+                                            </div>
+                                            <div class="minimal-setting">
+                                                <label class="form-label">Interval</label>
+                                                <select id="serverBackupIntervalSelect" class="form-input">
+                                                    <option value="15">Every 15 minutes</option>
+                                                    <option value="30">Every 30 minutes</option>
+                                                    <option value="60">Hourly</option>
+                                                    <option value="360">Every 6 hours</option>
+                                                    <option value="720">Every 12 hours</option>
+                                                    <option value="1440" selected>Daily</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="minimal-setting">
+                                            <label class="form-label">Retention Count</label>
+                                            <input id="serverBackupRetentionInput" class="form-input" type="number"
+                                                min="1" step="1" value="10">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="server-backup-panel">
+                                <div class="server-backup-panel-header">
+                                    <div class="server-backup-panel-title">
+                                        <strong>Snapshot Scope</strong>
+                                        <span>Choose exactly what each saved structure snapshot should include.</span>
+                                    </div>
+                                    <span class="server-backup-inline-badge">Included In Snapshot</span>
+                                </div>
+                                <div class="server-backup-scope-grid">
+                                    <label class="server-backup-scope-item"><input type="checkbox"
+                                            id="serverBackupIncludeSettings" class="backup-table-checkbox" checked>
+                                        <span>Guild Settings</span></label>
+                                    <label class="server-backup-scope-item"><input type="checkbox"
+                                            id="serverBackupIncludeRoles" class="backup-table-checkbox" checked>
+                                        <span>Roles</span></label>
+                                    <label class="server-backup-scope-item"><input type="checkbox"
+                                            id="serverBackupIncludeChannels" class="backup-table-checkbox" checked>
+                                        <span>Channels</span></label>
+                                    <label class="server-backup-scope-item"><input type="checkbox"
+                                            id="serverBackupIncludeEmojis" class="backup-table-checkbox" checked>
+                                        <span>Emojis</span></label>
+                                    <label class="server-backup-scope-item"><input type="checkbox"
+                                            id="serverBackupIncludeStickers" class="backup-table-checkbox" checked>
+                                        <span>Stickers</span></label>
+                                    <label class="server-backup-scope-item"><input type="checkbox"
+                                            id="serverBackupIncludePermissionOverwrites" class="backup-table-checkbox"
+                                            checked> <span>Permission Overwrites</span></label>
+                                </div>
+                            </div>
+
+                            <div class="minimal-actions">
+                                <div class="server-backup-composer">
+                                    <div class="server-backup-composer-copy">
+                                        <strong>Manual Snapshot</strong>
+                                        <span id="serverBackupStatusNote">Server backups save guild structure to JSON
+                                            snapshots.</span>
+                                    </div>
+                                    <div class="server-backup-composer-fields">
+                                        <input id="serverBackupLabelInput" class="form-input" type="text" maxlength="80"
+                                            placeholder="Snapshot label, for example before channel rework"
+                                            style="margin-bottom:0;">
+                                        <input id="serverBackupNotesInput" class="form-input" type="text"
+                                            maxlength="500" placeholder="Optional notes for restore context"
+                                            style="margin-bottom:0;">
+                                    </div>
+                                    <div class="server-backup-composer-actions">
+                                        <button class="btn btn-secondary" id="saveServerBackupConfigBtn">Save
+                                            Settings</button>
+                                        <button class="btn btn-primary" id="runServerBackupBtn">Run Snapshot</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <div class="dashboard-card server-backup-list-card">
+                        <div class="card-header">
+                            <div style="display:flex; align-items:center; gap:0.5rem;"><span
+                                    class="card-header-icon">🗂️</span> Saved Server Backups</div>
+                            <div style="margin-left:auto; font-size:0.85rem; color:#666;" id="serverBackupLastRunValue">
+                                Last run: -</div>
+                        </div>
+                        <div class="server-backup-card-note">Recent snapshots, manifest health, inspection details, and
+                            change history live together here so restore decisions take fewer clicks.</div>
+                        <div class="server-backup-section-shell">
+                            <div class="minimal-section-label" style="margin-bottom:0;">
+                                <strong>Recent Snapshots</strong>
+                                <span>Inspect or download the latest structures and their manifests.</span>
+                            </div>
+                            <div id="serverBackupFilesList" class="table-container"
+                                style="max-height:360px; overflow-y:auto; margin-top:0.9rem;">
+                                <div class="server-backup-empty">Loading saved server backups...</div>
+                            </div>
+                        </div>
+                        <div class="server-backup-overview-grid">
+                            <div class="server-backup-section-shell">
+                                <div class="minimal-section-label" style="margin-bottom:0;">
+                                    <strong>Backup Analytics</strong>
+                                    <span>Quick health and activity totals across recent snapshots.</span>
+                                </div>
+                                <div id="serverBackupAnalyticsGrid" class="server-backup-analytics-grid"></div>
+                            </div>
+                            <div class="server-backup-section-shell">
+                                <div class="minimal-section-label" style="margin-bottom:0;">
+                                    <strong>Snapshot Timeline</strong>
+                                    <span>Track the most recent structural changes between adjacent snapshots.</span>
+                                </div>
+                                <div id="serverBackupTimelineList" class="server-backup-inspection-empty"
+                                    style="margin-top:0.9rem;">Timeline entries appear after at least two snapshots
+                                    exist.</div>
+                            </div>
+                        </div>
+                        <div id="serverBackupInspectionPanel" class="server-backup-inspection">
+                            <div class="minimal-section-label" style="margin-bottom:0;">
+                                <strong>Backup Inspection</strong>
+                                <span>Inspect a snapshot to verify integrity and contents.</span>
+                            </div>
+                            <div id="serverBackupInspectionContent" class="server-backup-inspection-empty">Select
+                                Inspect on a backup to view health, metadata, and warnings.</div>
+                        </div>
+                    </div>
+
+                    <details class="minimal-disclosure">
+                        <summary>
+                            <span class="minimal-disclosure-copy">
+                                <span>Advanced Preview And Restore</span>
+                                <small>Compare snapshots and run targeted restore actions only when needed.</small>
+                            </span>
+                        </summary>
+                        <div class="minimal-disclosure-body">
+                            <div class="minimal-disclosure-grid">
+                                <div class="dashboard-card server-backup-advanced-card"
+                                    style="margin:0; background:rgba(255,255,255,0.02); box-shadow:none;">
+                                    <div class="card-header"><span class="card-header-icon">🧮</span> Backup Preview
+                                    </div>
+                                    <div
+                                        style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; align-items:end;">
+                                        <div>
+                                            <label class="form-label">Source Backup</label>
+                                            <select id="serverBackupSourceSelect" class="form-input">
+                                                <option value="">Select a backup</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="form-label">Compare Against</label>
+                                            <select id="serverBackupCompareTargetSelect" class="form-input">
+                                                <option value="live">Current Server State</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-secondary" id="previewServerBackupBtn"
+                                                style="width:100%; justify-content:center;">Preview Diff</button>
+                                        </div>
+                                    </div>
+                                    <div id="serverBackupDiffResults" class="table-container"
+                                        style="margin-top:1rem; max-height:320px; overflow-y:auto; padding:1rem; color:#cbd5e1;">
+                                        Select a backup and run a preview to compare snapshots before restoring.
+                                    </div>
+                                </div>
+
+                                <div class="dashboard-card server-backup-advanced-card"
+                                    style="margin:0; background:rgba(255,255,255,0.02); box-shadow:none;">
+                                    <div class="card-header"><span class="card-header-icon">♻️</span> Restore Backup
+                                    </div>
+                                    <div style="display:grid; gap:1rem;">
+                                        <div>
+                                            <label class="form-label">Backup To Restore</label>
+                                            <select id="serverBackupRestoreSelect" class="form-input">
+                                                <option value="">Select a backup</option>
+                                            </select>
+                                        </div>
+                                        <div class="backup-table-grid"
+                                            style="grid-template-columns: repeat(2, minmax(120px, 1fr));">
+                                            <label class="backup-table-item"><input type="checkbox"
+                                                    id="serverBackupRestoreSettings" class="backup-table-checkbox"
+                                                    checked> <span>Settings</span></label>
+                                            <label class="backup-table-item"><input type="checkbox"
+                                                    id="serverBackupRestoreRoles" class="backup-table-checkbox" checked>
+                                                <span>Roles</span></label>
+                                            <label class="backup-table-item"><input type="checkbox"
+                                                    id="serverBackupRestoreChannels" class="backup-table-checkbox"
+                                                    checked> <span>Channels</span></label>
+                                            <label class="backup-table-item"><input type="checkbox"
+                                                    id="serverBackupRestoreEmojis" class="backup-table-checkbox">
+                                                <span>Emojis</span></label>
+                                            <label class="backup-table-item"><input type="checkbox"
+                                                    id="serverBackupRestoreStickers" class="backup-table-checkbox">
+                                                <span>Stickers</span></label>
+                                            <label class="backup-table-item"><input type="checkbox"
+                                                    id="serverBackupRestorePermissionOverwrites"
+                                                    class="backup-table-checkbox" checked> <span>Overwrite
+                                                    Sync</span></label>
+                                        </div>
+                                        <div
+                                            style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:0.85rem;">
+                                            <div>
+                                                <label class="form-label">Exclude Roles</label>
+                                                <input id="serverBackupExcludeRolesInput" class="form-input" type="text"
+                                                    placeholder="Comma-separated role names">
+                                            </div>
+                                            <div>
+                                                <label class="form-label">Exclude Channels</label>
+                                                <input id="serverBackupExcludeChannelsInput" class="form-input"
+                                                    type="text" placeholder="Comma-separated channel names">
+                                            </div>
+                                        </div>
+                                        <button class="btn btn-secondary" id="serverBackupPreflightBtn"
+                                            style="width:100%; justify-content:center;">Run Restore Preflight</button>
+                                        <div id="serverBackupPreflightResults" class="server-backup-inspection-empty">
+                                            Run a preflight check before restoring to score risk against the current
+                                            server.</div>
+                                        <button class="btn btn-primary" id="restoreServerBackupBtn"
+                                            style="width:100%; justify-content:center;">Restore Selected Backup</button>
+                                        <div id="serverBackupRestoreResults" style="font-size:0.85rem; color:#94a3b8;">
+                                            Restore is non-destructive: it creates or updates matching roles and
+                                            channels instead of deleting extra server content.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
                 </div>
             </div>
         </div>

@@ -386,13 +386,8 @@ async function loadRecentActions() {
                 const relativeTime = formatTimeAgo(actionDate);
                 const exactTime = actionDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
-                const avatarUrl = action.userAvatar || null;
-                const initial = getMemberInitial({ username });
-
-                let avatarContent = `${initial}`;
-                if (avatarUrl) {
-					avatarContent = `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(username)}" onerror="this.parentElement.innerText='${escapeJsString(initial)}'">`;
-                }
+                const avatarUrl = action.userAvatar || action.user_avatar || null;
+                const avatarContent = getModerationAvatarMarkup(username, avatarUrl);
 
                 return `
                     <div class="mod-feed-item" style="border-left-color: ${statusColor};">
@@ -401,7 +396,7 @@ async function loadRecentActions() {
                         </div>
                         
                         <div class="mod-feed-user">
-                            <div class="mod-feed-avatar">${avatarContent}</div>
+                            ${avatarContent}
                             <span class="mod-feed-username" title="${userId}">${escapeHtml(username)}</span>
                         </div>
 
@@ -706,14 +701,10 @@ function renderBannedUsers(bans) {
         const reason = (ban.ban_reason && String(ban.ban_reason).trim()) ? ban.ban_reason : 'No reason provided';
         const bannedDate = ban.banned_at ? new Date(ban.banned_at).toLocaleString() : 'Unknown';
 
-        const initial = username.charAt(0).toUpperCase();
-
         return `
         <tr>
             <td style="display:flex; align-items:center; gap:1rem;">
-                <div class="mod-feed-avatar" style="width:36px; height:36px; font-size:0.9rem;">
-					 ${ban.user_avatar ? `<img src="${escapeHtml(ban.user_avatar)}" style="width:100%; height:100%; object-fit:cover;">` : `<span>${initial}</span>`}
-                </div>
+                ${getModerationAvatarMarkup(username, ban.user_avatar, 'width:36px; height:36px; font-size:0.9rem;')}
                 <div class="user-cell">
                     <span class="username">${escapeHtml(username)}</span>
                     <span class="userid">${escapeHtml(ban.user_id)}</span>
@@ -783,14 +774,10 @@ function renderTimeouts(timeouts) {
             }
         }
 
-        const initial = username.charAt(0).toUpperCase();
-
         return `
         <tr>
              <td style="display:flex; align-items:center; gap:1rem;">
-                <div class="mod-feed-avatar" style="width:36px; height:36px; font-size:0.9rem;">
-					 ${timeout.user_avatar ? `<img src="${escapeHtml(timeout.user_avatar)}" style="width:100%; height:100%; object-fit:cover;">` : `<span>${initial}</span>`}
-                </div>
+                ${getModerationAvatarMarkup(username, timeout.user_avatar, 'width:36px; height:36px; font-size:0.9rem;')}
                 <div class="user-cell">
                     <span class="username">${escapeHtml(username)}</span>
                     <span class="userid">${escapeHtml(timeout.user_id)}</span>
@@ -1329,12 +1316,12 @@ async function searchMembers() {
     if (!/^\d{17,19}$/.test(userId)) {
         renderMembers([]);
         renderDeepMemberProfile(null);
-		if (statusElem) statusElem.innerHTML = '<span style="color: #ff6b6b">Enter a valid Discord user ID and try again.</span>';
+        if (statusElem) statusElem.innerHTML = '<span style="color: #ff6b6b">Enter a valid Discord user ID and try again.</span>';
         return;
     }
 
     try {
-		if (statusElem) statusElem.innerHTML = '<span style="color: #5b7fff; animation: pulse 1s infinite;">Looking up member details...</span>';
+        if (statusElem) statusElem.innerHTML = '<span style="color: #5b7fff; animation: pulse 1s infinite;">Looking up member details...</span>';
         renderMemberLookupCardsSkeleton(3);
         showMemberProfileSkeleton();
 
@@ -1395,11 +1382,11 @@ async function searchMembers() {
         currentMemberLookup = enrichedMember;
         renderMembers([enrichedMember]);
         renderDeepMemberProfile(enrichedMember);
-		if (statusElem) statusElem.innerHTML = `<span style="color: #2ecc71">Member details loaded.</span>`;
+        if (statusElem) statusElem.innerHTML = `<span style="color: #2ecc71">Member details loaded.</span>`;
     } catch (error) {
         renderMembers([]);
         renderDeepMemberProfile(null);
-		if (statusElem) statusElem.innerHTML = `<span style="color: #ff6b6b">Could not find that member.</span>`;
+        if (statusElem) statusElem.innerHTML = `<span style="color: #ff6b6b">Could not find that member.</span>`;
         console.error('Search error:', error);
     }
 }
@@ -1408,7 +1395,7 @@ function clearMemberSearch() {
     const inputElem = document.getElementById('memberSearchInput');
     const statusElem = document.getElementById('memberSearchStatus');
     if (inputElem) inputElem.value = '';
-	if (statusElem) statusElem.textContent = 'Ready to search';
+    if (statusElem) statusElem.textContent = 'Ready to search';
     currentMemberLookup = null;
     resetMemberLookupTrendState();
     setMemberLookupOverview();
@@ -1465,6 +1452,18 @@ function formatMemberDate(value, fallback = 'Unknown') {
     if (!value) return fallback;
     const dt = new Date(value);
     return Number.isNaN(dt.getTime()) ? fallback : dt.toLocaleString();
+}
+
+function getModerationAvatarMarkup(username, avatarUrl, sizeStyle = '') {
+    const initial = getMemberInitial({ username });
+    const normalizedAvatarUrl = String(avatarUrl || '').trim();
+    const sizeAttribute = sizeStyle ? ` style="${sizeStyle}"` : '';
+
+    if (!normalizedAvatarUrl) {
+        return `<div class="mod-feed-avatar mod-feed-avatar-fallback"${sizeAttribute}><span>${initial}</span></div>`;
+    }
+
+    return `<div class="mod-feed-avatar"${sizeAttribute}><img src="${escapeHtml(normalizedAvatarUrl)}" alt="${escapeHtml(username || 'User')}" onerror="this.remove(); this.parentElement.classList.add('mod-feed-avatar-fallback'); this.parentElement.innerHTML = '<span>${escapeJsString(initial)}</span>';"></div>`;
 }
 
 function getMemberInitial(member) {
@@ -1973,7 +1972,7 @@ function viewBanDetails(ban) {
                     profileShowSuccess('Copied', 'User ID copied to clipboard', 2000);
                 });
             }
-        } catch (e) {}
+        } catch (e) { }
 
         try {
             const footer = modal.querySelector('.modal-footer');

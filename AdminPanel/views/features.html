@@ -56,7 +56,7 @@
                     <div>
                         <p class="features-eyebrow">Capabilities</p>
                         <h2>All-in-One Discord Bot</h2>
-                        <p class="features-subtitle">Moderation, automation, analytics, panel tooling, and event-driven
+                        <p class="features-subtitle">Moderation, profile systems, backup tooling, analytics, and panel
                             workflows designed
                             for real-world server operations and staff teams.</p>
                     </div>
@@ -101,6 +101,9 @@
                             & notes:</b> /warn, /warns, /note, /case with case logging</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">📋</span> <b>Logs &
                             review:</b> /audit, /modlogs, /moderations, /incident for case history</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🧠</span> <b>Case
+                            ledger:</b> a cleaner case history with incident tracking, event timelines, and easier
+                        review from the panel</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🧾</span> <b>Ban
                             details:</b> ban detail modal with direct unban action and clear case info</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">👻</span>
@@ -109,6 +112,10 @@
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">🚨</span>
                         <b>Anti-raid:</b> /raid controls, adaptive thresholds, risk scoring, and owner-level actions
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5b7fff;">📬</span>
+                        <b>Ban appeals:</b> Public appeal portal, case-linked review queues, moderator decisions, and
+                        email status updates
                     </div>
                 </div>
             </div>
@@ -126,6 +133,10 @@
                     <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🧭</span>
                         <b>Security center:</b> session tracking, login events, geo insights, and risk snapshots
                     </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🖼️</span>
+                        <b>Profile workspace:</b> upload your panel avatar, keep your profile looking consistent, and
+                        manage account details in one place
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🔐</span>
                         <b>2FA support:</b> TOTP enrollment, verification, and recovery-ready flows
                     </div>
@@ -133,7 +144,8 @@
                         <b>CSRF protection:</b> hardened mutating requests with auto-refresh tokens
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🔗</span>
-                        <b>Discord linking:</b> OAuth-based account linking with verification checks
+                        <b>Discord linking:</b> connect your Discord account, run verification checks, and fall back to
+                        your Discord avatar inside the panel when needed
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">📡</span>
                         <b>Internal webhooks:</b> site-to-bot events for audits and notifications
@@ -142,9 +154,17 @@
                         <b>Account recovery:</b> password reset flows, email delivery logging, and security
                         notifications
                     </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🧾</span>
+                        <b>Recovery codes:</b> fallback account access with dedicated recovery workflows when normal
+                        login is unavailable
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">🗄️</span>
-                        <b>Operational safeguards:</b> database backups, session controls, and admin helper systems
-                        behind the panel
+                        <b>Operational safeguards:</b> database backups, session controls, CAPTCHA protection, and admin
+                        tools that help keep the panel stable
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#6fb1ff;">💾</span>
+                        <b>Server backup center:</b> inspect backups before restoring, review risks ahead of time,
+                        follow restore progress live, and pick back up after a refresh
                     </div>
                 </div>
             </div>
@@ -185,7 +205,11 @@
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">ℹ️</span> <b>Info
-                            tools:</b> /serverinfo, /userinfo, /serverhealth, /invites, /avatar, /banner, /uptime</div>
+                            tools:</b> /serverinfo, /serverhealth, /invites, /avatar, /banner, /uptime</div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">👤</span>
+                        <b>Member profile:</b> /profile brings together levels, streaks, reputation, join history, and
+                        badges in one easy view
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🌦️</span>
                         <b>Services:</b> /steam, /crypto, /define, /timezone, and external account lookups
                     </div>
@@ -216,18 +240,31 @@
                         and /rules
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🎁</span>
-                        <b>Operations:</b> /setup, /setlevel, /giveaway
+                        <b>Operations:</b> /setup, /setlevel, /giveaway, plus backup commands for routine admin work
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🧰</span> <b>Safety
                             controls:</b> /health, /swearfilter, /automodwarns, /clearwarns</div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">💡</span>
                         <b>Feedback:</b> /suggestion
                     </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">🎁</span>
+                        <b>Lucky Drop:</b> random message-triggered rewards with configurable XP or coin drops and
+                        cooldown controls
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">📣</span>
-                        <b>Staff visibility:</b> incident, notification, and status channels
+                        <b>Staff visibility:</b> keeps incident updates and important notifications easy for staff to
+                        follow
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">⏰</span>
                         <b>Job Scheduler:</b> Automated recurring jobs (interest, reports, etc.)
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">📊</span>
+                        <b>Inactive channel reports:</b> scheduled reporting for stale channels to support cleanup and
+                        archival decisions
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">📦</span>
+                        <b>Backup operations:</b> run backups manually or on a schedule, check restore warnings first,
+                        and send the result straight to your Discord logs
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ff9d5b;">⚙️</span>
                         <b>Backend helpers:</b> AdminPanelHelper, EmailHelper, AntiRaid, InviteTracker, ChannelRevival,
@@ -246,13 +283,18 @@
                 </div>
                 <div class="feature-list">
                     <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">📈</span>
-                        <b>Leveling:</b> /levels
+                        <b>Leveling:</b> /levels ties into the shared profile system so member progress feels more
+                        complete
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🏅</span>
                         <b>Leaderboard:</b> /leaderboard
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🔥</span>
                         <b>Streaks:</b> /streak tracking
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🏷️</span>
+                        <b>Profile badges:</b> show badges, reputation, and join-date details in a way that feels tied
+                        to the member profile
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#b55bff;">🧩</span>
                         <b>XP Quests & Rewards:</b> Daily/weekly streams, quests, and riddle XP

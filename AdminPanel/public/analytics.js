@@ -82,7 +82,7 @@ async function loadVerificationAnalytics() {
             modeBreakdown.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--text-muted);">No verification mode data available yet.</div>';
         } else {
             const totalModes = modeRows.reduce((acc, [, value]) => acc + Number(value || 0), 0);
-
+            
             modeRows.sort((a, b) => Number(b[1]) - Number(a[1]));
 
             modeBreakdown.innerHTML = modeRows.map(([mode, value], index) => {
@@ -90,7 +90,7 @@ async function loadVerificationAnalytics() {
                 const pct = totalModes > 0 ? ((count / totalModes) * 100).toFixed(1) : '0.0';
                 const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#a78bfa', '#ec4899'];
                 const color = colors[index % colors.length];
-
+                
                 return `
                 <div style="margin-bottom: 1rem;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem; font-size: 0.9rem;">
@@ -246,7 +246,7 @@ async function loadAlertAnalytics() {
     try {
         const { response, data } = await window.AdminPanel.api.getJson('/api/owner/alert-settings-analytics');
         if (!response.ok) {
-            analyticsShowNotification('Failed to load alert analytics', 'error');
+			analyticsShowNotification('Failed to load alert analytics', 'error');
             return;
         }
 
@@ -258,7 +258,7 @@ async function loadAlertAnalytics() {
         await loadAlertMonitorStatus();
     } catch (error) {
         console.error('Error loading alert analytics:', error);
-        analyticsShowNotification('Failed to load alert analytics', 'error');
+		analyticsShowNotification('Failed to load alert analytics', 'error');
         renderAlertMonitorStatus(null);
     }
 }
@@ -310,13 +310,13 @@ function updateAlertStats(summary) {
 
     const totalEl = document.getElementById('totalAlertSettings');
     if (totalEl) totalEl.textContent = total;
-
+    
     const enabledEl = document.getElementById('enabledAlertSettings');
     if (enabledEl) enabledEl.textContent = enabled;
-
+    
     const activeEl = document.getElementById('activeAlertsCount');
     if (activeEl) activeEl.textContent = active;
-
+    
     const recentEl = document.getElementById('recentAlertsCount');
     if (recentEl) recentEl.textContent = recent;
 
@@ -325,7 +325,7 @@ function updateAlertStats(summary) {
         healthIndicator.classList.remove('warning', 'critical');
         const healthText = healthIndicator.querySelector('.health-text');
         const healthDot = healthIndicator.querySelector('.health-dot');
-
+        
         if (healthDot) {
             healthDot.style = '';
         }
@@ -421,7 +421,7 @@ function renderAlertSettings(settings) {
 
 async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
     if (typeof window.showPromptModal !== 'function') {
-        analyticsShowNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
+		analyticsShowNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
         return;
     }
 
@@ -445,7 +445,7 @@ async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
 
     const threshold = parseFloat(newThreshold);
     if (isNaN(threshold) || threshold < 0 || threshold > 100) {
-        analyticsShowNotification('Invalid threshold value. Must be between 0 and 100.', 'error');
+		analyticsShowNotification('Invalid threshold value. Must be between 0 and 100.', 'error');
         return;
     }
 
@@ -564,10 +564,10 @@ function renderActiveAlerts(alerts) {
     container.innerHTML = html;
 }
 
-window.resolveAlert = async function (alertId) {
+window.resolveAlert = async function(alertId) {
     if (!window.modalManager) {
         if (!confirm('Are you sure you want to resolve this alert?')) return;
-
+        
         try {
             const { response } = await window.AdminPanel.api.postJson(`/api/alerts/${alertId}/resolve`, {});
             if (response.ok) {
@@ -607,7 +607,7 @@ window.resolveAlert = async function (alertId) {
 
 function exportAlertSettings() {
     if (allAlertSettings.length === 0) {
-        analyticsShowNotification('No alert settings to export', 'warning');
+		analyticsShowNotification('No alert settings to export', 'warning');
         return;
     }
 
@@ -977,7 +977,7 @@ function renderEmailRecentRows(recentRows) {
 
 function exportEmailRecentCsv() {
     if (!Array.isArray(latestEmailRecentRows) || latestEmailRecentRows.length === 0) {
-        analyticsShowNotification('No recent email deliveries to export', 'warning');
+		analyticsShowNotification('No recent email deliveries to export', 'warning');
         return;
     }
 
@@ -1113,7 +1113,7 @@ window.systemMemoryData = {
     }]
 };
 
-window.toggleSystemMonitor = function () {
+window.toggleSystemMonitor = function() {
     const btn = document.getElementById('sysMonitorToggle');
     if (window.systemMonitorInterval) {
         clearInterval(window.systemMonitorInterval);
@@ -1139,7 +1139,7 @@ window.toggleSystemMonitor = function () {
     }
 };
 
-window.loadSystemStats = async function () {
+window.loadSystemStats = async function() {
     try {
         const { response, data } = await window.AdminPanel.api.getJson('/api/owner/system-stats');
         if (!response.ok) return;
@@ -1149,7 +1149,7 @@ window.loadSystemStats = async function () {
         const memPercent = system.totalMem > 0 ? ((system.usedMem / system.totalMem) * 100).toFixed(1) : '0.0';
         const sysMemEl = document.getElementById('sysMemUsage');
         if (sysMemEl) sysMemEl.textContent = `${memPercent}%`;
-
+        
         const load = system.loadavg && typeof system.loadavg[0] === 'number' ? system.loadavg[0].toFixed(2) : '0.00';
         const sysLoadEl = document.getElementById('sysLoadAvg');
         if (sysLoadEl) sysLoadEl.textContent = load;
@@ -1162,7 +1162,7 @@ window.loadSystemStats = async function () {
 
         const sysUptimeEl = document.getElementById('sysUptime');
         if (sysUptimeEl) sysUptimeEl.textContent = formatUptime(system.uptime);
-
+        
         const botUptimeEl = document.getElementById('botUptime');
         if (botUptimeEl) botUptimeEl.textContent = formatUptime(proc.uptime);
 

@@ -215,10 +215,10 @@ module.exports = {
                         .setTitle("🚫 Verification Failed")
                         .setDescription(`You have been removed from **${member.guild.name}** because you did not complete the verification process in time.\n\nPlease rejoin the server to try again when you are ready.`)
                         .setTimestamp();
-
+                    
                     try {
                         await member.send({ embeds: [kickEmbed] });
-                    } catch (dmErr) {
+                    } catch (dmErr) { 
                         // User has DMs off
                     }
 

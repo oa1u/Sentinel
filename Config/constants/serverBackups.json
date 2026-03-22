@@ -1,0 +1,13 @@
+{
+	"enabled": true,
+	"intervalMinutes": 15,
+	"retentionCount": 10,
+	"includes": {
+		"settings": true,
+		"roles": true,
+		"channels": true,
+		"emojis": true,
+		"stickers": true,
+		"permissionOverwrites": true
+	}
+}

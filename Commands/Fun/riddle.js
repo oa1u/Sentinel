@@ -165,7 +165,7 @@ module.exports = {
     category: 'fun',
     async execute(interaction) {
         if (!interaction.inGuild()) {
-            return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+            return interaction.reply({ content: 'This command can only be used in a server.', flags: require('discord.js').MessageFlags.Ephemeral });
         }
 
         await interaction.deferReply();

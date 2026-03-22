@@ -1,5 +1,5 @@
-
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
+const { generateCaseId } = require('../Events/caseId');
 
 class AdminPanelHelper {
     // Get admin user by username
@@ -29,7 +29,7 @@ class AdminPanelHelper {
     // Get all admin users
     static async getAllAdminUsers() {
         try {
-            const query = 'SELECT id, username, role, created_at, last_login FROM admin_users';
+            const query = 'SELECT id, username, role, created_at, last_login, avatar_url, avatar_updated_at, discord_user_id, discord_username, discord_linked_at FROM admin_users';
             const [results] = await MySQLDatabaseManager.connection.pool.query(query);
             return results || [];
         } catch (err) {
@@ -71,7 +71,7 @@ class AdminPanelHelper {
     // Ban user
     static async banUser(userId, reason, moderator, caseId, options = {}) {
         try {
-            const resolvedCaseId = caseId || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const resolvedCaseId = caseId || generateCaseId('BAN');
             return await MySQLDatabaseManager.addCase(userId, resolvedCaseId, {
                 reason: reason,
                 moderatorId: moderator,
@@ -79,6 +79,8 @@ class AdminPanelHelper {
                 moderatorSource: options.moderatorSource || null,
                 userName: options.userName || null,
                 type: 'BAN',
+                guildId: options.guildId || null,
+                source: options.source || 'panel',
                 timestamp: Date.now()
             });
         } catch (err) {
@@ -109,15 +111,16 @@ class AdminPanelHelper {
         try {
             const query = `
                 SELECT 
-                    w.id,
-                    w.user_id,
-                    w.case_id,
-                    w.reason,
-                    w.moderator_id,
-                    w.created_at,
-                    COALESCE(u.username, ma.username) as username
-                FROM warns w 
-                LEFT JOIN levels u ON w.user_id = u.user_id
+                    mc.case_id,
+                    mc.user_id,
+                    mc.reason,
+                    mc.moderator_id,
+                    mc.moderator_name,
+                    mc.status,
+                    mc.created_at,
+                    COALESCE(mc.user_name, u.username, ma.username, mc.user_id) as username
+                FROM moderation_cases mc
+                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = mc.user_id COLLATE utf8mb4_unicode_ci
                 LEFT JOIN (
                     SELECT ma1.user_id, ma1.username
                     FROM member_activity ma1
@@ -126,9 +129,9 @@ class AdminPanelHelper {
                         FROM member_activity
                         GROUP BY user_id
                     ) ma2 ON ma1.user_id = ma2.user_id AND ma1.timestamp = ma2.max_ts
-                ) ma ON w.user_id = ma.user_id
-                WHERE w.type = 'WARN'
-                ORDER BY w.created_at DESC
+                ) ma ON ma.user_id = mc.user_id
+                WHERE mc.action_type = 'WARN' AND mc.status NOT IN ('cleared', 'reversed')
+                ORDER BY mc.created_at DESC
                 LIMIT 1000
             `;
             const [results] = await MySQLDatabaseManager.connection.pool.query(query);
@@ -141,10 +144,7 @@ class AdminPanelHelper {
 
     static async getWarnsCount() {
         try {
-            const query = "SELECT COUNT(*) as count FROM warns WHERE (type IS NULL OR type = 'WARN')";
-            const [results] = await MySQLDatabaseManager.connection.pool.query(query);
-            const row = Array.isArray(results) ? results[0] : null;
-            return row?.count || 0;
+            return await MySQLDatabaseManager.getWarnsCount();
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting warnings count:', err.message);
             return 0;
@@ -208,21 +208,24 @@ class AdminPanelHelper {
     // Adds a timeout record to the database.
     static async addTimeout({ userId, caseId, username, reason, issuedBy, issuedByName, issuedBySource, issuedAt, expiresAt }) {
         try {
-            const query = `
-                INSERT INTO timeouts (user_id, case_id, username, reason, issued_by, issued_by_name, issued_by_source, issued_at, expires_at, active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-            `;
-            await MySQLDatabaseManager.connection.pool.query(query, [
+            await MySQLDatabaseManager.upsertModerationCase({
+                caseId,
+                guildId: null,
                 userId,
-                caseId || null,
-                username || null,
-                reason || null,
-                issuedBy || null,
-                issuedByName || null,
-                issuedBySource || null,
-                issuedAt || Date.now(),
-                expiresAt || null
-            ]);
+                userName: username || null,
+                actionType: 'TIMEOUT',
+                status: 'active',
+                reason: reason || null,
+                moderatorId: issuedBy || null,
+                moderatorName: issuedByName || null,
+                moderatorSource: issuedBySource || null,
+                source: issuedBySource || 'panel',
+                expiresAt: expiresAt || null,
+                createdAt: issuedAt || Date.now(),
+                updatedAt: issuedAt || Date.now(),
+                eventSummary: 'Timeout case recorded'
+            });
+            MySQLDatabaseManager.invalidateModerationUserCaches(userId);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error adding timeout:', err.message);
@@ -233,20 +236,23 @@ class AdminPanelHelper {
     // Adds a kick record to the database.
     static async addKick({ userId, caseId, username, reason, kickedBy, kickedByName, kickedBySource, kickedAt }) {
         try {
-            const query = `
-                INSERT INTO kicks (user_id, case_id, username, reason, kicked_by, kicked_by_name, kicked_by_source, kicked_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `;
-            await MySQLDatabaseManager.connection.pool.query(query, [
+            await MySQLDatabaseManager.upsertModerationCase({
+                caseId,
+                guildId: null,
                 userId,
-                caseId || null,
-                username || null,
-                reason || null,
-                kickedBy || null,
-                kickedByName || null,
-                kickedBySource || null,
-                kickedAt || Date.now()
-            ]);
+                userName: username || null,
+                actionType: 'KICK',
+                status: 'closed',
+                reason: reason || null,
+                moderatorId: kickedBy || null,
+                moderatorName: kickedByName || null,
+                moderatorSource: kickedBySource || null,
+                source: kickedBySource || 'panel',
+                createdAt: kickedAt || Date.now(),
+                updatedAt: kickedAt || Date.now(),
+                eventSummary: 'Kick case recorded'
+            });
+            MySQLDatabaseManager.invalidateModerationUserCaches(userId);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error adding kick:', err.message);
@@ -257,18 +263,15 @@ class AdminPanelHelper {
     // Gets all active timeouts from the database.
     static async getActiveTimeouts() {
         try {
-            const now = Date.now();
-            const query = `
-                SELECT t.*, u.username, m.username as issued_by_username
-                FROM timeouts t
-                LEFT JOIN levels u ON t.user_id = u.user_id
-                LEFT JOIN levels m ON t.issued_by = m.user_id
-                WHERE t.active = TRUE AND (t.expires_at IS NULL OR t.expires_at > ?)
-                ORDER BY t.expires_at ASC
-                LIMIT 200
-            `;
-            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [now]);
-            return results || [];
+            const results = await MySQLDatabaseManager.getActiveTimeoutCases({ limit: 200 });
+            return (results || []).map((row) => ({
+                ...row,
+                username: row.user_name || null,
+                issued_by: row.moderator_id || null,
+                issued_by_name: row.moderator_name || null,
+                issued_by_username: row.moderator_name || null,
+                active: row.effective_status === 'active'
+            }));
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting timeouts:', err.message);
             return [];
@@ -278,22 +281,38 @@ class AdminPanelHelper {
     // Clears a timeout for a user in the database.
     static async clearTimeout(userId, { caseId, clearedBy, clearedAt, reason } = {}) {
         try {
-            const query = `
-                UPDATE timeouts
-                SET active = FALSE,
-                    cleared_at = ?,
-                    cleared_by = ?,
-                    cleared_case_id = ?,
-                    cleared_reason = ?
-                WHERE user_id = ? AND active = TRUE
-            `;
-            await MySQLDatabaseManager.connection.pool.query(query, [
-                clearedAt || Date.now(),
-                clearedBy || null,
-                caseId || null,
-                reason || null,
-                userId
-            ]);
+            const originalCase = await MySQLDatabaseManager.getLatestActiveTimeoutCaseForUser(userId);
+            const originalCaseId = originalCase?.case_id ? String(originalCase.case_id) : null;
+            if (originalCaseId) {
+                await MySQLDatabaseManager.updateModerationCaseStatus(originalCaseId, 'cleared', {
+                    actorId: clearedBy || null,
+                    relatedCaseId: caseId || null,
+                    details: reason || 'Timeout cleared',
+                    updatedAt: clearedAt || Date.now()
+                });
+            }
+
+            if (caseId) {
+                await MySQLDatabaseManager.upsertModerationCase({
+                    caseId,
+                    guildId: originalCase?.guild_id || null,
+                    userId,
+                    userName: originalCase?.user_name || null,
+                    actionType: 'UNTIMEOUT',
+                    status: 'closed',
+                    reason: reason || null,
+                    moderatorId: clearedBy || null,
+                    moderatorName: typeof clearedBy === 'string' ? clearedBy : null,
+                    moderatorSource: 'panel',
+                    source: 'panel',
+                    relatedCaseId: originalCaseId,
+                    rootCaseId: originalCaseId || caseId,
+                    createdAt: clearedAt || Date.now(),
+                    updatedAt: clearedAt || Date.now(),
+                    eventSummary: 'Untimeout case recorded'
+                });
+            }
+            MySQLDatabaseManager.invalidateModerationUserCaches(userId);
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error clearing timeout:', err.message);
@@ -303,9 +322,14 @@ class AdminPanelHelper {
 
     static async getActiveTimeoutsCount() {
         try {
-            const now = Date.now();
-            const query = 'SELECT COUNT(*) as count FROM timeouts WHERE active = TRUE AND (expires_at IS NULL OR expires_at > ?)';
-            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [now]);
+            const query = `
+                SELECT COUNT(*) as count
+                FROM moderation_cases
+                WHERE action_type = 'TIMEOUT'
+                  AND status = 'active'
+                  AND (expires_at IS NULL OR expires_at > ?)
+            `;
+            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [Date.now()]);
             return results?.[0]?.count || 0;
         } catch (err) {
             console.error('[AdminPanelHelper] Error counting timeouts:', err.message);
@@ -316,136 +340,24 @@ class AdminPanelHelper {
     // Gets recent moderation actions from the database.
     static async getRecentModerationActions(limit = 15) {
         try {
-            // Use UNION to combine all moderation actions and get the most recent ones
             const query = `
                 SELECT 
-                    user_id,
-                    reason,
-                    timestamp,
-                    moderator_id,
-                    user_name,
-                    moderator_name,
-                    moderator_source,
-                    action,
-                    case_id,
-                    user_avatar
-                FROM (
-                    SELECT 
-                        CONVERT(CAST(w.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                        CONVERT(CAST(w.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                        CAST(FROM_UNIXTIME(w.timestamp/1000) AS DATETIME) as timestamp,
-                        CONVERT(CAST(w.moderator_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                        CONVERT(CAST(COALESCE(w.user_name, ui.username, u.username, w.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
-                        CONVERT(CAST(CASE WHEN w.moderator_source = 'panel' THEN w.moderator_name ELSE COALESCE(m_ui.username, m.username, w.moderator_id, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                        CONVERT(COALESCE(w.moderator_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('WARN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
-                    FROM warns w
-                    LEFT JOIN userinfo ui ON ui.user_id = CAST(w.user_id AS UNSIGNED)
-                    LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
-                    LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(w.moderator_id AS UNSIGNED)
-                    LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = w.moderator_id COLLATE utf8mb4_unicode_ci
-                    WHERE (w.type IS NULL OR w.type = 'WARN')
-                        AND w.reason NOT LIKE '%(timeout%'
-                        AND w.reason NOT LIKE '%(untimeout)%'
-                    
-                    UNION ALL
-                    
-                    SELECT 
-                        CONVERT(CAST(b.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                        CONVERT(CAST(b.ban_reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                        CAST(b.banned_at AS DATETIME) as timestamp,
-                        CONVERT(CAST(b.banned_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                        CONVERT(CAST(COALESCE(b.user_name, ui.username, u.username, b.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
-                        CONVERT(CAST(CASE WHEN b.banned_by_source = 'panel' THEN b.banned_by_name ELSE COALESCE(m_ui.username, m.username, b.banned_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                        CONVERT(COALESCE(b.banned_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('BAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(b.ban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
-                    FROM user_bans b
-                    LEFT JOIN userinfo ui ON ui.user_id = CAST(b.user_id AS UNSIGNED)
-                    LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = b.user_id COLLATE utf8mb4_unicode_ci
-                    LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(b.banned_by AS UNSIGNED)
-                    LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = b.banned_by COLLATE utf8mb4_unicode_ci
-                    WHERE b.ban_case_id IS NOT NULL
-                    
-                    UNION ALL
-
-                    SELECT 
-                        CONVERT(CAST(ub.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                        CONVERT(CAST(COALESCE(ub.reason, ub.original_ban_reason, 'Unbanned') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                        CAST(ub.unbanned_at AS DATETIME) as timestamp,
-                        CONVERT(CAST(ub.unbanned_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                        CONVERT(CAST(COALESCE(ub.user_name, ui.username, u.username, ub.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
-                        CONVERT(CAST(CASE WHEN ub.unbanned_by_source = 'panel' THEN ub.unbanned_by_name ELSE COALESCE(ub.unbanned_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                        CONVERT(COALESCE(ub.unbanned_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('UNBAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(ub.unban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
-                    FROM unbans ub
-                    LEFT JOIN userinfo ui ON ui.user_id = CAST(ub.user_id AS UNSIGNED)
-                    LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = ub.user_id COLLATE utf8mb4_unicode_ci
-
-                    UNION ALL
-                    
-                    SELECT 
-                        CONVERT(CAST(t.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                        CONVERT(CAST(t.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                        CAST(FROM_UNIXTIME(t.issued_at/1000) AS DATETIME) as timestamp,
-                        CONVERT(CAST(t.issued_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                        CONVERT(CAST(COALESCE(t.username, ui.username, u.username, t.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
-                        CONVERT(CAST(CASE WHEN t.issued_by_source = 'panel' THEN t.issued_by_name ELSE COALESCE(m_ui.username, m.username, t.issued_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                        CONVERT(COALESCE(t.issued_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('TIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(t.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
-                    FROM timeouts t
-                    LEFT JOIN userinfo ui ON ui.user_id = CAST(t.user_id AS UNSIGNED)
-                    LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = t.user_id COLLATE utf8mb4_unicode_ci
-                    LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(t.issued_by AS UNSIGNED)
-                    LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = t.issued_by COLLATE utf8mb4_unicode_ci
-                    
-                    UNION ALL
-                    
-                    SELECT 
-                        CONVERT(CAST(w.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                        CONVERT(CAST(w.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                        CAST(FROM_UNIXTIME(w.timestamp/1000) AS DATETIME) as timestamp,
-                        CONVERT(CAST(w.moderator_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                        CONVERT(CAST(COALESCE(w.user_name, ui.username, u.username, w.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
-                        CONVERT(CAST(CASE WHEN w.moderator_source = 'panel' THEN w.moderator_name ELSE COALESCE(m_ui.username, m.username, w.moderator_id, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                        CONVERT(COALESCE(w.moderator_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('UNTIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
-                    FROM warns w
-                    LEFT JOIN userinfo ui ON ui.user_id = CAST(w.user_id AS UNSIGNED)
-                    LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
-                    LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(w.moderator_id AS UNSIGNED)
-                    LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = w.moderator_id COLLATE utf8mb4_unicode_ci
-                    WHERE w.reason LIKE '%(untimeout)%'
-
-                    UNION ALL
-
-                    SELECT 
-                        CONVERT(CAST(k.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                        CONVERT(CAST(k.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                        CAST(FROM_UNIXTIME(k.kicked_at/1000) AS DATETIME) as timestamp,
-                        CONVERT(CAST(k.kicked_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                        CONVERT(CAST(COALESCE(k.username, ui.username, u.username, k.user_id) AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_name,
-                        CONVERT(CAST(CASE WHEN k.kicked_by_source = 'panel' THEN k.kicked_by_name ELSE COALESCE(m_ui.username, m.username, k.kicked_by, 'System') END AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                        CONVERT(COALESCE(k.kicked_by_source, 'discord') USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_source,
-                        CONVERT('KICK' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                        CONVERT(CAST(k.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                        CONVERT(CAST(ui.avatar AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_avatar
-                    FROM kicks k
-                    LEFT JOIN userinfo ui ON ui.user_id = CAST(k.user_id AS UNSIGNED)
-                    LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = k.user_id COLLATE utf8mb4_unicode_ci
-                    LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(k.kicked_by AS UNSIGNED)
-                    LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = k.kicked_by COLLATE utf8mb4_unicode_ci
-                ) combined
-                ORDER BY timestamp DESC
+                    mc.user_id,
+                    mc.reason,
+                    mc.created_at as timestamp,
+                    mc.moderator_id,
+                    COALESCE(mc.user_name, ui.username, u.username, mc.user_id) as user_name,
+                    COALESCE(mc.moderator_name, m_ui.username, m.username, mc.moderator_id, 'System') as moderator_name,
+                    COALESCE(mc.moderator_source, mc.source, 'discord') as moderator_source,
+                    mc.action_type as action,
+                    mc.case_id,
+                    ui.avatar as user_avatar
+                FROM moderation_cases mc
+                LEFT JOIN userinfo ui ON ui.user_id = CAST(mc.user_id AS UNSIGNED)
+                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = mc.user_id COLLATE utf8mb4_unicode_ci
+                LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(mc.moderator_id AS UNSIGNED)
+                LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = mc.moderator_id COLLATE utf8mb4_unicode_ci
+                ORDER BY mc.created_at DESC
                 LIMIT ?
             `;
             const [rows] = await MySQLDatabaseManager.connection.pool.query(query, [limit]);
@@ -643,13 +555,11 @@ class AdminPanelHelper {
     // Gets user warnings with details.
     static async getUserWarns(userId) {
         try {
-            const query = `
-                SELECT * FROM warns 
-                WHERE user_id = ? AND type = "WARN"
-                ORDER BY created_at DESC
-            `;
-            const [results] = await MySQLDatabaseManager.connection.pool.query(query, [userId]);
-            return results || [];
+            return await MySQLDatabaseManager.getUserModerationCases(userId, {
+                actionTypes: ['WARN'],
+                excludeStatuses: ['cleared', 'reversed'],
+                limit: 200
+            });
         } catch (err) {
             console.error('[AdminPanelHelper] Error getting user warnings:', err.message);
             return [];
@@ -659,8 +569,11 @@ class AdminPanelHelper {
     // Clears user warnings from the database.
     static async clearUserWarns(userId) {
         try {
-            const query = 'DELETE FROM warns WHERE user_id = ?';
-            await MySQLDatabaseManager.connection.pool.query(query, [userId]);
+            await MySQLDatabaseManager.clearAllWarningCases(userId, {
+                actorName: 'Admin Panel',
+                details: 'Warnings cleared via admin panel',
+                updatedAt: Date.now()
+            });
             return true;
         } catch (err) {
             console.error('[AdminPanelHelper] Error clearing user warnings:', err.message);

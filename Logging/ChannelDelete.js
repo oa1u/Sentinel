@@ -13,7 +13,7 @@ module.exports = (client) => {
             const channelPrefix = isVoice ? "🔊 " : "📝";
 
             const embed = new EmbedBuilder()
-                .setTitle(`🗑️ ${emoji} Channel Deleted`)
+                .setTitle(`${emoji} Channel Deleted`)
                 .setColor("#F04747")
                 .setDescription(`${channelTypeText} deleted from server.`)
             const fields = [

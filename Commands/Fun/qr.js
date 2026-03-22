@@ -21,7 +21,7 @@ module.exports = {
                 .setTitle('❌ Error')
                 .setDescription('Please provide valid text to generate a QR code.');
 
-            return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            return interaction.reply({ embeds: [errorEmbed], flags: require('discord.js').MessageFlags.Ephemeral });
         }
 
         await interaction.deferReply();

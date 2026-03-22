@@ -1,5 +1,5 @@
 
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const InviteTracker = require('../../Functions/InviteTracker');
 
 function formatCount(value) {
@@ -50,7 +50,7 @@ module.exports = {
         const sub = interaction.options.getSubcommand();
         const guildId = interaction.guild?.id;
         if (!guildId) {
-            return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+            return interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
         }
 
         if (sub === 'leaderboard') {
@@ -179,3 +179,4 @@ module.exports = {
         }
     }
 };
+

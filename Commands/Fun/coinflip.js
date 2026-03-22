@@ -15,6 +15,6 @@ module.exports = {
       .setDescription(`The coin landed on **${result}**! ${emoji}`)
       .setTimestamp();
 
-    await interaction.reply({ embeds: [em], ephemeral: false });
+    await interaction.reply({ embeds: [em] });
   }
 };

@@ -84,7 +84,9 @@ function getModerationActionStyle(action = '') {
 }
 
 function sanitizeActionLabel(action = 'Action') {
-    const text = String(action || 'Action').replace(/[\u{1F300}-\u{1FAFF}]/gu, '').trim();
+    const text = String(action || 'Action')
+        .replace(/^[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2600-\u27BF\uFE0F\u200D\s]+/gu, '')
+        .trim();
     return trimToLimit(text || 'Action', EMBED_LIMITS.title, 'Action');
 }
 

@@ -1,8 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 
-// Fetch a random joke from an API—sometimes they're hilarious, sometimes they're... not.
-// The quality of these jokes is hit or miss. Don't blame me!
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('joke')

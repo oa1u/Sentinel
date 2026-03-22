@@ -10,9 +10,12 @@ const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const bodyParser = require('body-parser');
+const multer = require('multer');
+const sharp = require('sharp');
 const http = require('http');
 const socketIo = require('socket.io');
 const MySQLDatabaseManager = require('./Functions/MySQLDatabaseManager');
+const ServerBackupManager = require('./Functions/ServerBackupManager');
 const AdminPanelHelper = require('./Functions/AdminPanelHelper');
 const TotpHelper = require('./Functions/TotpHelper');
 const EmailHelper = require('./Functions/EmailHelper');
@@ -25,6 +28,18 @@ const { EmbedBuilder } = require('discord.js');
 const moment = require('moment');
 require('moment-duration-format');
 const { CHANNELS: { serverLogChannelId, discordChannelId, suggestionChannelId }, RULES: RULES_CONFIG, MISC: MISC_CONFIG } = require('./Config/constants');
+
+const ADMIN_AVATAR_UPLOAD_DIR = path.join(__dirname, 'AdminPanel', 'public', 'uploads', 'avatars');
+const ADMIN_AVATAR_PUBLIC_PREFIX = '/public/uploads/avatars/';
+const ADMIN_AVATAR_SIZE = 256;
+const ADMIN_AVATAR_ALLOWED_MIME_TYPES = Object.freeze({
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif'
+});
+
+fs.mkdirSync(ADMIN_AVATAR_UPLOAD_DIR, { recursive: true });
 
 function validateCsrfHelperApi() {
     const requiredMethods = ['generateSecret', 'createToken', 'verifyToken', 'verifyOrigin'];
@@ -367,7 +382,7 @@ app.use(helmet({
             "script-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdn.socket.io", "https://cdnjs.cloudflare.com"],
             "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
             "font-src": ["'self'", "data:", "https://cdnjs.cloudflare.com", "https://fonts.gstatic.com"],
-            "img-src": ["'self'", "data:", "https://cdn.discordapp.com", "https://cdnjs.cloudflare.com"],
+            "img-src": ["'self'", "data:", "blob:", "https://cdn.discordapp.com", "https://cdnjs.cloudflare.com"],
             "connect-src": ["'self'", "ws:", "wss:", "https://cdn.socket.io"]
         },
     },
@@ -568,7 +583,7 @@ app.use((req, res, next) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
     res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
     res.setHeader('Origin-Agent-Cluster', '?1');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io; frame-src 'self' https://www.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; child-src 'none'; object-src 'none';");
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net https://cdn.socket.io; frame-src 'self' https://www.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; child-src 'none'; object-src 'none';");
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 
     const noStoreTargets = new Set(['/login', '/register', '/recovery', '/owner', '/admin', '/moderator', '/dashboard', '/profile']);
@@ -1321,6 +1336,20 @@ const backupState = {
 };
 let backupConfig = null;
 let backupTimer = null;
+const serverBackupState = {
+    running: false,
+    lastRunAt: null,
+    lastRunFile: null,
+    lastRunStatus: 'idle',
+    lastRunError: null,
+    nextRunAt: null,
+    lastGuildId: null
+};
+const serverBackupRestoreOperations = new Map();
+const SERVER_BACKUP_RESTORE_OPERATION_TTL_MS = 30 * 60 * 1000;
+const SERVER_BACKUP_RESTORE_OPERATION_MAX_ENTRIES = 25;
+let serverBackupConfig = null;
+let serverBackupTimer = null;
 const DEFAULT_AUTOMOD_PROFILES = Object.freeze({
     balanced: {
         blockExternalInvites: true,
@@ -1485,6 +1514,233 @@ function saveBackupConfig(config) {
     fs.writeFileSync(BACKUP_CONFIG_PATH, `${JSON.stringify(backupConfig, null, '\t')}\n`, 'utf8');
     scheduleBackupTimer();
     return backupConfig;
+}
+
+function getDefaultServerBackupGuildId() {
+    try {
+        delete require.cache[require.resolve('./Config/main.json')];
+        const mainConfig = require('./Config/main.json');
+        return String(mainConfig?.serverID || '').trim();
+    } catch {
+        return '';
+    }
+}
+
+function loadServerBackupConfig() {
+    const loaded = ServerBackupManager.loadServerBackupConfig();
+    return {
+        ...ServerBackupManager.DEFAULT_SERVER_BACKUP_CONFIG,
+        ...loaded,
+        includes: ServerBackupManager.normalizeBackupIncludes(loaded?.includes || {})
+    };
+}
+
+function saveServerBackupConfig(config) {
+    serverBackupConfig = ServerBackupManager.saveServerBackupConfig({
+        ...ServerBackupManager.DEFAULT_SERVER_BACKUP_CONFIG,
+        ...config,
+        includes: ServerBackupManager.normalizeBackupIncludes(config?.includes || {})
+    });
+    scheduleServerBackupTimer();
+    return serverBackupConfig;
+}
+
+function listAvailableDiscordGuilds() {
+    if (!discordClient?.guilds?.cache) {
+        return [];
+    }
+
+    return Array.from(discordClient.guilds.cache.values())
+        .sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')))
+        .map((guild) => ({
+            id: guild.id,
+            name: guild.name,
+            iconURL: guild.iconURL({ size: 128 }) || null
+        }));
+}
+
+async function resolveServerBackupGuild(guildId = null) {
+    const targetGuildId = String(guildId || getDefaultServerBackupGuildId()).trim();
+    if (!targetGuildId || !discordClient?.guilds) {
+        return null;
+    }
+
+    return discordClient.guilds.cache.get(targetGuildId)
+        || await discordClient.guilds.fetch(targetGuildId).catch(() => null);
+}
+
+function pruneServerBackupRestoreOperations() {
+    const now = Date.now();
+
+    for (const [operationId, operation] of serverBackupRestoreOperations.entries()) {
+        const status = String(operation?.status || '').toLowerCase();
+        const updatedAt = Number(operation?.updatedAt || operation?.startedAt || 0);
+        const isActive = status === 'queued' || status === 'running';
+        if (!isActive && updatedAt > 0 && (now - updatedAt) > SERVER_BACKUP_RESTORE_OPERATION_TTL_MS) {
+            serverBackupRestoreOperations.delete(operationId);
+        }
+    }
+
+    const completedOperations = Array.from(serverBackupRestoreOperations.entries())
+        .filter(([, operation]) => !['queued', 'running'].includes(String(operation?.status || '').toLowerCase()))
+        .sort((left, right) => Number(left[1]?.updatedAt || 0) - Number(right[1]?.updatedAt || 0));
+
+    while (serverBackupRestoreOperations.size > SERVER_BACKUP_RESTORE_OPERATION_MAX_ENTRIES && completedOperations.length) {
+        const [operationId] = completedOperations.shift();
+        serverBackupRestoreOperations.delete(operationId);
+    }
+}
+
+function serializeServerBackupRestoreOperation(operation) {
+    if (!operation || typeof operation !== 'object') {
+        return null;
+    }
+
+    return {
+        id: operation.id,
+        file: operation.file || null,
+        status: operation.status || 'queued',
+        phase: operation.phase || 'queued',
+        stage: operation.stage || 'queued',
+        message: operation.message || '',
+        error: operation.error || null,
+        progress: operation.progress || null,
+        summary: operation.summary || null,
+        events: Array.isArray(operation.events) ? operation.events : [],
+        startedAt: Number(operation.startedAt || 0) || null,
+        updatedAt: Number(operation.updatedAt || 0) || null,
+        completedAt: Number(operation.completedAt || 0) || null
+    };
+}
+
+function hasActiveServerBackupRestoreOperation() {
+    pruneServerBackupRestoreOperations();
+    return Array.from(serverBackupRestoreOperations.values()).some((operation) => {
+        const status = String(operation?.status || '').toLowerCase();
+        return status === 'queued' || status === 'running';
+    });
+}
+
+function createServerBackupRestoreOperation({ file, requestedBy = null } = {}) {
+    pruneServerBackupRestoreOperations();
+
+    const timestamp = Date.now();
+    const operation = {
+        id: crypto.randomBytes(16).toString('hex'),
+        file: String(file || '').trim() || null,
+        requestedBy: requestedBy ? String(requestedBy).trim() : null,
+        status: 'queued',
+        phase: 'queued',
+        stage: 'queued',
+        message: 'Restore queued.',
+        error: null,
+        progress: {
+            phase: 'queued',
+            stage: 'queued',
+            message: 'Restore queued.',
+            currentLabel: null,
+            processed: null,
+            total: null,
+            percent: null,
+            timestamp
+        },
+        summary: null,
+        events: [
+            {
+                timestamp,
+                phase: 'queued',
+                stage: 'queued',
+                message: 'Restore queued.',
+                currentLabel: null,
+                processed: null,
+                total: null,
+                percent: null
+            }
+        ],
+        startedAt: timestamp,
+        updatedAt: timestamp,
+        completedAt: null
+    };
+
+    serverBackupRestoreOperations.set(operation.id, operation);
+    pruneServerBackupRestoreOperations();
+    return operation;
+}
+
+function appendServerBackupRestoreOperationEvent(operation, event = {}) {
+    if (!operation || typeof operation !== 'object') {
+        return null;
+    }
+
+    const timestamp = Number(event.timestamp || Date.now()) || Date.now();
+    const processed = Number.isFinite(Number(event.processed)) ? Number(event.processed) : null;
+    const total = Number.isFinite(Number(event.total)) ? Number(event.total) : null;
+    const explicitPercent = Number.isFinite(Number(event.percent)) ? Number(event.percent) : null;
+    const derivedPercent = processed !== null && total !== null && total > 0
+        ? Math.max(0, Math.min(100, Math.round((processed / total) * 100)))
+        : null;
+    const nextEvent = {
+        timestamp,
+        phase: String(event.phase || operation.phase || 'queued').trim() || 'queued',
+        stage: String(event.stage || operation.stage || 'processing').trim() || 'processing',
+        message: String(event.message || operation.message || '').trim(),
+        currentLabel: String(event.currentLabel || '').trim() || null,
+        processed,
+        total,
+        percent: explicitPercent !== null ? explicitPercent : derivedPercent
+    };
+
+    if (typeof event.status === 'string' && event.status.trim()) {
+        operation.status = event.status.trim().toLowerCase();
+    }
+
+    operation.phase = nextEvent.phase;
+    operation.stage = nextEvent.stage;
+    operation.message = nextEvent.message || operation.message || '';
+    operation.progress = nextEvent;
+    operation.updatedAt = timestamp;
+    operation.events = [nextEvent, ...(Array.isArray(operation.events) ? operation.events : [])].slice(0, 20);
+    return operation;
+}
+
+function markServerBackupRestoreOperationCompleted(operation, summary) {
+    if (!operation || typeof operation !== 'object') {
+        return null;
+    }
+
+    operation.status = 'completed';
+    operation.summary = summary || null;
+    operation.error = null;
+    operation.completedAt = Date.now();
+    appendServerBackupRestoreOperationEvent(operation, {
+        status: 'completed',
+        phase: 'completed',
+        stage: 'completed',
+        message: Array.isArray(summary?.warnings) && summary.warnings.length
+            ? 'Restore completed with warnings.'
+            : 'Restore completed successfully.',
+        percent: 100
+    });
+    return operation;
+}
+
+function markServerBackupRestoreOperationFailed(operation, error) {
+    if (!operation || typeof operation !== 'object') {
+        return null;
+    }
+
+    const message = error?.message || String(error || 'Restore failed');
+    operation.status = 'failed';
+    operation.error = message;
+    operation.completedAt = Date.now();
+    appendServerBackupRestoreOperationEvent(operation, {
+        status: 'failed',
+        phase: 'failed',
+        stage: 'failed',
+        message,
+        percent: operation.progress?.percent ?? null
+    });
+    return operation;
 }
 
 function listBackupFiles() {
@@ -1662,6 +1918,164 @@ function scheduleBackupTimer() {
     }, intervalMs);
 }
 
+function scheduleServerBackupTimer() {
+    if (serverBackupTimer) {
+        clearInterval(serverBackupTimer);
+        serverBackupTimer = null;
+    }
+
+    if (!serverBackupConfig?.enabled || !getDefaultServerBackupGuildId()) {
+        serverBackupState.nextRunAt = null;
+        return;
+    }
+
+    const intervalMinutes = Math.max(15, Number(serverBackupConfig.intervalMinutes) || ServerBackupManager.DEFAULT_SERVER_BACKUP_CONFIG.intervalMinutes);
+    const intervalMs = intervalMinutes * 60 * 1000;
+    serverBackupState.nextRunAt = Date.now() + intervalMs;
+    serverBackupTimer = setInterval(() => {
+        serverBackupState.nextRunAt = Date.now() + intervalMs;
+        runServerStructureBackup('scheduled', {
+            includes: serverBackupConfig?.includes
+        }).catch(() => { });
+    }, intervalMs);
+}
+
+async function sendServerBackupLogEmbed({
+    guild = null,
+    trigger = 'manual',
+    requestedBy = null,
+    status = 'success',
+    result = null,
+    error = null,
+    includes = null
+} = {}) {
+    if (!discordClient || !serverLogChannelId) {
+        return;
+    }
+
+    try {
+        const logChannel = await discordClient.channels.fetch(serverLogChannelId).catch(() => null);
+        if (!logChannel) {
+            return;
+        }
+
+        const normalizedStatus = String(status || 'success').toLowerCase();
+        const normalizedTrigger = String(trigger || 'manual').toLowerCase();
+        const normalizedIncludes = ServerBackupManager.normalizeBackupIncludes(includes || result?.includes || {});
+        const enabledSections = Object.entries(normalizedIncludes)
+            .filter(([, enabled]) => enabled)
+            .map(([key]) => key.replace(/([A-Z])/g, ' $1').toLowerCase())
+            .join(', ') || 'none';
+        const actorLabel = requestedBy || (normalizedTrigger === 'scheduled' ? 'Scheduler' : 'System');
+        const guildLabel = guild?.name && guild?.id ? `${guild.name} (${guild.id})` : (guild?.id || 'Unavailable');
+
+        const embed = new EmbedBuilder()
+            .setTitle(normalizedStatus === 'success' ? '💾 Server Backup Completed' : '⚠️ Server Backup Failed')
+            .setColor(normalizedStatus === 'success' ? 0x43B581 : 0xED4245)
+            .addFields(
+                { name: '🏠 Server', value: guildLabel, inline: false },
+                { name: '🚀 Trigger', value: normalizedTrigger, inline: true },
+                { name: '👤 Requested By', value: String(actorLabel), inline: true },
+                { name: '📦 Included', value: enabledSections, inline: false }
+            )
+            .setTimestamp();
+
+        if (normalizedStatus === 'success') {
+            embed.addFields(
+                { name: '📄 Backup File', value: result?.fileName ? `\`${result.fileName}\`` : 'Unavailable', inline: false },
+                { name: '🗜️ Size', value: ServerBackupManager.formatBackupBytes(result?.size || 0), inline: true },
+                { name: '🏷️ Label', value: String(result?.label || 'None'), inline: true }
+            );
+            embed.setFooter({ text: `Server backup completed via ${normalizedTrigger}` });
+        } else {
+            embed.addFields({
+                name: '❌ Error',
+                value: String(error || 'Unknown backup failure').slice(0, 1024),
+                inline: false
+            });
+            embed.setFooter({ text: `Server backup failed via ${normalizedTrigger}` });
+        }
+
+        await logChannel.send({ embeds: [embed] }).catch((sendError) => {
+            console.error('[ServerBackup] Failed to send backup log embed:', sendError.message || sendError);
+        });
+    } catch (logError) {
+        console.error('[ServerBackup] Failed to build backup log embed:', logError.message || logError);
+    }
+}
+
+async function runServerStructureBackup(trigger = 'manual', options = {}) {
+    if (serverBackupState.running) {
+        return { success: false, error: 'Server backup already in progress.' };
+    }
+
+    serverBackupState.running = true;
+    serverBackupState.lastRunStatus = 'running';
+    serverBackupState.lastRunError = null;
+
+    try {
+        const guild = await resolveServerBackupGuild(options.guildId);
+        if (!guild) {
+            serverBackupState.lastRunStatus = 'failed';
+            serverBackupState.lastRunError = 'The configured guild could not be resolved.';
+            serverBackupState.running = false;
+            await sendServerBackupLogEmbed({
+                guild: null,
+                trigger,
+                requestedBy: options.requestedBy || null,
+                status: 'failed',
+                error: serverBackupState.lastRunError,
+                includes: options.includes || serverBackupConfig?.includes || {}
+            });
+            return { success: false, error: serverBackupState.lastRunError };
+        }
+
+        const retentionCount = Math.max(
+            1,
+            Number(options.retentionCount ?? serverBackupConfig?.retentionCount) || ServerBackupManager.DEFAULT_SERVER_BACKUP_CONFIG.retentionCount
+        );
+        const includes = ServerBackupManager.normalizeBackupIncludes(options.includes || serverBackupConfig?.includes || {});
+
+        const result = await ServerBackupManager.createServerBackupFromGuild(guild, {
+            trigger,
+            retentionCount,
+            includes,
+            label: options.label,
+            notes: options.notes,
+            requestedBy: options.requestedBy || null
+        });
+
+        serverBackupState.lastRunAt = Date.now();
+        serverBackupState.lastRunFile = result.fileName;
+        serverBackupState.lastRunStatus = 'success';
+        serverBackupState.lastRunError = null;
+        serverBackupState.lastGuildId = guild.id;
+        serverBackupState.running = false;
+        await sendServerBackupLogEmbed({
+            guild,
+            trigger,
+            requestedBy: options.requestedBy || null,
+            status: 'success',
+            result,
+            includes
+        });
+        return { success: true, ...result };
+    } catch (error) {
+        serverBackupState.lastRunStatus = 'failed';
+        serverBackupState.lastRunError = error.message || 'Server backup failed.';
+        serverBackupState.running = false;
+        await sendServerBackupLogEmbed({
+            guild: null,
+            trigger,
+            requestedBy: options.requestedBy || null,
+            status: 'failed',
+            error: serverBackupState.lastRunError,
+            includes: options.includes || serverBackupConfig?.includes || {}
+        });
+        return { success: false, error: serverBackupState.lastRunError };
+    }
+}
+
 async function runDatabaseBackup(trigger = 'manual', options = {}) {
     if (backupState.running) {
         return { success: false, error: 'Backup already in progress.' };
@@ -1819,6 +2233,8 @@ async function runDatabaseBackup(trigger = 'manual', options = {}) {
 
 backupConfig = loadBackupConfig();
 scheduleBackupTimer();
+serverBackupConfig = loadServerBackupConfig();
+scheduleServerBackupTimer();
 
 function cloneDefaultAutoModProfiles() {
     return JSON.parse(JSON.stringify(DEFAULT_AUTOMOD_PROFILES));
@@ -3438,6 +3854,77 @@ function isValidEmailAddress(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 }
 
+function isManagedAdminAvatarUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw.startsWith(ADMIN_AVATAR_PUBLIC_PREFIX)) return false;
+    const relative = raw.slice(ADMIN_AVATAR_PUBLIC_PREFIX.length);
+    return relative.length > 0 && !relative.includes('..') && !path.isAbsolute(relative);
+}
+
+function deleteManagedAdminAvatarFile(avatarUrl) {
+    if (!isManagedAdminAvatarUrl(avatarUrl)) return;
+    const filename = path.basename(String(avatarUrl || '').trim());
+    if (!filename) return;
+    const targetPath = path.join(ADMIN_AVATAR_UPLOAD_DIR, filename);
+    if (fs.existsSync(targetPath)) {
+        fs.unlinkSync(targetPath);
+    }
+}
+
+async function normalizeAdminAvatarUpload(tempFilePath) {
+    const normalizedFilename = `avatar-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.webp`;
+    const normalizedPath = path.join(ADMIN_AVATAR_UPLOAD_DIR, normalizedFilename);
+
+    try {
+        await sharp(tempFilePath, { animated: true, limitInputPixels: 4096 * 4096 })
+            .rotate()
+            .resize(ADMIN_AVATAR_SIZE, ADMIN_AVATAR_SIZE, {
+                fit: 'cover',
+                position: 'attention'
+            })
+            .webp({
+                quality: 82,
+                effort: 4,
+                alphaQuality: 85
+            })
+            .toFile(normalizedPath);
+
+        return {
+            filename: normalizedFilename,
+            absolutePath: normalizedPath,
+            publicUrl: `${ADMIN_AVATAR_PUBLIC_PREFIX}${normalizedFilename}`
+        };
+    } finally {
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+        }
+    }
+}
+
+const adminAvatarUpload = multer({
+    storage: multer.diskStorage({
+        destination: (_req, _file, callback) => {
+            callback(null, ADMIN_AVATAR_UPLOAD_DIR);
+        },
+        filename: (_req, file, callback) => {
+            const ext = ADMIN_AVATAR_ALLOWED_MIME_TYPES[file.mimetype] || 'bin';
+            callback(null, `avatar-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`);
+        }
+    }),
+    limits: {
+        fileSize: 4 * 1024 * 1024,
+        files: 1
+    },
+    fileFilter: (_req, file, callback) => {
+        if (!ADMIN_AVATAR_ALLOWED_MIME_TYPES[file.mimetype]) {
+            callback(new Error('Only PNG, JPG, GIF, and WEBP images are allowed'));
+            return;
+        }
+
+        callback(null, true);
+    }
+});
+
 // Validation helpers (shared across routes)
 // Keep ID, reason, and duration checks centralized to avoid drift.
 
@@ -3479,7 +3966,11 @@ function normalizeAdminUserRecord(user) {
     const base = (user && typeof user === 'object') ? user : {};
     return {
         ...base,
-        id: normalizeAdminUserIdValue(base.id)
+        id: normalizeAdminUserIdValue(base.id),
+        avatar_url: typeof base.avatar_url === 'string' && base.avatar_url.trim() ? base.avatar_url.trim() : null,
+        discord_user_id: typeof base.discord_user_id === 'string' && base.discord_user_id.trim() ? base.discord_user_id.trim() : null,
+        discord_username: typeof base.discord_username === 'string' && base.discord_username.trim() ? base.discord_username.trim() : null,
+        discord_avatar_url: typeof base.discord_avatar_url === 'string' && base.discord_avatar_url.trim() ? base.discord_avatar_url.trim() : null
     };
 }
 
@@ -3882,23 +4373,15 @@ app.get('/api/users/:id', requireAuth, async (req, res) => {
 
         let timeoutRow = null;
         try {
-            const [timeoutRows] = await MySQLDatabaseManager.connection.pool.query(
-                `SELECT reason, expires_at, active
-                 FROM timeouts
-                 WHERE user_id = ?
-                 ORDER BY expires_at DESC
-                 LIMIT 1`,
-                [userId]
-            );
-            timeoutRow = Array.isArray(timeoutRows) && timeoutRows.length ? timeoutRows[0] : null;
+            timeoutRow = await MySQLDatabaseManager.getLatestActiveTimeoutCaseForUser(userId, process.env.GUILD_ID || null);
         } catch (_) {
             timeoutRow = null;
         }
 
         const isBanned = Boolean(banRow && Number(banRow.banned) === 1);
         const timeoutExpires = timeoutRow?.expires_at || null;
-        const timeoutActiveFlag = timeoutRow ? (timeoutRow.active === undefined ? true : Boolean(timeoutRow.active)) : false;
-        const isTimedOut = Boolean(timeoutRow && timeoutActiveFlag && timeoutExpires && new Date(timeoutExpires).getTime() > Date.now());
+        const timeoutActiveFlag = timeoutRow ? String(timeoutRow.effective_status || timeoutRow.status || '') === 'active' : false;
+        const isTimedOut = Boolean(timeoutRow && timeoutActiveFlag && timeoutExpires && Number(timeoutExpires) > Date.now());
 
         // Get notes if available
         let notes = null;
@@ -4266,7 +4749,7 @@ app.get('/api/stats/today', requireAuth, async (req, res) => {
         };
 
         const [warnsToday, bansToday, newMembersToday, ticketsCreatedToday, commandsToday] = await Promise.all([
-            safeCount('SELECT COUNT(*) as count FROM warns WHERE type = "WARN" AND timestamp >= ? AND timestamp < ?', [todayMs, tomorrowMs], 'Warns'),
+            safeCount(`SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') AND created_at >= ? AND created_at < ?`, [todayMs, tomorrowMs], 'Warns'),
             safeCount('SELECT COUNT(*) as count FROM user_bans WHERE banned = TRUE AND banned_at >= ? AND banned_at < ?', [todayStr, tomorrowStr], 'Bans'),
             safeCount(
                 "SELECT COUNT(*) as count FROM member_activity WHERE event_type = 'join' AND ((timestamp >= ? AND timestamp < ?) OR (timestamp >= ? AND timestamp < ?))",
@@ -4521,28 +5004,38 @@ app.delete('/api/banned/:userId', requireAuth, async (req, res) => {
             const unbanCaseId = generateCaseId('UNBAN');
             const targetUser = await resolveDiscordUser(userId);
 
+            const unbanCreatedAt = Date.now();
             try {
-                await MySQLDatabaseManager.connection.pool.query(
-                    `INSERT INTO unbans (
-                        user_id, unban_case_id, unbanned_at, unbanned_by,
-                        unbanned_by_name, unbanned_by_source, user_name,
-                        original_ban_case_id, original_ban_reason, reason
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    , [
-                        userId,
-                        unbanCaseId,
-                        new Date(),
-                        null,
-                        req.session?.username || null,
-                        'panel',
-                        targetUser?.username || null,
-                        originalBanCaseId,
-                        originalBanReason,
-                        `Unbanned via admin panel by ${req.session?.username || 'Unknown'}`
-                    ]
-                );
+                await MySQLDatabaseManager.upsertModerationCase({
+                    caseId: unbanCaseId,
+                    guildId: process.env.GUILD_ID || null,
+                    userId,
+                    userName: targetUser?.username || null,
+                    actionType: 'UNBAN',
+                    status: 'closed',
+                    reason: `Unbanned via admin panel by ${req.session?.username || 'Unknown'}`,
+                    moderatorName: req.session?.username || null,
+                    moderatorSource: 'panel',
+                    source: 'panel',
+                    relatedCaseId: originalBanCaseId || null,
+                    rootCaseId: originalBanCaseId || unbanCaseId,
+                    metadata: originalBanReason ? { originalBanReason } : null,
+                    createdAt: unbanCreatedAt,
+                    updatedAt: unbanCreatedAt,
+                    eventSummary: 'Unban case recorded'
+                });
+
+                if (originalBanCaseId) {
+                    await MySQLDatabaseManager.updateModerationCaseStatus(originalBanCaseId, 'reversed', {
+                        guildId: process.env.GUILD_ID || null,
+                        actorName: req.session?.username || null,
+                        relatedCaseId: unbanCaseId,
+                        details: `Reversed by admin panel unban case ${unbanCaseId}`,
+                        updatedAt: unbanCreatedAt
+                    });
+                }
             } catch (dbErr) {
-                console.error('[Unban] Failed to insert unban record:', dbErr.message);
+                console.error('[Unban] Failed to write moderation ledger record:', dbErr.message);
             }
 
             try {
@@ -4923,7 +5416,22 @@ app.get('/api/admin/users', requireAuth, async (req, res) => {
         }
 
         const users = await AdminPanelHelper.getAllAdminUsers();
-        res.json((Array.isArray(users) ? users : []).map(normalizeAdminUserRecord));
+        const normalizedUsers = await Promise.all((Array.isArray(users) ? users : []).map(async (record) => {
+            const normalized = normalizeAdminUserRecord(record);
+            if (normalized.avatar_url || !normalized.discord_user_id || !discordClient?.users) {
+                return normalized;
+            }
+
+            const discordUser = discordClient.users.cache.get(normalized.discord_user_id)
+                || await discordClient.users.fetch(normalized.discord_user_id, { force: true }).catch(() => null);
+
+            return {
+                ...normalized,
+                discord_avatar_url: discordUser?.displayAvatarURL({ dynamic: true, size: 128 }) || null
+            };
+        }));
+
+        res.json(normalizedUsers);
     } catch (error) {
         console.error('Error fetching admin users:', error);
         res.status(500).json({ error: 'Failed to fetch admin users' });
@@ -5175,7 +5683,7 @@ async function runAdvancedUserSearch(payload = {}) {
             l.username,
             l.level,
             l.xp,
-            (SELECT COUNT(*) FROM warns WHERE user_id = l.user_id) as warn_count,
+            (SELECT COUNT(*) FROM moderation_cases mc WHERE mc.user_id = l.user_id AND mc.action_type = 'WARN' AND mc.status NOT IN ('cleared', 'reversed')) as warn_count,
             b.banned,
             b.ban_reason,
             b.banned_at
@@ -5196,7 +5704,7 @@ async function runAdvancedUserSearch(payload = {}) {
         } else if (filters.status === 'active') {
             sql += ` AND (b.banned IS NULL OR b.banned = 0)`;
         } else if (filters.status === 'timedout') {
-            sql += ` AND EXISTS (SELECT 1 FROM timeouts t WHERE t.user_id = l.user_id AND t.active = 1)`;
+            sql += ` AND EXISTS (SELECT 1 FROM moderation_cases mc WHERE mc.user_id = l.user_id AND mc.action_type = 'TIMEOUT' AND mc.status = 'active' AND (mc.expires_at IS NULL OR mc.expires_at > ${Date.now()}))`;
         }
     }
 
@@ -5355,11 +5863,11 @@ app.get('/api/admin/system/lookup/:query', requireAuth, async (req, res) => {
             ] = await Promise.all([
                 MySQLDatabaseManager.connection.pool.query('SELECT * FROM userinfo WHERE user_id = ?', [user.id]),
                 MySQLDatabaseManager.connection.pool.query('SELECT * FROM levels WHERE user_id = ?', [user.id]),
-                MySQLDatabaseManager.connection.pool.query('SELECT COUNT(*) as count FROM warns WHERE user_id = ?', [user.id]),
-                MySQLDatabaseManager.connection.pool.query('SELECT id, user_id, case_id, reason, moderator_id, moderator_name, type, timestamp, created_at FROM warns WHERE user_id = ? ORDER BY timestamp DESC LIMIT 20', [user.id]),
+                MySQLDatabaseManager.connection.pool.query(`SELECT COUNT(*) as count FROM moderation_cases WHERE user_id = ? AND action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')`, [user.id]),
+                MySQLDatabaseManager.connection.pool.query(`SELECT case_id as id, user_id, case_id, reason, moderator_id, moderator_name, action_type as type, created_at as timestamp, created_at, status FROM moderation_cases WHERE user_id = ? AND action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') ORDER BY created_at DESC LIMIT 20`, [user.id]),
                 MySQLDatabaseManager.connection.pool.query('SELECT user_id, banned, ban_case_id, banned_at, banned_by, banned_by_name, ban_reason, created_at FROM user_bans WHERE user_id = ? ORDER BY created_at DESC', [user.id]),
                 MySQLDatabaseManager.connection.pool.query('SELECT * FROM member_notes WHERE user_id = ? ORDER BY created_at DESC LIMIT 10', [user.id]).catch(() => [[]]),
-                MySQLDatabaseManager.connection.pool.query('SELECT id, user_id, case_id, reason, issued_by, issued_by_name, issued_at, expires_at, active FROM timeouts WHERE user_id = ? ORDER BY issued_at DESC LIMIT 10', [user.id]).catch(() => [[]])
+                MySQLDatabaseManager.getUserModerationCases(user.id, { actionTypes: ['TIMEOUT'], limit: 10 }).then(rows => [rows]).catch(() => [[]])
             ]);
 
             dbUserInfo = users[0] || null;
@@ -6273,6 +6781,8 @@ app.get('/api/account/info', requireAuth, async (req, res) => {
             success: true,
             username: user.username,
             email: user.email || null,
+            avatar_url: user.avatar_url || null,
+            avatar_updated_at: user.avatar_updated_at || null,
             email_verified: Boolean(user.email_verified),
             role: user.role,
             created_at: user.created_at,
@@ -6354,6 +6864,8 @@ app.get('/api/user', requireAuth, async (req, res) => {
             success: true,
             username: user.username,
             email: user.email || null,
+            avatar_url: user.avatar_url || null,
+            avatar_updated_at: user.avatar_updated_at || null,
             email_verified: Boolean(user.email_verified),
             role: user.role,
             created_at: user.created_at,
@@ -7623,6 +8135,105 @@ app.post('/api/user/change-email', createRateLimiter(5, 60000), requireAuth, asy
     }
 });
 
+app.post('/api/user/change-avatar', createRateLimiter(10, 60000), requireAuth, (req, res) => {
+    adminAvatarUpload.single('avatar')(req, res, async (uploadError) => {
+        try {
+            if (uploadError) {
+                const message = uploadError instanceof multer.MulterError
+                    ? (uploadError.code === 'LIMIT_FILE_SIZE'
+                        ? 'Avatar image must be 4MB or smaller'
+                        : 'Failed to process avatar upload')
+                    : (uploadError.message || 'Failed to process avatar upload');
+                return res.status(400).json({ error: message });
+            }
+
+            const shouldResetAvatar = String(req.body?.resetAvatar || '').trim() === '1';
+            const user = await AdminPanelHelper.getAdminUser(req.session.username);
+            if (!user) {
+                if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            if (!req.file && !shouldResetAvatar) {
+                return res.status(400).json({ error: 'Select an image to upload' });
+            }
+
+            const oldAvatarUrl = String(user.avatar_url || '').trim();
+            let nextAvatarUrl = null;
+            if (!shouldResetAvatar && req.file?.path) {
+                const normalizedAvatar = await normalizeAdminAvatarUpload(req.file.path);
+                nextAvatarUrl = normalizedAvatar.publicUrl;
+            }
+            const avatarUpdatedAt = nextAvatarUrl ? new Date() : null;
+
+            const [updateResult] = await MySQLDatabaseManager.connection.pool.query(
+                `UPDATE admin_users
+                 SET avatar_url = ?, avatar_updated_at = ?
+                 WHERE id = ?`,
+                [nextAvatarUrl, avatarUpdatedAt, user.id]
+            );
+
+            const affectedRows = Number(updateResult?.affectedRows || 0);
+            if (affectedRows < 1) {
+                if (nextAvatarUrl) {
+                    try {
+                        deleteManagedAdminAvatarFile(nextAvatarUrl);
+                    } catch (_) { }
+                }
+                return res.status(500).json({ error: 'Avatar could not be saved' });
+            }
+
+            const persistedUser = await AdminPanelHelper.getAdminUserById(user.id);
+            if (!persistedUser) {
+                if (nextAvatarUrl) {
+                    try {
+                        deleteManagedAdminAvatarFile(nextAvatarUrl);
+                    } catch (_) { }
+                }
+                return res.status(500).json({ error: 'Avatar save could not be verified' });
+            }
+
+            const persistedAvatarUrl = String(persistedUser.avatar_url || '').trim() || null;
+            const expectedAvatarUrl = nextAvatarUrl || null;
+            if (persistedAvatarUrl !== expectedAvatarUrl) {
+                if (nextAvatarUrl) {
+                    try {
+                        deleteManagedAdminAvatarFile(nextAvatarUrl);
+                    } catch (_) { }
+                }
+                console.warn('[AdminPanel] Avatar save verification failed', {
+                    userId: user.id,
+                    expectedAvatarUrl,
+                    persistedAvatarUrl
+                });
+                return res.status(500).json({ error: 'Avatar save verification failed' });
+            }
+
+            if (oldAvatarUrl && oldAvatarUrl !== nextAvatarUrl) {
+                try {
+                    deleteManagedAdminAvatarFile(oldAvatarUrl);
+                } catch (cleanupError) {
+                    console.warn('[AdminPanel] Failed to remove previous avatar:', cleanupError.message || cleanupError);
+                }
+            }
+
+            console.log(`[Admin] User ${req.session.username} ${nextAvatarUrl ? 'updated' : 'cleared'} their avatar`);
+            return res.json({
+                success: true,
+                avatar_url: persistedUser.avatar_url || null,
+                avatar_updated_at: persistedUser.avatar_updated_at ? new Date(persistedUser.avatar_updated_at).toISOString() : null,
+                message: nextAvatarUrl ? 'Avatar uploaded successfully' : 'Avatar reset successfully'
+            });
+        } catch (error) {
+            if (req.file?.path && fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
+            console.error('Error changing avatar:', error);
+            return res.status(500).json({ error: 'Failed to change avatar' });
+        }
+    });
+});
+
 // Audit logs page route
 app.get('/audit-logs', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'audit-logs.html'));
@@ -7962,94 +8573,20 @@ app.get('/api/moderator/case/:caseId', requireAuth, async (req, res) => {
         if (!caseId || typeof caseId !== 'string') {
             return res.status(400).json({ error: 'Invalid caseId' });
         }
-        // Try to find case in warns, bans, timeouts, kicks, etc.
-        // Warns
-        const warn = await MySQLDatabaseManager.connection.query('SELECT * FROM warns WHERE case_id = ? LIMIT 1', [caseId]);
-        if (warn && warn.length > 0) {
+        const caseData = await MySQLDatabaseManager.getModerationCaseById(caseId);
+        if (caseData) {
             return res.json({
-                type: warn[0].type || 'WARN',
-                userId: warn[0].user_id,
-                userName: warn[0].user_name,
-                moderatorId: warn[0].moderator_id,
-                moderatorName: warn[0].moderator_name,
-                moderatorSource: warn[0].moderator_source,
-                reason: warn[0].reason,
-                timestamp: warn[0].timestamp,
-                duration: warn[0].duration,
-                expiresAt: warn[0].expires_at,
-                status: 'active',
-                extra: null
-            });
-        }
-        // Bans
-        const ban = await MySQLDatabaseManager.connection.query('SELECT * FROM user_bans WHERE ban_case_id = ? LIMIT 1', [caseId]);
-        if (ban && ban.length > 0) {
-            return res.json({
-                type: 'BAN',
-                userId: ban[0].user_id,
-                userName: ban[0].user_name,
-                moderatorId: ban[0].banned_by,
-                moderatorName: ban[0].banned_by_name,
-                moderatorSource: ban[0].banned_by_source,
-                reason: ban[0].ban_reason,
-                timestamp: ban[0].banned_at,
-                duration: null,
-                expiresAt: null,
-                status: ban[0].banned ? 'active' : 'inactive',
-                extra: null
-            });
-        }
-        // Timeouts
-        const timeout = await MySQLDatabaseManager.connection.query('SELECT * FROM warns WHERE case_id = ? AND type = "TIMEOUT" LIMIT 1', [caseId]);
-        if (timeout && timeout.length > 0) {
-            return res.json({
-                type: 'TIMEOUT',
-                userId: timeout[0].user_id,
-                userName: timeout[0].user_name,
-                moderatorId: timeout[0].moderator_id,
-                moderatorName: timeout[0].moderator_name,
-                moderatorSource: timeout[0].moderator_source,
-                reason: timeout[0].reason,
-                timestamp: timeout[0].timestamp,
-                duration: timeout[0].duration,
-                expiresAt: timeout[0].expires_at,
-                status: 'active',
-                extra: null
-            });
-        }
-        // Kicks
-        const kick = await MySQLDatabaseManager.connection.query('SELECT * FROM warns WHERE case_id = ? AND type = "KICK" LIMIT 1', [caseId]);
-        if (kick && kick.length > 0) {
-            return res.json({
-                type: 'KICK',
-                userId: kick[0].user_id,
-                userName: kick[0].user_name,
-                moderatorId: kick[0].moderator_id,
-                moderatorName: kick[0].moderator_name,
-                moderatorSource: kick[0].moderator_source,
-                reason: kick[0].reason,
-                timestamp: kick[0].timestamp,
-                duration: kick[0].duration,
-                expiresAt: kick[0].expires_at,
-                status: 'active',
-                extra: null
-            });
-        }
-        // Untimeouts
-        const untimeout = await MySQLDatabaseManager.connection.query('SELECT * FROM warns WHERE case_id = ? AND type = "UNTIMEOUT" LIMIT 1', [caseId]);
-        if (untimeout && untimeout.length > 0) {
-            return res.json({
-                type: 'UNTIMEOUT',
-                userId: untimeout[0].user_id,
-                userName: untimeout[0].user_name,
-                moderatorId: untimeout[0].moderator_id,
-                moderatorName: untimeout[0].moderator_name,
-                moderatorSource: untimeout[0].moderator_source,
-                reason: untimeout[0].reason,
-                timestamp: untimeout[0].timestamp,
-                duration: untimeout[0].duration,
-                expiresAt: untimeout[0].expires_at,
-                status: 'active',
+                type: caseData.action_type,
+                userId: caseData.user_id,
+                userName: caseData.user_name,
+                moderatorId: caseData.moderator_id,
+                moderatorName: caseData.moderator_name,
+                moderatorSource: caseData.moderator_source,
+                reason: caseData.reason,
+                timestamp: caseData.created_at,
+                duration: caseData.metadata?.duration || null,
+                expiresAt: caseData.expires_at,
+                status: caseData.effective_status,
                 extra: null
             });
         }
@@ -8187,7 +8724,7 @@ app.get('/api/admin/search-users', requireAuth, async (req, res) => {
                     COUNT(w.id) as warn_count,
                     CASE WHEN ub.user_id IS NULL THEN 0 ELSE 1 END as is_banned,
                     CASE WHEN t.user_id IS NULL THEN 0 ELSE 1 END as is_timed_out
-                FROM warns w
+                FROM moderation_cases w
                 LEFT JOIN levels l ON w.user_id = l.user_id
                 LEFT JOIN (
                     SELECT ma1.user_id, ma1.username
@@ -8198,12 +8735,11 @@ app.get('/api/admin/search-users', requireAuth, async (req, res) => {
                         GROUP BY user_id
                     ) ma2 ON ma1.user_id = ma2.user_id AND ma1.timestamp = ma2.max_ts
                 ) ma ON w.user_id = ma.user_id
-                LEFT JOIN user_bans ub ON w.user_id = ub.user_id AND ub.banned = TRUE
-                LEFT JOIN timeouts t ON w.user_id = t.user_id AND t.expires_at > NOW()
+                                LEFT JOIN user_bans ub ON w.user_id = ub.user_id AND ub.banned = TRUE
+                                LEFT JOIN moderation_cases t ON w.user_id = t.user_id AND t.action_type = 'TIMEOUT' AND t.status = 'active' AND (t.expires_at IS NULL OR t.expires_at > ${Date.now()})
                 WHERE l.user_id IS NULL
-                  AND (w.type IS NULL OR w.type = 'WARN')
-                  AND w.reason NOT LIKE '%(timeout%'
-                  AND w.reason NOT LIKE '%(untimeout)%'
+                                    AND w.action_type = 'WARN'
+                                    AND w.status NOT IN ('cleared', 'reversed')
                   AND ${warnWhere.join(' AND ')}
                 GROUP BY w.user_id
                 LIMIT 50
@@ -8247,26 +8783,44 @@ app.get('/api/admin/user-profile/:userId', requireAuth, async (req, res) => {
         }
 
         // Build profile from available data
-        const [levels, warns] = await Promise.all([
+        const [levels, warnings, userInfo] = await Promise.all([
             AdminPanelHelper.getAllLevels(),
-            AdminPanelHelper.getUserWarns(userId)
+            AdminPanelHelper.getUserWarns(userId),
+            typeof MySQLDatabaseManager.getUserInfo === 'function'
+                ? MySQLDatabaseManager.getUserInfo(userId)
+                : Promise.resolve(null)
         ]);
 
         const userLevel = levels.find(l => l.user_id === userId);
 
-        if (!userLevel) {
-            return res.status(404).json({ error: 'User not found' });
+        let discordUser = null;
+        if (discordClient) {
+            try {
+                discordUser = await discordClient.users.fetch(userId).catch(() => null);
+            } catch (_) {
+                discordUser = null;
+            }
         }
+
+        const warningList = Array.isArray(warnings) ? warnings : [];
+        const resolvedUsername = userLevel?.username
+            || userInfo?.username
+            || discordUser?.username
+            || warningList.find(entry => entry?.username)?.username
+            || 'Unknown User';
 
         const profile = {
             user_id: userId,
-            username: userLevel.username || 'Unknown User',
-            level: userLevel.level || 0,
-            xp: userLevel.xp || 0,
-            messages: userLevel.messages || 0,
-            warn_count: warns?.warn_count || 0,
-            banned: warns?.banned || false,
-            warnings: warns?.warnings || [],
+            username: resolvedUsername,
+            nickname: userInfo?.nickname || null,
+            bio: userInfo?.bio || null,
+            avatar: discordUser?.displayAvatarURL?.({ dynamic: true, size: 256 }) || null,
+            level: Number(userLevel?.level || 0),
+            xp: Number(userLevel?.xp || 0),
+            messages: Number(userLevel?.messages || 0),
+            warn_count: warningList.length,
+            banned: false,
+            warnings: warningList,
             bans: [],
             audit_logs: [],
             violations: []
@@ -8514,23 +9068,20 @@ app.post('/api/admin/suggestions/:id/approve', requireAuth, async (req, res) => 
     try {
         const { id } = req.params;
         const { reason } = req.body;
-        // userId from session
         const userId = req.session.userId;
-        const username = req.session.username;
+        const moderatorName = req.session.username || 'Admin';
 
-        if (!reason || reason.trim() === '') {
-            return res.status(400).json({ success: false, error: 'A reason is required to approve this suggestion.' });
+        const updated = await MySQLDatabaseManager.updateSuggestionStatus(id, 'approved', userId, reason || null);
+        if (!updated) {
+            return res.status(500).json({ error: 'Failed to approve suggestion' });
         }
 
-        await MySQLDatabaseManager.updateSuggestionStatus(id, 'approved', userId, reason);
+        await syncSuggestionEmbed(id, 'approved', reason || null, userId, moderatorName);
 
-        // Update Discord Embed
-        await syncSuggestionEmbed(id, 'approved', reason, userId, username);
-
-        res.json({ success: true, message: 'Suggestion approved' });
+        return res.json({ success: true, message: 'Suggestion approved' });
     } catch (error) {
         console.error('Error approving suggestion:', error);
-        res.status(500).json({ error: 'Failed to approve suggestion' });
+        return res.status(500).json({ error: 'Failed to approve suggestion' });
     }
 });
 
@@ -8540,24 +9091,21 @@ app.post('/api/admin/suggestions/:id/deny', requireAuth, async (req, res) => {
         const { id } = req.params;
         const { reason } = req.body;
         const userId = req.session.userId;
-        const username = req.session.username;
+        const moderatorName = req.session.username || 'Admin';
 
-        if (!reason || reason.trim() === '') {
-            return res.status(400).json({ success: false, error: 'A reason is required to deny this suggestion.' });
+        const updated = await MySQLDatabaseManager.updateSuggestionStatus(id, 'denied', userId, reason || null);
+        if (!updated) {
+            return res.status(500).json({ error: 'Failed to deny suggestion' });
         }
 
-        await MySQLDatabaseManager.updateSuggestionStatus(id, 'denied', userId, reason);
+        await syncSuggestionEmbed(id, 'denied', reason || null, userId, moderatorName);
 
-        // Update Discord Embed
-        await syncSuggestionEmbed(id, 'denied', reason, userId, username);
-
-        res.json({ success: true, message: 'Suggestion denied' });
+        return res.json({ success: true, message: 'Suggestion denied' });
     } catch (error) {
         console.error('Error denying suggestion:', error);
-        res.status(500).json({ error: 'Failed to deny suggestion' });
+        return res.status(500).json({ error: 'Failed to deny suggestion' });
     }
 });
-
 
 // Get ghost pings endpoint
 app.get('/api/admin/ghost-pings', requireAuth, async (req, res) => {
@@ -8565,96 +9113,61 @@ app.get('/api/admin/ghost-pings', requireAuth, async (req, res) => {
         const { limit } = req.query;
         let pings = await MySQLDatabaseManager.getAllGhostPings(parseInt(limit) || 50);
 
-        // Hydrate
         if (discordClient) {
-            const guildId = process.env.GUILD_ID;
-            const guild = guildId ? discordClient.guilds.cache.get(guildId) : discordClient.guilds.cache.first();
-
-            pings = await Promise.all(pings.map(async (p) => {
-                // Clone object to avoid mutating readonly DB row if driver returns so
-                const ping = { ...p };
-
-                // Resolve Channel Name
-                const channelId = ping.channelId || ping.channel_id;
-                if (!ping.channelName && channelId && guild) {
-                    const ch = guild.channels.cache.get(channelId);
-                    if (ch) ping.channelName = ch.name; // Set camelCase for frontend consistency
-                }
-
-                // Resolve User Tag and Avatar
-                try {
-                    const userId = ping.userId || ping.user_id;
-                    if (userId) {
-                        const user = await discordClient.users.fetch(userId).catch(() => null);
-                        if (user) {
-                            ping.userTag = user.tag; // Ensure we maintain camelCase for frontend
-                            ping.avatarUrl = user.displayAvatarURL({ dynamic: true, extension: 'png', size: 128 });
-                        } else {
-                            let userInfo = await MySQLDatabaseManager.getUserInfo(userId);
-                            if (userInfo && userInfo.avatar) {
-                                ping.avatarUrl = `https://cdn.discordapp.com/avatars/${userId}/${userInfo.avatar}.png`;
-                            }
-                        }
-                    }
-                } catch (err) { }
-
-                // Resolve Mentioned Users into Usernames instead of raw IDs
+            pings = await Promise.all(pings.map(async (ping) => {
                 if (ping.mentions && typeof ping.mentions === 'string') {
-                    // The mentions string comes through as comma separated tags like "<@123456789>, <@!123456789>" or raw IDs like "123456789"
-                    // We want to transform the IDs to usernames from Discord
                     let rawMentions = ping.mentions;
                     const mentionRegex = /<@!?(\d+)>|(\d{17,19})/g;
-
                     let match;
                     const replacedMentionsIds = new Set();
+
                     while ((match = mentionRegex.exec(ping.mentions)) !== null) {
-                        const mId = match[1] || match[2];
-                        if (mId && !replacedMentionsIds.has(mId)) {
-                            replacedMentionsIds.add(mId);
+                        const mentionId = match[1] || match[2];
+                        if (mentionId && !replacedMentionsIds.has(mentionId)) {
+                            replacedMentionsIds.add(mentionId);
                             try {
-                                const mUser = await discordClient.users.fetch(mId).catch(() => null);
-                                if (mUser) {
-                                    // Make sure we just insert text to be later parsed on the client
-                                    rawMentions = rawMentions.replace(new RegExp(`<@!?${mId}>|\\b${mId}\\b`, 'g'), `@${mUser.username}`);
+                                const mentionUser = await discordClient.users.fetch(mentionId).catch(() => null);
+                                if (mentionUser) {
+                                    rawMentions = rawMentions.replace(new RegExp(`<@!?${mentionId}>|\\b${mentionId}\\b`, 'g'), `@${mentionUser.username}`);
                                 } else {
-                                    // Fallback to db
-                                    const mUserInfo = await MySQLDatabaseManager.getUserInfo(mId);
-                                    if (mUserInfo && mUserInfo.username) {
-                                        rawMentions = rawMentions.replace(new RegExp(`<@!?${mId}>|\\b${mId}\\b`, 'g'), `@${mUserInfo.username}`);
+                                    const mentionUserInfo = await MySQLDatabaseManager.getUserInfo(mentionId);
+                                    if (mentionUserInfo && mentionUserInfo.username) {
+                                        rawMentions = rawMentions.replace(new RegExp(`<@!?${mentionId}>|\\b${mentionId}\\b`, 'g'), `@${mentionUserInfo.username}`);
                                     }
                                 }
-                            } catch (e) { }
+                            } catch (error) { }
                         }
                     }
+
                     ping.resolvedMentions = rawMentions;
                 } else {
                     ping.resolvedMentions = ping.mentions;
                 }
 
-                // Also resolve IDs inside the content so it reads better
                 if (ping.content && typeof ping.content === 'string') {
                     let resolvedContent = ping.content;
                     const mentionContentRegex = /<@!?(\d+)>|(\d{17,19})/g;
-
-                    let cMatch;
+                    let contentMatch;
                     const replacedContentIds = new Set();
-                    while ((cMatch = mentionContentRegex.exec(ping.content)) !== null) {
-                        const cId = cMatch[1] || cMatch[2];
-                        if (cId && !replacedContentIds.has(cId)) {
-                            replacedContentIds.add(cId);
+
+                    while ((contentMatch = mentionContentRegex.exec(ping.content)) !== null) {
+                        const contentId = contentMatch[1] || contentMatch[2];
+                        if (contentId && !replacedContentIds.has(contentId)) {
+                            replacedContentIds.add(contentId);
                             try {
-                                const cUser = await discordClient.users.fetch(cId).catch(() => null);
-                                if (cUser) {
-                                    resolvedContent = resolvedContent.replace(new RegExp(`<@!?${cId}>|\\b${cId}\\b`, 'g'), `@${cUser.username}`);
+                                const contentUser = await discordClient.users.fetch(contentId).catch(() => null);
+                                if (contentUser) {
+                                    resolvedContent = resolvedContent.replace(new RegExp(`<@!?${contentId}>|\\b${contentId}\\b`, 'g'), `@${contentUser.username}`);
                                 } else {
-                                    const cUserInfo = await MySQLDatabaseManager.getUserInfo(cId);
-                                    if (cUserInfo && cUserInfo.username) {
-                                        resolvedContent = resolvedContent.replace(new RegExp(`<@!?${cId}>|\\b${cId}\\b`, 'g'), `@${cUserInfo.username}`);
+                                    const contentUserInfo = await MySQLDatabaseManager.getUserInfo(contentId);
+                                    if (contentUserInfo && contentUserInfo.username) {
+                                        resolvedContent = resolvedContent.replace(new RegExp(`<@!?${contentId}>|\\b${contentId}\\b`, 'g'), `@${contentUserInfo.username}`);
                                     }
                                 }
-                            } catch (e) { }
+                            } catch (error) { }
                         }
                     }
+
                     ping.resolvedContent = resolvedContent;
                 } else {
                     ping.resolvedContent = ping.content;
@@ -8983,11 +9496,10 @@ app.post('/api/admin/warn-user', requireAuth, async (req, res) => {
 
         // Add the warning to database
         try {
-            await MySQLDatabaseManager.connection.pool.query(
-                `INSERT INTO warns (user_id, case_id, reason, moderator_id, moderator_name, type, timestamp) 
-                 VALUES (?, ?, ?, ?, ?, 'WARN', ?)`,
-                [userId, caseId, reason.trim(), adminUser.id, adminUser.username, Date.now()]
-            );
+            await AdminPanelHelper.addWarn(userId, reason.trim(), adminUser.id, caseId, {
+                moderatorName: adminUser.username,
+                moderatorSource: 'panel'
+            });
             console.log('[Warn] Database insert successful');
         } catch (dbError) {
             console.error('[Warn] Database error:', dbError.message);
@@ -9132,25 +9644,14 @@ app.post('/api/admin/ban-user', requireAuth, async (req, res) => {
 
         // Add ban to database (with upsert)
         try {
-            await MySQLDatabaseManager.connection.pool.query(
-                `INSERT INTO user_bans (user_id, banned, ban_case_id, banned_at, banned_by, banned_by_name, ban_reason) 
-                 VALUES (?, TRUE, ?, NOW(), ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE
-                    banned = TRUE,
-                    ban_case_id = VALUES(ban_case_id),
-                    banned_at = NOW(),
-                    banned_by = VALUES(banned_by),
-                    banned_by_name = VALUES(banned_by_name),
-                    ban_reason = VALUES(ban_reason)`,
-                [userId, caseId, adminUser.id, adminUser.username, reason.trim()]
-            );
-
-            // Also log in warns table for consistency
-            await MySQLDatabaseManager.connection.pool.query(
-                `INSERT INTO warns (user_id, case_id, reason, moderator_id, moderator_name, type, timestamp) 
-                 VALUES (?, ?, ?, ?, ?, 'BAN', ?)`,
-                [userId, caseId, reason.trim(), adminUser.id, adminUser.username, Date.now()]
-            );
+            const targetUser = await resolveDiscordUser(userId);
+            await AdminPanelHelper.banUser(userId, reason.trim(), adminUser.id, caseId, {
+                moderatorName: adminUser.username,
+                moderatorSource: 'panel',
+                userName: targetUser?.username || null,
+                guildId: process.env.GUILD_ID || null,
+                source: 'panel'
+            });
         } catch (dbError) {
             return res.status(500).json({ error: `Database error: ${dbError.message}` });
         }
@@ -9259,16 +9760,6 @@ app.post('/api/admin/timeout-user', requireAuth, async (req, res) => {
                 return res.status(500).json({ error: 'Database error: failed to store timeout record' });
             }
 
-            // Also log in warns table for consistency (non-blocking)
-            try {
-                await MySQLDatabaseManager.connection.pool.query(
-                    `INSERT INTO warns (user_id, case_id, reason, moderator_id, moderator_name, type, timestamp) 
-                     VALUES (?, ?, ?, ?, ?, 'TIMEOUT', ?)`,
-                    [userId, caseId, reason.trim(), adminUser.id, adminUser.username, Date.now()]
-                );
-            } catch (warnLogError) {
-                console.error('[Admin] Failed to write timeout warn log:', warnLogError.message);
-            }
         } catch (dbError) {
             return res.status(500).json({ error: `Database error: ${dbError.message}` });
         }
@@ -9565,6 +10056,285 @@ app.get('/api/owner/backups/download', requireAuth, requireOwner, (req, res) => 
     res.download(filePath, fileName);
 });
 
+app.get('/api/owner/server-backups/status', requireAuth, requireOwner, (req, res) => {
+    const effectiveGuildId = getDefaultServerBackupGuildId();
+    const files = ServerBackupManager.listServerBackupFiles({ guildId: effectiveGuildId }).map((file) => {
+        try {
+            const inspection = ServerBackupManager.inspectServerBackupFile(file.name);
+            return {
+                ...file,
+                label: inspection.label || null,
+                notes: inspection.notes || null,
+                valid: Boolean(inspection.validation?.valid),
+                warningCount: Array.isArray(inspection.validation?.warnings) ? inspection.validation.warnings.length : 0,
+                errorCount: Array.isArray(inspection.validation?.errors) ? inspection.validation.errors.length : 0,
+                manifestAvailable: Boolean(inspection.manifest?.available),
+                manifestSigned: Boolean(inspection.manifest?.signed),
+                manifestValid: Boolean(inspection.manifest?.valid)
+            };
+        } catch {
+            return file;
+        }
+    });
+    const analytics = ServerBackupManager.buildServerBackupAnalytics({ guildId: effectiveGuildId, limit: 20 });
+    const timeline = ServerBackupManager.buildBackupTimeline({ guildId: effectiveGuildId, limit: 6 });
+    res.json({
+        config: serverBackupConfig,
+        state: serverBackupState,
+        files,
+        analytics,
+        timeline,
+        guilds: listAvailableDiscordGuilds(),
+        effectiveGuildId
+    });
+});
+
+app.post('/api/owner/server-backups/config', requireAuth, requireOwner, (req, res) => {
+    try {
+        const next = { ...serverBackupConfig };
+        if (typeof req.body?.enabled === 'boolean') {
+            next.enabled = req.body.enabled;
+        }
+        if (Number.isFinite(Number(req.body?.intervalMinutes))) {
+            next.intervalMinutes = Math.max(15, Math.min(10080, Number(req.body.intervalMinutes)));
+        }
+        if (Number.isFinite(Number(req.body?.retentionCount))) {
+            next.retentionCount = Math.max(1, Math.min(50, Number(req.body.retentionCount)));
+        }
+        if (req.body?.includes && typeof req.body.includes === 'object') {
+            next.includes = ServerBackupManager.normalizeBackupIncludes(req.body.includes);
+        }
+
+        const saved = saveServerBackupConfig(next);
+        res.json({ success: true, config: saved, state: serverBackupState, guilds: listAvailableDiscordGuilds(), effectiveGuildId: getDefaultServerBackupGuildId() });
+    } catch (error) {
+        console.error('[ServerBackup] Failed to update config:', error.message);
+        res.status(500).json({ error: 'Failed to update server backup configuration' });
+    }
+});
+
+app.post('/api/owner/server-backups/run', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const includes = req.body?.includes && typeof req.body.includes === 'object'
+            ? ServerBackupManager.normalizeBackupIncludes(req.body.includes)
+            : undefined;
+        const result = await runServerStructureBackup('manual', {
+            includes,
+            label: req.body?.label,
+            notes: req.body?.notes,
+            requestedBy: req.session?.username || null
+        });
+        if (!result.success) {
+            return res.status(500).json({ error: result.error || 'Server backup failed', state: serverBackupState });
+        }
+        res.json({ success: true, state: serverBackupState });
+    } catch (error) {
+        console.error('[ServerBackup] Manual backup failed:', error.message);
+        res.status(500).json({ error: 'Server backup failed', state: serverBackupState });
+    }
+});
+
+app.get('/api/owner/server-backups/download', requireAuth, requireOwner, (req, res) => {
+    const filePath = ServerBackupManager.getServerBackupFilePath(req.query.file || '');
+    if (!filePath) {
+        return res.status(400).json({ error: 'Invalid backup file' });
+    }
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Backup not found' });
+    }
+    res.download(filePath, path.basename(filePath));
+});
+
+app.get('/api/owner/server-backups/download-manifest', requireAuth, requireOwner, (req, res) => {
+    const manifestPath = ServerBackupManager.getServerBackupManifestPath(req.query.file || '');
+    if (!manifestPath) {
+        return res.status(400).json({ error: 'Invalid backup file' });
+    }
+    if (!fs.existsSync(manifestPath)) {
+        return res.status(404).json({ error: 'Manifest not found' });
+    }
+    res.download(manifestPath, path.basename(manifestPath));
+});
+
+app.get('/api/owner/server-backups/diff', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const sourceFile = String(req.query.source || '').trim();
+        const targetFile = String(req.query.target || 'live').trim();
+        if (!sourceFile) {
+            return res.status(400).json({ error: 'A source backup file is required.' });
+        }
+
+        const sourcePayload = ServerBackupManager.readServerBackupFile(sourceFile);
+        let targetPayload;
+        let targetLabel = 'Current Server';
+
+        if (targetFile && targetFile !== 'live') {
+            targetPayload = ServerBackupManager.readServerBackupFile(targetFile);
+            targetLabel = targetFile;
+        } else {
+            const guild = await resolveServerBackupGuild(sourcePayload?.guild?.id);
+            if (!guild) {
+                return res.status(404).json({ error: 'The live guild could not be resolved for comparison.' });
+            }
+            targetPayload = await ServerBackupManager.buildGuildBackupPayload(guild, {
+                trigger: 'preview',
+                includes: sourcePayload?.metadata?.includes || serverBackupConfig?.includes
+            });
+        }
+
+        const diff = ServerBackupManager.buildSnapshotDiff(sourcePayload, targetPayload, {
+            sourceLabel: sourceFile,
+            targetLabel
+        });
+
+        res.json({ success: true, diff });
+    } catch (error) {
+        console.error('[ServerBackup] Diff failed:', error.message);
+        res.status(500).json({ error: 'Failed to build backup diff' });
+    }
+});
+
+app.get('/api/owner/server-backups/inspect', requireAuth, requireOwner, (req, res) => {
+    try {
+        const file = String(req.query.file || '').trim();
+        if (!file) {
+            return res.status(400).json({ error: 'A backup file is required.' });
+        }
+
+        const inspection = ServerBackupManager.inspectServerBackupFile(file);
+        res.json({ success: true, inspection });
+    } catch (error) {
+        console.error('[ServerBackup] Inspect failed:', error.message);
+        res.status(500).json({ error: 'Failed to inspect backup file' });
+    }
+});
+
+app.get('/api/owner/server-backups/preflight', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const file = String(req.query.file || '').trim();
+        if (!file) {
+            return res.status(400).json({ error: 'A backup file is required.' });
+        }
+
+        const payload = ServerBackupManager.readServerBackupFile(file);
+        const guild = await resolveServerBackupGuild(payload?.guild?.id);
+        if (!guild) {
+            return res.status(404).json({ error: 'The target guild could not be resolved.' });
+        }
+
+        const livePayload = await ServerBackupManager.buildGuildBackupPayload(guild, {
+            trigger: 'preflight',
+            includes: payload?.metadata?.includes || serverBackupConfig?.includes
+        });
+        const exclusions = ServerBackupManager.normalizeRestoreExclusions({
+            roleNames: req.query?.excludeRoles,
+            channelNames: req.query?.excludeChannels
+        });
+        const scopedPayload = ServerBackupManager.applyRestoreExclusionsToPayload(payload, exclusions);
+        const preflight = ServerBackupManager.buildRestorePreflightReport(scopedPayload, livePayload);
+        res.json({ success: true, preflight });
+    } catch (error) {
+        console.error('[ServerBackup] Preflight failed:', error.message);
+        res.status(500).json({ error: 'Failed to build restore preflight' });
+    }
+});
+
+app.get('/api/owner/server-backups/restore-status', requireAuth, requireOwner, async (req, res) => {
+    try {
+        pruneServerBackupRestoreOperations();
+
+        const operationId = String(req.query.operationId || '').trim();
+        if (!operationId) {
+            return res.status(400).json({ error: 'A restore operation ID is required.' });
+        }
+
+        const operation = serverBackupRestoreOperations.get(operationId);
+        if (!operation) {
+            return res.status(404).json({ error: 'The restore operation could not be found.' });
+        }
+
+        return res.json({ success: true, operation: serializeServerBackupRestoreOperation(operation) });
+    } catch (error) {
+        console.error('[ServerBackup] Restore status failed:', error.message);
+        return res.status(500).json({ error: 'Failed to get restore status' });
+    }
+});
+
+app.post('/api/owner/server-backups/restore', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const file = String(req.body?.file || '').trim();
+        if (!file) {
+            return res.status(400).json({ error: 'A backup file is required.' });
+        }
+
+        const payload = ServerBackupManager.readServerBackupFile(file);
+        const guild = await resolveServerBackupGuild(payload?.guild?.id);
+        if (!guild) {
+            return res.status(404).json({ error: 'The target guild could not be resolved.' });
+        }
+
+        if (hasActiveServerBackupRestoreOperation()) {
+            return res.status(409).json({ error: 'A server backup restore is already in progress.' });
+        }
+
+        const restoreOptions = ServerBackupManager.normalizeRestoreOptions({
+            restoreSettings: req.body?.restoreSettings,
+            restoreRoles: req.body?.restoreRoles,
+            restoreChannels: req.body?.restoreChannels,
+            restoreEmojis: req.body?.restoreEmojis,
+            restoreStickers: req.body?.restoreStickers,
+            applyPermissionOverwrites: req.body?.applyPermissionOverwrites
+        });
+        const restoreExclusions = ServerBackupManager.normalizeRestoreExclusions({
+            roleNames: req.body?.excludeRoles,
+            channelNames: req.body?.excludeChannels
+        });
+
+        const operation = createServerBackupRestoreOperation({
+            file,
+            requestedBy: req.session?.username || req.session?.user?.username || null
+        });
+
+        appendServerBackupRestoreOperationEvent(operation, {
+            status: 'running',
+            phase: 'preparing',
+            stage: 'started',
+            message: 'Restore started. Preparing Discord resources.'
+        });
+
+        res.status(202).json({
+            success: true,
+            operationId: operation.id,
+            operation: serializeServerBackupRestoreOperation(operation)
+        });
+
+        void (async () => {
+            try {
+                const summary = await ServerBackupManager.restoreBackupToGuild(guild, payload, {
+                    ...restoreOptions,
+                    exclusions: restoreExclusions,
+                    onProgress: (progress) => {
+                        appendServerBackupRestoreOperationEvent(operation, {
+                            ...progress,
+                            status: 'running'
+                        });
+                    }
+                });
+
+                markServerBackupRestoreOperationCompleted(operation, summary);
+            } catch (error) {
+                console.error('[ServerBackup] Restore failed:', error.message);
+                markServerBackupRestoreOperationFailed(operation, error);
+            } finally {
+                pruneServerBackupRestoreOperations();
+            }
+        })();
+    } catch (error) {
+        console.error('[ServerBackup] Restore failed:', error.message);
+        res.status(500).json({ error: 'Failed to restore backup' });
+    }
+});
+
 app.get('/api/owner/security/session-policy', requireAuth, requireOwner, async (req, res) => {
     try {
         return res.json({
@@ -9759,8 +10529,17 @@ app.post('/api/owner/purge-bans', requireAuth, requireOwner, async (req, res) =>
 // Purge all warnings (owner only)
 app.post('/api/owner/purge-warnings', requireAuth, requireOwner, async (req, res) => {
     try {
-        const result = await AdminPanelHelper.connection.query('DELETE FROM warns');
-        const deletedCount = result.affectedRows || 0;
+        const [warnCases] = await AdminPanelHelper.connection.pool.query("SELECT case_id FROM moderation_cases WHERE action_type = 'WARN'");
+        const caseIds = Array.isArray(warnCases) ? warnCases.map((row) => row.case_id).filter(Boolean) : [];
+
+        if (caseIds.length) {
+            const placeholders = caseIds.map(() => '?').join(', ');
+            await AdminPanelHelper.connection.pool.query(`DELETE FROM moderation_case_events WHERE case_id IN (${placeholders})`, caseIds);
+            await AdminPanelHelper.connection.pool.query(`DELETE FROM moderation_incidents WHERE case_id IN (${placeholders})`, caseIds);
+        }
+
+        const [result] = await AdminPanelHelper.connection.pool.query("DELETE FROM moderation_cases WHERE action_type = 'WARN'");
+        const deletedCount = result?.affectedRows || 0;
 
         console.log(`[Owner] ${req.session.username} purged ${deletedCount} warning records`);
         res.json({
@@ -9852,17 +10631,17 @@ app.get('/api/moderation/overview', requireAuth, async (req, res) => {
         };
 
         // Get counts
-        const warnsToday = await safeCount('SELECT COUNT(*) as count FROM warns WHERE (type IS NULL OR type = "WARN") AND timestamp BETWEEN ? AND ?', [startMs, endMs]);
-        const warnsWeek = await safeCount('SELECT COUNT(*) as count FROM warns WHERE (type IS NULL OR type = "WARN") AND timestamp BETWEEN ? AND ?', [weekStartMs, endMs]);
-        const warnsAll = await safeCount('SELECT COUNT(*) as count FROM warns WHERE type IS NULL OR type = "WARN"', []);
+        const warnsToday = await safeCount(`SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') AND created_at BETWEEN ? AND ?`, [startMs, endMs]);
+        const warnsWeek = await safeCount(`SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') AND created_at BETWEEN ? AND ?`, [weekStartMs, endMs]);
+        const warnsAll = await safeCount(`SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')`, []);
 
         const bansToday = await safeCount('SELECT COUNT(*) as count FROM user_bans WHERE banned = TRUE AND banned_at BETWEEN ? AND ?', [today, tomorrow]);
         const bansWeek = await safeCount('SELECT COUNT(*) as count FROM user_bans WHERE banned = TRUE AND banned_at BETWEEN ? AND ?', [weekAgo, tomorrow]);
         const bansAll = await safeCount('SELECT COUNT(*) as count FROM user_bans WHERE banned = TRUE', []);
 
         const activeTimeouts = await AdminPanelHelper.getActiveTimeoutsCount();
-        const expiringToday = await safeCount('SELECT COUNT(*) as count FROM timeouts WHERE active = TRUE AND expires_at BETWEEN ? AND ?', [today, tomorrow]);
-        const timeoutsAll = await safeCount('SELECT COUNT(*) as count FROM timeouts', []);
+        const expiringToday = await safeCount(`SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'TIMEOUT' AND status = 'active' AND expires_at BETWEEN ? AND ?`, [startMs, endMs]);
+        const timeoutsAll = await safeCount(`SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'TIMEOUT'`, []);
 
         const openTickets = await safeCount('SELECT COUNT(*) as count FROM tickets WHERE status = "open"', []);
 
@@ -9873,14 +10652,21 @@ app.get('/api/moderation/overview', requireAuth, async (req, res) => {
 
         // Get top violation reason
         const [topViolationResult] = await MySQLDatabaseManager.connection.pool.query(
-            'SELECT reason, COUNT(*) as count FROM warns WHERE (type IS NULL OR type = "WARN") AND timestamp > ? GROUP BY reason ORDER BY count DESC LIMIT 1',
+            `SELECT reason, COUNT(*) as count
+             FROM moderation_cases
+             WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') AND created_at > ?
+             GROUP BY reason ORDER BY count DESC LIMIT 1`,
             [weekStartMs]
         ).catch(() => [[{ reason: 'N/A', count: 0 }]]);
         const topViolation = topViolationResult?.[0]?.reason || 'None';
 
         // Get most warned user
         const [mostWarnedResult] = await MySQLDatabaseManager.connection.pool.query(
-            'SELECT w.user_id, COALESCE(l.username, "Unknown") as username, COUNT(*) as count FROM warns w LEFT JOIN levels l ON w.user_id = l.user_id WHERE w.type IS NULL OR w.type = "WARN" GROUP BY w.user_id ORDER BY count DESC LIMIT 1',
+            `SELECT mc.user_id, COALESCE(mc.user_name, l.username, 'Unknown') as username, COUNT(*) as count
+             FROM moderation_cases mc
+             LEFT JOIN levels l ON mc.user_id = l.user_id
+             WHERE mc.action_type = 'WARN' AND mc.status NOT IN ('cleared', 'reversed')
+             GROUP BY mc.user_id ORDER BY count DESC LIMIT 1`,
             []
         ).catch(() => [[{ user_id: 'N/A', username: 'None', count: 0 }]]);
         const mostWarnedUser = mostWarnedResult?.[0]?.username || 'None';
@@ -10026,29 +10812,38 @@ app.delete('/api/moderation/bans/:userId', requireAuth, async (req, res) => {
             const targetUser = await resolveDiscordUser(userId);
             const targetLabel = targetUser ? `${targetUser.tag} (${targetUser.id})` : userId;
 
-            // Store unban in database
+            const unbanCreatedAt = Date.now();
             try {
-                await MySQLDatabaseManager.connection.pool.query(
-                    `INSERT INTO unbans (
-                        user_id, unban_case_id, unbanned_at, unbanned_by,
-                        unbanned_by_name, unbanned_by_source, user_name,
-                        original_ban_case_id, original_ban_reason, reason
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    , [
-                        userId,
-                        unbanCaseId,
-                        new Date(),
-                        null,
-                        req.session.username || null,
-                        'panel',
-                        targetUser?.username || null,
-                        originalBanCaseId || null,
-                        originalBanReason || null,
-                        `Unbanned via admin panel by ${req.session.username}`
-                    ]
-                );
+                await MySQLDatabaseManager.upsertModerationCase({
+                    caseId: unbanCaseId,
+                    guildId: process.env.GUILD_ID || null,
+                    userId,
+                    userName: targetUser?.username || null,
+                    actionType: 'UNBAN',
+                    status: 'closed',
+                    reason: `Unbanned via admin panel by ${req.session.username}`,
+                    moderatorName: req.session.username || null,
+                    moderatorSource: 'panel',
+                    source: 'panel',
+                    relatedCaseId: originalBanCaseId || null,
+                    rootCaseId: originalBanCaseId || unbanCaseId,
+                    metadata: originalBanReason ? { originalBanReason } : null,
+                    createdAt: unbanCreatedAt,
+                    updatedAt: unbanCreatedAt,
+                    eventSummary: 'Unban case recorded'
+                });
+
+                if (originalBanCaseId) {
+                    await MySQLDatabaseManager.updateModerationCaseStatus(originalBanCaseId, 'reversed', {
+                        guildId: process.env.GUILD_ID || null,
+                        actorName: req.session.username || null,
+                        relatedCaseId: unbanCaseId,
+                        details: `Reversed by admin panel unban case ${unbanCaseId}`,
+                        updatedAt: unbanCreatedAt
+                    });
+                }
             } catch (dbErr) {
-                console.error('[Unban] Failed to insert unban record:', dbErr.message);
+                console.error('[Unban] Failed to write moderation ledger record:', dbErr.message);
             }
 
             const logEmbed = new EmbedBuilder()
@@ -10114,12 +10909,9 @@ app.delete('/api/moderation/timeouts/:userId', requireAuth, async (req, res) => 
         }
 
         // Get the timeout info before clearing (for logging)
-        const [timeoutInfo] = await MySQLDatabaseManager.connection.pool.query(
-            'SELECT case_id, reason FROM timeouts WHERE user_id = ? AND active = TRUE LIMIT 1',
-            [userId]
-        );
-        const caseId = timeoutInfo?.[0]?.case_id || 'Unknown';
-        const timeoutReason = timeoutInfo?.[0]?.reason || 'No reason provided';
+        const timeoutInfo = await MySQLDatabaseManager.getLatestActiveTimeoutCaseForUser(userId, process.env.GUILD_ID || null);
+        const caseId = timeoutInfo?.case_id || 'Unknown';
+        const timeoutReason = timeoutInfo?.reason || 'No reason provided';
 
         // Update database first
         const success = await AdminPanelHelper.clearTimeout(userId, {
@@ -10214,16 +11006,16 @@ app.get('/api/moderation/warnings/search', requireAuth, async (req, res) => {
 
         const [allWarnsRaw] = await MySQLDatabaseManager.connection.pool.query(`
             SELECT 
-                w.id,
-                w.user_id,
-                w.case_id,
-                w.reason,
-                w.moderator_id,
-                w.created_at,
+                mc.case_id as id,
+                mc.user_id,
+                mc.case_id,
+                mc.reason,
+                mc.moderator_id,
+                FROM_UNIXTIME(mc.created_at/1000) as created_at,
                 'WARN' as type,
-                COALESCE(u.username, ma.username) as username
-            FROM warns w
-            LEFT JOIN levels u ON w.user_id = u.user_id
+                COALESCE(mc.user_name, u.username, ma.username) as username
+            FROM moderation_cases mc
+            LEFT JOIN levels u ON mc.user_id = u.user_id
             LEFT JOIN (
                 SELECT ma1.user_id, ma1.username
                 FROM member_activity ma1
@@ -10232,26 +11024,24 @@ app.get('/api/moderation/warnings/search', requireAuth, async (req, res) => {
                     FROM member_activity
                     GROUP BY user_id
                 ) ma2 ON ma1.user_id = ma2.user_id AND ma1.timestamp = ma2.max_ts
-            ) ma ON w.user_id = ma.user_id
-            WHERE (w.type IS NULL OR w.type = 'WARN')
-              AND w.reason NOT LIKE '%(timeout%'
-              AND w.reason NOT LIKE '%(untimeout)%'
-            ORDER BY w.created_at DESC
+            ) ma ON mc.user_id = ma.user_id
+            WHERE mc.action_type = 'WARN' AND mc.status NOT IN ('cleared', 'reversed')
+            ORDER BY mc.created_at DESC
             LIMIT 2000
         `);
 
         const [allKicksRaw] = await MySQLDatabaseManager.connection.pool.query(`
             SELECT 
-                k.id,
-                k.user_id,
-                k.case_id,
-                k.reason,
-                k.kicked_by as moderator_id,
-                FROM_UNIXTIME(k.kicked_at/1000) as created_at,
+                mc.case_id as id,
+                mc.user_id,
+                mc.case_id,
+                mc.reason,
+                mc.moderator_id,
+                FROM_UNIXTIME(mc.created_at/1000) as created_at,
                 'KICK' as type,
-                COALESCE(k.username, u.username, ma.username) as username
-            FROM kicks k
-            LEFT JOIN levels u ON k.user_id = u.user_id
+                COALESCE(mc.user_name, u.username, ma.username) as username
+            FROM moderation_cases mc
+            LEFT JOIN levels u ON mc.user_id = u.user_id
             LEFT JOIN (
                 SELECT ma1.user_id, ma1.username
                 FROM member_activity ma1
@@ -10260,8 +11050,9 @@ app.get('/api/moderation/warnings/search', requireAuth, async (req, res) => {
                     FROM member_activity
                     GROUP BY user_id
                 ) ma2 ON ma1.user_id = ma2.user_id AND ma1.timestamp = ma2.max_ts
-            ) ma ON k.user_id = ma.user_id
-            ORDER BY k.kicked_at DESC
+            ) ma ON mc.user_id = ma.user_id
+            WHERE mc.action_type = 'KICK'
+            ORDER BY mc.created_at DESC
             LIMIT 2000
         `);
 
@@ -10436,118 +11227,23 @@ app.get('/api/moderation/actions/search', requireAuth, async (req, res) => {
 
         const likeQuery = `%${query}%`;
         const actionsQuery = `
-            SELECT * FROM (
-                SELECT 
-                    CONVERT('WARN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                    CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                    CONVERT(CAST(w.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                    CONVERT(CAST(COALESCE(u.username, w.user_name, 'Unknown') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as username,
-                    CONVERT(CAST(w.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                    CONVERT(CAST(w.moderator_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                    CONVERT(CAST(COALESCE(m_ui.username, m.username, w.moderator_name, w.moderator_id, 'System') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                    COALESCE(w.created_at, FROM_UNIXTIME(w.timestamp/1000)) as timestamp,
-                    NULL as expires_at,
-                    NULL as related_case_id
-                FROM warns w
-                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
-                LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(w.moderator_id AS UNSIGNED)
-                LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = w.moderator_id COLLATE utf8mb4_unicode_ci
-                WHERE (w.type IS NULL OR w.type = 'WARN')
-                    AND w.reason NOT LIKE '%(timeout%'
-                    AND w.reason NOT LIKE '%(untimeout)%'
-
-                UNION ALL
-
-                SELECT 
-                    CONVERT('UNTIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                    CONVERT(CAST(w.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                    CONVERT(CAST(w.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                    CONVERT(CAST(COALESCE(u.username, w.user_name, 'Unknown') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as username,
-                    CONVERT(CAST(w.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                    CONVERT(CAST(w.moderator_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                    CONVERT(CAST(COALESCE(m_ui.username, m.username, w.moderator_name, w.moderator_id, 'System') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                    COALESCE(w.created_at, FROM_UNIXTIME(w.timestamp/1000)) as timestamp,
-                    NULL as expires_at,
-                    NULL as related_case_id
-                FROM warns w
-                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = w.user_id COLLATE utf8mb4_unicode_ci
-                LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(w.moderator_id AS UNSIGNED)
-                LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = w.moderator_id COLLATE utf8mb4_unicode_ci
-                WHERE w.reason LIKE '%(untimeout)%'
-
-                UNION ALL
-
-                SELECT 
-                    CONVERT('KICK' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                    CONVERT(CAST(k.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                    CONVERT(CAST(k.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                    CONVERT(CAST(COALESCE(k.username, u.username, 'Unknown') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as username,
-                    CONVERT(CAST(k.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                    CONVERT(CAST(k.kicked_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                    CONVERT(CAST(COALESCE(k.kicked_by_name, m_ui.username, m.username, k.kicked_by, 'System') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                    FROM_UNIXTIME(k.kicked_at/1000) as timestamp,
-                    NULL as expires_at,
-                    NULL as related_case_id
-                FROM kicks k
-                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = k.user_id COLLATE utf8mb4_unicode_ci
-                LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(k.kicked_by AS UNSIGNED)
-                LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = k.kicked_by COLLATE utf8mb4_unicode_ci
-
-                UNION ALL
-
-                SELECT 
-                    CONVERT('BAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                    CONVERT(CAST(b.ban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                    CONVERT(CAST(b.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                    CONVERT(CAST(COALESCE(b.user_name, u.username, 'Unknown') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as username,
-                    CONVERT(CAST(b.ban_reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                    CONVERT(CAST(b.banned_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                    CONVERT(CAST(COALESCE(b.banned_by_name, m_ui.username, m.username, b.banned_by, 'System') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                    b.banned_at as timestamp,
-                    NULL as expires_at,
-                    NULL as related_case_id
-                FROM user_bans b
-                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = b.user_id COLLATE utf8mb4_unicode_ci
-                LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(b.banned_by AS UNSIGNED)
-                LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = b.banned_by COLLATE utf8mb4_unicode_ci
-                WHERE b.ban_case_id IS NOT NULL
-
-                UNION ALL
-
-                SELECT 
-                    CONVERT('UNBAN' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                    CONVERT(CAST(ub.unban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                    CONVERT(CAST(ub.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                    CONVERT(CAST(COALESCE(ub.user_name, u.username, 'Unknown') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as username,
-                    CONVERT(CAST(COALESCE(ub.reason, ub.original_ban_reason, 'Unbanned') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                    CONVERT(CAST(ub.unbanned_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                    CONVERT(CAST(COALESCE(ub.unbanned_by_name, ub.unbanned_by, 'System') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                    ub.unbanned_at as timestamp,
-                    NULL as expires_at,
-                    CONVERT(CAST(ub.original_ban_case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as related_case_id
-                FROM unbans ub
-                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = ub.user_id COLLATE utf8mb4_unicode_ci
-
-                UNION ALL
-
-                SELECT 
-                    CONVERT('TIMEOUT' USING utf8mb4) COLLATE utf8mb4_unicode_ci as action,
-                    CONVERT(CAST(t.case_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as case_id,
-                    CONVERT(CAST(t.user_id AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as user_id,
-                    CONVERT(CAST(COALESCE(t.username, u.username, 'Unknown') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as username,
-                    CONVERT(CAST(t.reason AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as reason,
-                    CONVERT(CAST(t.issued_by AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_id,
-                    CONVERT(CAST(COALESCE(t.issued_by_name, m_ui.username, m.username, t.issued_by, 'System') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci as moderator_name,
-                    FROM_UNIXTIME(t.issued_at/1000) as timestamp,
-                    FROM_UNIXTIME(t.expires_at/1000) as expires_at,
-                    NULL as related_case_id
-                FROM timeouts t
-                LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = t.user_id COLLATE utf8mb4_unicode_ci
-                LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(t.issued_by AS UNSIGNED)
-                LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = t.issued_by COLLATE utf8mb4_unicode_ci
-            ) combined
-            WHERE (? COLLATE utf8mb4_unicode_ci = '' OR combined.case_id LIKE ? COLLATE utf8mb4_unicode_ci OR combined.user_id LIKE ? COLLATE utf8mb4_unicode_ci OR combined.username LIKE ? COLLATE utf8mb4_unicode_ci)
-                AND (? COLLATE utf8mb4_unicode_ci = 'ALL' OR combined.action = ? COLLATE utf8mb4_unicode_ci)
+            SELECT
+                mc.action_type as action,
+                mc.case_id,
+                mc.user_id,
+                COALESCE(mc.user_name, u.username, 'Unknown') as username,
+                mc.reason,
+                mc.moderator_id,
+                COALESCE(mc.moderator_name, m_ui.username, m.username, mc.moderator_id, 'System') as moderator_name,
+                FROM_UNIXTIME(mc.created_at/1000) as timestamp,
+                CASE WHEN mc.expires_at IS NOT NULL THEN FROM_UNIXTIME(mc.expires_at/1000) ELSE NULL END as expires_at,
+                mc.related_case_id
+            FROM moderation_cases mc
+            LEFT JOIN levels u ON u.user_id COLLATE utf8mb4_unicode_ci = mc.user_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN userinfo m_ui ON m_ui.user_id = CAST(mc.moderator_id AS UNSIGNED)
+            LEFT JOIN levels m ON m.user_id COLLATE utf8mb4_unicode_ci = mc.moderator_id COLLATE utf8mb4_unicode_ci
+            WHERE (? COLLATE utf8mb4_unicode_ci = '' OR mc.case_id LIKE ? COLLATE utf8mb4_unicode_ci OR mc.user_id LIKE ? COLLATE utf8mb4_unicode_ci OR COALESCE(mc.user_name, u.username, 'Unknown') LIKE ? COLLATE utf8mb4_unicode_ci)
+              AND (? COLLATE utf8mb4_unicode_ci = 'ALL' OR mc.action_type = ? COLLATE utf8mb4_unicode_ci)
         `;
 
         const countQuery = `SELECT COUNT(*) as total FROM (${actionsQuery}) as count_table`;
@@ -10953,7 +11649,7 @@ app.get('/api/server/activity-trends', requireAuth, async (req, res) => {
 
             // Count warnings for this day (warns table uses BIGINT timestamp in milliseconds)
             const [warnings] = await AdminPanelHelper.connection.query(
-                `SELECT COUNT(*) as count FROM warns WHERE type = "WARN" AND timestamp >= ? AND timestamp < ?`,
+                `SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') AND created_at >= ? AND created_at < ?`,
                 [startMs, endMs]
             );
 
@@ -13921,7 +14617,7 @@ app.get('/api/moderation/intelligence', requireAuth, async (req, res) => {
         const dayAgoMs = nowMs - (24 * 60 * 60 * 1000);
 
         const [warnCountRows] = await MySQLDatabaseManager.connection.pool.execute(
-            'SELECT COUNT(*) as count FROM warns WHERE timestamp >= ?',
+            `SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') AND created_at >= ?`,
             [dayAgoMs]
         );
 
@@ -13930,7 +14626,7 @@ app.get('/api/moderation/intelligence', requireAuth, async (req, res) => {
         );
 
         const [timeoutCountRows] = await MySQLDatabaseManager.connection.pool.execute(
-            'SELECT COUNT(*) as count FROM timeouts WHERE active = TRUE AND (expires_at IS NULL OR expires_at > ?)',
+            `SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'TIMEOUT' AND status = 'active' AND (expires_at IS NULL OR expires_at > ?)`,
             [nowMs]
         );
 
@@ -14144,21 +14840,13 @@ app.post('/api/warn', requireAuth, async (req, res) => {
         // Generate Case ID to satisfy unique constraint
         const caseId = createPrefixedCaseId('WARN');
 
-        // Get current warning count
-        const [warns] = await MySQLDatabaseManager.connection.pool.query(
-            'SELECT COUNT(*) as warnings FROM warns WHERE user_id = ? AND type = "WARN"',
-            [user_id]
-        );
+        const currentWarnings = await MySQLDatabaseManager.getUserWarnsCount(user_id);
+        const newWarnings = Number(currentWarnings || 0) + 1;
 
-        const newWarnings = (warns[0]?.warnings || 0) + 1;
-
-        // Add new warning with Case ID and Type
-        // Using 'created_at' as in original query, but adding case_id, type, moderator_id
-        // Validating columns: user_id, case_id, reason, moderator_id, type, created_at
-        await MySQLDatabaseManager.connection.pool.query(
-            'INSERT INTO warns (user_id, case_id, reason, moderator_id, moderator_name, type, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
-            [user_id, caseId, reason, moderatorId, adminUser?.username || 'Unknown', 'WARN']
-        );
+        await AdminPanelHelper.addWarn(user_id, reason, moderatorId, caseId, {
+            moderatorName: adminUser?.username || 'Unknown',
+            moderatorSource: 'panel'
+        });
 
         // Log the action
         await MySQLDatabaseManager.connection.pool.query(
@@ -14500,7 +15188,7 @@ app.get('/api/moderation/analytics', requireAuth, async (req, res) => {
 
         // Get total counts
         const [[totalWarns]] = await MySQLDatabaseManager.connection.pool.query(
-            'SELECT COUNT(*) as count FROM warns WHERE type IS NULL OR type = "WARN"'
+            `SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')`
         );
 
         const [[totalBans]] = await MySQLDatabaseManager.connection.pool.query(
@@ -14508,7 +15196,7 @@ app.get('/api/moderation/analytics', requireAuth, async (req, res) => {
         );
 
         const [[totalTimeouts]] = await MySQLDatabaseManager.connection.pool.query(
-            'SELECT COUNT(*) as count FROM timeouts'
+            `SELECT COUNT(*) as count FROM moderation_cases WHERE action_type = 'TIMEOUT'`
         );
 
         // Get action breakdown
@@ -14519,8 +15207,8 @@ app.get('/api/moderation/analytics', requireAuth, async (req, res) => {
                 SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as week,
                 SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as month,
                 MAX(created_at) as lastPerformed
-            FROM warns
-            WHERE type IS NULL OR type = 'WARN'
+            FROM moderation_cases
+            WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')
             UNION ALL
             SELECT
                 'BAN' as type,
@@ -14533,31 +15221,32 @@ app.get('/api/moderation/analytics', requireAuth, async (req, res) => {
             UNION ALL
             SELECT
                 'TIMEOUT' as type,
-                SUM(CASE WHEN issued_at >= ? THEN 1 ELSE 0 END) as today,
-                SUM(CASE WHEN issued_at >= ? THEN 1 ELSE 0 END) as week,
-                SUM(CASE WHEN issued_at >= ? THEN 1 ELSE 0 END) as month,
-                MAX(issued_at) as lastPerformed
-            FROM timeouts
-        `, [today, weekAgo, monthAgo, today, weekAgo, monthAgo, today, weekAgo, monthAgo]);
+                SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as today,
+                SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as week,
+                SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as month,
+                MAX(created_at) as lastPerformed
+            FROM moderation_cases
+            WHERE action_type = 'TIMEOUT'
+        `, [today, weekAgo, monthAgo, today, weekAgo, monthAgo, today.getTime(), weekAgo.getTime(), monthAgo.getTime()]);
 
         // Get top warned users
         const [topWarned] = await MySQLDatabaseManager.connection.pool.query(`
             SELECT 
-                w.user_id,
-                COALESCE(l.username, ma.username, 'Unknown') as username,
+                mc.user_id,
+                COALESCE(mc.user_name, l.username, ma.username, 'Unknown') as username,
                 COUNT(*) as warn_count,
-                MAX(w.created_at) as lastWarning
-            FROM warns w
-            LEFT JOIN levels l ON w.user_id = l.user_id
+                MAX(mc.created_at) as lastWarning
+            FROM moderation_cases mc
+            LEFT JOIN levels l ON mc.user_id = l.user_id
             LEFT JOIN (
                 SELECT user_id, username
                 FROM member_activity
                 GROUP BY user_id
                 ORDER BY MAX(timestamp) DESC
                 LIMIT 1
-            ) ma ON w.user_id = ma.user_id
-            WHERE w.type IS NULL OR w.type = 'WARN'
-            GROUP BY w.user_id
+            ) ma ON mc.user_id = ma.user_id
+            WHERE mc.action_type = 'WARN' AND mc.status NOT IN ('cleared', 'reversed')
+            GROUP BY mc.user_id
             ORDER BY warn_count DESC
             LIMIT 10
         `);
@@ -14586,49 +15275,21 @@ app.get('/api/moderation/case/:caseId', requireAuth, async (req, res) => {
 
         const { caseId } = req.params;
 
-        // Search in warns table
-        const [warns] = await MySQLDatabaseManager.connection.pool.query(
-            `SELECT w.*, l.username FROM warns w
-             LEFT JOIN levels l ON w.user_id = l.user_id
-             WHERE w.case_id = ? LIMIT 1`,
-            [caseId]
-        );
+        const moderationCase = await MySQLDatabaseManager.getModerationCaseById(caseId);
 
-        if (warns && warns.length > 0) {
-            return res.json(warns[0]);
-        }
-
-        // Search in user_bans table
-        const [bans] = await MySQLDatabaseManager.connection.pool.query(
-            `SELECT ub.*, l.username FROM user_bans ub
-             LEFT JOIN levels l ON ub.user_id = l.user_id
-             WHERE ub.ban_case_id = ? LIMIT 1`,
-            [caseId]
-        );
-
-        if (bans && bans.length > 0) {
-            const ban = bans[0];
+        if (moderationCase) {
             return res.json({
-                case_id: ban.ban_case_id,
-                user_id: ban.user_id,
-                username: ban.username,
-                reason: ban.ban_reason,
-                type: 'BAN',
-                moderator_name: ban.banned_by_name,
-                timestamp: ban.banned_at
+                case_id: moderationCase.case_id,
+                user_id: moderationCase.user_id,
+                username: moderationCase.user_name,
+                reason: moderationCase.reason,
+                type: moderationCase.action_type,
+                moderator_name: moderationCase.moderator_name,
+                timestamp: moderationCase.created_at,
+                status: moderationCase.effective_status,
+                expires_at: moderationCase.expires_at || null,
+                related_case_id: moderationCase.related_case_id || null
             });
-        }
-
-        // Search in timeouts table
-        const [timeouts] = await MySQLDatabaseManager.connection.pool.query(
-            `SELECT t.*, l.username FROM timeouts t
-             LEFT JOIN levels l ON t.user_id = l.user_id
-             WHERE t.case_id = ? LIMIT 1`,
-            [caseId]
-        );
-
-        if (timeouts && timeouts.length > 0) {
-            return res.json(timeouts[0]);
         }
 
         res.status(404).json({ error: 'Case not found' });
@@ -14655,7 +15316,7 @@ app.get('/api/moderator/user/:userId', requireAuth, async (req, res) => {
             AdminPanelHelper.getUserLevel(userId),
             AdminPanelHelper.connection.getUserWarns(userId),
             AdminPanelHelper.connection.query('SELECT * FROM user_bans WHERE user_id = ?', [userId]),
-            AdminPanelHelper.connection.query('SELECT * FROM timeouts WHERE user_id = ?', [userId])
+            MySQLDatabaseManager.getUserModerationCases(userId, { actionTypes: ['TIMEOUT'], limit: 50 })
         ]);
 
         // Aggregate infractions
@@ -14681,7 +15342,7 @@ app.get('/api/moderator/user/:userId', requireAuth, async (req, res) => {
                 infractions.push({
                     type: 'TIMEOUT',
                     reason: timeout.reason,
-                    timestamp: timeout.issued_at
+                    timestamp: timeout.created_at
                 });
             });
         }
@@ -14710,11 +15371,10 @@ app.get('/api/moderation/user/:userId/history', requireAuth, async (req, res) =>
         const { userId } = req.params;
 
         // Get all moderation actions for this user
-        const [warns] = await MySQLDatabaseManager.connection.pool.query(
-            `SELECT case_id, reason, moderator_id, moderator_name, type, created_at as timestamp
-             FROM warns WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`,
-            [userId]
-        );
+        const warns = await MySQLDatabaseManager.getUserModerationCases(userId, {
+            actionTypes: ['WARN', 'KICK', 'TIMEOUT', 'UNTIMEOUT', 'UNBAN'],
+            limit: 50
+        });
 
         const [bans] = await MySQLDatabaseManager.connection.pool.query(
             `SELECT ban_case_id as case_id, ban_reason as reason, banned_by as moderator_id, banned_by_name as moderator_name, 
@@ -14723,18 +15383,10 @@ app.get('/api/moderation/user/:userId/history', requireAuth, async (req, res) =>
             [userId]
         );
 
-        const [timeouts] = await MySQLDatabaseManager.connection.pool.query(
-            `SELECT case_id, reason, issued_by as moderator_id, issued_by_name as moderator_name,
-                    'TIMEOUT' as type, issued_at as timestamp, expires_at
-             FROM timeouts WHERE user_id = ? ORDER BY issued_at DESC LIMIT 50`,
-            [userId]
-        );
-
         // Combine and sort
         const history = [
             ...(warns || []),
-            ...(bans || []),
-            ...(timeouts || [])
+            ...(bans || [])
         ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
         res.json(history);

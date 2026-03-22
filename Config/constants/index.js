@@ -8,6 +8,7 @@ const economy = require('./economy.json');
 const automod = require('./automod.json');
 const leveling = require('./leveling.json');
 const rules = require('./rules.json');
+const serverBackups = require('./serverBackups.json');
 
 function loadBlockedWordsSafe() {
     const blockedWordsPath = path.join(__dirname, 'blockedWords.json');
@@ -36,6 +37,7 @@ module.exports = {
     blockedWords,
     rules,
     economy,
+    serverBackups,
     CHANNELS: channels,
     ROLES: roles,
     MISC: misc,
@@ -43,5 +45,6 @@ module.exports = {
     AUTOMOD: automod,
     LEVELING: leveling,
     BLOCKED_WORDS: blockedWords,
-    RULES: rules
+    RULES: rules,
+    SERVER_BACKUPS: serverBackups
 };

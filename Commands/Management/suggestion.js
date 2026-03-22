@@ -116,7 +116,7 @@ module.exports = {
                     embed.addFields({ name: '✅ Resolved', value: `<t:${Math.floor(new Date(suggestion.resolved_at).getTime() / 1000)}:R>`, inline: true });
                 }
 
-                return interaction.reply({ embeds: [embed], ephemeral: true });
+                return interaction.reply({ embeds: [embed], flags: require('discord.js').MessageFlags.Ephemeral });
             }
 
             let newStatus;

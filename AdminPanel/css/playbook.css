@@ -1,3 +1,4 @@
+
 .playbook-layout {
     display: grid;
     grid-template-columns: 280px 1fr;
@@ -31,7 +32,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
 }
 
 .playbook-intro {
@@ -89,7 +90,7 @@
     background: rgba(114, 137, 218, 0.1);
     color: var(--color-blue);
     border-color: rgba(114, 137, 218, 0.2);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 .playbook-nav-item i {
@@ -118,7 +119,7 @@
     color: var(--text-primary);
     font-size: 1.1rem;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 .playbook-search-input:focus {
@@ -151,24 +152,13 @@
 
 .playbook-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.15);
 }
 
-.playbook-card.severity-low {
-    border-left: 4px solid #4caf50;
-}
-
-.playbook-card.severity-medium {
-    border-left: 4px solid #ff9800;
-}
-
-.playbook-card.severity-high {
-    border-left: 4px solid #f44336;
-}
-
-.playbook-card.severity-critical {
-    border-left: 4px solid #d32f2f;
-}
+.playbook-card.severity-low { border-left: 4px solid #4caf50; }
+.playbook-card.severity-medium { border-left: 4px solid #ff9800; }
+.playbook-card.severity-high { border-left: 4px solid #f44336; }
+.playbook-card.severity-critical { border-left: 4px solid #d32f2f; }
 
 .playbook-card-header {
     display: flex;
@@ -219,30 +209,10 @@
     background: currentColor;
 }
 
-.severity-badge.low {
-    background: rgba(76, 175, 80, 0.1);
-    color: #4caf50;
-    border: 1px solid rgba(76, 175, 80, 0.2);
-}
-
-.severity-badge.medium {
-    background: rgba(255, 152, 0, 0.1);
-    color: #ff9800;
-    border: 1px solid rgba(255, 152, 0, 0.2);
-}
-
-.severity-badge.high {
-    background: rgba(244, 67, 54, 0.1);
-    color: #f44336;
-    border: 1px solid rgba(244, 67, 54, 0.2);
-}
-
-.severity-badge.critical {
-    background: rgba(211, 47, 47, 0.15);
-    color: #ef5350;
-    border: 1px solid #ef5350;
-    box-shadow: 0 0 10px rgba(239, 83, 80, 0.2);
-}
+.severity-badge.low { background: rgba(76, 175, 80, 0.1); color: #4caf50; border: 1px solid rgba(76, 175, 80, 0.2); }
+.severity-badge.medium { background: rgba(255, 152, 0, 0.1); color: #ff9800; border: 1px solid rgba(255, 152, 0, 0.2); }
+.severity-badge.high { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.2); }
+.severity-badge.critical { background: rgba(211, 47, 47, 0.15); color: #ef5350; border: 1px solid #ef5350; box-shadow: 0 0 10px rgba(239, 83, 80, 0.2); }
 
 .playbook-card-body {
     font-size: 1rem;
@@ -252,10 +222,10 @@
 
 .playbook-section {
     margin-top: 1.5rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0,0,0,0.2);
     border-radius: 12px;
     padding: 1.25rem;
-    border: 1px solid rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255,255,255,0.03);
 }
 
 .playbook-section-header {
@@ -296,7 +266,7 @@
 }
 
 .command-copy-btn {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255,255,255,0.1);
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
@@ -332,21 +302,10 @@
     gap: 0.5rem;
 }
 
-.framework-card.step-1 {
-    border-color: var(--color-blue);
-}
-
-.framework-card.step-2 {
-    border-color: var(--color-orange);
-}
-
-.framework-card.step-3 {
-    border-color: var(--color-red);
-}
-
-.framework-card.step-4 {
-    border-color: var(--color-green);
-}
+.framework-card.step-1 { border-color: var(--color-blue); }
+.framework-card.step-2 { border-color: var(--color-orange); }
+.framework-card.step-3 { border-color: var(--color-red); }
+.framework-card.step-4 { border-color: var(--color-green); }
 
 .framework-step {
     font-size: 0.75rem;
@@ -382,7 +341,7 @@
 }
 
 .matrix-row:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255,255,255,0.02);
 }
 
 .matrix-offense {
@@ -421,11 +380,7 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-.docs-search {
-    position: relative;
-    margin-bottom: 2rem;
-}
-
+.docs-search { position: relative; margin-bottom: 2rem; }
 .docs-search-input {
     width: 100%;
     background: rgba(0, 0, 0, 0.25);
@@ -437,7 +392,6 @@
     transition: all 0.3s ease;
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
-
 .docs-search-input:focus {
     border-color: var(--docs-accent);
     outline: none;
@@ -445,7 +399,6 @@
     box-shadow: 0 0 0 1px var(--docs-accent), inset 0 2px 4px rgba(0, 0, 0, 0.2);
     transform: translateY(-1px);
 }
-
 .docs-search-icon {
     position: absolute;
     left: 1rem;
@@ -457,94 +410,41 @@
     transition: color 0.3s;
 }
 
-.docs-nav-group {
-    margin-bottom: 2rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.docs-nav-group:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-}
+.docs-nav-group { margin-bottom: 2rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.docs-nav-group:last-child { border-bottom: none; margin-bottom: 0; }
 
 .docs-nav-title {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--docs-accent);
-    filter: brightness(1.2);
-    font-weight: 800;
-    margin-bottom: 1rem;
-    padding-left: 0.8rem;
-    opacity: 0.9;
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--docs-accent); filter: brightness(1.2); font-weight: 800;
+    margin-bottom: 1rem; padding-left: 0.8rem; opacity: 0.9;
     text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
 }
 
 .docs-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    padding: 0.8rem 1rem;
-    border-radius: var(--radius-md, 8px);
-    color: var(--text-secondary);
-    text-decoration: none;
-    font-size: 0.95rem;
-    font-weight: 500;
+    display: flex; align-items: center; gap: 0.85rem; padding: 0.8rem 1rem;
+    border-radius: var(--radius-md, 8px); color: var(--text-secondary);
+    text-decoration: none; font-size: 0.95rem; font-weight: 500;
     transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
-    cursor: pointer;
-    margin-bottom: 4px;
-    position: relative;
-    overflow: hidden;
-    border: 1px solid transparent;
-    background: transparent;
+    cursor: pointer; margin-bottom: 4px; position: relative;
+    overflow: hidden; border: 1px solid transparent; background: transparent;
 }
-
 .docs-nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-primary);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border-color: rgba(255, 255, 255, 0.1);
 }
-
 .docs-nav-item.active {
     background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), transparent);
-    color: var(--docs-accent);
-    font-weight: 600;
-    border: 1px solid rgba(59, 130, 246, 0.2);
+    color: var(--docs-accent); font-weight: 600; border: 1px solid rgba(59, 130, 246, 0.2);
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
 }
-
 .docs-nav-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 10%;
-    height: 80%;
-    width: 3px;
-    background: var(--docs-accent);
-    border-radius: 0 4px 4px 0;
-    box-shadow: 0 0 8px var(--docs-accent);
+    content: ''; position: absolute; left: 0; top: 10%; height: 80%; width: 3px;
+    background: var(--docs-accent); border-radius: 0 4px 4px 0; box-shadow: 0 0 8px var(--docs-accent);
 }
-
 .docs-nav-item i {
-    width: 20px;
-    text-align: center;
-    opacity: 0.8;
-    font-size: 1.1rem;
-    transition: all 0.3s;
-    font-style: normal;
-    display: inline-block;
+    width: 20px; text-align: center; opacity: 0.8; font-size: 1.1rem;
+    transition: all 0.3s; font-style: normal; display: inline-block;
     filter: grayscale(1) opacity(0.7);
 }
+.docs-nav-item:hover i { transform: scale(1.15) rotate(5deg); opacity: 1; filter: none; }
+.docs-nav-item.active i { opacity: 1; transform: scale(1.15); filter: none; }
 
-.docs-nav-item:hover i {
-    transform: scale(1.15) rotate(5deg);
-    opacity: 1;
-    filter: none;
-}
-
-.docs-nav-item.active i {
-    opacity: 1;
-    transform: scale(1.15);
-    filter: none;
-}

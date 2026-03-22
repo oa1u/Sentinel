@@ -4,7 +4,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const { generateCaseId } = require("../../Events/caseId");
 const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
-const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
+const { canModerateMember, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
 module.exports = {
@@ -47,7 +47,7 @@ module.exports = {
     const caseId = generateCaseId('WARN');
 
     const logEmbed = createModerationEmbed({
-      action: '⚠️ Warning',
+      action: 'Warning',
       target: targetUser,
       moderator: interaction.user,
       reason: reasonInput,
@@ -74,30 +74,27 @@ module.exports = {
 
     await logModerationAction(interaction, logEmbed);
 
-    addCase(targetUser.id, caseId, {
-      moderator: interaction.user.id,
-      moderatorTag: interaction.user.username,
-      userTag: targetUser.username,
-      reason: reasonInput,
-      date: moment(Date.now()).format('LL'),
-      type: 'WARN'
-    });
-
     try {
-      const query = `
-        INSERT INTO warns (user_id, case_id, reason, moderator_id, moderator_name, type, timestamp, created_at)
-        VALUES (?, ?, ?, ?, ?, 'WARN', ?, NOW())
-      `;
-      await DatabaseManager.connection.pool.query(query, [
-        targetUser.id,
+      const createdAt = Date.now();
+      await DatabaseManager.upsertModerationCase({
         caseId,
-        reasonInput,
-        interaction.user.id,
-        interaction.user.username,
-        Date.now()
-      ]);
+        guildId: interaction.guild.id,
+        userId: targetUser.id,
+        userName: targetUser.username,
+        actionType: 'WARN',
+        status: 'open',
+        reason: reasonInput,
+        moderatorId: interaction.user.id,
+        moderatorName: interaction.user.username,
+        moderatorSource: 'discord',
+        source: 'discord',
+        createdAt,
+        updatedAt: createdAt,
+        eventSummary: 'Warning case recorded'
+      });
+      DatabaseManager.invalidateModerationUserCaches(targetUser.id);
     } catch (err) {
-      console.error('[warn] Failed to add warning to database:', err.message);
+      console.error('[warn] Failed to add warning case to database:', err.message);
     }
 
     await sendSuccessReply(

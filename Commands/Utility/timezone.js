@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const moment = require('moment-timezone');
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
@@ -52,7 +52,7 @@ module.exports = {
                 const example = 'America/New_York';
                 return interaction.reply({
                     content: `Invalid timezone. Example: \`${example}\``,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -60,7 +60,7 @@ module.exports = {
             if (!saved) {
                 return interaction.reply({
                     content: 'Could not save your timezone. Please try again later.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 

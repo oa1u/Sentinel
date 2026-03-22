@@ -4,9 +4,8 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags } = require('discord.js');
 const { generateCaseId } = require("../../Events/caseId");
 const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
-const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
+const { canModerateMember, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const AdminPanelHelper = require("../../Functions/AdminPanelHelper");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -50,7 +49,7 @@ module.exports = {
     const caseID = generateCaseId('KICK');
 
     const logEmbed = createModerationEmbed({
-      action: '👢 Kick',
+      action: 'Kick',
       target: targetUser,
       moderator: interaction.user,
       reason: reason,
@@ -76,28 +75,27 @@ module.exports = {
 
     await logModerationAction(interaction, logEmbed);
 
-    addCase(targetUser.id, caseID, {
-      moderator: interaction.user.id,
-      moderatorTag: interaction.user.username,
-      userTag: targetUser.username,
-      reason: `(kicked) - ${reason}`,
-      date: moment(Date.now()).format('LL'),
-      type: 'KICK'
-    });
-
     try {
       await targetMember.kick(reason);
 
-      await AdminPanelHelper.addKick({
-        userId: targetUser.id,
+      const createdAt = Date.now();
+      await DatabaseManager.upsertModerationCase({
         caseId: caseID,
-        username: targetUser.username,
-        reason: reason,
-        kickedBy: interaction.user.id,
-        kickedByName: interaction.user.username,
-        kickedBySource: 'discord',
-        kickedAt: Date.now()
+        guildId: interaction.guild.id,
+        userId: targetUser.id,
+        userName: targetUser.username,
+        actionType: 'KICK',
+        status: 'closed',
+        reason,
+        moderatorId: interaction.user.id,
+        moderatorName: interaction.user.username,
+        moderatorSource: 'discord',
+        source: 'discord',
+        createdAt,
+        updatedAt: createdAt,
+        eventSummary: 'Kick case recorded'
       });
+      DatabaseManager.invalidateModerationUserCaches(targetUser.id);
 
       await sendSuccessReply(
         interaction,

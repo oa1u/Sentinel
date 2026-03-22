@@ -386,6 +386,102 @@
         }
     }
 
+    function initCollapsibleCards(options = {}) {
+        const {
+            root = document,
+            cardSelector,
+            headerSelector,
+            bodyClass = 'collapsible-card-body',
+            toggleClass = 'collapsible-card-toggle',
+            collapsedClass = 'is-collapsed',
+            titleSelector = '',
+            collapseLabel = 'Collapse',
+            expandLabel = 'Expand',
+            defaultCollapsed = false
+        } = options;
+
+        if (!cardSelector || !headerSelector || !root?.querySelectorAll) {
+            return;
+        }
+
+        const cards = root.querySelectorAll(cardSelector);
+        cards.forEach((card) => {
+            if (!(card instanceof HTMLElement) || card.dataset.collapseReady === 'true') {
+                return;
+            }
+
+            const header = card.querySelector(headerSelector);
+            if (!(header instanceof HTMLElement)) {
+                return;
+            }
+
+            const contentNodes = Array.from(card.children).filter((child) => child !== header);
+            if (!contentNodes.length) {
+                return;
+            }
+
+            const body = document.createElement('div');
+            body.className = bodyClass;
+
+            const bodyInner = document.createElement('div');
+            bodyInner.className = `${bodyClass}-inner`;
+
+            contentNodes.forEach((child) => {
+                bodyInner.appendChild(child);
+            });
+
+            body.appendChild(bodyInner);
+            card.appendChild(body);
+
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = toggleClass;
+            toggle.innerHTML = '<span class="collapsible-card-toggle-label"></span><span class="collapsible-card-toggle-icon" aria-hidden="true"></span>';
+
+            const titleText = titleSelector
+                ? card.querySelector(titleSelector)?.textContent?.trim() || 'card details'
+                : 'card details';
+            toggle.setAttribute('aria-label', `Toggle ${titleText}`);
+
+            header.appendChild(toggle);
+            card.classList.add('is-collapsible');
+            card.dataset.collapseReady = 'true';
+
+            const labelNode = toggle.querySelector('.collapsible-card-toggle-label');
+            const setCollapsed = (collapsed) => {
+                card.classList.toggle(collapsedClass, collapsed);
+                toggle.setAttribute('aria-expanded', String(!collapsed));
+                if (labelNode) {
+                    labelNode.textContent = collapsed ? expandLabel : collapseLabel;
+                }
+            };
+
+            const initialCollapsed = card.dataset.collapsed === 'true'
+                || (card.dataset.collapsed !== 'false' && defaultCollapsed);
+
+            setCollapsed(initialCollapsed);
+
+            const toggleCollapsedState = () => {
+                setCollapsed(!card.classList.contains(collapsedClass));
+            };
+
+            toggle.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleCollapsedState();
+            });
+
+            header.addEventListener('click', (event) => {
+                if (event.target instanceof Element && event.target.closest('button, a, input, select, textarea, summary')) {
+                    return;
+                }
+                toggleCollapsedState();
+            });
+        });
+    }
+
+    ui.initCollapsibleCards = initCollapsibleCards;
+
     window.AdminPanel = {
         ui,
         api: {

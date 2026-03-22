@@ -860,8 +860,15 @@ class MySQLDatabaseManager {
 
     async moderationCaseExists(caseId) {
         try {
-            const normalizedCaseId = this.validateTextInput(String(caseId || '').trim(), 50);
+            const normalizedCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
             if (!normalizedCaseId) return false;
+
+            const ledgerRow = await this.queryOne(
+                'SELECT case_id FROM moderation_cases WHERE case_id = ? LIMIT 1',
+                [normalizedCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.ledger' }
+            );
+            if (ledgerRow) return true;
 
             const checks = await Promise.all([
                 this.queryOne(
@@ -888,6 +895,11 @@ class MySQLDatabaseManager {
                     'SELECT 1 AS found FROM unbans WHERE unban_case_id = ? LIMIT 1',
                     [normalizedCaseId],
                     { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.unbans' }
+                ),
+                this.queryOne(
+                    'SELECT 1 AS found FROM manual_lockdowns WHERE case_id = ? LIMIT 1',
+                    [normalizedCaseId],
+                    { suppressError: true, fallbackValue: null, logLabel: 'moderationCaseExists.manual_lockdowns' }
                 )
             ]);
 
@@ -895,6 +907,816 @@ class MySQLDatabaseManager {
         } catch (error) {
             console.error('[MySQLDatabaseManager] Error checking moderation case existence:', error.message);
             return false;
+        }
+    }
+
+    normalizeModerationActionType(actionType = 'OTHER') {
+        const normalized = String(actionType || 'OTHER').trim().toUpperCase();
+        const aliases = {
+            LOCKDOWN_ENABLE: 'LOCKDOWN',
+            LOCKDOWN_DISABLE: 'LOCKDOWN',
+            CLEAR_TIMEOUT: 'UNTIMEOUT'
+        };
+        return aliases[normalized] || normalized || 'OTHER';
+    }
+
+    getDefaultModerationCaseStatus(actionType, expiresAt = null) {
+        const normalized = this.normalizeModerationActionType(actionType);
+        switch (normalized) {
+            case 'BAN':
+            case 'TIMEOUT':
+            case 'LOCKDOWN':
+                return expiresAt ? 'active' : 'active';
+            case 'WARN':
+                return 'open';
+            case 'KICK':
+            case 'UNBAN':
+            case 'UNTIMEOUT':
+                return 'closed';
+            default:
+                return 'open';
+        }
+    }
+
+    normalizeModerationCaseStatus(status, actionType = 'OTHER', expiresAt = null) {
+        const normalized = String(status || '').trim().toLowerCase();
+        const allowed = new Set(['open', 'active', 'closed', 'cleared', 'reversed', 'expired', 'appealed']);
+        if (allowed.has(normalized)) {
+            if (normalized === 'active' && expiresAt && Number(expiresAt) > 0 && Number(expiresAt) <= Date.now()) {
+                return 'expired';
+            }
+            return normalized;
+        }
+        return this.getDefaultModerationCaseStatus(actionType, expiresAt);
+    }
+
+    resolveEffectiveModerationCaseStatus(caseRow = null) {
+        if (!caseRow || typeof caseRow !== 'object') return 'open';
+        const expiresAt = Number(caseRow.expires_at || caseRow.expiresAt || 0) || null;
+        return this.normalizeModerationCaseStatus(caseRow.status, caseRow.action_type || caseRow.actionType, expiresAt);
+    }
+
+    safeJsonStringify(value) {
+        if (value == null) return null;
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return null;
+        }
+    }
+
+    async appendModerationCaseEvent({
+        caseId,
+        guildId = null,
+        eventType,
+        summary = null,
+        details = null,
+        actorId = null,
+        actorName = null,
+        relatedCaseId = null,
+        metadata = null,
+        createdAt = Date.now()
+    }) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
+            const safeEventType = this.validateTextInput(String(eventType || '').trim().toUpperCase(), 30);
+            if (!safeCaseId || !safeEventType) return false;
+
+            await this.connection.query(
+                `INSERT INTO moderation_case_events
+                    (case_id, guild_id, event_type, summary, details, actor_id, actor_name, related_case_id, metadata, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    safeCaseId,
+                    guildId ? this.validateDiscordId(guildId) : null,
+                    safeEventType,
+                    this.validateTextInput(String(summary || ''), 255) || null,
+                    this.validateTextInput(String(details || ''), 8000) || null,
+                    actorId ? this.validateDiscordId(actorId) : null,
+                    this.validateTextInput(String(actorName || ''), 100) || null,
+                    relatedCaseId ? this.validateTextInput(String(relatedCaseId || '').trim().toUpperCase(), 50) : null,
+                    this.safeJsonStringify(metadata),
+                    Number(createdAt) || Date.now()
+                ]
+            );
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error appending moderation case event:', error.message);
+            return false;
+        }
+    }
+
+    async upsertModerationCase({
+        caseId,
+        guildId = null,
+        userId,
+        userName = null,
+        actionType,
+        status = null,
+        reason = null,
+        moderatorId = null,
+        moderatorName = null,
+        moderatorSource = null,
+        source = 'discord',
+        relatedCaseId = null,
+        rootCaseId = null,
+        expiresAt = null,
+        closedAt = null,
+        metadata = null,
+        createdAt = Date.now(),
+        updatedAt = Date.now(),
+        createEvent = true,
+        eventType = 'CREATED',
+        eventSummary = null,
+        eventDetails = null
+    }) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
+            const safeUserId = this.validateDiscordId(userId);
+            const safeActionType = this.normalizeModerationActionType(actionType);
+            if (!safeCaseId || !safeUserId || !safeActionType) return false;
+
+            const normalizedExpiresAt = Number(expiresAt) || null;
+            const normalizedCreatedAt = Number(createdAt) || Date.now();
+            const normalizedUpdatedAt = Number(updatedAt) || normalizedCreatedAt;
+            const normalizedStatus = this.normalizeModerationCaseStatus(status, safeActionType, normalizedExpiresAt);
+            const normalizedClosedAt = Number(closedAt) || (['closed', 'cleared', 'reversed', 'expired'].includes(normalizedStatus) ? normalizedUpdatedAt : null);
+            const safeRootCaseId = this.validateTextInput(String(rootCaseId || relatedCaseId || safeCaseId).trim().toUpperCase(), 50) || safeCaseId;
+
+            const existing = await this.queryOne(
+                'SELECT case_id FROM moderation_cases WHERE case_id = ? LIMIT 1',
+                [safeCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'upsertModerationCase.existing' }
+            );
+
+            await this.connection.query(
+                `INSERT INTO moderation_cases
+                    (case_id, guild_id, user_id, user_name, action_type, status, reason, moderator_id, moderator_name, moderator_source, source, related_case_id, root_case_id, expires_at, closed_at, metadata, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    guild_id = COALESCE(VALUES(guild_id), guild_id),
+                    user_id = VALUES(user_id),
+                    user_name = COALESCE(VALUES(user_name), user_name),
+                    action_type = VALUES(action_type),
+                    status = VALUES(status),
+                    reason = COALESCE(VALUES(reason), reason),
+                    moderator_id = COALESCE(VALUES(moderator_id), moderator_id),
+                    moderator_name = COALESCE(VALUES(moderator_name), moderator_name),
+                    moderator_source = COALESCE(VALUES(moderator_source), moderator_source),
+                    source = COALESCE(VALUES(source), source),
+                    related_case_id = COALESCE(VALUES(related_case_id), related_case_id),
+                    root_case_id = COALESCE(VALUES(root_case_id), root_case_id),
+                    expires_at = COALESCE(VALUES(expires_at), expires_at),
+                    closed_at = COALESCE(VALUES(closed_at), closed_at),
+                    metadata = COALESCE(VALUES(metadata), metadata),
+                    updated_at = VALUES(updated_at)`,
+                [
+                    safeCaseId,
+                    guildId ? this.validateDiscordId(guildId) : null,
+                    safeUserId,
+                    this.validateTextInput(String(userName || ''), 100) || null,
+                    safeActionType,
+                    normalizedStatus,
+                    this.validateTextInput(String(reason || ''), 8000) || null,
+                    moderatorId ? this.validateDiscordId(moderatorId) : null,
+                    this.validateTextInput(String(moderatorName || ''), 100) || null,
+                    this.validateTextInput(String(moderatorSource || ''), 20) || null,
+                    this.validateTextInput(String(source || ''), 20) || 'discord',
+                    relatedCaseId ? this.validateTextInput(String(relatedCaseId || '').trim().toUpperCase(), 50) : null,
+                    safeRootCaseId,
+                    normalizedExpiresAt,
+                    normalizedClosedAt,
+                    this.safeJsonStringify(metadata),
+                    normalizedCreatedAt,
+                    normalizedUpdatedAt
+                ]
+            );
+
+            if (createEvent) {
+                await this.appendModerationCaseEvent({
+                    caseId: safeCaseId,
+                    guildId,
+                    eventType,
+                    summary: eventSummary || (existing ? 'Case updated' : 'Case created'),
+                    details: eventDetails || reason || null,
+                    actorId: moderatorId,
+                    actorName: moderatorName,
+                    relatedCaseId,
+                    metadata,
+                    createdAt: normalizedUpdatedAt
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error upserting moderation case:', error.message);
+            return false;
+        }
+    }
+
+    async updateModerationCaseStatus(caseId, status, options = {}) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
+            if (!safeCaseId) return false;
+
+            const current = await this.queryOne('SELECT case_id, action_type, status FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId], {
+                suppressError: true,
+                fallbackValue: null,
+                logLabel: 'updateModerationCaseStatus.current'
+            });
+            if (!current) return false;
+
+            const updatedAt = Number(options.updatedAt) || Date.now();
+            const normalizedStatus = this.normalizeModerationCaseStatus(status, current.action_type, options.expiresAt);
+            const closedAt = ['closed', 'cleared', 'reversed', 'expired'].includes(normalizedStatus)
+                ? (Number(options.closedAt) || updatedAt)
+                : null;
+
+            await this.connection.query(
+                `UPDATE moderation_cases SET status = ?, closed_at = ?, updated_at = ? WHERE case_id = ?`,
+                [normalizedStatus, closedAt, updatedAt, safeCaseId]
+            );
+
+            await this.appendModerationCaseEvent({
+                caseId: safeCaseId,
+                guildId: options.guildId || null,
+                eventType: 'STATUS_CHANGED',
+                summary: `Status changed to ${normalizedStatus}`,
+                details: options.details || null,
+                actorId: options.actorId || null,
+                actorName: options.actorName || null,
+                relatedCaseId: options.relatedCaseId || null,
+                metadata: { previousStatus: current.status, nextStatus: normalizedStatus },
+                createdAt: updatedAt
+            });
+
+            return true;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error updating moderation case status:', error.message);
+            return false;
+        }
+    }
+
+    async syncLegacyModerationCase(caseId) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
+            if (!safeCaseId) return null;
+
+            const existing = await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId], {
+                suppressError: true,
+                fallbackValue: null,
+                logLabel: 'syncLegacyModerationCase.existing'
+            });
+            if (existing) return existing;
+
+            const warn = await this.queryOne(
+                `SELECT user_id, user_name, moderator_id, moderator_name, moderator_source, reason, timestamp
+                 FROM warns WHERE case_id = ? LIMIT 1`,
+                [safeCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'syncLegacyModerationCase.warn' }
+            );
+            if (warn) {
+                await this.upsertModerationCase({
+                    caseId: safeCaseId,
+                    userId: warn.user_id,
+                    userName: warn.user_name,
+                    actionType: 'WARN',
+                    status: 'open',
+                    reason: warn.reason,
+                    moderatorId: warn.moderator_id,
+                    moderatorName: warn.moderator_name,
+                    moderatorSource: warn.moderator_source,
+                    source: warn.moderator_source || 'legacy',
+                    createdAt: Number(warn.timestamp) || Date.now(),
+                    updatedAt: Number(warn.timestamp) || Date.now(),
+                    createEvent: true,
+                    eventSummary: 'Legacy warning synced'
+                });
+                return await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId]);
+            }
+
+            const timeout = await this.queryOne(
+                `SELECT user_id, username, reason, issued_by, issued_by_name, issued_by_source, issued_at, expires_at, active
+                 FROM timeouts WHERE case_id = ? LIMIT 1`,
+                [safeCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'syncLegacyModerationCase.timeout' }
+            );
+            if (timeout) {
+                await this.upsertModerationCase({
+                    caseId: safeCaseId,
+                    userId: timeout.user_id,
+                    userName: timeout.username,
+                    actionType: 'TIMEOUT',
+                    status: timeout.active ? 'active' : 'cleared',
+                    reason: timeout.reason,
+                    moderatorId: timeout.issued_by,
+                    moderatorName: timeout.issued_by_name,
+                    moderatorSource: timeout.issued_by_source,
+                    source: timeout.issued_by_source || 'legacy',
+                    expiresAt: Number(timeout.expires_at) || null,
+                    createdAt: Number(timeout.issued_at) || Date.now(),
+                    updatedAt: Number(timeout.issued_at) || Date.now(),
+                    createEvent: true,
+                    eventSummary: 'Legacy timeout synced'
+                });
+                return await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId]);
+            }
+
+            const ban = await this.queryOne(
+                `SELECT user_id, user_name, banned_by, banned_by_name, banned_by_source, ban_reason, UNIX_TIMESTAMP(banned_at) * 1000 AS banned_at_ms, banned
+                 FROM user_bans WHERE ban_case_id = ? LIMIT 1`,
+                [safeCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'syncLegacyModerationCase.ban' }
+            );
+            if (ban) {
+                await this.upsertModerationCase({
+                    caseId: safeCaseId,
+                    userId: ban.user_id,
+                    userName: ban.user_name,
+                    actionType: 'BAN',
+                    status: ban.banned ? 'active' : 'reversed',
+                    reason: ban.ban_reason,
+                    moderatorId: ban.banned_by,
+                    moderatorName: ban.banned_by_name,
+                    moderatorSource: ban.banned_by_source,
+                    source: ban.banned_by_source || 'legacy',
+                    createdAt: Number(ban.banned_at_ms) || Date.now(),
+                    updatedAt: Number(ban.banned_at_ms) || Date.now(),
+                    createEvent: true,
+                    eventSummary: 'Legacy ban synced'
+                });
+                return await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId]);
+            }
+
+            const kick = await this.queryOne(
+                `SELECT user_id, username, reason, kicked_by, kicked_by_name, kicked_by_source, kicked_at
+                 FROM kicks WHERE case_id = ? LIMIT 1`,
+                [safeCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'syncLegacyModerationCase.kick' }
+            );
+            if (kick) {
+                await this.upsertModerationCase({
+                    caseId: safeCaseId,
+                    userId: kick.user_id,
+                    userName: kick.username,
+                    actionType: 'KICK',
+                    status: 'closed',
+                    reason: kick.reason,
+                    moderatorId: kick.kicked_by,
+                    moderatorName: kick.kicked_by_name,
+                    moderatorSource: kick.kicked_by_source,
+                    source: kick.kicked_by_source || 'legacy',
+                    createdAt: Number(kick.kicked_at) || Date.now(),
+                    updatedAt: Number(kick.kicked_at) || Date.now(),
+                    createEvent: true,
+                    eventSummary: 'Legacy kick synced'
+                });
+                return await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId]);
+            }
+
+            const unban = await this.queryOne(
+                `SELECT user_id, user_name, unbanned_by, unbanned_by_name, unbanned_by_source, reason, original_ban_case_id, UNIX_TIMESTAMP(unbanned_at) * 1000 AS unbanned_at_ms
+                 FROM unbans WHERE unban_case_id = ? LIMIT 1`,
+                [safeCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'syncLegacyModerationCase.unban' }
+            );
+            if (unban) {
+                await this.upsertModerationCase({
+                    caseId: safeCaseId,
+                    userId: unban.user_id,
+                    userName: unban.user_name,
+                    actionType: 'UNBAN',
+                    status: 'closed',
+                    reason: unban.reason,
+                    moderatorId: unban.unbanned_by,
+                    moderatorName: unban.unbanned_by_name,
+                    moderatorSource: unban.unbanned_by_source,
+                    source: unban.unbanned_by_source || 'legacy',
+                    relatedCaseId: unban.original_ban_case_id,
+                    rootCaseId: unban.original_ban_case_id || safeCaseId,
+                    createdAt: Number(unban.unbanned_at_ms) || Date.now(),
+                    updatedAt: Number(unban.unbanned_at_ms) || Date.now(),
+                    createEvent: true,
+                    eventSummary: 'Legacy unban synced'
+                });
+                if (unban.original_ban_case_id) {
+                    await this.updateModerationCaseStatus(unban.original_ban_case_id, 'reversed', {
+                        actorId: unban.unbanned_by,
+                        actorName: unban.unbanned_by_name,
+                        relatedCaseId: safeCaseId,
+                        details: `Linked unban case ${safeCaseId}`,
+                        updatedAt: Number(unban.unbanned_at_ms) || Date.now()
+                    });
+                }
+                return await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId]);
+            }
+
+            const lockdown = await this.queryOne(
+                `SELECT guild_id, action_type, moderator_id, moderator_name, reason, UNIX_TIMESTAMP(created_at) * 1000 AS created_at_ms
+                 FROM manual_lockdowns WHERE case_id = ? LIMIT 1`,
+                [safeCaseId],
+                { suppressError: true, fallbackValue: null, logLabel: 'syncLegacyModerationCase.lockdown' }
+            );
+            if (lockdown) {
+                await this.upsertModerationCase({
+                    caseId: safeCaseId,
+                    guildId: lockdown.guild_id,
+                    userId: lockdown.moderator_id || '00000000000000000',
+                    userName: 'Server',
+                    actionType: 'LOCKDOWN',
+                    status: String(lockdown.action_type || '').toLowerCase() === 'enable' ? 'active' : 'closed',
+                    reason: lockdown.reason,
+                    moderatorId: lockdown.moderator_id,
+                    moderatorName: lockdown.moderator_name,
+                    moderatorSource: 'discord',
+                    source: 'legacy',
+                    createdAt: Number(lockdown.created_at_ms) || Date.now(),
+                    updatedAt: Number(lockdown.created_at_ms) || Date.now(),
+                    createEvent: true,
+                    eventSummary: 'Legacy lockdown synced'
+                });
+                return await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId]);
+            }
+
+            return null;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error syncing legacy moderation case:', error.message);
+            return null;
+        }
+    }
+
+    async getModerationCaseById(caseId) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
+            if (!safeCaseId) return null;
+
+            let row = await this.queryOne('SELECT * FROM moderation_cases WHERE case_id = ? LIMIT 1', [safeCaseId], {
+                suppressError: true,
+                fallbackValue: null,
+                logLabel: 'getModerationCaseById.primary'
+            });
+            if (!row) {
+                row = await this.syncLegacyModerationCase(safeCaseId);
+            }
+            if (!row) return null;
+
+            const incident = await this.getModerationIncidentByCaseId(safeCaseId);
+            const timeline = await this.getModerationCaseTimeline(safeCaseId);
+            const relatedCases = await this.query(
+                `SELECT case_id, action_type, status, reason, related_case_id, created_at
+                 FROM moderation_cases
+                 WHERE related_case_id = ? OR case_id = ? OR root_case_id = ?
+                 ORDER BY created_at ASC`,
+                [safeCaseId, row.related_case_id || '', row.root_case_id || safeCaseId],
+                { suppressError: true, fallbackValue: [], logLabel: 'getModerationCaseById.related' }
+            );
+
+            return {
+                ...row,
+                effective_status: this.resolveEffectiveModerationCaseStatus(row),
+                incident,
+                timeline,
+                relatedCases: Array.isArray(relatedCases)
+                    ? relatedCases.filter((entry) => String(entry.case_id) !== String(safeCaseId))
+                    : []
+            };
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting moderation case by ID:', error.message);
+            return null;
+        }
+    }
+
+    async getModerationCaseTimeline(caseId) {
+        try {
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
+            if (!safeCaseId) return [];
+
+            const events = await this.query(
+                `SELECT id, case_id, guild_id, event_type, summary, details, actor_id, actor_name, related_case_id, metadata, created_at
+                 FROM moderation_case_events
+                 WHERE case_id = ?
+                 ORDER BY created_at ASC, id ASC`,
+                [safeCaseId],
+                { suppressError: true, fallbackValue: [], logLabel: 'getModerationCaseTimeline.events' }
+            );
+
+            const incident = await this.getModerationIncidentByCaseId(safeCaseId);
+            const timeline = Array.isArray(events) ? [...events] : [];
+            if (incident) {
+                timeline.push({
+                    id: `incident-${safeCaseId}`,
+                    case_id: safeCaseId,
+                    event_type: 'INCIDENT',
+                    summary: 'Incident proof attached',
+                    details: incident.proof_text || incident.reason || null,
+                    actor_id: incident.moderator_id || null,
+                    actor_name: incident.moderator_name || null,
+                    related_case_id: null,
+                    metadata: this.safeJsonStringify({
+                        proofUrl: incident.proof_url || null,
+                        attachmentUrl: incident.attachment_url || null,
+                        messageLink: incident.message_link || null
+                    }),
+                    created_at: incident.updated_at ? new Date(incident.updated_at).getTime() : (incident.created_at ? new Date(incident.created_at).getTime() : Date.now())
+                });
+            }
+
+            return timeline.sort((left, right) => Number(left.created_at || 0) - Number(right.created_at || 0));
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting moderation case timeline:', error.message);
+            return [];
+        }
+    }
+
+    async searchModerationCases({ query = '', userId = null, moderatorId = null, status = null, limit = 10 } = {}) {
+        try {
+            const clauses = [];
+            const params = [];
+            const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
+            const safeQuery = this.validateTextInput(String(query || '').trim(), 120);
+            const safeUserId = userId ? this.validateDiscordId(userId) : null;
+            const safeModeratorId = moderatorId ? this.validateDiscordId(moderatorId) : null;
+            const safeStatus = status ? this.normalizeModerationCaseStatus(status) : null;
+
+            if (safeQuery) {
+                clauses.push('(case_id LIKE ? OR reason LIKE ? OR user_name LIKE ? OR moderator_name LIKE ?)');
+                params.push(`%${safeQuery}%`, `%${safeQuery}%`, `%${safeQuery}%`, `%${safeQuery}%`);
+            }
+            if (safeUserId) {
+                clauses.push('user_id = ?');
+                params.push(safeUserId);
+            }
+            if (safeModeratorId) {
+                clauses.push('moderator_id = ?');
+                params.push(safeModeratorId);
+            }
+            const sql = `
+                SELECT case_id, guild_id, user_id, user_name, action_type, status, reason, moderator_id, moderator_name, related_case_id, root_case_id, expires_at, closed_at, created_at, updated_at
+                FROM moderation_cases
+                ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+                ORDER BY created_at DESC
+                LIMIT ?`;
+            params.push(safeLimit);
+
+            let rows = await this.query(sql, params, {
+                suppressError: true,
+                fallbackValue: [],
+                logLabel: 'searchModerationCases.search'
+            });
+
+            rows = Array.isArray(rows) ? rows.map((row) => ({ ...row, effective_status: this.resolveEffectiveModerationCaseStatus(row) })) : [];
+            if (safeStatus) {
+                rows = rows.filter((row) => row.effective_status === safeStatus);
+            }
+            return rows;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error searching moderation cases:', error.message);
+            return [];
+        }
+    }
+
+    invalidateModerationUserCaches(userId = null) {
+        const validId = userId ? this.validateDiscordId(userId) : null;
+        if (validId) {
+            this.invalidateCacheByPrefix(this.getCacheKey('warns', `${validId}:`));
+            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
+        }
+        this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
+        this.invalidateCacheByPrefix(this.getCacheKey('warns', 'count'));
+    }
+
+    async getUserModerationCases(userId, { actionTypes = ['WARN'], includeStatuses = null, excludeStatuses = [], limit = 50 } = {}) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return [];
+
+            const safeActionTypes = Array.isArray(actionTypes)
+                ? actionTypes
+                    .map((type) => this.normalizeModerationActionType(type))
+                    .filter(Boolean)
+                : [];
+
+            if (!safeActionTypes.length) return [];
+
+            const placeholders = safeActionTypes.map(() => '?').join(', ');
+            const safeLimit = Math.max(1, Math.min(500, Number(limit) || 50));
+
+            let rows = await this.query(
+                `SELECT case_id, guild_id, user_id, user_name, action_type, status, reason, moderator_id, moderator_name, related_case_id, root_case_id, expires_at, closed_at, created_at, updated_at
+                 FROM moderation_cases
+                 WHERE user_id = ? AND action_type IN (${placeholders})
+                 ORDER BY created_at DESC
+                 LIMIT ?`,
+                [validId, ...safeActionTypes, safeLimit],
+                {
+                    suppressError: true,
+                    fallbackValue: [],
+                    logLabel: 'getUserModerationCases'
+                }
+            );
+
+            const includeSet = Array.isArray(includeStatuses) && includeStatuses.length
+                ? new Set(includeStatuses.map((entry) => this.normalizeModerationCaseStatus(entry)))
+                : null;
+            const excludeSet = new Set(
+                Array.isArray(excludeStatuses)
+                    ? excludeStatuses.map((entry) => this.normalizeModerationCaseStatus(entry))
+                    : []
+            );
+
+            rows = Array.isArray(rows)
+                ? rows.map((row) => ({ ...row, effective_status: this.resolveEffectiveModerationCaseStatus(row) }))
+                : [];
+
+            return rows.filter((row) => {
+                if (includeSet && !includeSet.has(row.effective_status)) return false;
+                if (excludeSet.has(row.effective_status)) return false;
+                return true;
+            });
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting user moderation cases:', error.message);
+            return [];
+        }
+    }
+
+    async getActiveTimeoutCases({ guildId = null, limit = 200 } = {}) {
+        try {
+            const safeGuildId = guildId ? this.validateDiscordId(guildId) : null;
+            const safeLimit = Math.max(1, Math.min(500, Number(limit) || 200));
+            const params = ['TIMEOUT', Date.now()];
+            let sql = `SELECT case_id, guild_id, user_id, user_name, reason, moderator_id, moderator_name, expires_at, created_at, updated_at, status
+                       FROM moderation_cases
+                       WHERE action_type = ?
+                         AND (expires_at IS NULL OR expires_at > ?)`;
+
+            if (safeGuildId) {
+                sql += ' AND guild_id = ?';
+                params.push(safeGuildId);
+            }
+
+            sql += ' ORDER BY COALESCE(expires_at, 9223372036854775807) ASC, created_at ASC LIMIT ?';
+            params.push(safeLimit);
+
+            let rows = await this.query(sql, params, {
+                suppressError: true,
+                fallbackValue: [],
+                logLabel: 'getActiveTimeoutCases'
+            });
+
+            rows = Array.isArray(rows)
+                ? rows.map((row) => ({ ...row, effective_status: this.resolveEffectiveModerationCaseStatus(row) }))
+                : [];
+
+            return rows.filter((row) => row.effective_status === 'active');
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting active timeout cases:', error.message);
+            return [];
+        }
+    }
+
+    async getLatestActiveTimeoutCaseForUser(userId, guildId = null) {
+        const rows = await this.getUserModerationCases(userId, {
+            actionTypes: ['TIMEOUT'],
+            includeStatuses: ['active'],
+            limit: 25
+        });
+
+        if (!guildId) {
+            return rows[0] || null;
+        }
+
+        const safeGuildId = this.validateDiscordId(guildId);
+        return rows.find((row) => !safeGuildId || String(row.guild_id || '') === safeGuildId) || null;
+    }
+
+    async getLatestActiveBanCaseForUser(userId, guildId = null) {
+        const rows = await this.getUserModerationCases(userId, {
+            actionTypes: ['BAN'],
+            includeStatuses: ['active'],
+            limit: 25
+        });
+
+        if (!guildId) {
+            return rows[0] || null;
+        }
+
+        const safeGuildId = this.validateDiscordId(guildId);
+        return rows.find((row) => !safeGuildId || String(row.guild_id || '') === safeGuildId) || null;
+    }
+
+    async clearWarningCase(userId, caseId, options = {}) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            const safeCaseId = this.validateTextInput(String(caseId || '').trim().toUpperCase(), 50);
+            if (!validId || !safeCaseId) return null;
+
+            let row = await this.queryOne(
+                `SELECT case_id, user_id, action_type, reason, status, created_at, updated_at
+                 FROM moderation_cases
+                 WHERE case_id = ? AND user_id = ? AND action_type = 'WARN'
+                 LIMIT 1`,
+                [safeCaseId, validId],
+                { suppressError: true, fallbackValue: null, logLabel: 'clearWarningCase.current' }
+            );
+
+            if (!row) {
+                row = await this.syncLegacyModerationCase(safeCaseId);
+            }
+
+            if (!row || String(row.user_id) !== validId || String(row.action_type || '').toUpperCase() !== 'WARN') {
+                return null;
+            }
+
+            await this.updateModerationCaseStatus(safeCaseId, 'cleared', {
+                guildId: options.guildId || row.guild_id || null,
+                actorId: options.actorId || null,
+                actorName: options.actorName || null,
+                details: options.details || 'Warning cleared',
+                updatedAt: options.updatedAt || Date.now()
+            });
+
+            this.invalidateModerationUserCaches(validId);
+            return row;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error clearing warning case:', error.message);
+            return null;
+        }
+    }
+
+    async clearAllWarningCases(userId, options = {}) {
+        try {
+            const validId = this.validateDiscordId(userId);
+            if (!validId) return 0;
+
+            const rows = await this.getUserModerationCases(validId, {
+                actionTypes: ['WARN'],
+                excludeStatuses: ['cleared', 'reversed'],
+                limit: 500
+            });
+
+            for (const row of rows) {
+                await this.updateModerationCaseStatus(row.case_id, 'cleared', {
+                    guildId: options.guildId || row.guild_id || null,
+                    actorId: options.actorId || null,
+                    actorName: options.actorName || null,
+                    details: options.details || 'Warnings cleared in bulk',
+                    updatedAt: options.updatedAt || Date.now()
+                });
+            }
+
+            this.invalidateModerationUserCaches(validId);
+            return rows.length;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error clearing all warning cases:', error.message);
+            return 0;
+        }
+    }
+
+    async getLockdownHistory(guildId, limit = 5) {
+        try {
+            const safeGuildId = this.validateDiscordId(guildId);
+            if (!safeGuildId) return [];
+
+            const safeLimit = Math.max(1, Math.min(25, Number(limit) || 5));
+            const rows = await this.query(
+                `SELECT case_id, status, moderator_name, reason, metadata, created_at
+                 FROM moderation_cases
+                 WHERE guild_id = ? AND action_type = 'LOCKDOWN'
+                 ORDER BY created_at DESC
+                 LIMIT ?`,
+                [safeGuildId, safeLimit],
+                {
+                    suppressError: true,
+                    fallbackValue: [],
+                    logLabel: 'getLockdownHistory'
+                }
+            );
+
+            return Array.isArray(rows) ? rows.map((row) => {
+                let metadata = row.metadata;
+                if (typeof metadata === 'string') {
+                    try {
+                        metadata = JSON.parse(metadata);
+                    } catch {
+                        metadata = null;
+                    }
+                }
+
+                const action = String(metadata?.lockdownAction || '').toLowerCase() === 'disable'
+                    ? 'disable'
+                    : (String(metadata?.lockdownAction || '').toLowerCase() === 'enable'
+                        ? 'enable'
+                        : (this.resolveEffectiveModerationCaseStatus(row) === 'active' ? 'enable' : 'disable'));
+
+                return {
+                    ...row,
+                    action_type: action,
+                    effective_status: this.resolveEffectiveModerationCaseStatus(row)
+                };
+            }) : [];
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting lockdown history:', error.message);
+            return [];
         }
     }
 
@@ -926,6 +1748,7 @@ class MySQLDatabaseManager {
                 return { success: false, error: 'Invalid incident payload' };
             }
 
+            const normalizedCaseId = safeCaseId.toUpperCase();
             await this.connection.query(
                 `INSERT INTO moderation_incidents
                     (case_id, user_id, action_type, reason, proof_text, proof_url, attachment_url, message_link, moderator_id, moderator_name)
@@ -941,7 +1764,7 @@ class MySQLDatabaseManager {
                     moderator_id = VALUES(moderator_id),
                     moderator_name = VALUES(moderator_name)`,
                 [
-                    safeCaseId,
+                    normalizedCaseId,
                     safeUserId,
                     safeActionType,
                     safeReason,
@@ -953,6 +1776,22 @@ class MySQLDatabaseManager {
                     safeModeratorName
                 ]
             );
+
+            await this.appendModerationCaseEvent({
+                caseId: normalizedCaseId,
+                eventType: 'INCIDENT',
+                summary: 'Incident proof attached',
+                details: safeProofText || safeReason || null,
+                actorId: safeModeratorId,
+                actorName: safeModeratorName,
+                metadata: {
+                    proofUrl: safeProofUrl,
+                    attachmentUrl: safeAttachmentUrl,
+                    messageLink: safeMessageLink,
+                    actionType: safeActionType
+                },
+                createdAt: Date.now()
+            });
 
             return { success: true };
         } catch (error) {
@@ -1331,31 +2170,65 @@ class MySQLDatabaseManager {
             // Handle both old format (moderator, date) and new format (moderatorId, timestamp)
             const moderatorId = caseData.moderatorId || caseData.moderator || null;
             const reason = caseData.reason || null;
-            const type = caseData.type || 'WARN';
+            const type = this.normalizeModerationActionType(caseData.type || 'WARN');
             const timestamp = caseData.timestamp || Date.now();
             const duration = caseData.duration || null;
             const expiresAt = caseData.expiresAt || null;
+            const guildId = caseData.guildId || null;
             const userName = caseData.userName || caseData.userTag || null;
             const moderatorName = caseData.moderatorName || caseData.moderatorTag || null;
             const moderatorSource = caseData.moderatorSource || (moderatorId ? 'discord' : null);
+            const relatedCaseId = caseData.relatedCaseId || caseData.originalCase || null;
 
-            // Only insert into warns table for actual warnings (not timeouts/bans/kicks/automod)
-            // AutoMod violations are logged separately to automod_violations table
-            if (type === 'WARN') {
-                await this.connection.query(
-                    `INSERT INTO warns (user_id, case_id, reason, moderator_id, user_name, moderator_name, moderator_source, type, timestamp) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
-                     ON DUPLICATE KEY UPDATE reason = ?, moderator_id = ?, user_name = ?, moderator_name = ?, moderator_source = ?, type = ?, timestamp = ?`,
-                    [userId, caseId, reason, moderatorId, userName, moderatorName, moderatorSource, type, timestamp, reason, moderatorId, userName, moderatorName, moderatorSource, type, timestamp]
-                );
-                this.invalidateCacheByPrefix(this.getCacheKey('warns', `${userId}:`));
-                this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
-                this.invalidateCacheByPrefix(this.getCacheKey('warns', 'count'));
-                this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${userId}:`));
+            await this.upsertModerationCase({
+                caseId,
+                guildId,
+                userId,
+                userName,
+                actionType: type,
+                reason,
+                moderatorId,
+                moderatorName,
+                moderatorSource,
+                source: caseData.source || moderatorSource || 'discord',
+                relatedCaseId,
+                rootCaseId: relatedCaseId || caseId,
+                expiresAt,
+                status: caseData.status || this.getDefaultModerationCaseStatus(type, expiresAt),
+                metadata: {
+                    duration,
+                    durationString: caseData.durationString || null,
+                    originalCase: relatedCaseId || null
+                },
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                eventSummary: `${type} case recorded`
+            });
+
+            if (type === 'UNBAN' && relatedCaseId) {
+                await this.updateModerationCaseStatus(relatedCaseId, 'reversed', {
+                    guildId,
+                    actorId: moderatorId,
+                    actorName: moderatorName,
+                    relatedCaseId: caseId,
+                    details: `Reversed by unban case ${caseId}`,
+                    updatedAt: timestamp
+                });
+            }
+
+            if (type === 'UNTIMEOUT' && relatedCaseId) {
+                await this.updateModerationCaseStatus(relatedCaseId, 'cleared', {
+                    guildId,
+                    actorId: moderatorId,
+                    actorName: moderatorName,
+                    relatedCaseId: caseId,
+                    details: `Cleared by untimeout case ${caseId}`,
+                    updatedAt: timestamp
+                });
             }
 
             // Update user_bans table only for ban actions
-            if (type === 'BAN' || type === 'ban') {
+            if (type === 'BAN') {
                 await this.connection.query(
                     `INSERT INTO user_bans (user_id, banned, ban_case_id, banned_at, banned_by, ban_reason, user_name, banned_by_name, banned_by_source) 
                      VALUES (?, TRUE, ?, NOW(), ?, ?, ?, ?, ?) 
@@ -1374,8 +2247,9 @@ class MySQLDatabaseManager {
                 this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
                 this.invalidateCacheByPrefix(this.getCacheKey('banned', 'list:'));
                 this.invalidateCacheByPrefix(this.getCacheKey('banned', 'count'));
-                this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${userId}:`));
             }
+
+            this.invalidateModerationUserCaches(userId);
 
             return true;
         } catch (error) {
@@ -1391,17 +2265,11 @@ class MySQLDatabaseManager {
                 return { warns: {}, banned: false, lastWarned: null, lastReason: null };
             }
 
-            const warns = await this.query(
-                'SELECT * FROM warns WHERE user_id = ? AND type = "WARN" ORDER BY created_at DESC',
-                [validId],
-                {
-                    useCache: true,
-                    cacheNamespace: 'warns',
-                    cacheKey: `${validId}:rows`,
-                    cacheTtlMs: 10000,
-                    logLabel: 'getUserWarns.rows'
-                }
-            );
+            const warns = await this.getUserModerationCases(validId, {
+                actionTypes: ['WARN'],
+                excludeStatuses: ['cleared', 'reversed'],
+                limit: 500
+            });
 
             const banInfo = await this.query(
                 'SELECT * FROM user_bans WHERE user_id = ?',
@@ -1422,10 +2290,12 @@ class MySQLDatabaseManager {
                 warnsObj[warn.case_id] = {
                     reason: warn.reason,
                     moderatorId: warn.moderator_id,
-                    type: warn.type,
-                    timestamp: warn.timestamp
+                    type: warn.action_type,
+                    timestamp: Number(warn.created_at || warn.updated_at || 0) || null
                 };
-                if (!lastWarn || (warn.timestamp || 0) > (lastWarn.timestamp || 0)) {
+                const warnTimestamp = Number(warn.created_at || warn.updated_at || 0) || 0;
+                const lastWarnTimestamp = Number(lastWarn?.created_at || lastWarn?.updated_at || 0) || 0;
+                if (!lastWarn || warnTimestamp > lastWarnTimestamp) {
                     lastWarn = warn;
                 }
             });
@@ -1433,7 +2303,7 @@ class MySQLDatabaseManager {
             return {
                 warns: warnsObj,
                 banned: banInfo[0]?.banned || false,
-                lastWarned: lastWarn?.timestamp || null,
+                lastWarned: Number(lastWarn?.created_at || lastWarn?.updated_at || 0) || null,
                 lastReason: lastWarn?.reason || null
             };
         } catch (error) {
@@ -1448,7 +2318,9 @@ class MySQLDatabaseManager {
             if (!validId) return 0;
 
             const count = await this.queryValue(
-                'SELECT COUNT(*) as count FROM warns WHERE user_id = ? AND type = "WARN"',
+                `SELECT COUNT(*) as count
+                 FROM moderation_cases
+                 WHERE user_id = ? AND action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')`,
                 [validId],
                 'count',
                 {
@@ -1471,15 +2343,8 @@ class MySQLDatabaseManager {
             const validId = this.validateDiscordId(userId);
             if (!validId) return false;
 
-            await this.connection.query(
-                'DELETE FROM warns WHERE user_id = ?',
-                [validId]
-            );
-            this.invalidateCacheByPrefix(this.getCacheKey('warns', `${validId}:`));
-            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
-            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'count'));
-            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
-            return true;
+            const clearedCount = await this.clearAllWarningCases(validId);
+            return clearedCount >= 0;
         } catch (error) {
             console.error('Error clearing user warns:', error);
             return false;
@@ -1491,15 +2356,7 @@ class MySQLDatabaseManager {
             const validId = this.validateDiscordId(userId);
             if (!validId || !caseId) return false;
 
-            await this.connection.query(
-                'DELETE FROM warns WHERE user_id = ? AND case_id = ?',
-                [validId, caseId]
-            );
-            this.invalidateCacheByPrefix(this.getCacheKey('warns', `${validId}:`));
-            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'list:'));
-            this.invalidateCacheByPrefix(this.getCacheKey('warns', 'count'));
-            this.invalidateCacheByPrefix(this.getCacheKey('userprofile', `${validId}:`));
-            return true;
+            return !!(await this.clearWarningCase(validId, caseId));
         } catch (error) {
             console.error('Error deleting warn:', error);
             return false;
@@ -1562,23 +2419,26 @@ class MySQLDatabaseManager {
     async getAllWarns() {
         try {
             const query = `
-                SELECT w.user_id, 
+                SELECT mc.user_id,
                        COUNT(*) as warn_count,
                        COALESCE(ub.banned, FALSE) as banned,
-                       lw.last_warned,
-                       lw.last_reason
-                FROM warns w
-                LEFT JOIN user_bans ub ON w.user_id = ub.user_id
+                       latest.last_warned,
+                       latest.last_reason
+                FROM moderation_cases mc
+                LEFT JOIN user_bans ub ON mc.user_id = ub.user_id
                 LEFT JOIN (
-                    SELECT w1.user_id, w1.timestamp AS last_warned, w1.reason AS last_reason
-                    FROM warns w1
+                    SELECT mc1.user_id, mc1.created_at AS last_warned, mc1.reason AS last_reason
+                    FROM moderation_cases mc1
                     INNER JOIN (
-                        SELECT user_id, MAX(timestamp) AS max_ts
-                        FROM warns
+                        SELECT user_id, MAX(created_at) AS max_ts
+                        FROM moderation_cases
+                        WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')
                         GROUP BY user_id
-                    ) latest ON latest.user_id = w1.user_id AND latest.max_ts = w1.timestamp
-                ) lw ON w.user_id = lw.user_id
-                GROUP BY w.user_id, ub.banned, lw.last_warned, lw.last_reason
+                    ) latest_inner ON latest_inner.user_id = mc1.user_id AND latest_inner.max_ts = mc1.created_at
+                    WHERE mc1.action_type = 'WARN' AND mc1.status NOT IN ('cleared', 'reversed')
+                ) latest ON mc.user_id = latest.user_id
+                WHERE mc.action_type = 'WARN' AND mc.status NOT IN ('cleared', 'reversed')
+                GROUP BY mc.user_id, ub.banned, latest.last_warned, latest.last_reason
             `;
             const results = await this.query(query, [], {
                 useCache: true,
@@ -1597,7 +2457,9 @@ class MySQLDatabaseManager {
     async getWarnsCount() {
         try {
             const count = await this.queryValue(
-                'SELECT COUNT(DISTINCT user_id) as count FROM warns WHERE type = "WARN"',
+                `SELECT COUNT(DISTINCT user_id) as count
+                 FROM moderation_cases
+                 WHERE action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')`,
                 [],
                 'count',
                 {
@@ -5040,18 +5902,23 @@ class MySQLDatabaseManager {
             const safeReason = String(reason).trim();
             if (!safeCaseId || !safeReason) return false;
 
-            await this.connection.query(
-                `INSERT INTO manual_lockdowns (guild_id, action_type, case_id, moderator_id, moderator_name, reason)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [
-                    String(guildId),
-                    safeAction,
-                    safeCaseId,
-                    String(moderatorId),
-                    moderatorName ? String(moderatorName) : null,
-                    safeReason
-                ]
-            );
+            await this.upsertModerationCase({
+                caseId: safeCaseId,
+                guildId,
+                userId: moderatorId,
+                userName: 'Server',
+                actionType: 'LOCKDOWN',
+                status: safeAction === 'enable' ? 'active' : 'closed',
+                reason: safeReason,
+                moderatorId,
+                moderatorName: moderatorName || null,
+                moderatorSource: 'panel',
+                source: 'panel',
+                metadata: { lockdownAction: safeAction },
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                eventSummary: `Lockdown ${safeAction === 'enable' ? 'enabled' : 'disabled'}`
+            });
             return true;
         } catch (error) {
             console.error('[MySQLDatabaseManager] Error logging manual lockdown:', error.message);
@@ -5107,7 +5974,7 @@ class MySQLDatabaseManager {
         try {
             const results = await this.connection.query(
                 `SELECT l.user_id, l.username, l.level, l.xp, l.messages,
-                        (SELECT COUNT(*) FROM warns w WHERE w.user_id = l.user_id AND w.type = "WARN") as warn_count,
+                        (SELECT COUNT(*) FROM moderation_cases mc WHERE mc.user_id = l.user_id AND mc.action_type = 'WARN' AND mc.status NOT IN ('cleared', 'reversed')) as warn_count,
                         (SELECT banned FROM user_bans WHERE user_id = l.user_id LIMIT 1) as banned
                  FROM levels l
                  WHERE l.username LIKE ? OR l.user_id LIKE ?
@@ -5145,7 +6012,10 @@ class MySQLDatabaseManager {
                     }
                 ),
                 this.query(
-                    'SELECT * FROM warns WHERE user_id = ? AND type = "WARN" ORDER BY timestamp DESC',
+                    `SELECT case_id, user_id, user_name AS username, reason, moderator_id, moderator_name, action_type AS type, created_at AS timestamp, created_at, updated_at, status
+                     FROM moderation_cases
+                     WHERE user_id = ? AND action_type = 'WARN' AND status NOT IN ('cleared', 'reversed')
+                     ORDER BY created_at DESC`,
                     [validId],
                     {
                         useCache: true,

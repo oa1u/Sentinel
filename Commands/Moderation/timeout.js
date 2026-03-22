@@ -3,8 +3,8 @@ const moment = require("moment");
 require("moment-duration-format");
 const { generateCaseId } = require("../../Events/caseId");
 const { sendErrorReply, sendSuccessReply, sendWarningReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
-const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
-const AdminPanelHelper = require("../../Functions/AdminPanelHelper");
+const { canModerateMember, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
+const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
 
 function parseDuration(input) {
   const match = input.match(/^(\d+)([mhdw])$/i);
@@ -112,7 +112,7 @@ module.exports = {
     const expiresAt = Date.now() + timeoutMs;
 
     const logEmbed = createModerationEmbed({
-      action: '⏱️ Time Out',
+      action: 'Time Out',
       target: targetUser,
       moderator: interaction.user,
       reason: reason,
@@ -148,36 +148,28 @@ module.exports = {
 
     await logModerationAction(interaction, logEmbed);
 
-    addCase(targetUser.id, caseID, {
-      moderator: interaction.user.id,
-      moderatorTag: interaction.user.username,
-      userTag: targetUser.username,
-      reason: `(timeout ${durationInput}) - ${reason}`,
-      date: moment(Date.now()).format('LL'),
-      type: 'TIMEOUT',
-      duration: duration,
-      durationString: durationInput,
-      expiresAt: expiresAt
-    });
-
-    try {
-      await AdminPanelHelper.addTimeout({
-        userId: targetUser.id,
-        caseId: caseID,
-        username: targetUser.username,
-        reason: reason,
-        issuedBy: interaction.user.id,
-        issuedByName: interaction.user.username,
-        issuedBySource: 'discord',
-        issuedAt: Date.now(),
-        expiresAt: expiresAt
-      });
-    } catch (err) {
-      console.error('[timeout] Failed to add timeout to database:', err.message);
-    }
-
     try {
       await targetMember.timeout(timeoutMs, reason);
+
+      const createdAt = Date.now();
+      await DatabaseManager.upsertModerationCase({
+        caseId: caseID,
+        guildId: interaction.guild.id,
+        userId: targetUser.id,
+        userName: targetUser.username,
+        actionType: 'TIMEOUT',
+        status: 'active',
+        reason,
+        moderatorId: interaction.user.id,
+        moderatorName: interaction.user.username,
+        moderatorSource: 'discord',
+        source: 'discord',
+        expiresAt,
+        createdAt,
+        updatedAt: createdAt,
+        eventSummary: 'Timeout case recorded'
+      });
+      DatabaseManager.invalidateModerationUserCaches(targetUser.id);
 
       await sendSuccessReply(
         interaction,

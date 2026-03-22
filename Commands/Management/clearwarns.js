@@ -59,12 +59,9 @@ module.exports = {
     const caseID = interaction.options.getString('caseid');
 
     try {
-      const [rows] = await DatabaseManager.connection.pool.query(
-        'SELECT reason FROM warns WHERE case_id = ? AND user_id = ?',
-        [caseID, user.id]
-      );
+      const warningCase = await DatabaseManager.getModerationCaseById(caseID);
 
-      if (!rows || rows.length === 0) {
+      if (!warningCase || String(warningCase.user_id || '') !== String(user.id) || String(warningCase.action_type || '').toUpperCase() !== 'WARN') {
         const notFoundEmbed = new EmbedBuilder()
           .setColor(0xF04747)
           .setTitle('❌ Case Not Found')
@@ -75,12 +72,18 @@ module.exports = {
         });
       }
 
-      const caseReason = rows[0].reason;
+      const caseReason = warningCase.reason || 'No reason provided';
+      const cleared = await DatabaseManager.clearWarningCase(user.id, caseID, {
+        guildId: interaction.guild.id,
+        actorId: interaction.user.id,
+        actorName: interaction.user.tag,
+        details: 'Warning cleared via /clearwarns single',
+        updatedAt: Date.now()
+      });
 
-      await DatabaseManager.connection.pool.query(
-        'DELETE FROM warns WHERE case_id = ?',
-        [caseID]
-      );
+      if (!cleared) {
+        throw new Error('Failed to clear warning case from moderation ledger.');
+      }
 
       const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
       const em = new EmbedBuilder()
@@ -126,7 +129,13 @@ module.exports = {
         console.error('Error unbanning user:', err);
       });
     }
-    await DatabaseManager.clearUserWarns(user.id);
+    await DatabaseManager.clearAllWarningCases(user.id, {
+      guildId: interaction.guild.id,
+      actorId: interaction.user.id,
+      actorName: interaction.user.tag,
+      details: 'Warnings cleared via /clearwarns all',
+      updatedAt: Date.now()
+    });
 
     const clearedWarnsLog = interaction.client.channels.cache.get(serverLogChannelId);
     const em = new EmbedBuilder()

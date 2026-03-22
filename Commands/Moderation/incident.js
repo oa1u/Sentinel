@@ -177,7 +177,7 @@ module.exports = {
                 return sendWarningReply(
                     interaction,
                     'Case ID Not Found',
-                    `No moderation case with ID \`${caseId}\` was found in warns/timeouts/bans/kicks records.`
+                    `No moderation case with ID \`${caseId}\` was found in the moderation ledger.`
                 );
             }
 

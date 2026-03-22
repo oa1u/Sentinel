@@ -34,11 +34,11 @@ module.exports = {
     // Fetch warnings from MySQL
     let warns = [];
     try {
-      const [rows] = await DatabaseManager.connection.pool.query(
-        'SELECT case_id, reason, type, timestamp, created_at FROM warns WHERE user_id = ? ORDER BY timestamp DESC',
-        [targetUserId]
-      );
-      warns = rows || [];
+      warns = await DatabaseManager.getUserModerationCases(targetUserId, {
+        actionTypes: ['WARN'],
+        excludeStatuses: ['cleared', 'reversed'],
+        limit: 100
+      });
     } catch (err) {
       console.error('[warns] Error fetching warnings:', err);
       const errorEmbed = new EmbedBuilder()
@@ -49,7 +49,9 @@ module.exports = {
     }
 
     const noneMsg = viewingSelf ? 'You have not been warned before' : 'User has not been warned before';
-    const list = warns.length ? warns.map((w, idx) => `${idx + 1}. ${w.case_id}`).join('\n') : noneMsg;
+    const list = warns.length
+      ? warns.map((w, idx) => `${idx + 1}. ${w.case_id} (${w.effective_status || 'open'})`).join('\n')
+      : noneMsg;
 
     const em = new EmbedBuilder()
       .setTitle("Warnings")

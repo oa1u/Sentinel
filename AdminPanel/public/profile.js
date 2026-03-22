@@ -12,6 +12,190 @@ let activeSecurityWorkspaceTab = 'center';
 let activeProfileTab = 'security';
 let securityEventControlsInitialized = false;
 const DISCORD_LINK_BANNER_STORAGE_KEY = 'discord_link_banner_dismissed_v1';
+let confirmModalResolver = null;
+let pendingAvatarPreviewUrl = '';
+
+function getCurrentAvatarUrl() {
+    return String(currentUser?.avatar_url || currentUser?.avatarUrl || '').trim();
+}
+
+function revokePendingAvatarPreviewUrl() {
+    if (!pendingAvatarPreviewUrl) return;
+    URL.revokeObjectURL(pendingAvatarPreviewUrl);
+    pendingAvatarPreviewUrl = '';
+}
+
+function getSelectedAvatarFile() {
+    const input = document.getElementById('avatarFileInput');
+    return input?.files?.[0] || null;
+}
+
+function validateAvatarFile(file) {
+    if (!file) return { ok: false, message: 'Select an image to upload.' };
+
+    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+    if (!allowedTypes.has(file.type)) {
+        return { ok: false, message: 'Only PNG, JPG, GIF, and WEBP images are supported.' };
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+        return { ok: false, message: 'Avatar image must be 4MB or smaller.' };
+    }
+
+    return { ok: true, message: `Selected ${file.name}` };
+}
+
+async function postFormDataWithCsrf(url, formData, options = {}) {
+    const method = String(options.method || 'POST').toUpperCase();
+
+    const sendRequest = async (csrfToken) => {
+        return fetch(url, {
+            method,
+            credentials: 'include',
+            headers: {
+                ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+                ...(options.headers || {})
+            },
+            body: formData
+        });
+    };
+
+    let csrfToken = getCsrfTokenFromCookie();
+    if (!csrfToken) {
+        try {
+            if (window.AdminPanel?.api?.getJson) {
+                await window.AdminPanel.api.getJson('/api/csrf');
+            } else {
+                await fetch('/api/csrf', { credentials: 'include' });
+            }
+        } catch (error) {
+            console.warn('Failed to prefetch CSRF token', error);
+        }
+        csrfToken = getCsrfTokenFromCookie();
+    }
+
+    let response = await sendRequest(csrfToken);
+    if (response.status === 403 && !options._csrfRetried) {
+        if (window.AdminPanel?.api?.getJson) {
+            await window.AdminPanel.api.getJson('/api/csrf');
+        } else {
+            await fetch('/api/csrf', { credentials: 'include' });
+        }
+        csrfToken = getCsrfTokenFromCookie();
+        response = await sendRequest(csrfToken);
+    }
+
+    return response;
+}
+
+function renderAvatarSurface(element, username, avatarUrl) {
+    if (!element) return;
+    const safeName = String(username || '').trim();
+    const trimmedAvatarUrl = String(avatarUrl || '').trim();
+
+    if (trimmedAvatarUrl) {
+        element.innerHTML = '';
+        const image = document.createElement('img');
+        image.src = trimmedAvatarUrl;
+        image.alt = safeName || 'Avatar';
+        image.loading = 'lazy';
+        image.referrerPolicy = 'no-referrer';
+        image.addEventListener('error', () => {
+            element.innerHTML = '';
+            element.textContent = getProfileInitials(safeName);
+        }, { once: true });
+        element.appendChild(image);
+        return;
+    }
+
+    element.innerHTML = '';
+    element.textContent = getProfileInitials(safeName);
+}
+
+function syncAvatarEditorState() {
+    const input = document.getElementById('avatarFileInput');
+    const status = document.getElementById('avatarUploadStatus');
+    const preview = document.getElementById('accountAvatarPreview');
+    const resetBtn = document.getElementById('resetAvatarBtn');
+    const submitBtn = document.getElementById('changeAvatarSubmitBtn');
+    const uploadSurface = document.getElementById('avatarUploadSurface');
+    const uploadTitle = document.getElementById('avatarUploadTitle');
+    const uploadBadge = document.getElementById('avatarUploadFileBadge');
+    const username = currentUser?.username || 'User';
+    const selectedFile = getSelectedAvatarFile();
+
+    if (selectedFile) {
+        revokePendingAvatarPreviewUrl();
+        pendingAvatarPreviewUrl = URL.createObjectURL(selectedFile);
+    } else {
+        revokePendingAvatarPreviewUrl();
+    }
+
+    const effectiveAvatar = pendingAvatarPreviewUrl || getCurrentAvatarUrl();
+
+    renderAvatarSurface(preview, username, effectiveAvatar);
+
+    if (status) {
+        if (!selectedFile && !getCurrentAvatarUrl()) {
+            status.textContent = 'No custom avatar set.';
+            status.style.color = 'var(--text-muted)';
+        } else if (!selectedFile && getCurrentAvatarUrl()) {
+            status.textContent = 'Current custom avatar is active.';
+            status.style.color = 'var(--text-muted)';
+        } else {
+            const validation = validateAvatarFile(selectedFile);
+            status.textContent = validation.ok ? 'Preview ready. Save to upload your new avatar.' : validation.message;
+            status.style.color = validation.ok ? '#86efac' : '#fca5a5';
+        }
+    }
+
+    if (uploadSurface) {
+        uploadSurface.classList.remove('is-selected', 'is-error');
+        if (selectedFile) {
+            const validation = validateAvatarFile(selectedFile);
+            uploadSurface.classList.add(validation.ok ? 'is-selected' : 'is-error');
+        }
+    }
+
+    if (uploadTitle) {
+        if (selectedFile) {
+            uploadTitle.textContent = selectedFile.name;
+        } else if (getCurrentAvatarUrl()) {
+            uploadTitle.textContent = 'Replace your current avatar';
+        } else {
+            uploadTitle.textContent = 'Choose an avatar image';
+        }
+    }
+
+    if (uploadBadge) {
+        if (selectedFile) {
+            const validation = validateAvatarFile(selectedFile);
+            const fileSizeMb = (selectedFile.size / (1024 * 1024)).toFixed(2);
+            uploadBadge.innerHTML = validation.ok
+                ? `<strong>Selected</strong> ${selectedFile.type.split('/')[1].toUpperCase()} • ${fileSizeMb} MB`
+                : `<strong>Error</strong> ${validation.message}`;
+        } else if (getCurrentAvatarUrl()) {
+            uploadBadge.innerHTML = '<strong>Status</strong> Current avatar saved';
+        } else {
+            uploadBadge.innerHTML = '<strong>Status</strong> No file selected';
+        }
+    }
+
+    if (resetBtn) {
+        const canReset = Boolean(getCurrentAvatarUrl()) || Boolean(selectedFile);
+        resetBtn.disabled = !canReset;
+        resetBtn.style.opacity = canReset ? '1' : '0.6';
+        resetBtn.style.cursor = canReset ? 'pointer' : 'not-allowed';
+        resetBtn.textContent = selectedFile ? 'Clear Selection' : 'Reset Avatar';
+    }
+
+    if (submitBtn) {
+        const validation = validateAvatarFile(selectedFile);
+        submitBtn.disabled = !validation.ok;
+        submitBtn.style.cursor = validation.ok ? 'pointer' : 'not-allowed';
+        submitBtn.style.opacity = validation.ok ? '1' : '0.7';
+    }
+}
 
 function setDiscordLinkBannerVisible(visible) {
     const banner = document.getElementById('discordLinkBanner');
@@ -81,32 +265,80 @@ function initDiscordLinkBanner() {
     }
 }
 
-function showConfirmModal(title, message, isDestructive, callback) {
+function showConfirmModal(configOrTitle, message, isDestructive, callback) {
     const modal = document.getElementById('confirmationModal');
-    if (!modal) return;
+    const options = typeof configOrTitle === 'object' && configOrTitle !== null
+        ? configOrTitle
+        : {
+            title: configOrTitle,
+            message,
+            isDestructive,
+            onConfirm: callback
+        };
 
-    document.getElementById('confirmModalTitle').textContent = title;
-    document.getElementById('confirmModalMessage').textContent = message;
+    const titleText = String(options.title || 'Confirm Action');
+    const messageText = String(options.message || 'Are you sure you want to proceed?');
+    const detailsText = String(options.details || '').trim();
+    const confirmText = String(options.confirmText || 'Confirm');
+    const cancelText = String(options.cancelText || 'Cancel');
+    const destructive = Boolean(options.isDestructive);
+    const onConfirm = typeof options.onConfirm === 'function' ? options.onConfirm : null;
 
+    if (!modal) {
+        if (onConfirm) {
+            const confirmed = confirm(messageText);
+            if (confirmed) onConfirm();
+            return;
+        }
+        return Promise.resolve(confirm(messageText));
+    }
+
+    const titleEl = document.getElementById('confirmModalTitle');
+    const messageEl = document.getElementById('confirmModalMessage');
+    const detailsEl = document.getElementById('confirmModalDetails');
+    const cancelBtn = document.getElementById('confirmModalCancelBtn');
     const confirmBtn = document.getElementById('confirmModalActionBtn');
+
+    if (titleEl) titleEl.textContent = titleText;
+    if (messageEl) messageEl.textContent = messageText;
+    if (detailsEl) {
+        detailsEl.textContent = detailsText;
+        detailsEl.style.display = detailsText ? 'block' : 'none';
+    }
+    if (cancelBtn) cancelBtn.textContent = cancelText;
+
     if (confirmBtn) {
-        confirmBtn.className = isDestructive ? 'btn btn-danger' : 'btn btn-primary';
-        confirmBtn.innerHTML = isDestructive ? '<i class="fas fa-trash-alt"></i> Confirm' : '<i class="fas fa-check"></i> Confirm';
+        confirmBtn.className = destructive ? 'btn btn-danger' : 'btn btn-primary';
+        confirmBtn.innerHTML = destructive
+            ? `<i class="fas fa-unlink"></i> ${confirmText}`
+            : `<i class="fas fa-check"></i> ${confirmText}`;
 
         const newBtn = confirmBtn.cloneNode(true);
         confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
 
-        newBtn.onclick = () => {
-            if (callback) callback();
-            closeConfirmModal();
+        newBtn.onclick = async () => {
+            try {
+                if (onConfirm) {
+                    await onConfirm();
+                }
+                closeConfirmModal(true);
+            } catch (error) {
+                closeConfirmModal(false);
+                throw error;
+            }
         };
     }
 
+    const promise = onConfirm ? null : new Promise((resolve) => {
+        confirmModalResolver = resolve;
+    });
+
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('show'), 10);
+    return promise;
 }
 
-function closeConfirmModal() {
+function closeConfirmModal(confirmed = false) {
     const modal = document.getElementById('confirmationModal');
     if (!modal) return;
 
@@ -114,6 +346,11 @@ function closeConfirmModal() {
     setTimeout(() => {
         modal.style.display = 'none';
     }, 300);
+
+    if (confirmModalResolver) {
+        confirmModalResolver(Boolean(confirmed));
+        confirmModalResolver = null;
+    }
 }
 
 let passwordConfirmResolver = null;
@@ -893,6 +1130,12 @@ function getProfileInitials(name) {
     return safeName.slice(0, 2).toUpperCase();
 }
 
+function renderProfileHero() {
+    const displayUsername = currentUser?.username || '-';
+    const heroAvatar = document.getElementById('profileHeroAvatar');
+    renderAvatarSurface(heroAvatar, displayUsername, getCurrentAvatarUrl());
+}
+
 async function loadProfile() {
     try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -938,16 +1181,18 @@ async function loadProfile() {
             }
             if (heroCreated) heroCreated.textContent = createdDate ? createdDate.toLocaleDateString() : 'Unknown';
             if (heroLastActive) heroLastActive.textContent = lastLoginDate ? lastLoginDate.toLocaleString() : (viewUserId ? 'N/A' : 'First login');
-            if (heroAvatar) heroAvatar.textContent = getProfileInitials(displayUsername);
+            renderProfileHero();
             if (heroSubtitle) {
                 heroSubtitle.textContent = viewUserId
                     ? 'Viewing Discord account details, moderation visibility, and operational context.'
                     : 'Manage profile identity, account security, and linked service visibility from one place.';
             }
             updateEmailVerificationUI(Boolean(currentUser.email_verified), currentUser.email);
+            syncAvatarEditorState();
 
             if (viewUserId) {
                 setElementDisplayById('userActionsCard', 'block');
+                setElementDisplayById('changeAvatarCard', 'none');
                 setElementDisplayById('emailVerificationCard', 'none');
                 setElementDisplayById('changeEmailCard', 'none');
                 setElementDisplayById('changePasswordCard', 'none');
@@ -971,6 +1216,7 @@ async function loadProfile() {
                 applyProfileTab('security');
             } else {
                 setElementDisplayById('userActionsCard', 'none');
+                setElementDisplayById('changeAvatarCard', 'block');
                 setElementDisplayById('emailVerificationCard', 'block');
                 setElementDisplayById('changeEmailCard', 'block');
                 setElementDisplayById('changePasswordCard', 'block');
@@ -2176,18 +2422,14 @@ async function unlinkDiscordAccount() {
 
     if (discordUnlinkInProgress) return;
 
-    let confirmed = true;
-    if (typeof modalManager !== 'undefined' && modalManager?.showConfirm) {
-        confirmed = await modalManager.showConfirm({
-            title: 'Unlink Discord Account',
-            message: 'Unlink your Discord account from this panel profile?',
-            confirmText: 'Unlink',
-            cancelText: 'Cancel',
-            type: 'warning'
-        });
-    } else {
-        confirmed = confirm('Unlink your Discord account from this panel profile?');
-    }
+    const confirmed = await showConfirmModal({
+        title: 'Disconnect Discord Account?',
+        message: 'Remove the linked Discord account from this panel profile?',
+        details: 'This only disconnects Discord from your panel profile. You can link it again later from the Discord section.',
+        confirmText: 'Unlink account',
+        cancelText: 'Keep linked',
+        isDestructive: true
+    });
 
     if (!confirmed) return;
 
@@ -2524,6 +2766,96 @@ bindListenerById('changeEmailForm', 'submit', async function (e) {
         }
         updateChangeEmailButtonState();
     }
+});
+
+bindListenerById('avatarFileInput', 'change', syncAvatarEditorState);
+bindListenerById('changeAvatarForm', 'submit', async function (e) {
+    e.preventDefault();
+
+    const input = document.getElementById('avatarFileInput');
+    const submitBtn = document.getElementById('changeAvatarSubmitBtn');
+    const selectedFile = getSelectedAvatarFile();
+    const validation = validateAvatarFile(selectedFile);
+
+    if (!validation.ok) {
+        profileShowError(validation.message);
+        return;
+    }
+
+    document.getElementById('changeAvatarBtnText').style.display = 'none';
+    document.getElementById('changeAvatarLoading').classList.remove('hidden');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.style.cursor = 'not-allowed';
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('avatar', selectedFile);
+
+        const response = await postFormDataWithCsrf('/api/user/change-avatar', formData);
+        const data = await response.json();
+
+        if (response.ok) {
+            currentUser.avatar_url = data.avatar_url || null;
+            currentUser.avatar_updated_at = data.avatar_updated_at || null;
+            if (input) input.value = '';
+            renderProfileHero();
+            syncAvatarEditorState();
+            profileShowSuccess(data.message || 'Avatar uploaded successfully');
+        } else {
+            profileShowError(data.error || 'Failed to change avatar');
+        }
+    } catch (error) {
+        console.error('Error changing avatar:', error);
+        profileShowError('Failed to change avatar');
+    } finally {
+        document.getElementById('changeAvatarBtnText').style.display = 'inline';
+        document.getElementById('changeAvatarLoading').classList.add('hidden');
+        syncAvatarEditorState();
+    }
+});
+
+bindListenerById('resetAvatarBtn', 'click', async function () {
+    const input = document.getElementById('avatarFileInput');
+    const selectedFile = getSelectedAvatarFile();
+
+    if (selectedFile) {
+        if (input) input.value = '';
+        syncAvatarEditorState();
+        return;
+    }
+
+    if (!getCurrentAvatarUrl()) return;
+
+    const confirmed = await showConfirmModal({
+        title: 'Reset Avatar',
+        message: 'Remove your custom avatar and return to initials?',
+        confirmText: 'Reset Avatar',
+        isDestructive: true
+    });
+
+    if (!confirmed) return;
+
+    if (input) input.value = '';
+
+    const formData = new FormData();
+    formData.append('resetAvatar', '1');
+
+    const response = await postFormDataWithCsrf('/api/user/change-avatar', formData);
+    const data = await response.json().catch(() => ({}));
+
+    if (response.ok) {
+        currentUser.avatar_url = null;
+        currentUser.avatar_updated_at = null;
+        renderProfileHero();
+        syncAvatarEditorState();
+        profileShowSuccess(data.message || 'Avatar reset successfully');
+        return;
+    }
+
+    syncAvatarEditorState();
+    profileShowError(data.error || 'Failed to reset avatar');
 });
 
 async function warnUser() {

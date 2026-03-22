@@ -4,7 +4,7 @@ function prettifyConstantName(key) {
     name = name.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
     return name.trim();
 }
-const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -28,7 +28,7 @@ module.exports = {
     category: 'Management',
     async execute(interaction) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
+            return interaction.reply({ content: 'You do not have permission to use this command.', flags: MessageFlags.Ephemeral });
         }
         const type = interaction.options.getString('type');
         let filePath;
@@ -37,7 +37,7 @@ module.exports = {
         } else if (type === 'role') {
             filePath = path.join(__dirname, '../../Config/constants/roles.json');
         } else {
-            return interaction.reply({ content: 'Type must be either "channel" or "role".', ephemeral: true });
+            return interaction.reply({ content: 'Type must be either "channel" or "role".', flags: MessageFlags.Ephemeral });
         }
         let config;
         try {
@@ -47,7 +47,7 @@ module.exports = {
         }
         const keys = Object.keys(config);
         if (keys.length === 0) {
-            return interaction.reply({ content: `No constants found in ${type}.json.`, ephemeral: true });
+            return interaction.reply({ content: `No constants found in ${type}.json.`, flags: MessageFlags.Ephemeral });
         }
 
         const sessionId = `${interaction.guildId}:${interaction.user.id}`;
@@ -60,7 +60,7 @@ module.exports = {
                     .setDescription(`Setup started for **${type}.json**. Type \`cancel\` anytime to stop.`)
                     .setColor(0x5865F2)
             ],
-            flags: 64
+            flags: MessageFlags.Ephemeral
         });
         askNext(interaction, sessionId);
     }

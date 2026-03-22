@@ -52,6 +52,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (idx !== 0) tc.style.display = 'none';
     });
 
+    document.querySelectorAll('.changelog-entry-card').forEach((card) => {
+        card.dataset.collapsed = 'true';
+    });
+
+    if (window.ui && typeof window.ui.initCollapsibleCards === 'function') {
+        window.ui.initCollapsibleCards({
+            cardSelector: '.changelog-entry-card',
+            headerSelector: '.changelog-entry-header',
+            bodyClass: 'changelog-entry-body',
+            toggleClass: 'changelog-entry-toggle',
+            titleSelector: '.changelog-entry-header h3',
+            collapseLabel: 'Hide',
+            expandLabel: 'Show',
+            defaultCollapsed: true
+        });
+    }
+
     const primaryLink = document.getElementById('githubIssuesLink');
     const quickLink = document.getElementById('quickIssuesLink');
     const latestReleaseVersion = document.getElementById('latestReleaseVersion');

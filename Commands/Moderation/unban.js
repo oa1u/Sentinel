@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('@discordjs/builders');
 const { MessageFlags, PermissionFlagsBits } = require('discord.js');
+const { generateCaseId } = require('../../Events/caseId');
+const dbManager = require('../../Functions/MySQLDatabaseManager');
 const {
   ROLES: { moderatorRoleId, administratorRoleId },
   CHANNELS: { serverLogChannelId }
@@ -41,15 +43,14 @@ module.exports = {
 
     let targetUserId = userOption ? userOption.id : null;
     let resolvedCaseId = caseIdOption || null;
-
-    const dbManager = require('../../Functions/MySQLDatabaseManager');
+    let originalBanCase = null;
 
     if (caseIdOption) {
       try {
-        const [banRows] = await dbManager.connection.pool.query('SELECT user_id, ban_case_id FROM user_bans WHERE ban_case_id = ?', [caseIdOption]);
-        if (banRows && banRows.length > 0) {
-          targetUserId = banRows[0].user_id;
-          resolvedCaseId = banRows[0].ban_case_id;
+        originalBanCase = await dbManager.getModerationCaseById(caseIdOption);
+        if (originalBanCase && String(originalBanCase.action_type || '').toUpperCase() === 'BAN') {
+          targetUserId = originalBanCase.user_id;
+          resolvedCaseId = originalBanCase.case_id;
         } else {
           const notFound = new EmbedBuilder()
             .setColor(0xF04747)
@@ -67,9 +68,9 @@ module.exports = {
       }
     } else if (userOption) {
       try {
-        const [banRows] = await dbManager.connection.pool.query('SELECT ban_case_id FROM user_bans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userOption.id]);
-        if (banRows && banRows.length > 0) {
-          resolvedCaseId = banRows[0].ban_case_id;
+        originalBanCase = await dbManager.getLatestActiveBanCaseForUser(userOption.id, interaction.guild.id);
+        if (originalBanCase?.case_id) {
+          resolvedCaseId = originalBanCase.case_id;
         }
       } catch (err) {
         console.error('[unban] Error looking up user bans:', err);
@@ -87,52 +88,24 @@ module.exports = {
     const targetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
     const targetLabel = targetUser ? `${targetUser.tag} (${targetUser.id})` : targetUserId;
 
-    function generateCaseId(type) {
-      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-      return `${type}-${random}`;
-    }
-
     const newUnbanCaseId = generateCaseId('UNBAN');
     const providedReason = interaction.options.getString('reason', true);
 
     let originalBanCaseId = resolvedCaseId || null;
     let originalBanReason = null;
 
-    if (originalBanCaseId) {
-      try {
-        const [rows] = await dbManager.connection.pool.query('SELECT ban_reason AS reason FROM user_bans WHERE ban_case_id = ? LIMIT 1', [originalBanCaseId]);
-        if (rows && rows.length > 0) originalBanReason = rows[0].reason;
-      } catch (e) {
-        console.error('[unban] Failed to fetch original ban reason:', e);
-      }
-    } else if (targetUserId) {
-      try {
-        const [rows] = await dbManager.connection.pool.query('SELECT ban_case_id, ban_reason AS reason FROM user_bans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [targetUserId]);
-        if (rows && rows.length > 0) {
-          originalBanCaseId = rows[0].ban_case_id;
-          originalBanReason = rows[0].reason;
-        }
-      } catch (e) {
-        console.error('[unban] Error looking up latest ban for user:', e);
-      }
+    if (!originalBanCase && originalBanCaseId) {
+      originalBanCase = await dbManager.getModerationCaseById(originalBanCaseId);
     }
 
-    await dbManager.connection.query(
-      `INSERT INTO unbans (user_id, unban_case_id, unbanned_at, unbanned_by, unbanned_by_name, unbanned_by_source, user_name, original_ban_case_id, original_ban_reason, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        targetUserId,
-        newUnbanCaseId,
-        new Date(),
-        interaction.user.id,
-        interaction.user.username,
-        'discord',
-        targetUser ? targetUser.username : null,
-        originalBanCaseId,
-        originalBanReason,
-        providedReason
-      ]
-    );
+    if (!originalBanCase && targetUserId) {
+      originalBanCase = await dbManager.getLatestActiveBanCaseForUser(targetUserId, interaction.guild.id);
+    }
 
+    originalBanCaseId = originalBanCase?.case_id || originalBanCaseId || null;
+    originalBanReason = originalBanCase?.reason || null;
+
+    const unbanCreatedAt = Date.now();
     const unbanResult = await interaction.guild.members.unban(targetUserId, providedReason).catch(err => {
       console.error('Error unbanning user:', err);
       return null;
@@ -146,7 +119,39 @@ module.exports = {
       return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
 
+    await dbManager.upsertModerationCase({
+      caseId: newUnbanCaseId,
+      guildId: interaction.guild.id,
+      userId: targetUserId,
+      userName: targetUser ? targetUser.username : null,
+      actionType: 'UNBAN',
+      status: 'closed',
+      reason: providedReason,
+      moderatorId: interaction.user.id,
+      moderatorName: interaction.user.username,
+      moderatorSource: 'discord',
+      source: 'discord',
+      relatedCaseId: originalBanCaseId,
+      rootCaseId: originalBanCase?.root_case_id || originalBanCaseId || newUnbanCaseId,
+      metadata: originalBanReason ? { originalBanReason } : null,
+      createdAt: unbanCreatedAt,
+      updatedAt: unbanCreatedAt,
+      eventSummary: 'Unban case recorded'
+    });
+
+    if (originalBanCaseId) {
+      await dbManager.updateModerationCaseStatus(originalBanCaseId, 'reversed', {
+        guildId: interaction.guild.id,
+        actorId: interaction.user.id,
+        actorName: interaction.user.username,
+        relatedCaseId: newUnbanCaseId,
+        details: `Reversed by unban case ${newUnbanCaseId}`,
+        updatedAt: unbanCreatedAt
+      });
+    }
+
     await dbManager.unbanUser(targetUserId);
+    dbManager.invalidateModerationUserCaches(targetUserId);
 
     const logChannel = interaction.client.channels.cache.get(serverLogChannelId);
     const em = new EmbedBuilder()

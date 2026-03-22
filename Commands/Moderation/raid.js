@@ -61,17 +61,26 @@ module.exports = {
             const caseId = generateCaseId('LOCKDOWN');
             const status = await AntiRaid.setManualLockdown(interaction.guild, true, interaction.user, reason);
 
-            await DatabaseManager.logManualLockdown({
-                guildId: interaction.guild.id,
-                actionType: 'enable',
+            await DatabaseManager.upsertModerationCase({
                 caseId,
+                guildId: interaction.guild.id,
+                userId: interaction.user.id,
+                userName: interaction.guild.name,
+                actionType: 'LOCKDOWN',
+                status: 'active',
+                reason,
                 moderatorId: interaction.user.id,
                 moderatorName: interaction.user.username,
-                reason
+                moderatorSource: 'discord',
+                source: 'discord',
+                metadata: { lockdownAction: 'enable' },
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                eventSummary: 'Lockdown enabled'
             }).catch(() => { });
 
             const logEmbed = createModerationEmbed({
-                action: '🚨 Lockdown Enabled',
+                action: 'Lockdown Enabled',
                 moderator: interaction.user,
                 reason,
                 caseId,
@@ -93,17 +102,26 @@ module.exports = {
             const caseId = generateCaseId('LOCKDOWN');
             await AntiRaid.setManualLockdown(interaction.guild, false, interaction.user, reason);
 
-            await DatabaseManager.logManualLockdown({
-                guildId: interaction.guild.id,
-                actionType: 'disable',
+            await DatabaseManager.upsertModerationCase({
                 caseId,
+                guildId: interaction.guild.id,
+                userId: interaction.user.id,
+                userName: interaction.guild.name,
+                actionType: 'LOCKDOWN',
+                status: 'closed',
+                reason,
                 moderatorId: interaction.user.id,
                 moderatorName: interaction.user.username,
-                reason
+                moderatorSource: 'discord',
+                source: 'discord',
+                metadata: { lockdownAction: 'disable' },
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                eventSummary: 'Lockdown disabled'
             }).catch(() => { });
 
             const logEmbed = createModerationEmbed({
-                action: '✅ Lockdown Disabled',
+                action: 'Lockdown Disabled',
                 moderator: interaction.user,
                 reason,
                 caseId,
@@ -128,14 +146,7 @@ module.exports = {
 
             let rows = [];
             try {
-                rows = await DatabaseManager.connection.query(
-                    `SELECT action_type, case_id, moderator_name, reason, created_at
-                     FROM manual_lockdowns
-                     WHERE guild_id = ?
-                     ORDER BY created_at DESC
-                     LIMIT ?`,
-                    [String(interaction.guild.id), limit]
-                );
+                rows = await DatabaseManager.getLockdownHistory(interaction.guild.id, limit);
             } catch (err) {
                 return sendWarningReply(interaction, 'History Unavailable', 'Unable to load manual lockdown history.');
             }
@@ -149,7 +160,7 @@ module.exports = {
                 const caseId = String(row.case_id || 'N/A');
                 const moderatorName = String(row.moderator_name || 'Unknown');
                 const reason = String(row.reason || 'No reason provided');
-                const timestamp = row.created_at ? Math.floor(new Date(row.created_at).getTime() / 1000) : null;
+                const timestamp = row.created_at ? Math.floor(Number(row.created_at) / 1000) : null;
                 const timeLabel = timestamp ? `<t:${timestamp}:R>` : 'Unknown time';
                 return `• ${action} | ${timeLabel}\n  Case: \`${caseId}\` | By: ${moderatorName}\n  Reason: ${reason}`;
             });

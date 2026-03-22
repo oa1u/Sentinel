@@ -3,9 +3,8 @@ const moment = require("moment");
 require("moment-duration-format");
 const { generateCaseId } = require("../../Events/caseId");
 const { sendErrorReply, sendSuccessReply, sendWarningReply, sendInfoReply, createModerationEmbed, createModerationDmEmbed } = require("../../Functions/EmbedBuilders");
-const { canModerateMember, addCase, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
+const { canModerateMember, sendModerationDM, logModerationAction } = require("../../Functions/ModerationHelper");
 const DatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const AdminPanelHelper = require('../../Functions/AdminPanelHelper');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -35,6 +34,7 @@ module.exports = {
     let targetUser = interaction.options.getUser('user');
     const caseId = interaction.options.getString('caseid');
     const reason = interaction.options.getString('reason') || 'No reason provided';
+    let originalTimeoutCase = null;
 
     if (!targetUser && !caseId) {
       return sendWarningReply(
@@ -46,10 +46,9 @@ module.exports = {
 
     if (caseId) {
       try {
-        const query = 'SELECT user_id, case_id, reason, issued_at, expires_at, active FROM timeouts WHERE case_id = ? LIMIT 1';
-        const [rows] = await DatabaseManager.connection.pool.query(query, [caseId]);
+        const foundCase = await DatabaseManager.getModerationCaseById(caseId);
 
-        if (!rows || rows.length === 0) {
+        if (!foundCase || String(foundCase.action_type || '').toUpperCase() !== 'TIMEOUT') {
           return sendInfoReply(
             interaction,
             'Case Not Found',
@@ -57,7 +56,7 @@ module.exports = {
           );
         }
 
-        const foundCase = rows[0];
+        originalTimeoutCase = foundCase;
         const foundUserId = foundCase.user_id;
 
         try {
@@ -83,6 +82,10 @@ module.exports = {
       return;
     }
 
+    if (!originalTimeoutCase && targetUser) {
+      originalTimeoutCase = await DatabaseManager.getLatestActiveTimeoutCaseForUser(targetUser.id, interaction.guild.id);
+    }
+
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
       await sendWarningReply(
@@ -105,7 +108,7 @@ module.exports = {
     const newCaseID = generateCaseId('UNTIMEOUT');
 
     const logEmbed = createModerationEmbed({
-      action: '✅ Untimeout',
+      action: 'Untimeout',
       target: targetUser,
       moderator: interaction.user,
       reason: reason,
@@ -138,29 +141,41 @@ module.exports = {
 
     await logModerationAction(interaction, logEmbed);
 
-    addCase(targetUser.id, newCaseID, {
-      moderator: interaction.user.id,
-      moderatorTag: interaction.user.username,
-      userTag: targetUser.username,
-      reason: `(untimeout) - ${reason}`,
-      date: moment(Date.now()).format('LL'),
-      type: 'UNTIMEOUT',
-      originalCase: caseId || null
-    });
-
-    try {
-      await AdminPanelHelper.clearTimeout(targetUser.id, {
-        caseId: newCaseID,
-        clearedBy: interaction.user.id,
-        clearedAt: Date.now(),
-        reason: reason
-      });
-    } catch (err) {
-      console.error('[untimeout] Failed to remove timeout from database:', err.message);
-    }
-
     try {
       await targetMember.timeout(null, reason);
+
+      const updatedAt = Date.now();
+
+      if (originalTimeoutCase?.case_id) {
+        await DatabaseManager.updateModerationCaseStatus(originalTimeoutCase.case_id, 'cleared', {
+          guildId: interaction.guild.id,
+          actorId: interaction.user.id,
+          actorName: interaction.user.username,
+          relatedCaseId: newCaseID,
+          details: reason,
+          updatedAt
+        });
+      }
+
+      await DatabaseManager.upsertModerationCase({
+        caseId: newCaseID,
+        guildId: interaction.guild.id,
+        userId: targetUser.id,
+        userName: targetUser.username,
+        actionType: 'UNTIMEOUT',
+        status: 'closed',
+        reason,
+        moderatorId: interaction.user.id,
+        moderatorName: interaction.user.username,
+        moderatorSource: 'discord',
+        source: 'discord',
+        relatedCaseId: originalTimeoutCase?.case_id || null,
+        rootCaseId: originalTimeoutCase?.root_case_id || originalTimeoutCase?.case_id || newCaseID,
+        createdAt: updatedAt,
+        updatedAt,
+        eventSummary: 'Untimeout case recorded'
+      });
+      DatabaseManager.invalidateModerationUserCaches(targetUser.id);
 
       await sendSuccessReply(
         interaction,

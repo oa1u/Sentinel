@@ -42,7 +42,7 @@ module.exports = {
 
       const caseID = generateCaseId('BAN');
       const logEmbed = createModerationEmbed({
-        action: '🔨 Ban',
+        action: 'Ban',
         target: targetUser,
         moderator: interaction.user,
         reason: reason,
