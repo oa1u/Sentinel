@@ -5,13 +5,25 @@ const crypto = require('crypto');
 // stored 2FA secrets. These helpers keep 2FA logic in one place.
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-function generateBase32Secret(length = 32) {
-    const bytes = crypto.randomBytes(length);
-    let output = '';
-    for (let i = 0; i < bytes.length; i += 1) {
-        output += BASE32_ALPHABET[bytes[i] % BASE32_ALPHABET.length];
+function bufferToBase32(buffer) {
+    let bits = '';
+    for (const byte of buffer) {
+        bits += byte.toString(2).padStart(8, '0');
     }
+
+    let output = '';
+    for (let i = 0; i < bits.length; i += 5) {
+        const chunk = bits.slice(i, i + 5).padEnd(5, '0');
+        output += BASE32_ALPHABET[parseInt(chunk, 2)];
+    }
+
     return output;
+}
+
+function generateBase32Secret(length = 32) {
+    const normalizedLength = Math.max(16, Number(length) || 32);
+    const byteLength = Math.max(10, Math.ceil((normalizedLength * 5) / 8));
+    return bufferToBase32(crypto.randomBytes(byteLength)).slice(0, normalizedLength);
 }
 
 function base32ToBuffer(base32) {
@@ -52,9 +64,21 @@ function generateTotp(secret, time = Date.now(), stepSeconds = 30, digits = 6) {
     return generateHotp(secret, counter, digits);
 }
 
-function verifyTotp(token, secret, options = {}) {
+function timingSafeTokenCompare(candidate, token) {
+    const candidateBuffer = Buffer.from(String(candidate || ''), 'utf8');
+    const tokenBuffer = Buffer.from(String(token || ''), 'utf8');
+    if (candidateBuffer.length !== tokenBuffer.length) {
+        return false;
+    }
+
+    return crypto.timingSafeEqual(candidateBuffer, tokenBuffer);
+}
+
+function verifyTotpDetailed(token, secret, options = {}) {
     const normalizedToken = String(token || '').replace(/\s+/g, '');
-    if (!/^\d{6}$/.test(normalizedToken)) return false;
+    if (!/^\d{6}$/.test(normalizedToken)) {
+        return { valid: false, counter: null, delta: null };
+    }
 
     const stepSeconds = Number(options.stepSeconds) || 30;
     const digits = Number(options.digits) || 6;
@@ -62,13 +86,18 @@ function verifyTotp(token, secret, options = {}) {
     const nowCounter = Math.floor(Date.now() / 1000 / stepSeconds);
 
     for (let delta = -window; delta <= window; delta += 1) {
-        const candidate = generateHotp(secret, nowCounter + delta, digits);
-        if (candidate === normalizedToken) {
-            return true;
+        const counter = nowCounter + delta;
+        const candidate = generateHotp(secret, counter, digits);
+        if (timingSafeTokenCompare(candidate, normalizedToken)) {
+            return { valid: true, counter, delta };
         }
     }
 
-    return false;
+    return { valid: false, counter: null, delta: null };
+}
+
+function verifyTotp(token, secret, options = {}) {
+    return verifyTotpDetailed(token, secret, options).valid;
 }
 
 function buildOtpauthUrl({ secret, accountName, issuer = 'Admin Panel' }) {
@@ -113,6 +142,7 @@ module.exports = {
     generateBase32Secret,
     generateTotp,
     verifyTotp,
+    verifyTotpDetailed,
     buildOtpauthUrl,
     encryptTwoFactorSecret,
     decryptTwoFactorSecret

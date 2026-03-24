@@ -5,6 +5,9 @@ let securitySummary = null;
 let securitySummaryLoadingPromise = null;
 let latestRecoveryCodes = [];
 let discordAccountLinked = false;
+let discordSecurityEligible = false;
+let discordSecurityReason = '';
+let discordProtectedFeatures = [];
 let discordUnlinkInProgress = false;
 let discordOAuthStartInProgress = false;
 let discordOAuthHealthState = 'checking';
@@ -12,6 +15,7 @@ let activeSecurityWorkspaceTab = 'center';
 let activeProfileTab = 'security';
 let securityEventControlsInitialized = false;
 const DISCORD_LINK_BANNER_STORAGE_KEY = 'discord_link_banner_dismissed_v1';
+const HIGH_RISK_ACTION_APPROVAL_STORAGE_KEY = 'sentinel_high_risk_action_approvals_v1';
 let confirmModalResolver = null;
 let pendingAvatarPreviewUrl = '';
 
@@ -123,6 +127,8 @@ function syncAvatarEditorState() {
     const uploadBadge = document.getElementById('avatarUploadFileBadge');
     const username = currentUser?.username || 'User';
     const selectedFile = getSelectedAvatarFile();
+    const discordLocked = !discordSecurityEligible;
+    const discordLockedReason = discordSecurityReason || 'Link Discord from the Discord tab to continue.';
 
     if (selectedFile) {
         revokePendingAvatarPreviewUrl();
@@ -136,7 +142,10 @@ function syncAvatarEditorState() {
     renderAvatarSurface(preview, username, effectiveAvatar);
 
     if (status) {
-        if (!selectedFile && !getCurrentAvatarUrl()) {
+        if (discordLocked) {
+            status.textContent = discordLockedReason;
+            status.style.color = '#fca5a5';
+        } else if (!selectedFile && !getCurrentAvatarUrl()) {
             status.textContent = 'No custom avatar set.';
             status.style.color = 'var(--text-muted)';
         } else if (!selectedFile && getCurrentAvatarUrl()) {
@@ -183,17 +192,19 @@ function syncAvatarEditorState() {
 
     if (resetBtn) {
         const canReset = Boolean(getCurrentAvatarUrl()) || Boolean(selectedFile);
-        resetBtn.disabled = !canReset;
-        resetBtn.style.opacity = canReset ? '1' : '0.6';
-        resetBtn.style.cursor = canReset ? 'pointer' : 'not-allowed';
+        resetBtn.disabled = discordLocked || !canReset;
+        resetBtn.style.opacity = (!discordLocked && canReset) ? '1' : '0.6';
+        resetBtn.style.cursor = (!discordLocked && canReset) ? 'pointer' : 'not-allowed';
+        resetBtn.title = discordLocked ? discordLockedReason : '';
         resetBtn.textContent = selectedFile ? 'Clear Selection' : 'Reset Avatar';
     }
 
     if (submitBtn) {
         const validation = validateAvatarFile(selectedFile);
-        submitBtn.disabled = !validation.ok;
-        submitBtn.style.cursor = validation.ok ? 'pointer' : 'not-allowed';
-        submitBtn.style.opacity = validation.ok ? '1' : '0.7';
+        submitBtn.disabled = discordLocked || !validation.ok;
+        submitBtn.style.cursor = (!discordLocked && validation.ok) ? 'pointer' : 'not-allowed';
+        submitBtn.style.opacity = (!discordLocked && validation.ok) ? '1' : '0.7';
+        submitBtn.title = discordLocked ? discordLockedReason : '';
     }
 }
 
@@ -415,6 +426,17 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function normalizeOriginValue(originValue) {
+    const raw = String(originValue || '').trim();
+    if (!raw) return '';
+
+    try {
+        return new URL(raw).origin.toLowerCase();
+    } catch (_) {
+        return raw.replace(/\/+$/, '').toLowerCase();
+    }
 }
 
 function buildStatusBadge(label, tone = 'neutral') {
@@ -1331,6 +1353,10 @@ async function loadDiscordOAuthRuntimeInfo() {
             throw new Error(data.error || 'Failed to read Discord OAuth runtime config');
         }
 
+        if (Array.isArray(data?.protectedFeatures) && data.protectedFeatures.length > 0) {
+            discordProtectedFeatures = data.protectedFeatures;
+        }
+
         if (!data.ready) {
             discordOAuthHealthState = 'unavailable';
             warning.textContent = 'Discord OAuth is not fully configured on the server. Linking is currently unavailable.';
@@ -1345,12 +1371,18 @@ async function loadDiscordOAuthRuntimeInfo() {
             return;
         }
 
-        const currentOrigin = window.location.origin;
+        const currentOrigin = String(window.location.origin || '').trim();
         const callbackOrigin = String(data.callbackOrigin || '').trim();
+        const requestOrigin = String(data.requestOrigin || '').trim();
+        const currentOriginNormalized = normalizeOriginValue(currentOrigin);
+        const callbackOriginNormalized = normalizeOriginValue(callbackOrigin);
+        const requestOriginNormalized = normalizeOriginValue(requestOrigin);
+        const browserOriginMismatch = Boolean(callbackOriginNormalized && currentOriginNormalized && currentOriginNormalized !== callbackOriginNormalized);
+        const serverOriginMismatch = Boolean(callbackOriginNormalized && requestOriginNormalized && requestOriginNormalized !== callbackOriginNormalized);
 
-        if (!discordAccountLinked && callbackOrigin && currentOrigin !== callbackOrigin) {
+        if (!discordAccountLinked && browserOriginMismatch) {
             discordOAuthHealthState = 'host-mismatch';
-            warning.innerHTML = `<strong>OAuth host mismatch detected.</strong><br>Current panel host: ${escapeHtml(currentOrigin)}<br>Configured callback host: ${escapeHtml(callbackOrigin)}<div class="discord-warning-fix"><strong>Fix:</strong> Open this panel on <strong>${escapeHtml(callbackOrigin)}</strong>, then sign in and retry linking.</div>`;
+            warning.innerHTML = `<strong>OAuth host mismatch detected.</strong><br>Current panel host: ${escapeHtml(currentOrigin)}<br>Configured callback host: ${escapeHtml(callbackOrigin)}${serverOriginMismatch && requestOrigin ? `<br>Server-detected request origin: ${escapeHtml(requestOrigin)}` : ''}<div class="discord-warning-fix"><strong>Fix:</strong> Open this panel on <strong>${escapeHtml(callbackOrigin)}</strong>, then sign in and retry linking.</div>`;
             warning.style.display = 'block';
             if (authorizeBtn) {
                 authorizeBtn.disabled = true;
@@ -1360,6 +1392,12 @@ async function loadDiscordOAuthRuntimeInfo() {
             }
             updateDiscordConnectionHealthChip();
             return;
+        }
+
+        if (!discordAccountLinked && serverOriginMismatch) {
+            discordOAuthHealthState = 'degraded';
+            warning.innerHTML = `<strong>Discord OAuth proxy warning.</strong><br>The panel host is correct, but the server detected a different proxy origin: ${escapeHtml(requestOrigin || 'Unknown')}. Linking should still work from this host, but check proxy headers if callbacks fail.`;
+            warning.style.display = 'block';
         }
 
         discordOAuthHealthState = discordAccountLinked ? 'linked' : 'ready';
@@ -1425,6 +1463,135 @@ function updateDiscordConnectionHealthChip() {
     target.setAttribute('aria-label', meta.label);
 }
 
+function getDiscordProtectedFeatureMessage(source, fallback = 'Link Discord from the Discord tab to continue.') {
+    const message = String(
+        source?.securityReason
+        || source?.error
+        || source?.discordLinkState?.securityReason
+        || ''
+    ).trim();
+    return message || fallback;
+}
+
+function handleDiscordProtectedError(data, fallback) {
+    if (!data?.discordLinkRequired) return false;
+    const message = getDiscordProtectedFeatureMessage(data?.discordLinkState || data, fallback);
+    applyProfileTab('discord');
+    profileShowError(message);
+    try {
+        document.getElementById('discordAuthorizeBtn')?.focus();
+    } catch (_) {
+    }
+    return true;
+}
+
+function readStoredHighRiskApprovals() {
+    try {
+        const raw = sessionStorage.getItem(HIGH_RISK_ACTION_APPROVAL_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function writeStoredHighRiskApprovals(value) {
+    try {
+        sessionStorage.setItem(HIGH_RISK_ACTION_APPROVAL_STORAGE_KEY, JSON.stringify(value || {}));
+    } catch (_) {
+    }
+}
+
+function getStoredHighRiskApproval(actionKey) {
+    const approvals = readStoredHighRiskApprovals();
+    const entry = approvals[String(actionKey || '')] || null;
+    if (!entry) return null;
+
+    const expiresAt = Number(new Date(entry.readyAt).getTime()) + (30 * 60 * 1000);
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+        clearStoredHighRiskApproval(actionKey);
+        return null;
+    }
+
+    return entry;
+}
+
+function setStoredHighRiskApproval(actionKey, payload) {
+    const approvals = readStoredHighRiskApprovals();
+    approvals[String(actionKey || '')] = payload;
+    writeStoredHighRiskApprovals(approvals);
+}
+
+function clearStoredHighRiskApproval(actionKey) {
+    const approvals = readStoredHighRiskApprovals();
+    delete approvals[String(actionKey || '')];
+    writeStoredHighRiskApprovals(approvals);
+}
+
+function buildHighRiskApprovalPayload(actionKey, payload = {}) {
+    const approval = getStoredHighRiskApproval(actionKey);
+    if (!approval) return { ...payload };
+
+    const readyAtMs = Number(new Date(approval.readyAt).getTime());
+    if (Number.isFinite(readyAtMs) && Date.now() < readyAtMs) {
+        const seconds = Math.max(1, Math.ceil((readyAtMs - Date.now()) / 1000));
+        throw new Error(`Security delay in progress. Try again in about ${seconds}s.`);
+    }
+
+    return {
+        ...payload,
+        approvalToken: approval.approvalToken
+    };
+}
+
+function handleHighRiskApprovalResponse(actionKey, data) {
+    if (!data?.pendingApproval) return false;
+    setStoredHighRiskApproval(actionKey, {
+        approvalToken: String(data.approvalToken || '').trim(),
+        readyAt: String(data.readyAt || '')
+    });
+
+    const readyAtMs = Number(new Date(data.readyAt).getTime());
+    const seconds = Number.isFinite(readyAtMs)
+        ? Math.max(1, Math.ceil((readyAtMs - Date.now()) / 1000))
+        : null;
+    const countdownLabel = seconds ? ` Wait about ${seconds}s, then repeat the action to confirm.` : '';
+    profileShowSuccess(`${String(data.message || 'Security delay started.')}${countdownLabel}`);
+    return true;
+}
+
+function setDiscordProtectedControlState(element, locked, title) {
+    if (!element) return;
+    element.disabled = Boolean(locked);
+    element.style.opacity = locked ? '0.6' : '1';
+    element.style.cursor = locked ? 'not-allowed' : 'pointer';
+    element.title = locked ? title : '';
+}
+
+function applyDiscordProtectedFeatureState(discordLink) {
+    discordSecurityEligible = Boolean(discordLink?.securityEligible);
+    discordSecurityReason = getDiscordProtectedFeatureMessage(discordLink);
+    discordProtectedFeatures = Array.isArray(discordLink?.protectedFeatures)
+        ? discordLink.protectedFeatures.filter((feature) => typeof feature === 'string' && feature.trim())
+        : [];
+
+    const locked = !discordSecurityEligible;
+    const lockedReason = discordSecurityReason || 'Link Discord from the Discord tab to continue.';
+    const protectedControls = [
+        document.querySelector('button[onclick="generateRecoveryCodesForAccount()"]'),
+        document.querySelector('button[onclick="logoutOtherSessions()"]'),
+        document.getElementById('setup2faBtn'),
+        document.getElementById('disable2faBtn'),
+        document.getElementById('changeEmailSubmitBtn'),
+        document.getElementById('changeAvatarSubmitBtn'),
+        document.getElementById('resetAvatarBtn')
+    ];
+
+    protectedControls.forEach((element) => {
+        setDiscordProtectedControlState(element, locked, lockedReason);
+    });
+}
+
 function updateTwoFactorStatus(enabled, enabledAt) {
     const statusEl = document.getElementById('twoFactorStatusText');
     const statusHintEl = document.getElementById('twoFactorStatusHint');
@@ -1449,6 +1616,10 @@ function updateTwoFactorStatus(enabled, enabledAt) {
     if (setupBtn) setupBtn.style.display = enabled ? 'none' : 'inline-flex';
     if (disableBtn) disableBtn.style.display = enabled ? 'inline-flex' : 'none';
     if (!enabled && setupPanel) setupPanel.style.display = 'none';
+
+    if (securitySummary?.discordLink) {
+        applyDiscordProtectedFeatureState(securitySummary.discordLink);
+    }
 }
 
 function formatAuthMethod(authMethod) {
@@ -1652,6 +1823,7 @@ function renderSecurityOverview(summary) {
     const metrics24h = summary?.metrics24h && typeof summary.metrics24h === 'object' ? summary.metrics24h : {};
     const hiddenStaleSessions = Number(summary?.hiddenStaleSessions || 0);
     const twoFactorEnabled = Boolean(summary?.twoFactorEnabled);
+    const discordLink = summary?.discordLink && typeof summary.discordLink === 'object' ? summary.discordLink : {};
 
     const failedEventsRecent = events.filter((event) => {
         const eventType = String(event?.eventType || '').toUpperCase();
@@ -1667,6 +1839,17 @@ function renderSecurityOverview(summary) {
         ? 'Needs Attention'
         : (failedEvents24h > 0 ? 'Elevated Monitoring' : 'Healthy');
     const riskTone = riskLevel === 'Healthy' ? 'positive' : 'warning';
+    const discordLinkedLabel = discordLink.linked ? 'Linked' : 'Unlinked';
+    const discordLinkedTone = discordLink.linked ? 'positive' : 'neutral';
+    const discordTrustLabel = !discordLink.linked
+        ? 'Unavailable'
+        : (discordLink.trustedPanelRole ? `Trusted as ${String(discordLink.trustedPanelRole).toUpperCase()}` : 'Linked only');
+    const discordTrustTone = discordLink.securityEligible ? 'positive' : (discordLink.linked ? 'warning' : 'neutral');
+    const verificationLabel = !discordLink.linked
+        ? 'No Discord verification'
+        : (discordLink.recentlyVerified
+            ? (discordLink.verificationSource === 'live' ? 'Verified just now' : 'Verified recently')
+            : 'Verification stale');
 
     const currentSession = sessions.find((session) => session.isCurrent) || null;
     const now = Date.now();
@@ -1681,6 +1864,9 @@ function renderSecurityOverview(summary) {
             return `Started ${ageHours}h ago`;
         })()
         : 'Current session active';
+    const verificationMetaLabel = discordLink.lastVerifiedAt
+        ? new Date(discordLink.lastVerifiedAt).toLocaleString()
+        : 'No verification timestamp recorded';
 
     primaryContainer.innerHTML = `
                 <div class="security-overview-item">
@@ -1705,6 +1891,21 @@ function renderSecurityOverview(summary) {
                     <strong>Failed Events (Recent)</strong>
                     <span class="overview-value">${escapeHtml(String(failedEvents24h))}</span>
                     <div class="security-empty-note">Tracks login and 2FA failures over the last rolling 24 hours.</div>
+                </div>
+                <div class="security-overview-item">
+                    <strong>Discord Link</strong>
+                    ${buildStatusBadge(discordLinkedLabel, discordLinkedTone)}
+                    <div class="security-empty-note">${escapeHtml(discordLink.linked ? 'A Discord account is connected to this panel account.' : 'Connect Discord before protected panel actions can use it.')}</div>
+                </div>
+                <div class="security-overview-item">
+                    <strong>Discord Trust</strong>
+                    ${buildStatusBadge(discordTrustLabel, discordTrustTone)}
+                    <div class="security-empty-note">${escapeHtml(getDiscordProtectedFeatureMessage(discordLink, 'Link Discord to unlock protected actions.'))}</div>
+                </div>
+                <div class="security-overview-item">
+                    <strong>Discord Verification</strong>
+                    ${buildStatusBadge(verificationLabel, discordLink.recentlyVerified ? 'positive' : (discordLink.linked ? 'warning' : 'neutral'))}
+                    <div class="security-empty-note">${escapeHtml(discordLink.lastVerifiedAt ? `Last verified: ${verificationMetaLabel}` : 'No recent Discord verification recorded.')}</div>
                 </div>
             `;
 }
@@ -2170,6 +2371,35 @@ function renderDiscordLink(discordLink) {
     const linkedAt = discordLink?.linkedAt ? new Date(discordLink.linkedAt).toLocaleString() : 'Unknown';
     const linkedUserId = discordLink?.discordUserId || 'Unknown ID';
     const linkedUsername = discordLink?.discordUsername || 'Unknown User';
+    const securityEligible = Boolean(discordLink?.securityEligible);
+    const securityReason = getDiscordProtectedFeatureMessage(discordLink);
+    const trustedPanelRole = String(discordLink?.trustedPanelRole || '').trim();
+    const lastVerifiedLabel = discordLink?.lastVerifiedAt
+        ? new Date(discordLink.lastVerifiedAt).toLocaleString()
+        : 'Not recently verified';
+    const protectedFeatures = Array.isArray(discordLink?.protectedFeatures) && discordLink.protectedFeatures.length
+        ? discordLink.protectedFeatures
+        : (discordProtectedFeatures.length ? discordProtectedFeatures : [
+            'Manage active sessions',
+            'Generate recovery codes',
+            'Configure two-factor authentication',
+            'Change account email',
+            'Change panel avatar'
+        ]);
+    const protectedFeatureList = protectedFeatures
+        .map((feature) => `<span style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.4rem 0.65rem; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); font-size:0.78rem; color:var(--text-secondary);">${escapeHtml(feature)}</span>`)
+        .join('');
+    const guildStatusLabel = discordLink?.guildVerificationRequired
+        ? (discordLink?.guildMemberVerified ? 'Server Member Verified' : (discordLink?.guildVerificationAvailable ? 'Server Membership Required' : 'Server Check Pending'))
+        : 'Discord Link Active';
+    const guildStatusTone = discordLink?.guildVerificationRequired
+        ? (discordLink?.guildMemberVerified ? 'positive' : 'warning')
+        : 'positive';
+    const securityBadge = buildStatusBadge(securityEligible ? 'Protected Features Unlocked' : 'Protected Features Locked', securityEligible ? 'positive' : 'warning');
+    const trustStatusLabel = securityEligible
+        ? (trustedPanelRole ? `Trusted for ${trustedPanelRole.toUpperCase()}` : 'Trusted for protected actions')
+        : (linked ? 'Linked only' : 'Unlinked');
+    const trustStatusTone = securityEligible ? 'positive' : (linked ? 'warning' : 'neutral');
 
     const profile = discordLink?.profile || {};
     const globalName = profile.globalName || '';
@@ -2192,6 +2422,8 @@ function renderDiscordLink(discordLink) {
     if (refreshMeta) {
         refreshMeta.textContent = `Last synced: ${new Date().toLocaleString()}`;
     }
+
+    applyDiscordProtectedFeatureState(discordLink || {});
 
     if (!linked) {
         status.innerHTML = `
@@ -2216,8 +2448,14 @@ function renderDiscordLink(discordLink) {
                 <p style="margin: 0 auto; max-width: 400px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
                     Verify your identity and unlock role-based access management by linking a Discord account.
                 </p>
+                <div style="display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:center; margin-top:1.25rem;">
+                    ${protectedFeatureList}
+                </div>
                 <div style="margin-top: 1.5rem;">
                     <span id="discordConnectionHealthChip"></span>
+                </div>
+                <div style="margin-top:0.9rem; color:var(--text-muted); font-size:0.82rem;">
+                    ${escapeHtml(securityReason)}
                 </div>
             </div>
         `;
@@ -2233,7 +2471,9 @@ function renderDiscordLink(discordLink) {
                     <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 0%, rgba(20, 21, 25, 0.8) 100%);"></div>
                     
                     <div style="position: absolute; top: 1.5rem; right: 1.5rem; display: flex; gap: 0.75rem; align-items: center; z-index: 2;">
-                        ${buildStatusBadge('Active Connection', 'positive')}
+                        ${buildStatusBadge('Discord Linked', 'positive')}
+                        ${buildStatusBadge(trustStatusLabel, trustStatusTone)}
+                        ${buildStatusBadge(guildStatusLabel, guildStatusTone)}
                         <span id="discordConnectionHealthChip"></span>
                     </div>
                 </div>
@@ -2282,6 +2522,15 @@ function renderDiscordLink(discordLink) {
 
                          <div style="display: flex; flex-direction: column; gap: 0.4rem;">
                               <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
+                                 <i class="fas fa-shield-alt" style="opacity: 0.5;"></i> Panel Trust
+                             </div>
+                             <div style="font-size: 0.95rem; font-weight: 500; color: #fff;">
+                                 ${escapeHtml(trustedPanelRole ? trustedPanelRole.toUpperCase() : 'Linked only')}
+                             </div>
+                         </div>
+
+                         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
                                  <i class="fas fa-palette" style="opacity: 0.5;"></i> Accent Color
                              </div>
                              <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -2289,6 +2538,26 @@ function renderDiscordLink(discordLink) {
                                  <code style="font-family: monospace; color: #fff; background: rgba(255,255,255,0.1); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.85rem;">${profileColor}</code>
                              </div>
                          </div>
+                    </div>
+
+                    <div style="margin-top:1.25rem; padding:1rem 1.1rem; background:rgba(88, 101, 242, 0.08); border:1px solid rgba(88, 101, 242, 0.22); border-radius:12px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+                            <div style="font-size:0.9rem; font-weight:600; color:#fff;">Discord security trust</div>
+                            ${securityBadge}
+                        </div>
+                        <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                            ${protectedFeatureList}
+                        </div>
+                        <div style="margin-top:0.8rem; color:var(--text-secondary); font-size:0.84rem; line-height:1.5;">
+                            ${escapeHtml(securityEligible
+            ? 'This Discord account is linked and currently trusted for protected account actions.'
+            : (linked
+                ? `This Discord account is linked, but it is not currently trusted for protected account actions. ${securityReason}`
+                : securityReason))}
+                        </div>
+                        <div style="margin-top:0.5rem; color:var(--text-muted); font-size:0.78rem; line-height:1.4;">
+                            Last Discord verification: ${escapeHtml(lastVerifiedLabel)}
+                        </div>
                     </div>
 
                 </div>
@@ -2303,8 +2572,20 @@ async function generateRecoveryCodesForAccount() {
     const currentPassword = await requestPasswordConfirmation();
     if (!currentPassword) return;
 
+    let token = '';
+    if (Boolean(securitySummary?.twoFactorEnabled)) {
+        const promptedToken = prompt('Enter your current authenticator 6-digit code to generate new recovery codes:');
+        if (!promptedToken) return;
+
+        token = String(promptedToken || '').trim();
+        if (!/^\d{6}$/.test(token)) {
+            profileShowError('Please enter a valid 6-digit 2FA code');
+            return;
+        }
+    }
+
     try {
-        const response = await postWithCsrf('/api/security/recovery-codes/generate', { currentPassword });
+        const response = await postWithCsrf('/api/security/recovery-codes/generate', { currentPassword, token });
         const raw = await response.text();
         let data = {};
         try {
@@ -2313,6 +2594,9 @@ async function generateRecoveryCodesForAccount() {
             data = {};
         }
         if (!response.ok) {
+            if (handleDiscordProtectedError(data, 'Link Discord to manage recovery codes.')) {
+                return;
+            }
             throw new Error(data.error || `Failed to generate recovery codes (HTTP ${response.status})`);
         }
 
@@ -2433,6 +2717,9 @@ async function unlinkDiscordAccount() {
 
     if (!confirmed) return;
 
+    const currentPassword = await requestPasswordConfirmation();
+    if (!currentPassword) return;
+
     const previousUnlinkText = unlinkBtn ? unlinkBtn.textContent : '';
     const previousUnlinkTitle = unlinkBtn ? (unlinkBtn.title || '') : '';
     const previousAuthorizeDisabled = authorizeBtn ? authorizeBtn.disabled : false;
@@ -2454,7 +2741,7 @@ async function unlinkDiscordAccount() {
     }
 
     try {
-        const response = await postWithCsrf('/api/account/discord-unlink', {});
+        const response = await postWithCsrf('/api/account/discord-unlink', buildHighRiskApprovalPayload('discord-unlink', { currentPassword }));
         const raw = await response.text();
         let data = {};
         try {
@@ -2462,9 +2749,17 @@ async function unlinkDiscordAccount() {
         } catch (_) {
             data = {};
         }
+        if (response.status === 202 && handleHighRiskApprovalResponse('discord-unlink', data)) {
+            return;
+        }
         if (!response.ok) {
+            if (handleDiscordProtectedError(data, 'Link Discord to manage Discord connection settings.')) {
+                return;
+            }
             throw new Error(data.error || `Failed to unlink Discord account (HTTP ${response.status})`);
         }
+
+        clearStoredHighRiskApproval('discord-unlink');
 
         profileShowSuccess('Discord account unlinked.');
         loadSecurityCenter();
@@ -2502,19 +2797,83 @@ function openSessionDetails(encodedSessionId) {
 
     const loginTime = session.loginTime ? new Date(Number(session.loginTime)).toLocaleString() : 'Unknown';
     const expiresAt = session.expiresAt ? new Date(session.expiresAt).toLocaleString() : 'Unknown';
+    const statusLabel = session.isCurrent ? 'Current Session' : 'Active Session';
+    const statusClass = session.isCurrent ? 'current' : 'active';
+    const expiresAtMs = session.expiresAt ? new Date(session.expiresAt).getTime() : 0;
+    const sessionAgeLabel = session.loginTime
+        ? formatRelativeTimeFromDate(Number(session.loginTime))
+        : 'Unknown';
+    const expiresInLabel = Number.isFinite(expiresAtMs) && expiresAtMs > 0
+        ? (expiresAtMs <= Date.now()
+            ? 'Expired'
+            : `In ${Math.max(1, Math.ceil((expiresAtMs - Date.now()) / 60000))}m`)
+        : 'Unknown';
+    const sessionHeadline = session.isCurrent
+        ? 'This browser currently holds the active authenticated panel session.'
+        : 'This device still has an active authenticated session for the panel.';
 
     body.innerHTML = `
-                <div><strong>Session ID:</strong><br>${escapeHtml(session.sessionId || 'Unknown')}</div>
-                <div><strong>Device:</strong><br>${escapeHtml(session.device || 'Unknown')}</div>
-                <div><strong>Status:</strong><br>${session.isCurrent ? 'Current Session' : 'Active Session'}</div>
-                <div><strong>IP Address:</strong><br>${escapeHtml(String(session.ipAddress || 'Unknown'))}</div>
-                <div><strong>Location:</strong><br>${escapeHtml(session.geoLabel || 'Unknown location')}</div>
-                <div><strong>Login Time:</strong><br>${escapeHtml(loginTime)}</div>
-                <div><strong>Expires:</strong><br>${escapeHtml(expiresAt)}</div>
-                <div><strong>User Agent:</strong><br><span style="word-break: break-word;">${escapeHtml(session.userAgent || 'Unknown')}</span></div>
+                <section class="session-summary">
+                    <span class="session-summary-badge">Session Inspection</span>
+                    <div class="session-summary-head">
+                        <div>
+                            <div class="session-summary-device">${escapeHtml(session.device || 'Unknown Device')}</div>
+                            <div class="session-summary-copy">${escapeHtml(sessionHeadline)}</div>
+                        </div>
+                        <span class="session-summary-status ${statusClass}">${escapeHtml(statusLabel)}</span>
+                    </div>
+                    <div class="session-summary-tags">
+                        <span class="session-summary-tag">Created ${escapeHtml(sessionAgeLabel)}</span>
+                        <span class="session-summary-tag">${escapeHtml(session.geoLabel || 'Unknown location')}</span>
+                        <span class="session-summary-tag">Expires ${escapeHtml(expiresInLabel)}</span>
+                    </div>
+                </section>
+
+                <section class="session-section-grid">
+                    <article class="session-surface">
+                        <div class="session-surface-head">
+                            <span class="session-surface-title">Session Details</span>
+                            <span class="session-surface-note">Current browser record</span>
+                        </div>
+                        <div class="session-detail-list">
+                            <div class="session-detail-row">
+                                <span class="session-detail-row-label">Session ID</span>
+                                <div class="session-detail-row-value subtle">${escapeHtml(session.sessionId || 'Unknown')}</div>
+                            </div>
+                            <div class="session-detail-row">
+                                <span class="session-detail-row-label">Device</span>
+                                <div class="session-detail-row-value">${escapeHtml(session.device || 'Unknown Device')}</div>
+                            </div>
+                            <div class="session-detail-row">
+                                <span class="session-detail-row-label">Status</span>
+                                <div class="session-detail-row-value">${escapeHtml(statusLabel)}</div>
+                            </div>
+                            <div class="session-detail-row">
+                                <span class="session-detail-row-label">IP Address</span>
+                                <div class="session-detail-row-value">${escapeHtml(String(session.ipAddress || 'Unknown'))}</div>
+                            </div>
+                            <div class="session-detail-row">
+                                <span class="session-detail-row-label">Login Time</span>
+                                <div class="session-detail-row-value">${escapeHtml(loginTime)}</div>
+                            </div>
+                            <div class="session-detail-row">
+                                <span class="session-detail-row-label">Expires At</span>
+                                <div class="session-detail-row-value">${escapeHtml(expiresAt)}</div>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="session-surface">
+                        <div class="session-surface-head">
+                            <span class="session-surface-title">User Agent</span>
+                            <span class="session-surface-note">Browser signature</span>
+                        </div>
+                        <div class="session-code-block">${escapeHtml(session.userAgent || 'Unknown')}</div>
+                    </article>
+                </section>
             `;
 
-    drawer.style.display = 'block';
+    drawer.style.display = 'flex';
 }
 
 function closeSessionDetails() {
@@ -2533,6 +2892,9 @@ function logoutOtherSessions() {
                 const data = await response.json();
 
                 if (!response.ok) {
+                    if (handleDiscordProtectedError(data, 'Link Discord to manage active sessions.')) {
+                        return;
+                    }
                     throw new Error(data.error || 'Failed to logout other sessions');
                 }
 
@@ -2560,6 +2922,9 @@ function revokeSession(encodedSessionId) {
                 const data = await response.json();
 
                 if (!response.ok) {
+                    if (handleDiscordProtectedError(data, 'Link Discord to manage active sessions.')) {
+                        return;
+                    }
                     throw new Error(data.error || 'Failed to revoke session');
                 }
 
@@ -2582,17 +2947,24 @@ async function startTwoFactorSetup() {
         const response = await postWithCsrf('/api/security/2fa/setup', { currentPassword });
         const data = await response.json();
         if (!response.ok) {
+            if (handleDiscordProtectedError(data, 'Link Discord to configure two-factor authentication.')) {
+                return;
+            }
             throw new Error(data.error || 'Failed to start 2FA setup');
         }
 
-        document.getElementById('twoFactorSecret').value = data.secret || '';
         if (document.getElementById('twoFactorVerifyCode')) document.getElementById('twoFactorVerifyCode').value = '';
 
         const qrWrap = document.getElementById('twoFactorQrWrap');
         const qrImage = document.getElementById('twoFactorQrImage');
-        if (qrWrap && qrImage && data.otpauthUri) {
-            qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.otpauthUri)}`;
+        if (qrWrap && qrImage && data.qrDataUrl) {
+            qrImage.src = data.qrDataUrl;
             qrWrap.style.display = 'block';
+        }
+
+        const manualKey = document.getElementById('twoFactorManualKey');
+        if (manualKey) {
+            manualKey.textContent = data.manualEntryKey || 'Unavailable';
         }
 
         document.getElementById('twoFactorSetupPanel').style.display = 'block';
@@ -2615,15 +2987,31 @@ async function confirmTwoFactorSetup() {
         const data = await response.json();
 
         if (!response.ok) {
+            if (handleDiscordProtectedError(data, 'Link Discord to enable two-factor authentication.')) {
+                return;
+            }
             throw new Error(data.error || 'Failed to enable 2FA');
+        }
+
+        latestRecoveryCodes = Array.isArray(data.codes) ? data.codes : [];
+        const recoveryWrap = document.getElementById('recoveryCodesWrap');
+        const recoveryOutput = document.getElementById('recoveryCodesOutput');
+        if (recoveryWrap) recoveryWrap.style.display = latestRecoveryCodes.length ? 'block' : 'none';
+        if (recoveryOutput) {
+            recoveryOutput.value = latestRecoveryCodes.join('\n');
+            recoveryOutput.classList.add('sensitive-blur');
+            recoveryOutput.classList.remove('revealed');
         }
 
         document.getElementById('twoFactorSetupPanel').style.display = 'none';
         const qrWrap = document.getElementById('twoFactorQrWrap');
         const qrImage = document.getElementById('twoFactorQrImage');
+        const manualKey = document.getElementById('twoFactorManualKey');
         if (qrWrap) qrWrap.style.display = 'none';
         if (qrImage) qrImage.src = '';
-        profileShowSuccess('Two-factor authentication enabled.');
+        if (manualKey) manualKey.textContent = 'Not generated yet';
+        applyProfileTab('recovery');
+        profileShowSuccess('Two-factor authentication enabled. Save your recovery codes before leaving this page.');
         loadSecurityCenter();
     } catch (error) {
         console.error('Error enabling 2FA:', error);
@@ -2639,12 +3027,21 @@ async function disableTwoFactor() {
     if (!token) return;
 
     try {
-        const response = await postWithCsrf('/api/security/2fa/disable', { currentPassword, token: token.trim() });
+        const response = await postWithCsrf('/api/security/2fa/disable', buildHighRiskApprovalPayload('two-factor-disable', { currentPassword, token: token.trim() }));
         const data = await response.json();
 
+        if (response.status === 202 && handleHighRiskApprovalResponse('two-factor-disable', data)) {
+            return;
+        }
+
         if (!response.ok) {
+            if (handleDiscordProtectedError(data, 'Link Discord to disable two-factor authentication.')) {
+                return;
+            }
             throw new Error(data.error || 'Failed to disable 2FA');
         }
+
+        clearStoredHighRiskApproval('two-factor-disable');
 
         profileShowSuccess('Two-factor authentication disabled.');
         loadSecurityCenter();
@@ -2740,8 +3137,12 @@ bindListenerById('changeEmailForm', 'submit', async function (e) {
     }
 
     try {
-        const response = await postWithCsrf('/api/user/change-email', { newEmail });
+        const response = await postWithCsrf('/api/user/change-email', buildHighRiskApprovalPayload('change-email', { newEmail }));
         const data = await response.json();
+
+        if (response.status === 202 && handleHighRiskApprovalResponse('change-email', data)) {
+            return;
+        }
 
         if (response.ok) {
             const updatedEmail = data.email || newEmail;
@@ -2750,8 +3151,12 @@ bindListenerById('changeEmailForm', 'submit', async function (e) {
             currentUser.email = updatedEmail;
             currentUser.email_verified = false;
             updateEmailVerificationUI(false, updatedEmail);
+            clearStoredHighRiskApproval('change-email');
             profileShowSuccess('Email updated. Please verify your new address from your inbox.');
         } else {
+            if (handleDiscordProtectedError(data, 'Link Discord to change your email address.')) {
+                return;
+            }
             profileShowError(data.error || 'Failed to change email');
         }
     } catch (error) {
@@ -2804,6 +3209,9 @@ bindListenerById('changeAvatarForm', 'submit', async function (e) {
             syncAvatarEditorState();
             profileShowSuccess(data.message || 'Avatar uploaded successfully');
         } else {
+            if (handleDiscordProtectedError(data, 'Link Discord to change your panel avatar.')) {
+                return;
+            }
             profileShowError(data.error || 'Failed to change avatar');
         }
     } catch (error) {
@@ -2855,6 +3263,9 @@ bindListenerById('resetAvatarBtn', 'click', async function () {
     }
 
     syncAvatarEditorState();
+    if (handleDiscordProtectedError(data, 'Link Discord to change your panel avatar.')) {
+        return;
+    }
     profileShowError(data.error || 'Failed to reset avatar');
 });
 

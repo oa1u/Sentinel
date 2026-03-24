@@ -1,10 +1,12 @@
 const { SlashCommandBuilder, ChannelType, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
-const { sendErrorReply, sendSuccessReply } = require('../../Functions/EmbedBuilders');
+const RateLimiter = require('../../Functions/RateLimiter');
+const { sendErrorReply, sendSuccessReply, sendEmbedReply } = require('../../Functions/EmbedBuilders');
 const { BLOCKED_WORDS: blockedWordsList } = require('../../Config/constants');
 const { createProfanityMatcher } = require('../../Functions/ProfanityFilter');
 
 const blockedWordMatcher = createProfanityMatcher(blockedWordsList);
+const VOICE_MUTATION_SUBCOMMANDS = new Set(['name', 'limit', 'lock', 'unlock', 'permit', 'reject', 'delete']);
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -102,10 +104,25 @@ module.exports = {
             return sendErrorReply(interaction, 'No Permission', 'Only the creator of this temporary voice channel can use this command.');
         }
 
+        if (VOICE_MUTATION_SUBCOMMANDS.has(subcommand) && !RateLimiter.isExempt(interaction.member)) {
+            const limitState = RateLimiter.checkLimit(interaction.user.id, `voice:${subcommand}`);
+            if (limitState.limited) {
+                return sendErrorReply(
+                    interaction,
+                    'Slow Down',
+                    `You are using voice management commands too quickly. Try again in **${limitState.retryAfter}s**.`
+                );
+            }
+
+            RateLimiter.recordUsage(interaction.user.id, `voice:${subcommand}`);
+        }
+
         try {
             if (subcommand === 'info') {
                 const ownerDisplay = jtcData.owner_id ? `<@${jtcData.owner_id}>` : 'Unknown';
                 const isLocked = voiceChannel.permissionsFor(interaction.guild.roles.everyone)?.has(PermissionFlagsBits.Connect) === false;
+                const createdTimestamp = Number(voiceChannel.createdTimestamp || 0);
+                const explicitAccessRules = voiceChannel.permissionOverwrites.cache.filter((overwrite) => overwrite.id !== interaction.guildId).size;
 
                 const infoEmbed = new EmbedBuilder()
                     .setColor(0x5865F2)
@@ -114,12 +131,14 @@ module.exports = {
                     .addFields(
                         { name: 'User Limit', value: `${voiceChannel.userLimit || 0}`, inline: true },
                         { name: 'Members', value: `${voiceChannel.members.size}`, inline: true },
-                        { name: 'Locked', value: isLocked ? 'Yes' : 'No', inline: true }
+                        { name: 'Locked', value: isLocked ? 'Yes' : 'No', inline: true },
+                        { name: 'Custom Access Rules', value: `${explicitAccessRules}`, inline: true },
+                        { name: 'Created', value: createdTimestamp ? `<t:${Math.floor(createdTimestamp / 1000)}:R>` : 'Unknown', inline: true }
                     )
                     .setFooter({ text: 'Join-to-Create' })
                     .setTimestamp();
 
-                return interaction.followUp({ embeds: [infoEmbed], flags: MessageFlags.Ephemeral });
+                return sendEmbedReply(interaction, infoEmbed, { ephemeral: true });
             }
 
             if (subcommand === 'name') {
@@ -162,6 +181,10 @@ module.exports = {
 
             if (subcommand === 'permit') {
                 const target = interaction.options.getUser('user', true);
+                if (target.id === interaction.user.id) {
+                    return sendErrorReply(interaction, 'Invalid Target', 'You already have access to your own temporary voice channel.');
+                }
+
                 await voiceChannel.permissionOverwrites.edit(target.id, {
                     ViewChannel: true,
                     Connect: true
@@ -175,6 +198,10 @@ module.exports = {
 
                 if (target.id === jtcData.owner_id) {
                     return sendErrorReply(interaction, 'Invalid Target', 'You cannot block the channel owner.');
+                }
+
+                if (target.id === interaction.user.id) {
+                    return sendErrorReply(interaction, 'Invalid Target', 'You cannot block yourself from your own temporary voice channel.');
                 }
 
                 await voiceChannel.permissionOverwrites.edit(target.id, {

@@ -865,13 +865,20 @@ class MySQLConnection {
                     { name: 'two_factor_enabled', type: 'BOOLEAN DEFAULT FALSE' },
                     { name: 'two_factor_secret', type: 'TEXT DEFAULT NULL' },
                     { name: 'two_factor_enabled_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                    { name: 'two_factor_last_counter', type: 'BIGINT DEFAULT NULL' },
+                    { name: 'two_factor_last_verified_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
                     { name: 'password_changed_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
                     { name: 'recovery_code_hashes', type: 'TEXT DEFAULT NULL' },
                     { name: 'recovery_codes_generated_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
                     { name: 'trusted_devices_json', type: 'TEXT DEFAULT NULL' },
                     { name: 'discord_user_id', type: 'VARCHAR(20) DEFAULT NULL' },
                     { name: 'discord_username', type: 'VARCHAR(100) DEFAULT NULL' },
-                    { name: 'discord_linked_at', type: 'TIMESTAMP NULL DEFAULT NULL' }
+                    { name: 'discord_linked_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                    { name: 'discord_last_verified_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                    { name: 'discord_guild_verified_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                    { name: 'discord_role_verified_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                    { name: 'discord_last_trusted_role', type: 'VARCHAR(20) DEFAULT NULL' },
+                    { name: 'discord_last_role_sync_at', type: 'TIMESTAMP NULL DEFAULT NULL' }
                 ],
                 indexes: [
                     { name: 'idx_username', definition: 'username' },

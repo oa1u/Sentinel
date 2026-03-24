@@ -36,6 +36,15 @@ const STALL_TIMEOUT_MS = 20_000;
 const RECONNECT_ATTEMPTS = 3;
 const RECONNECT_TIMEOUT_MS = 5_000;
 
+function shuffleTracks(tracks) {
+    for (let index = tracks.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [tracks[index], tracks[swapIndex]] = [tracks[swapIndex], tracks[index]];
+    }
+
+    return tracks;
+}
+
 function clearAutoLeaveTimer(guildId) {
     const pendingTimer = pendingAutoLeaveTimers.get(guildId);
     if (!pendingTimer) return;
@@ -561,9 +570,46 @@ function getQueue(guildId) {
 
 function skip(guildId) {
     const queue = guildQueues.get(guildId);
-    if (!queue || queue.tracks.length === 0) return false;
+    if (!queue) return false;
+
     clearStallTimer(queue);
-    return queue.player.stop(true);
+
+    if (
+        queue.currentTrack
+        || queue.player.state.status === AudioPlayerStatus.Playing
+        || queue.player.state.status === AudioPlayerStatus.Buffering
+        || queue.player.state.status === AudioPlayerStatus.Paused
+    ) {
+        return queue.player.stop(true);
+    }
+
+    if (queue.tracks.length > 0) {
+        void playNext(guildId);
+        return true;
+    }
+
+    return false;
+}
+
+function shuffle(guildId) {
+    const queue = guildQueues.get(guildId);
+    if (!queue || queue.tracks.length < 2) return 0;
+
+    shuffleTracks(queue.tracks);
+    return queue.tracks.length;
+}
+
+function removeTrack(guildId, position) {
+    const queue = guildQueues.get(guildId);
+    if (!queue) return null;
+
+    const index = Number(position) - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= queue.tracks.length) {
+        return null;
+    }
+
+    const [removedTrack] = queue.tracks.splice(index, 1);
+    return removedTrack || null;
 }
 
 function stop(guildId) {
@@ -672,6 +718,8 @@ module.exports = {
     enqueue,
     getQueue,
     skip,
+    shuffle,
+    removeTrack,
     stop,
     pause,
     resume,

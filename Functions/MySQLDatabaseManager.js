@@ -5034,6 +5034,57 @@ class MySQLDatabaseManager {
         }
     }
 
+    async getLinkedAdminUsersDueForDiscordRoleSync(limit = 25, staleMs = 5 * 60 * 1000) {
+        try {
+            const safeLimit = Math.max(1, Math.min(100, Number(limit) || 25));
+            const safeStaleMs = Math.max(60 * 1000, Number(staleMs) || 5 * 60 * 1000);
+            const cutoff = new Date(Date.now() - safeStaleMs);
+
+            const rows = await this.connection.query(
+                `SELECT id, username, role, active,
+                        discord_user_id, discord_username, discord_linked_at,
+                        discord_last_verified_at, discord_guild_verified_at,
+                        discord_role_verified_at, discord_last_trusted_role,
+                        discord_last_role_sync_at
+                 FROM admin_users
+                 WHERE active = 1
+                   AND discord_user_id IS NOT NULL
+                   AND discord_user_id <> ''
+                   AND (
+                     discord_last_role_sync_at IS NULL
+                     OR discord_last_role_sync_at < ?
+                   )
+                 ORDER BY COALESCE(discord_last_role_sync_at, discord_linked_at, created_at) ASC
+                 LIMIT ?`,
+                [cutoff, safeLimit]
+            );
+
+            return Array.isArray(rows) ? rows : [];
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error getting linked admin users due for Discord role sync:', error.message);
+            return [];
+        }
+    }
+
+    async markAdminUserDiscordRoleSyncChecked(adminUserId, checkedAt = new Date()) {
+        try {
+            const safeId = this.validateTextInput(String(adminUserId || ''), 36);
+            if (!safeId) return false;
+
+            const result = await this.connection.query(
+                `UPDATE admin_users
+                 SET discord_last_role_sync_at = ?
+                 WHERE id = ?`,
+                [checkedAt instanceof Date ? checkedAt : new Date(checkedAt || Date.now()), safeId]
+            );
+
+            return (result?.affectedRows || 0) > 0;
+        } catch (error) {
+            console.error('[MySQLDatabaseManager] Error marking Discord role sync check:', error.message);
+            return false;
+        }
+    }
+
     // ========== SCHEDULED JOBS ==========
 
     async enqueueJob(jobType, payload = {}, runAt = Date.now(), maxAttempts = 3) {

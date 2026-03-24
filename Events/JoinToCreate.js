@@ -5,6 +5,10 @@ const { CHANNELS: { joinToCreateChannelId, joinToCreateCategoryId } } = require(
 const JTC_CREATION_COOLDOWN_MS = 3500;
 const JTC_IDLE_CLEANUP_MS = Math.max(0, Number(process.env.JTC_IDLE_CLEANUP_MS || 120000));
 const JTC_NOTIFY_OWNER_TRANSFER = String(process.env.JTC_NOTIFY_OWNER_TRANSFER || 'true').toLowerCase() !== 'false';
+const JTC_RECONCILE_EMPTY_GRACE_MS = Math.max(
+  JTC_IDLE_CLEANUP_MS,
+  Number(process.env.JTC_RECONCILE_EMPTY_GRACE_MS || 5 * 60 * 1000)
+);
 const userCreationLocks = new Map();
 const userCreationCooldowns = new Map();
 const pendingIdleCleanupTimers = new Map();
@@ -140,6 +144,7 @@ async function transferOwnershipIfNeeded(guild, channel, jtcData, departedUserId
 
   const newOwner = pickNextJtcOwner(channel);
   if (!newOwner) return;
+  if (String(newOwner.id) === previousOwnerId) return;
 
   const transferred = await MySQLDatabaseManager.transferJTCOwner(channel.id, newOwner.id, channel.name);
   if (!transferred) {
@@ -255,6 +260,58 @@ async function cleanupIfEmptyJtcChannel(guild, channelId, departedUserId = null)
   pendingIdleCleanupTimers.set(channelId, timer);
 }
 
+function getChannelAgeMs(channel, jtcData) {
+  const channelTimestamp = Number(channel?.createdTimestamp || 0);
+  if (channelTimestamp > 0) {
+    return Math.max(0, Date.now() - channelTimestamp);
+  }
+
+  const createdAt = Number(jtcData?.created_at || 0);
+  if (createdAt > 0) {
+    return Math.max(0, Date.now() - createdAt);
+  }
+
+  return Number.POSITIVE_INFINITY;
+}
+
+async function reconcileGuildJtcChannels(guild, options = {}) {
+  if (!guild?.id) return;
+
+  const emptyGraceMs = Math.max(0, Number(options.emptyGraceMs ?? JTC_RECONCILE_EMPTY_GRACE_MS));
+  const activeRows = await MySQLDatabaseManager.getActiveJTCChannels(guild.id).catch(() => []);
+  if (!Array.isArray(activeRows) || activeRows.length === 0) return;
+
+  for (const jtcData of activeRows) {
+    const channelId = String(jtcData?.channel_id || '');
+    if (!channelId) continue;
+
+    const vc = guild.channels.cache.get(channelId)
+      || await guild.channels.fetch(channelId).catch(() => null);
+
+    if (!vc || vc.type !== ChannelType.GuildVoice) {
+      await MySQLDatabaseManager.deleteJTCChannel(channelId).catch(() => { });
+      continue;
+    }
+
+    if (vc.members.size > 0) {
+      const ownerId = String(jtcData?.owner_id || '');
+      if (ownerId && !vc.members.has(ownerId)) {
+        await transferOwnershipIfNeeded(guild, vc, jtcData, ownerId);
+      }
+      continue;
+    }
+
+    if (getChannelAgeMs(vc, jtcData) < emptyGraceMs) {
+      continue;
+    }
+
+    await MySQLDatabaseManager.deleteJTCChannel(channelId).catch(() => { });
+    await vc.delete().catch((err) => {
+      console.error(`[JTC] Couldn't delete reconciled temp channel: ${err.message}`);
+    });
+  }
+}
+
 function cleanupCreationCooldowns() {
   const now = Date.now();
   for (const [userId, ts] of userCreationCooldowns.entries()) {
@@ -309,3 +366,6 @@ async function createTempChannel(userState) {
     console.error('[JoinToCreate] Error creating temp channel:', err.message);
   }
 }
+
+module.exports.cleanupIfEmptyJtcChannel = cleanupIfEmptyJtcChannel;
+module.exports.reconcileGuildJtcChannels = reconcileGuildJtcChannels;

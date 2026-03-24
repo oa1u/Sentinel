@@ -2,6 +2,7 @@ const { ActivityType, EmbedBuilder } = require('discord.js');
 const presenceConfig = require('../Config/presence.json');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 const InviteTracker = require('../Functions/InviteTracker');
+const JoinToCreate = require('./JoinToCreate');
 const { serverID } = require('../Config/main.json');
 const { CHANNELS: { birthdayChannelId } } = require('../Config/constants');
 
@@ -42,29 +43,14 @@ async function startJoinToCreateCleanup(client) {
 
     console.log('[JTC] Starting cleanup interval...');
 
-    // Every 10 seconds, check for empty temp channels and remove them.
+    await JoinToCreate.reconcileGuildJtcChannels(guild).catch((err) => {
+        console.error('[JTC] Initial reconciliation error:', err.message);
+    });
+
+    // Periodically reconcile stale JTC rows, stale ownership, and long-idle empty channels.
     setInterval(async () => {
         try {
-            // Grab all active JTC channels from the database.
-            const jtcChannels = await MySQLDatabaseManager.getActiveJTCChannels(guild.id).catch(() => []);
-
-            for (const jtcData of jtcChannels) {
-                const vc = guild.channels.cache.get(jtcData.channel_id);
-
-                if (!vc) {
-                    // If the channel got deleted, clean up the database.
-                    await MySQLDatabaseManager.deleteJTCChannel(jtcData.channel_id).catch(() => { });
-                    continue;
-                }
-
-                if (vc.members.size < 1) {
-                    // If nobody's in the channel anymore, delete it.
-                    await MySQLDatabaseManager.deleteJTCChannel(vc.id).catch(() => { });
-                    vc.delete().catch((err) => {
-                        console.error(`[JTC] Couldn't delete temp channel: ${err.message}`);
-                    });
-                }
-            }
+            await JoinToCreate.reconcileGuildJtcChannels(guild);
 
             // Also delete really old channels (24+ hours) - don't run this every time though
             if (Math.random() < 0.0833) { // ~1 in 12 chance (runs every 2 mins on average)
@@ -73,7 +59,7 @@ async function startJoinToCreateCleanup(client) {
         } catch (err) {
             console.error('[JTC] Cleanup error:', err.message);
         }
-    }, 10000);
+    }, 30000);
 }
 
 function updatePresence(client, index = 0) {

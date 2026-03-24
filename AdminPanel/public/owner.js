@@ -1373,7 +1373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupLiveTerminal();
 
     const runBackupBtn = document.getElementById('runBackupBtn');
-    const saveBackupConfigBtn = document.getElementById('saveBackupConfigBtn');
+    const saveBackupSettingsCardBtn = document.getElementById('saveBackupSettingsCardBtn');
     const backupSelectAll = document.getElementById('backupTablesSelectAll');
     const runServerBackupBtn = document.getElementById('runServerBackupBtn');
     const saveServerBackupConfigBtn = document.getElementById('saveServerBackupConfigBtn');
@@ -1383,7 +1383,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const restoreServerBackupBtn = document.getElementById('restoreServerBackupBtn');
     initBackupModeTabs();
     runBackupBtn?.addEventListener('click', () => runBackupNow());
-    saveBackupConfigBtn?.addEventListener('click', () => saveBackupSettings());
+    saveBackupSettingsCardBtn?.addEventListener('click', () => saveBackupSettings());
     runServerBackupBtn?.addEventListener('click', () => runServerBackupNow());
     saveServerBackupConfigBtn?.addEventListener('click', () => saveServerBackupSettings());
     previewServerBackupBtn?.addEventListener('click', () => previewServerBackupDiff());

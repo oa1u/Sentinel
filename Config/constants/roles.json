@@ -2,6 +2,7 @@
     "verifiedRoleId": "VERIFIED_ROLE_ID",
     "moderatorRoleId": "MODERATOR_ROLE_ID",
     "administratorRoleId": "ADMINISTRATOR_ROLE_ID",
+    "ownerRoleId": "OWNER_ROLE_ID",
     "supportTeamRoleId": "SUPPORT_TEAM_ROLE_ID",
     "level5RoleId": "LEVEL_5_ROLE_ID",
     "level10RoleId": "LEVEL_10_ROLE_ID",

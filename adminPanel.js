@@ -19,6 +19,12 @@ const ServerBackupManager = require('./Functions/ServerBackupManager');
 const AdminPanelHelper = require('./Functions/AdminPanelHelper');
 const TotpHelper = require('./Functions/TotpHelper');
 const EmailHelper = require('./Functions/EmailHelper');
+const QRCode = require('qrcode');
+const {
+    buildDiscordLinkSecurityState: buildDiscordLinkSecurityStateHelper,
+    persistDiscordVerificationState: persistDiscordVerificationStateHelper,
+    applyDiscordRoleSyncPolicy: applyDiscordRoleSyncPolicyHelper
+} = require('./Functions/DiscordRoleSyncHelper');
 const { getVerificationAnalytics } = require('./Functions/VerificationAnalytics');
 const CsrfHelper = require('./Functions/CsrfHelper');
 const { getStats } = require('./Functions/botStats');
@@ -27,7 +33,7 @@ const { createModerationEmbed, createModerationDmEmbed } = require('./Functions/
 const { EmbedBuilder } = require('discord.js');
 const moment = require('moment');
 require('moment-duration-format');
-const { CHANNELS: { serverLogChannelId, discordChannelId, suggestionChannelId }, RULES: RULES_CONFIG, MISC: MISC_CONFIG } = require('./Config/constants');
+const { CHANNELS: { serverLogChannelId, discordChannelId, suggestionChannelId }, RULES: RULES_CONFIG, MISC: MISC_CONFIG, ROLES: ROLES_CONFIG } = require('./Config/constants');
 
 const ADMIN_AVATAR_UPLOAD_DIR = path.join(__dirname, 'AdminPanel', 'public', 'uploads', 'avatars');
 const ADMIN_AVATAR_PUBLIC_PREFIX = '/public/uploads/avatars/';
@@ -97,6 +103,28 @@ function normalizeHostName(hostValue) {
             : raw.replace(/:\d+$/, '');
         return noPort.replace(/\.+$/, '').trim();
     }
+}
+
+function normalizeOriginValue(originValue) {
+    const raw = String(originValue || '').trim();
+    if (!raw) return '';
+
+    try {
+        return new URL(raw).origin.toLowerCase();
+    } catch {
+        return raw.replace(/\/+$/, '').toLowerCase();
+    }
+}
+
+function getRequestOrigin(req) {
+    const forwardedProtoHeader = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    const forwardedHostHeader = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+    const requestProtocol = forwardedProtoHeader || req.protocol || 'http';
+    const requestHost = forwardedHostHeader || req.get('host') || '';
+
+    if (!requestHost) return '';
+
+    return normalizeOriginValue(`${requestProtocol}://${requestHost}`);
 }
 
 function getAllowedHostNames() {
@@ -399,6 +427,403 @@ app.use((req, res, next) => {
 let discordClient = null;
 function setDiscordClient(client) {
     discordClient = client;
+}
+
+function toBase64Url(buffer) {
+    return Buffer.from(buffer)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+}
+
+function buildDiscordOAuthBindingHash(value) {
+    return crypto.createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+function buildDiscordOAuthRequestBinding(req) {
+    return {
+        username: String(req?.session?.username || '').trim(),
+        ipHash: buildDiscordOAuthBindingHash(req?.clientIP || req?.ip || ''),
+        userAgentHash: buildDiscordOAuthBindingHash(req?.userAgent || req?.headers?.['user-agent'] || ''),
+        host: normalizeHostName(req?.get?.('host') || req?.headers?.host || '')
+    };
+}
+
+function getPrimaryTwoFactorEncryptionKey() {
+    return String(process.env.TOTP_ENCRYPTION_KEY || process.env.SESSION_SECRET || '').trim();
+}
+
+function getTwoFactorEncryptionKeyCandidates() {
+    const seen = new Set();
+    return [process.env.TOTP_ENCRYPTION_KEY, process.env.SESSION_SECRET]
+        .map((value) => String(value || '').trim())
+        .filter((value) => value && !seen.has(value) && seen.add(value));
+}
+
+function encryptStoredTwoFactorSecret(secret) {
+    const encryptionKey = getPrimaryTwoFactorEncryptionKey();
+    if (!encryptionKey) {
+        throw new Error('Missing TOTP encryption key');
+    }
+
+    return TotpHelper.encryptTwoFactorSecret(secret, encryptionKey);
+}
+
+function decryptStoredTwoFactorSecret(payload) {
+    const candidates = getTwoFactorEncryptionKeyCandidates();
+    let lastError = null;
+
+    for (const encryptionKey of candidates) {
+        try {
+            return {
+                secret: TotpHelper.decryptTwoFactorSecret(payload, encryptionKey),
+                keyUsed: encryptionKey
+            };
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('Unable to decrypt TOTP secret');
+}
+
+async function reencryptTwoFactorSecretIfNeeded(userId, secret, keyUsed) {
+    const preferredKey = getPrimaryTwoFactorEncryptionKey();
+    if (!preferredKey || !secret || keyUsed === preferredKey) {
+        return;
+    }
+
+    const encryptedSecret = TotpHelper.encryptTwoFactorSecret(secret, preferredKey);
+    await MySQLDatabaseManager.connection.pool.execute(
+        `UPDATE admin_users
+         SET two_factor_secret = ?
+         WHERE id = ?`,
+        [encryptedSecret, userId]
+    );
+}
+
+function buildTwoFactorChallengeBinding(req) {
+    return {
+        sessionId: String(req?.sessionID || ''),
+        ipHash: buildDiscordOAuthBindingHash(req?.clientIP || req?.ip || ''),
+        userAgentHash: buildDiscordOAuthBindingHash(req?.userAgent || req?.headers?.['user-agent'] || '')
+    };
+}
+
+function isSameTwoFactorChallengeBinding(expected, actual) {
+    return String(expected?.sessionId || '') === String(actual?.sessionId || '')
+        && String(expected?.ipHash || '') === String(actual?.ipHash || '')
+        && String(expected?.userAgentHash || '') === String(actual?.userAgentHash || '');
+}
+
+async function consumeVerifiedTwoFactorCounter(userId, counter) {
+    const normalizedCounter = Number(counter);
+    if (!Number.isFinite(normalizedCounter)) {
+        return false;
+    }
+
+    const [result] = await MySQLDatabaseManager.connection.pool.execute(
+        `UPDATE admin_users
+         SET two_factor_last_counter = ?,
+             two_factor_last_verified_at = NOW()
+         WHERE id = ?
+           AND (two_factor_last_counter IS NULL OR two_factor_last_counter < ?)`,
+        [normalizedCounter, userId, normalizedCounter]
+    );
+
+    return Number(result?.affectedRows || 0) > 0;
+}
+
+function createDiscordOAuthPkcePair() {
+    const codeVerifier = toBase64Url(crypto.randomBytes(48));
+    const codeChallenge = toBase64Url(crypto.createHash('sha256').update(codeVerifier).digest());
+    return { codeVerifier, codeChallenge };
+}
+
+function getConfiguredDiscordGuildId() {
+    const envGuildId = String(process.env.GUILD_ID || '').trim();
+    if (envGuildId) return envGuildId;
+
+    try {
+        const mainConfig = require('./Config/main.json');
+        return String(mainConfig?.serverID || mainConfig?.guildId || '').trim();
+    } catch (_) {
+        return '';
+    }
+}
+
+async function resolveDiscordGuildMembership(discordUserId) {
+    const guildId = getConfiguredDiscordGuildId();
+    const guildRequirementEnabled = DISCORD_OAUTH_REQUIRE_GUILD_MEMBER;
+    const roleSyncConfigured = DISCORD_OWNER_ROLE_IDS.length > 0 || DISCORD_ADMIN_ROLE_IDS.length > 0 || DISCORD_MODERATOR_ROLE_IDS.length > 0;
+
+    const buildMembershipResult = (overrides = {}) => ({
+        required: guildRequirementEnabled,
+        available: false,
+        verified: null,
+        guildId,
+        guildName: null,
+        memberDisplayName: null,
+        trustedPanelRole: null,
+        trustedRoleIds: [],
+        trustedRoleNames: [],
+        roleSyncConfigured,
+        reason: '',
+        ...overrides
+    });
+
+    const deriveTrustedPanelRole = (guild, member) => {
+        if (!member) {
+            return {
+                trustedPanelRole: null,
+                trustedRoleIds: [],
+                trustedRoleNames: []
+            };
+        }
+
+        const memberRoleIds = new Set(Array.from(member.roles?.cache?.keys?.() || []));
+        const matchedRoleIds = [];
+        const matchedRoleNames = [];
+        let trustedPanelRole = null;
+
+        if (guild?.ownerId && String(guild.ownerId) === String(member.id)) {
+            trustedPanelRole = 'owner';
+        }
+
+        const mappings = [
+            { panelRole: 'owner', roleIds: DISCORD_OWNER_ROLE_IDS },
+            { panelRole: 'admin', roleIds: DISCORD_ADMIN_ROLE_IDS },
+            { panelRole: 'moderator', roleIds: DISCORD_MODERATOR_ROLE_IDS }
+        ];
+
+        for (const mapping of mappings) {
+            const hits = mapping.roleIds.filter((roleId) => memberRoleIds.has(roleId));
+            if (hits.length > 0) {
+                if (!trustedPanelRole || getRoleRank(mapping.panelRole) > getRoleRank(trustedPanelRole)) {
+                    trustedPanelRole = mapping.panelRole;
+                }
+                matchedRoleIds.push(...hits);
+                matchedRoleNames.push(...hits.map((roleId) => member.roles?.cache?.get(roleId)?.name).filter(Boolean));
+            }
+        }
+
+        return {
+            trustedPanelRole,
+            trustedRoleIds: Array.from(new Set(matchedRoleIds)),
+            trustedRoleNames: Array.from(new Set(matchedRoleNames))
+        };
+    };
+
+    if (!guildRequirementEnabled && !roleSyncConfigured) {
+        return buildMembershipResult({ required: false });
+    }
+
+    if (!discordUserId || !guildId || !discordClient?.guilds?.fetch) {
+        return buildMembershipResult({ reason: 'Guild membership could not be verified yet' });
+    }
+
+    try {
+        const guild = discordClient.guilds.cache.get(guildId)
+            || await discordClient.guilds.fetch(guildId).catch(() => null);
+        if (!guild) {
+            return buildMembershipResult({ reason: 'Discord guild lookup failed' });
+        }
+
+        const member = guild.members.cache.get(discordUserId)
+            || await guild.members.fetch(discordUserId).catch(() => null);
+        const trustedRole = deriveTrustedPanelRole(guild, member);
+
+        return buildMembershipResult({
+            available: true,
+            verified: Boolean(member),
+            guildName: guild.name || null,
+            memberDisplayName: member?.displayName || member?.user?.globalName || member?.user?.username || null,
+            trustedPanelRole: trustedRole.trustedPanelRole,
+            trustedRoleIds: trustedRole.trustedRoleIds,
+            trustedRoleNames: trustedRole.trustedRoleNames,
+            reason: member ? '' : 'Linked Discord account is not in the configured server'
+        });
+    } catch (error) {
+        console.warn('[DiscordLink] Failed to verify guild membership:', error?.message || error);
+        return buildMembershipResult({ reason: 'Guild membership verification is temporarily unavailable' });
+    }
+}
+
+function getDiscordStoredVerificationSnapshot(user) {
+    const parseTime = (value) => {
+        const timestamp = value ? new Date(value).getTime() : 0;
+        return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0;
+    };
+
+    return {
+        lastVerifiedAtMs: parseTime(user?.discord_last_verified_at),
+        guildVerifiedAtMs: parseTime(user?.discord_guild_verified_at),
+        roleVerifiedAtMs: parseTime(user?.discord_role_verified_at),
+        trustedPanelRole: String(user?.discord_last_trusted_role || '').trim() || null
+    };
+}
+
+function isDiscordRoleTrustConfigured() {
+    return DISCORD_OWNER_ROLE_IDS.length > 0 || DISCORD_ADMIN_ROLE_IDS.length > 0 || DISCORD_MODERATOR_ROLE_IDS.length > 0;
+}
+
+async function buildDiscordLinkSecurityState(user) {
+    const state = await buildDiscordLinkSecurityStateHelper({ user, discordClient });
+    return {
+        ...state,
+        protectedFeatures: DISCORD_SECURITY_PROTECTED_FEATURES
+    };
+}
+
+async function persistDiscordVerificationState(user, state) {
+    await persistDiscordVerificationStateHelper({
+        databaseManager: MySQLDatabaseManager,
+        user,
+        state
+    });
+}
+
+async function applyDiscordRoleSyncPolicy(user, state, req = null) {
+    const result = await applyDiscordRoleSyncPolicyHelper({
+        databaseManager: MySQLDatabaseManager,
+        user,
+        state
+    });
+
+    if (result?.state?.roleAutoSynced) {
+        const previousRole = result.state.previousPanelRole || user.role;
+
+        await sendSecurityAlertIfPossible(user, 'Panel role aligned to Discord trust', [
+            `Previous role: ${previousRole}`,
+            `New role: ${result.state.panelRole}`,
+            `Discord account: ${String(user.discord_username || user.discord_user_id || 'Unknown')}`,
+            `Time: ${new Date().toLocaleString()}`
+        ], req);
+
+        sendBotWebhook('account.role_synced', {
+            username: user.username || null,
+            userId: user.id || null,
+            previousRole,
+            newRole: result.state.panelRole,
+            discordUserId: user.discord_user_id || null,
+            discordUsername: user.discord_username || null
+        }, req).catch(() => { });
+    }
+
+    return result;
+}
+
+async function ensureDiscordLinkSecurityState(req, options = {}) {
+    if (!req?.session?.username) {
+        return {
+            linked: false,
+            securityEligible: false,
+            securityReason: 'Sign in again to continue',
+            protectedFeatures: DISCORD_SECURITY_PROTECTED_FEATURES
+        };
+    }
+
+    const forceRefresh = Boolean(options.forceRefresh);
+    const now = Date.now();
+    const verifiedAt = Number(req.session.discordSecurityVerifiedAt) || 0;
+    if (!forceRefresh && req.session.discordSecurityState && (now - verifiedAt < DISCORD_LINK_CACHE_TTL_MS)) {
+        return req.session.discordSecurityState;
+    }
+
+    const user = options.user || await AdminPanelHelper.getAdminUser(req.session.username);
+    let state = await buildDiscordLinkSecurityState(user);
+    if (state.linked && state.liveVerificationSucceeded) {
+        await persistDiscordVerificationState(user, state);
+    }
+    const syncResult = await applyDiscordRoleSyncPolicy(user, state, req);
+    state = syncResult.state;
+    req.session.discordSecurityState = state;
+    req.session.discordSecurityVerifiedAt = now;
+    req.session.discordLinked = Boolean(state.linked);
+    req.session.discordLinkedVerifiedAt = now;
+    return state;
+}
+
+function buildDiscordSecurityRequirementMessage(state, fallback = 'Discord verification is required for this action') {
+    if (state?.securityReason) return String(state.securityReason);
+    if (state?.linked === false) return 'Link a Discord account from the Discord tab to continue';
+    if (state?.guildVerificationRequired && state?.guildMemberVerified === false) {
+        const guildName = String(state.guildName || '').trim();
+        return guildName
+            ? `Join ${guildName} with your linked Discord account to continue`
+            : 'Join the configured Discord server with your linked account to continue';
+    }
+    return fallback;
+}
+
+async function validateDiscordSecurityBinding(req, options = {}) {
+    const state = await ensureDiscordLinkSecurityState(req, { forceRefresh: true });
+    const requireSensitiveFresh = Boolean(options.requireSensitiveFresh);
+
+    if (!state?.securityEligible) {
+        return {
+            ok: false,
+            status: 403,
+            error: buildDiscordSecurityRequirementMessage(state),
+            state
+        };
+    }
+
+    if (requireSensitiveFresh && !state.sensitiveVerificationFresh) {
+        return {
+            ok: false,
+            status: 403,
+            error: 'Discord verification is too old for this sensitive action. Refresh your Discord trust and try again.',
+            state: {
+                ...state,
+                securityReason: 'Discord verification is too old for this sensitive action. Refresh your Discord trust and try again.'
+            }
+        };
+    }
+
+    return { ok: true, state };
+}
+
+function createDiscordSecurityBindingMiddleware(options = {}) {
+    return async (req, res, next) => {
+        try {
+            const validation = await validateDiscordSecurityBinding(req, options);
+            if (validation.ok) {
+                return next();
+            }
+
+            return res.status(validation.status || 403).json({
+                error: validation.error,
+                discordLinkRequired: true,
+                discordLinkState: validation.state
+            });
+        } catch (error) {
+            console.error('[DiscordLink] Failed to validate Discord security binding:', error);
+            return res.status(500).json({ error: 'Failed to validate Discord security requirements' });
+        }
+    };
+}
+
+const requireDiscordSecurityBinding = createDiscordSecurityBindingMiddleware();
+const requireSensitiveDiscordSecurityBinding = createDiscordSecurityBindingMiddleware({ requireSensitiveFresh: true });
+
+async function requireLinkedDiscordAccount(req, res, next) {
+    try {
+        const state = await ensureDiscordLinkSecurityState(req, { forceRefresh: true });
+        if (state?.linked) {
+            return next();
+        }
+
+        return res.status(403).json({
+            error: 'Link a Discord account from the Discord tab to continue',
+            discordLinkRequired: true,
+            discordLinkState: state
+        });
+    } catch (error) {
+        console.error('[DiscordLink] Failed to validate linked Discord account:', error);
+        return res.status(500).json({ error: 'Failed to validate linked Discord account' });
+    }
 }
 
 async function resolveDiscordUser(userId) {
@@ -1131,23 +1556,104 @@ const DISCORD_LINK_EXEMPT_PATHS = new Set([
     '/api/account/discord-unlink'
 ]);
 
+const DISCORD_SECURITY_PROTECTED_FEATURES = Object.freeze([
+    'Manage active sessions',
+    'Generate recovery codes',
+    'Configure two-factor authentication',
+    'Change account email',
+    'Change panel avatar'
+]);
+
+const DISCORD_LINK_CACHE_TTL_MS = 2 * 60 * 1000;
+const DISCORD_OAUTH_REQUIRE_GUILD_MEMBER = (() => {
+    const raw = String(process.env.DISCORD_OAUTH_REQUIRE_GUILD_MEMBER || 'true').trim().toLowerCase();
+    return !['0', 'false', 'no', 'off'].includes(raw);
+})();
+const DISCORD_ROLE_TRUST_ENFORCED = (() => {
+    const raw = String(process.env.DISCORD_ROLE_TRUST_ENFORCED || 'true').trim().toLowerCase();
+    return !['0', 'false', 'no', 'off'].includes(raw);
+})();
+const DISCORD_RECENT_VERIFICATION_TTL_MS = (() => {
+    const parsed = Number(process.env.DISCORD_RECENT_VERIFICATION_TTL_MS);
+    return Number.isFinite(parsed) && parsed >= 5 * 60 * 1000 ? parsed : 24 * 60 * 60 * 1000;
+})();
+const DISCORD_SENSITIVE_VERIFICATION_TTL_MS = (() => {
+    const parsed = Number(process.env.DISCORD_SENSITIVE_VERIFICATION_TTL_MS);
+    return Number.isFinite(parsed) && parsed >= 60 * 1000 ? parsed : 10 * 60 * 1000;
+})();
+const DISCORD_SECURITY_ALERTS_ENABLED = (() => {
+    const raw = String(process.env.DISCORD_SECURITY_ALERTS_ENABLED || 'true').trim().toLowerCase();
+    return !['0', 'false', 'no', 'off'].includes(raw);
+})();
+const DISCORD_HIGH_RISK_DELAY_UNLINK_MS = (() => {
+    const parsed = Number(process.env.DISCORD_HIGH_RISK_DELAY_UNLINK_MS);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 2 * 60 * 1000;
+})();
+const DISCORD_HIGH_RISK_DELAY_DISABLE_2FA_MS = (() => {
+    const parsed = Number(process.env.DISCORD_HIGH_RISK_DELAY_DISABLE_2FA_MS);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 2 * 60 * 1000;
+})();
+const DISCORD_HIGH_RISK_DELAY_CHANGE_EMAIL_MS = (() => {
+    const parsed = Number(process.env.DISCORD_HIGH_RISK_DELAY_CHANGE_EMAIL_MS);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 90 * 1000;
+})();
+const DISCORD_HIGH_RISK_ACTION_RECORD_TTL_MS = (() => {
+    const parsed = Number(process.env.DISCORD_HIGH_RISK_ACTION_RECORD_TTL_MS);
+    return Number.isFinite(parsed) && parsed >= 5 * 60 * 1000 ? parsed : 30 * 60 * 1000;
+})();
+
+function parseDiscordRoleIdList(rawValue) {
+    return String(rawValue || '')
+        .split(',')
+        .map((entry) => String(entry || '').trim())
+        .filter((entry) => /^\d{17,20}$/.test(entry));
+}
+
+function buildDiscordRoleIds(envValue, fallbackValues = []) {
+    const envRoleIds = parseDiscordRoleIdList(envValue);
+    if (envRoleIds.length > 0) {
+        return Object.freeze(envRoleIds);
+    }
+
+    const fallbackRoleIds = fallbackValues
+        .map((entry) => String(entry || '').trim())
+        .filter((entry) => /^\d{17,20}$/.test(entry));
+
+    return Object.freeze(Array.from(new Set(fallbackRoleIds)));
+}
+
+const DISCORD_OWNER_ROLE_IDS = buildDiscordRoleIds(process.env.DISCORD_OWNER_ROLE_IDS, [
+    ROLES_CONFIG?.ownerRoleId
+]);
+const DISCORD_ADMIN_ROLE_IDS = buildDiscordRoleIds(process.env.DISCORD_ADMIN_ROLE_IDS, [
+    ROLES_CONFIG?.administratorRoleId
+]);
+const DISCORD_MODERATOR_ROLE_IDS = buildDiscordRoleIds(process.env.DISCORD_MODERATOR_ROLE_IDS, [
+    ROLES_CONFIG?.moderatorRoleId
+]);
+const DISCORD_ROLE_SYNC_MODE = (() => {
+    const raw = String(process.env.DISCORD_ROLE_SYNC_MODE || 'enforce').trim().toLowerCase();
+    if (['off', 'enforce', 'downgrade'].includes(raw)) return raw;
+    return 'enforce';
+})();
+
 async function ensureDiscordLinkStatus(req) {
     if (!req?.session?.username) return false;
 
     const now = Date.now();
     const verifiedAt = Number(req.session.discordLinkedVerifiedAt) || 0;
-    const cacheTtlMs = 2 * 60 * 1000;
     const cachedLinked = Boolean(req.session.discordLinked);
-    if (cachedLinked && (now - verifiedAt < cacheTtlMs)) {
+    if (cachedLinked && (now - verifiedAt < DISCORD_LINK_CACHE_TTL_MS)) {
         return true;
     }
 
+    if (req.session.discordSecurityState && (now - Number(req.session.discordSecurityVerifiedAt || 0) < DISCORD_LINK_CACHE_TTL_MS)) {
+        return Boolean(req.session.discordSecurityState.linked);
+    }
+
     try {
-        const user = await AdminPanelHelper.getAdminUser(req.session.username);
-        const linked = Boolean(user?.discord_user_id);
-        req.session.discordLinked = linked;
-        req.session.discordLinkedVerifiedAt = now;
-        return linked;
+        const state = await ensureDiscordLinkSecurityState(req, { forceRefresh: true });
+        return Boolean(state.linked);
     } catch (error) {
         console.warn('[DiscordLink] Failed to refresh discord link status:', error?.message || error);
         return Boolean(req.session.discordLinked);
@@ -1270,12 +1776,23 @@ async function refreshSessionRoleIfNeeded(req) {
         return;
     }
 
-    // Log role mismatch or update
-    if (req.session.role !== user.role) {
-        console.info(`[Sessions] Updated role for '${req.session.username}': ${req.session.role} -> ${user.role}`);
+    let effectiveRole = user.role;
+
+    try {
+        const state = await ensureDiscordLinkSecurityState(req, { user, forceRefresh: true });
+        if (state?.panelRole && state.panelRole !== effectiveRole) {
+            effectiveRole = state.panelRole;
+        }
+    } catch (error) {
+        console.warn('[Sessions] Discord role alignment refresh failed:', error?.message || error);
     }
 
-    req.session.role = user.role;
+    // Log role mismatch or update
+    if (req.session.role !== effectiveRole) {
+        console.info(`[Sessions] Updated role for '${req.session.username}': ${req.session.role} -> ${effectiveRole}`);
+    }
+
+    req.session.role = effectiveRole;
     req.session.roleVerifiedAt = now;
 }
 
@@ -3624,7 +4141,8 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
                         userId: user.id,
                         role: user.role,
                         ipAddress: req.clientIP,
-                        userAgent: req.userAgent
+                        userAgent: req.userAgent,
+                        binding: buildTwoFactorChallengeBinding(req)
                     });
                     await logAdminAuthEvent(username, 'LOGIN_2FA_CHALLENGE', req, { challengeId });
                     return res.status(202).json({
@@ -3640,17 +4158,44 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
                     return res.status(401).json({ error: 'Invalid or expired 2FA challenge. Please sign in again.' });
                 }
 
-                try {
-                    const twoFactorSecret = TotpHelper.decryptTwoFactorSecret(
-                        user.two_factor_secret,
-                        process.env.SESSION_SECRET
-                    );
+                if (!isSameTwoFactorChallengeBinding(challenge.binding, buildTwoFactorChallengeBinding(req))) {
+                    twoFactorChallenges.delete(twoFactorChallenge);
+                    await logAdminAuthEvent(username, 'LOGIN_2FA_FAILED', req, { reason: 'challenge-binding-mismatch' });
+                    return res.status(401).json({ error: 'This 2FA challenge no longer matches your session. Please sign in again.' });
+                }
 
-                    const isValidTotp = TotpHelper.verifyTotp(twoFactorToken, twoFactorSecret, { window: 1 });
-                    if (!isValidTotp) {
-                        await logAdminAuthEvent(username, 'LOGIN_2FA_FAILED', req, { reason: 'invalid-token' });
+                if (isTwoFactorAttemptBlocked(user.username, 'login')) {
+                    await logAdminAuthEvent(username, 'LOGIN_2FA_FAILED', req, { reason: 'two-factor-temporarily-blocked' });
+                    return res.status(429).json({ error: 'Too many invalid 2FA attempts. Wait a few minutes before trying again.' });
+                }
+
+                try {
+                    const { secret: twoFactorSecret, keyUsed } = decryptStoredTwoFactorSecret(user.two_factor_secret);
+                    const verification = TotpHelper.verifyTotpDetailed(twoFactorToken, twoFactorSecret, { window: 1 });
+                    if (!verification.valid) {
+                        challenge.attemptCount = Number(challenge.attemptCount || 0) + 1;
+                        noteTwoFactorAttemptFailure(user.username, 'login');
+                        await logAdminAuthEvent(username, 'LOGIN_2FA_FAILED', req, {
+                            reason: challenge.attemptCount >= TWO_FACTOR_CHALLENGE_MAX_ATTEMPTS ? 'invalid-token-challenge-exhausted' : 'invalid-token',
+                            challengeAttempts: challenge.attemptCount
+                        });
+                        if (challenge.attemptCount >= TWO_FACTOR_CHALLENGE_MAX_ATTEMPTS) {
+                            twoFactorChallenges.delete(twoFactorChallenge);
+                            return res.status(429).json({ error: 'Too many invalid 2FA attempts. Please sign in again.' });
+                        }
+
                         return res.status(401).json({ error: 'Invalid 2FA code' });
                     }
+
+                    const counterAccepted = await consumeVerifiedTwoFactorCounter(user.id, verification.counter);
+                    if (!counterAccepted) {
+                        noteTwoFactorAttemptFailure(user.username, 'login');
+                        await logAdminAuthEvent(username, 'LOGIN_2FA_FAILED', req, { reason: 'replayed-token' });
+                        return res.status(401).json({ error: 'This 2FA code was already used. Wait for a new code and try again.' });
+                    }
+
+                    await reencryptTwoFactorSecretIfNeeded(user.id, twoFactorSecret, keyUsed);
+                    clearTwoFactorAttemptFailures(user.username, 'login');
                 } catch (twoFactorError) {
                     await logAdminAuthEvent(username, 'LOGIN_2FA_FAILED', req, { reason: 'secret-decrypt-failed' });
                     return res.status(500).json({ error: 'Unable to verify 2FA code' });
@@ -4046,14 +4591,160 @@ function createSecureToken(bytes = 32) {
     return crypto.randomBytes(bytes).toString('hex');
 }
 
-async function sendSecurityAlertIfPossible(user, title, details = []) {
+async function sendDiscordSecurityAlertIfPossible(user, title, details = []) {
+    if (!DISCORD_SECURITY_ALERTS_ENABLED) return false;
+    const discordUserId = String(user?.discord_user_id || '').trim();
+    if (!discordUserId || !discordClient?.users?.fetch) return false;
+
+    try {
+        const discordUser = await discordClient.users.fetch(discordUserId).catch(() => null);
+        if (!discordUser || typeof discordUser.send !== 'function') {
+            return false;
+        }
+
+        const messageLines = [
+            `Security Alert: ${String(title || 'Notice')}`,
+            ...details.map((detail) => `- ${String(detail || '')}`)
+        ].filter(Boolean);
+
+        await discordUser.send(messageLines.join('\n')).catch(() => null);
+        return true;
+    } catch (error) {
+        console.error('[SecurityDiscord] Failed to send Discord security alert:', error?.message || error);
+        return false;
+    }
+}
+
+async function sendSecurityAlertIfPossible(user, title, details = [], req = null) {
     const email = String(user?.email || '').trim();
     const username = String(user?.username || '').trim() || 'User';
-    if (!EmailHelper.isReady() || !email) return;
+    const jobs = [];
 
-    await EmailHelper.sendSecurityAlertEmail(email, username, title, details).catch((emailError) => {
-        console.error('[SecurityEmail] Failed to send security alert:', emailError?.message || emailError);
-    });
+    if (EmailHelper.isReady() && email) {
+        jobs.push(
+            EmailHelper.sendSecurityAlertEmail(email, username, title, details).catch((emailError) => {
+                console.error('[SecurityEmail] Failed to send security alert:', emailError?.message || emailError);
+                return false;
+            })
+        );
+    }
+
+    jobs.push(sendDiscordSecurityAlertIfPossible(user, title, details));
+
+    jobs.push(
+        sendBotWebhook('security.alert', {
+            username,
+            userId: user?.id || null,
+            discordUserId: user?.discord_user_id || null,
+            discordUsername: user?.discord_username || null,
+            title: String(title || ''),
+            details: Array.isArray(details) ? details.map((item) => String(item || '')) : []
+        }, req).catch(() => false)
+    );
+
+    await Promise.allSettled(jobs);
+}
+
+const highRiskActionApprovalStore = new Map();
+const highRiskActionApprovalIndex = new Map();
+
+function cleanupHighRiskActionApprovals(now = Date.now()) {
+    for (const [token, record] of highRiskActionApprovalStore.entries()) {
+        if (now > Number(record?.expiresAt || 0)) {
+            highRiskActionApprovalStore.delete(token);
+            highRiskActionApprovalIndex.delete(String(record?.indexKey || ''));
+        }
+    }
+}
+
+function buildHighRiskActionIndexKey(req, actionKey) {
+    return `${String(req?.session?.username || '').trim().toLowerCase()}:${String(actionKey || '').trim().toLowerCase()}`;
+}
+
+function buildHighRiskActionBinding(req) {
+    return {
+        sessionId: String(req?.sessionID || ''),
+        ipHash: buildDiscordOAuthBindingHash(req?.clientIP || req?.ip || ''),
+        userAgentHash: buildDiscordOAuthBindingHash(req?.userAgent || req?.headers?.['user-agent'] || '')
+    };
+}
+
+function requestHighRiskActionApproval(req, res, options = {}) {
+    const actionKey = String(options.actionKey || '').trim().toLowerCase();
+    const delayMs = Math.max(0, Number(options.delayMs) || 0);
+    const message = String(options.message || 'A short safety delay is required before completing this action.');
+    if (!actionKey || delayMs <= 0) {
+        return { approved: true };
+    }
+
+    cleanupHighRiskActionApprovals();
+
+    const providedToken = String(req?.body?.approvalToken || req?.query?.approvalToken || '').trim();
+    const now = Date.now();
+    const indexKey = buildHighRiskActionIndexKey(req, actionKey);
+    const binding = buildHighRiskActionBinding(req);
+
+    const createPendingResponse = (record) => {
+        res.status(202).json({
+            pendingApproval: true,
+            actionKey,
+            approvalToken: record.token,
+            readyAt: new Date(record.readyAt).toISOString(),
+            delayMs,
+            message
+        });
+        return { approved: false };
+    };
+
+    if (providedToken) {
+        const record = highRiskActionApprovalStore.get(providedToken);
+        if (!record || record.indexKey !== indexKey || record.actionKey !== actionKey) {
+            res.status(400).json({ error: 'Approval token is invalid or expired' });
+            return { approved: false };
+        }
+
+        if (record.sessionId !== binding.sessionId || record.ipHash !== binding.ipHash || record.userAgentHash !== binding.userAgentHash) {
+            highRiskActionApprovalStore.delete(providedToken);
+            highRiskActionApprovalIndex.delete(indexKey);
+            res.status(400).json({ error: 'Approval token no longer matches this session' });
+            return { approved: false };
+        }
+
+        if (now < record.readyAt) {
+            return createPendingResponse(record);
+        }
+
+        highRiskActionApprovalStore.delete(providedToken);
+        highRiskActionApprovalIndex.delete(indexKey);
+        return { approved: true };
+    }
+
+    const existingToken = highRiskActionApprovalIndex.get(indexKey);
+    if (existingToken) {
+        const existingRecord = highRiskActionApprovalStore.get(existingToken);
+        if (existingRecord && now <= Number(existingRecord.expiresAt || 0)) {
+            return createPendingResponse(existingRecord);
+        }
+        highRiskActionApprovalStore.delete(existingToken);
+        highRiskActionApprovalIndex.delete(indexKey);
+    }
+
+    const token = toBase64Url(crypto.randomBytes(24));
+    const record = {
+        token,
+        actionKey,
+        indexKey,
+        username: String(req?.session?.username || '').trim(),
+        sessionId: binding.sessionId,
+        ipHash: binding.ipHash,
+        userAgentHash: binding.userAgentHash,
+        readyAt: now + delayMs,
+        expiresAt: now + Math.max(DISCORD_HIGH_RISK_ACTION_RECORD_TTL_MS, delayMs + (5 * 60 * 1000))
+    };
+
+    highRiskActionApprovalStore.set(token, record);
+    highRiskActionApprovalIndex.set(indexKey, token);
+    return createPendingResponse(record);
 }
 
 function parseTrustedDevices(value) {
@@ -4250,6 +4941,10 @@ async function establishLoginSession(req, res, user, options = {}) {
     req.session.ipAddressV6 = req.clientIPV6;
     req.session.userAgent = req.userAgent;
     req.session.singleSessionCheckedAt = Date.now();
+    req.session.discordLinked = Boolean(user.discord_user_id);
+    req.session.discordLinkedVerifiedAt = 0;
+    req.session.discordSecurityState = null;
+    req.session.discordSecurityVerifiedAt = 0;
 
     // Initialize CSRF Secret for the new session
     req.session.csrfSecret = CsrfHelper.generateSecret();
@@ -7013,8 +7708,10 @@ app.get('/api/security/summary', requireAuth, async (req, res) => {
             generatedAt: user.recovery_codes_generated_at || null
         };
 
+        const discordLinkState = await ensureDiscordLinkSecurityState(req, { user, forceRefresh: true });
+
         let discordProfile = null;
-        if (user.discord_user_id && discordClient) {
+        if (discordLinkState.linked && discordClient) {
             try {
                 const discordUser = await discordClient.users.fetch(user.discord_user_id, { force: true }).catch(() => null);
                 if (discordUser) {
@@ -7035,10 +7732,7 @@ app.get('/api/security/summary', requireAuth, async (req, res) => {
         }
 
         const discordLink = {
-            linked: Boolean(user.discord_user_id),
-            discordUserId: user.discord_user_id || null,
-            discordUsername: user.discord_username || null,
-            linkedAt: user.discord_linked_at || null,
+            ...discordLinkState,
             profile: discordProfile
         };
 
@@ -7122,7 +7816,7 @@ app.get('/api/security/summary', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/security/sessions/logout-others', requireAuth, async (req, res) => {
+app.post('/api/security/sessions/logout-others', requireAuth, requireDiscordSecurityBinding, async (req, res) => {
     try {
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -7136,7 +7830,7 @@ app.post('/api/security/sessions/logout-others', requireAuth, async (req, res) =
     }
 });
 
-app.post('/api/security/sessions/revoke', requireAuth, async (req, res) => {
+app.post('/api/security/sessions/revoke', requireAuth, requireDiscordSecurityBinding, async (req, res) => {
     try {
         const { sessionId } = req.body || {};
         if (!sessionId || typeof sessionId !== 'string') {
@@ -7168,9 +7862,10 @@ app.post('/api/security/sessions/revoke', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/security/recovery-codes/generate', requireAuth, async (req, res) => {
+app.post('/api/security/recovery-codes/generate', createRateLimiter(5, 5 * 60 * 1000), requireAuth, requireDiscordSecurityBinding, async (req, res) => {
     try {
         const currentPassword = String(req.body?.currentPassword || '').trim();
+        const token = String(req.body?.token || '').trim();
         if (!currentPassword) {
             return res.status(400).json({ error: 'Current password is required' });
         }
@@ -7183,6 +7878,32 @@ app.post('/api/security/recovery-codes/generate', requireAuth, async (req, res) 
         const passwordValid = await bcrypt.compare(currentPassword, user.password_hash || '');
         if (!passwordValid) {
             return res.status(401).json({ error: 'Current password is incorrect' });
+        }
+
+        if (user.two_factor_enabled) {
+            if (!/^\d{6}$/.test(token)) {
+                return res.status(400).json({ error: 'Current 2FA code is required' });
+            }
+
+            if (isTwoFactorAttemptBlocked(user.username, 'recovery-codes')) {
+                return res.status(429).json({ error: 'Too many invalid 2FA attempts. Wait a few minutes before trying again.' });
+            }
+
+            const { secret: twoFactorSecret, keyUsed } = decryptStoredTwoFactorSecret(user.two_factor_secret);
+            const verification = TotpHelper.verifyTotpDetailed(token, twoFactorSecret, { window: 1 });
+            if (!verification.valid) {
+                noteTwoFactorAttemptFailure(user.username, 'recovery-codes');
+                return res.status(401).json({ error: 'Invalid 2FA code' });
+            }
+
+            const counterAccepted = await consumeVerifiedTwoFactorCounter(user.id, verification.counter);
+            if (!counterAccepted) {
+                noteTwoFactorAttemptFailure(user.username, 'recovery-codes');
+                return res.status(401).json({ error: 'This 2FA code was already used. Wait for a new code and try again.' });
+            }
+
+            await reencryptTwoFactorSecretIfNeeded(user.id, twoFactorSecret, keyUsed);
+            clearTwoFactorAttemptFailures(user.username, 'recovery-codes');
         }
 
         const codes = generateRecoveryCodes(10);
@@ -7215,15 +7936,35 @@ app.get('/api/account/discord/oauth/start', requireAuth, async (req, res) => {
             return completeDiscordOAuthRequest(req, res, { success: false, message: 'Discord OAuth is not configured' });
         }
 
+        if (!oauth.hostMatchesRequest) {
+            return completeDiscordOAuthRequest(req, res, { success: false, message: 'Open the panel on the configured Discord OAuth host before linking' });
+        }
+
+        const existingState = await ensureDiscordLinkSecurityState(req, { forceRefresh: true });
+        if (existingState?.linked) {
+            return completeDiscordOAuthRequest(req, res, { success: false, message: 'This profile is already linked. Unlink it first to connect a different Discord account.' });
+        }
+
         const state = crypto.randomBytes(24).toString('hex');
+        const { codeVerifier, codeChallenge } = createDiscordOAuthPkcePair();
+        const requestBinding = buildDiscordOAuthRequestBinding(req);
         storeDiscordOAuthState(state, {
             username: req.session.username,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            ipHash: requestBinding.ipHash,
+            userAgentHash: requestBinding.userAgentHash,
+            host: requestBinding.host,
+            codeVerifier
         });
 
         req.session.discordOAuthState = {
             value: state,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            username: req.session.username,
+            ipHash: requestBinding.ipHash,
+            userAgentHash: requestBinding.userAgentHash,
+            host: requestBinding.host,
+            codeVerifier
         };
 
         await new Promise((resolve) => req.session.save(() => resolve()));
@@ -7234,6 +7975,8 @@ app.get('/api/account/discord/oauth/start', requireAuth, async (req, res) => {
             response_type: 'code',
             scope: 'identify',
             state,
+            code_challenge: codeChallenge,
+            code_challenge_method: 'S256',
             prompt: 'consent'
         });
 
@@ -7264,7 +8007,12 @@ app.get('/api/account/discord/oauth/runtime', requireAuth, async (req, res) => {
             ready: Boolean(oauth.ready),
             redirectUri: oauth.redirectUri,
             callbackOrigin,
-            callbackHost
+            callbackHost,
+            requestOrigin: oauth.requestOrigin,
+            hostMatchesRequest: Boolean(oauth.hostMatchesRequest),
+            guildVerificationRequired: DISCORD_OAUTH_REQUIRE_GUILD_MEMBER,
+            guildId: getConfiguredDiscordGuildId() || null,
+            protectedFeatures: DISCORD_SECURITY_PROTECTED_FEATURES
         });
     } catch (error) {
         console.error('Error getting Discord OAuth runtime config:', error);
@@ -7283,22 +8031,52 @@ app.get('/api/account/discord/oauth/callback', async (req, res) => {
         const state = String(req.query?.state || '').trim();
         const serverState = state ? consumeDiscordOAuthState(state) : null;
         const stateData = req.session.discordOAuthState || null;
+        const requestBinding = buildDiscordOAuthRequestBinding(req);
 
         if (!code || !state) {
             return completeDiscordOAuthRequest(req, res, { success: false, message: 'Missing OAuth callback data' });
         }
+
+        const validateStoredOAuthState = (candidate) => {
+            if (!candidate?.value && !candidate?.codeVerifier && !candidate?.createdAt) return false;
+            if (candidate?.value && state !== candidate.value) return false;
+            if (!candidate?.codeVerifier) return false;
+
+            if (candidate?.username && requestBinding.username && candidate.username !== requestBinding.username) {
+                return false;
+            }
+
+            if (candidate?.ipHash && candidate.ipHash !== requestBinding.ipHash) {
+                return false;
+            }
+
+            if (candidate?.userAgentHash && candidate.userAgentHash !== requestBinding.userAgentHash) {
+                return false;
+            }
+
+            if (candidate?.host && candidate.host !== requestBinding.host) {
+                return false;
+            }
+
+            return true;
+        };
 
         const sessionStateAgeMs = Date.now() - Number(stateData?.createdAt || 0);
         const sessionStateValid = Boolean(
             stateData?.value &&
             state === stateData.value &&
             Number.isFinite(sessionStateAgeMs) &&
-            sessionStateAgeMs <= DISCORD_OAUTH_STATE_TTL_MS
+            sessionStateAgeMs <= DISCORD_OAUTH_STATE_TTL_MS &&
+            validateStoredOAuthState(stateData)
         );
 
-        if (!serverState && !sessionStateValid) {
+        const serverStateValid = Boolean(serverState && validateStoredOAuthState(serverState));
+
+        if (!serverStateValid && !sessionStateValid) {
             return completeDiscordOAuthRequest(req, res, { success: false, message: 'Invalid or expired OAuth state' });
         }
+
+        const effectiveState = serverStateValid ? serverState : stateData;
 
         if (req.session?.discordOAuthState) {
             delete req.session.discordOAuthState;
@@ -7311,7 +8089,8 @@ app.get('/api/account/discord/oauth/callback', async (req, res) => {
             grant_type: 'authorization_code',
             code,
             redirect_uri: oauth.redirectUri,
-            scope: 'identify'
+            scope: 'identify',
+            code_verifier: String(effectiveState?.codeVerifier || '')
         });
 
         const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
@@ -7355,6 +8134,17 @@ app.get('/api/account/discord/oauth/callback', async (req, res) => {
             return completeDiscordOAuthRequest(req, res, { success: false, message: 'That Discord account is already linked' });
         }
 
+        const guildMembership = await resolveDiscordGuildMembership(me.id);
+        if (guildMembership.required && guildMembership.available && guildMembership.verified === false) {
+            const guildName = String(guildMembership.guildName || '').trim();
+            return completeDiscordOAuthRequest(req, res, {
+                success: false,
+                message: guildName
+                    ? `Join ${guildName} with that Discord account before linking`
+                    : 'Join the configured Discord server with that account before linking'
+            });
+        }
+
         const discordUsername = me.discriminator && me.discriminator !== '0'
             ? `${me.username}#${me.discriminator}`
             : me.username;
@@ -7376,6 +8166,8 @@ app.get('/api/account/discord/oauth/callback', async (req, res) => {
         if (req.session) {
             req.session.discordLinked = true;
             req.session.discordLinkedVerifiedAt = Date.now();
+            req.session.discordSecurityState = null;
+            req.session.discordSecurityVerifiedAt = 0;
             await new Promise((resolve) => req.session.save(() => resolve()));
         }
 
@@ -7386,11 +8178,30 @@ app.get('/api/account/discord/oauth/callback', async (req, res) => {
     }
 });
 
-app.post('/api/account/discord-unlink', requireAuth, async (req, res) => {
+app.post('/api/account/discord-unlink', requireAuth, requireSensitiveDiscordSecurityBinding, requireLinkedDiscordAccount, async (req, res) => {
     try {
+        const { currentPassword } = req.body || {};
+        if (!currentPassword || typeof currentPassword !== 'string') {
+            return res.status(400).json({ error: 'Current password is required to unlink Discord' });
+        }
+
         const user = await AdminPanelHelper.getAdminUser(req.session.username);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
+        }
+
+        const validPassword = await bcrypt.compare(currentPassword, user.password_hash || '');
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Current password is incorrect' });
+        }
+
+        const delayedApproval = requestHighRiskActionApproval(req, res, {
+            actionKey: 'discord-unlink',
+            delayMs: DISCORD_HIGH_RISK_DELAY_UNLINK_MS,
+            message: 'Discord unlink requires a short security delay. Repeat the action after the timer ends to finish unlinking.'
+        });
+        if (!delayedApproval.approved) {
+            return;
         }
 
         await MySQLDatabaseManager.connection.pool.execute(
@@ -7410,6 +8221,8 @@ app.post('/api/account/discord-unlink', requireAuth, async (req, res) => {
         if (req.session) {
             req.session.discordLinked = false;
             req.session.discordLinkedVerifiedAt = Date.now();
+            req.session.discordSecurityState = null;
+            req.session.discordSecurityVerifiedAt = 0;
             await new Promise((resolve) => req.session.save(() => resolve()));
         }
 
@@ -7420,7 +8233,7 @@ app.post('/api/account/discord-unlink', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/security/2fa/setup', requireAuth, async (req, res) => {
+app.post('/api/security/2fa/setup', createRateLimiter(5, 60000), requireAuth, requireDiscordSecurityBinding, async (req, res) => {
     try {
         const { currentPassword } = req.body || {};
         if (!currentPassword || typeof currentPassword !== 'string') {
@@ -7441,6 +8254,11 @@ app.post('/api/security/2fa/setup', requireAuth, async (req, res) => {
             accountName: user.username,
             issuer: websiteName || 'Sentinel Panel'
         });
+        const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            width: 220
+        });
 
         req.session.pendingTwoFactorSetup = {
             secret,
@@ -7450,8 +8268,8 @@ app.post('/api/security/2fa/setup', requireAuth, async (req, res) => {
 
         return res.json({
             success: true,
-            secret,
-            otpauthUri
+            manualEntryKey: secret,
+            qrDataUrl
         });
     } catch (error) {
         console.error('Error initializing 2FA setup:', error);
@@ -7459,7 +8277,7 @@ app.post('/api/security/2fa/setup', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/security/2fa/enable', requireAuth, async (req, res) => {
+app.post('/api/security/2fa/enable', createRateLimiter(5, 60000), requireAuth, requireDiscordSecurityBinding, async (req, res) => {
     try {
         const { token } = req.body || {};
         const pending = req.session.pendingTwoFactorSetup;
@@ -7468,32 +8286,57 @@ app.post('/api/security/2fa/enable', requireAuth, async (req, res) => {
             return res.status(400).json({ error: '2FA setup has expired. Start setup again.' });
         }
 
-        if (!TotpHelper.verifyTotp(token, pending.secret, { window: 1 })) {
+        const user = await AdminPanelHelper.getAdminUser(req.session.username);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        if (isTwoFactorAttemptBlocked(req.session.username, 'enable')) {
+            return res.status(429).json({ error: 'Too many invalid 2FA attempts. Wait a few minutes before trying again.' });
+        }
+
+        const verification = TotpHelper.verifyTotpDetailed(token, pending.secret, { window: 1 });
+        if (!verification.valid) {
+            noteTwoFactorAttemptFailure(req.session.username, 'enable');
             return res.status(401).json({ error: 'Invalid verification code' });
         }
 
-        const encryptedSecret = TotpHelper.encryptTwoFactorSecret(pending.secret, process.env.SESSION_SECRET);
+        const encryptedSecret = encryptStoredTwoFactorSecret(pending.secret);
+        const codes = generateRecoveryCodes(10);
+        const codeHashes = codes.map(hashRecoveryCode);
         await MySQLDatabaseManager.connection.pool.execute(
             `UPDATE admin_users
              SET two_factor_enabled = TRUE,
                  two_factor_secret = ?,
-                 two_factor_enabled_at = NOW()
+                 two_factor_enabled_at = NOW(),
+                 two_factor_last_counter = NULL,
+                 two_factor_last_verified_at = NULL,
+                 recovery_code_hashes = ?,
+                 recovery_codes_generated_at = NOW()
              WHERE username = ?`,
-            [encryptedSecret, req.session.username]
+            [encryptedSecret, JSON.stringify(codeHashes), req.session.username]
         );
 
         delete req.session.pendingTwoFactorSetup;
         await req.session.save(() => { });
+        clearTwoFactorAttemptFailures(req.session.username, 'enable');
         await logAdminAuthEvent(req.session.username, 'TWO_FACTOR_ENABLED', req, {});
+        await sendSecurityAlertIfPossible(user, 'Two-factor authentication enabled', [
+            '2FA was enabled on your account.',
+            'A fresh set of recovery codes was generated at the same time.',
+            `Time: ${new Date().toLocaleString()}`
+        ], req);
 
-        return res.json({ success: true });
+        return res.json({
+            success: true,
+            codes,
+            generatedAt: new Date().toISOString()
+        });
     } catch (error) {
         console.error('Error enabling 2FA:', error);
         return res.status(500).json({ error: 'Failed to enable 2FA' });
     }
 });
 
-app.post('/api/security/2fa/disable', requireAuth, async (req, res) => {
+app.post('/api/security/2fa/disable', createRateLimiter(5, 60000), requireAuth, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const { currentPassword, token } = req.body || {};
         if (!currentPassword || !token) {
@@ -7510,26 +8353,49 @@ app.post('/api/security/2fa/disable', requireAuth, async (req, res) => {
             return res.status(400).json({ error: '2FA is not enabled on this account' });
         }
 
-        const decryptedSecret = TotpHelper.decryptTwoFactorSecret(user.two_factor_secret, process.env.SESSION_SECRET);
-        const validToken = TotpHelper.verifyTotp(token, decryptedSecret, { window: 1 });
-        if (!validToken) {
+        if (isTwoFactorAttemptBlocked(user.username, 'disable')) {
+            return res.status(429).json({ error: 'Too many invalid 2FA attempts. Wait a few minutes before trying again.' });
+        }
+
+        const { secret: decryptedSecret } = decryptStoredTwoFactorSecret(user.two_factor_secret);
+        const verification = TotpHelper.verifyTotpDetailed(token, decryptedSecret, { window: 1 });
+        if (!verification.valid) {
+            noteTwoFactorAttemptFailure(user.username, 'disable');
             return res.status(401).json({ error: 'Invalid verification code' });
+        }
+
+        const counterAccepted = await consumeVerifiedTwoFactorCounter(user.id, verification.counter);
+        if (!counterAccepted) {
+            noteTwoFactorAttemptFailure(user.username, 'disable');
+            return res.status(401).json({ error: 'This 2FA code was already used. Wait for a new code and try again.' });
+        }
+
+        const delayedApproval = requestHighRiskActionApproval(req, res, {
+            actionKey: 'two-factor-disable',
+            delayMs: DISCORD_HIGH_RISK_DELAY_DISABLE_2FA_MS,
+            message: 'Disabling 2FA requires a short safety delay. Repeat the action after the timer ends to confirm the change.'
+        });
+        if (!delayedApproval.approved) {
+            return;
         }
 
         await MySQLDatabaseManager.connection.pool.execute(
             `UPDATE admin_users
              SET two_factor_enabled = FALSE,
                  two_factor_secret = NULL,
-                 two_factor_enabled_at = NULL
+                 two_factor_enabled_at = NULL,
+                 two_factor_last_counter = NULL,
+                 two_factor_last_verified_at = NULL
              WHERE username = ?`,
             [req.session.username]
         );
 
+        clearTwoFactorAttemptFailures(user.username, 'disable');
         await logAdminAuthEvent(req.session.username, 'TWO_FACTOR_DISABLED', req, {});
         await sendSecurityAlertIfPossible(user, 'Two-factor authentication disabled', [
             '2FA was disabled on your account.',
             `Time: ${new Date().toLocaleString()}`
-        ]);
+        ], req);
         return res.json({ success: true });
     } catch (error) {
         console.error('Error disabling 2FA:', error);
@@ -7979,9 +8845,9 @@ app.get('/api/activity', requireAuth, async (req, res) => {
 });
 
 function requireAdmin(req, res, next) {
-    AdminPanelHelper.getAdminUser(req.session.username)
-        .then(user => {
-            if (!user || user.role !== 'admin') {
+    refreshSessionRoleIfNeeded(req)
+        .then(() => {
+            if (!hasAdminAccess({ role: req.session?.role })) {
                 return res.redirect('/unauthorized');
             }
             next();
@@ -8063,7 +8929,7 @@ app.post('/api/user/change-password', createRateLimiter(3, 60000), requireAuth, 
 });
 
 // Change email endpoint
-app.post('/api/user/change-email', createRateLimiter(5, 60000), requireAuth, async (req, res) => {
+app.post('/api/user/change-email', createRateLimiter(5, 60000), requireAuth, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const { newEmail } = req.body;
 
@@ -8092,6 +8958,15 @@ app.post('/api/user/change-email', createRateLimiter(5, 60000), requireAuth, asy
 
         if (Array.isArray(existingEmailRows) && existingEmailRows.length > 0) {
             return res.status(400).json({ error: 'Email is already in use' });
+        }
+
+        const delayedApproval = requestHighRiskActionApproval(req, res, {
+            actionKey: 'change-email',
+            delayMs: DISCORD_HIGH_RISK_DELAY_CHANGE_EMAIL_MS,
+            message: 'Email changes are delayed briefly for safety. Repeat the change after the timer ends to apply the new address.'
+        });
+        if (!delayedApproval.approved) {
+            return;
         }
 
         await MySQLDatabaseManager.connection.pool.query(
@@ -8124,7 +8999,7 @@ app.post('/api/user/change-email', createRateLimiter(5, 60000), requireAuth, asy
         await sendSecurityAlertIfPossible(user, 'Email address changed', [
             `New email: ${normalizedEmail}`,
             `Time: ${new Date().toLocaleString()}`
-        ]);
+        ], req);
 
         console.log(`[Admin] User ${req.session.username} changed their email address`);
         logAdminAuthEvent(req.session.username, 'EMAIL_CHANGED', req, { route: '/api/user/change-email' }).catch(() => { });
@@ -8135,7 +9010,7 @@ app.post('/api/user/change-email', createRateLimiter(5, 60000), requireAuth, asy
     }
 });
 
-app.post('/api/user/change-avatar', createRateLimiter(10, 60000), requireAuth, (req, res) => {
+app.post('/api/user/change-avatar', createRateLimiter(10, 60000), requireAuth, requireDiscordSecurityBinding, (req, res) => {
     adminAvatarUpload.single('avatar')(req, res, async (uploadError) => {
         try {
             if (uploadError) {
@@ -9929,10 +10804,9 @@ app.get('/analytics', requireAuth, requireOwner, (req, res) => {
 
 // Check if user is owner
 function requireOwner(req, res, next) {
-    AdminPanelHelper.getAdminUser(req.session.username)
-        .then(user => {
-            if (!hasOwnerAccess(user)) {
-                // Redirect to unauthorized page instead of error
+    refreshSessionRoleIfNeeded(req)
+        .then(() => {
+            if (!hasOwnerAccess({ role: req.session?.role })) {
                 return res.redirect('/unauthorized');
             }
             next();
@@ -9944,7 +10818,7 @@ function requireOwner(req, res, next) {
 }
 
 // Force logout all users (owner only)
-app.post('/api/owner/force-logout-all', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/force-logout-all', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         // Clear all sessions from the session store
         sessionStore.clearExpiredSessions((err) => {
@@ -9999,7 +10873,7 @@ app.get('/api/owner/backups/status', requireAuth, requireOwner, (req, res) => {
     });
 });
 
-app.post('/api/owner/backups/config', requireAuth, requireOwner, (req, res) => {
+app.post('/api/owner/backups/config', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, (req, res) => {
     try {
         const next = { ...backupConfig };
         if (typeof req.body?.enabled === 'boolean') {
@@ -10026,7 +10900,7 @@ app.post('/api/owner/backups/config', requireAuth, requireOwner, (req, res) => {
     }
 });
 
-app.post('/api/owner/backups/run', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/backups/run', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const tables = Array.isArray(req.body?.tables)
             ? req.body.tables.map((table) => String(table || '').trim()).filter(Boolean)
@@ -10089,7 +10963,7 @@ app.get('/api/owner/server-backups/status', requireAuth, requireOwner, (req, res
     });
 });
 
-app.post('/api/owner/server-backups/config', requireAuth, requireOwner, (req, res) => {
+app.post('/api/owner/server-backups/config', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, (req, res) => {
     try {
         const next = { ...serverBackupConfig };
         if (typeof req.body?.enabled === 'boolean') {
@@ -10113,7 +10987,7 @@ app.post('/api/owner/server-backups/config', requireAuth, requireOwner, (req, re
     }
 });
 
-app.post('/api/owner/server-backups/run', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/server-backups/run', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const includes = req.body?.includes && typeof req.body.includes === 'object'
             ? ServerBackupManager.normalizeBackupIncludes(req.body.includes)
@@ -10260,7 +11134,7 @@ app.get('/api/owner/server-backups/restore-status', requireAuth, requireOwner, a
     }
 });
 
-app.post('/api/owner/server-backups/restore', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/server-backups/restore', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const file = String(req.body?.file || '').trim();
         if (!file) {
@@ -10368,7 +11242,7 @@ app.get('/api/owner/security/captcha-policy', requireAuth, requireOwner, async (
     }
 });
 
-app.post('/api/owner/security/session-policy', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/security/session-policy', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const incoming = req.body || {};
 
@@ -10416,7 +11290,7 @@ app.post('/api/owner/security/session-policy', requireAuth, requireOwner, async 
     }
 });
 
-app.post('/api/owner/security/captcha-policy', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/security/captcha-policy', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const incoming = req.body || {};
 
@@ -10509,7 +11383,7 @@ app.post('/api/owner/security/captcha-policy', requireAuth, requireOwner, async 
 });
 
 // Purge all bans (owner only)
-app.post('/api/owner/purge-bans', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/purge-bans', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const result = await AdminPanelHelper.connection.query('DELETE FROM user_bans');
         const deletedCount = result.affectedRows || 0;
@@ -10527,7 +11401,7 @@ app.post('/api/owner/purge-bans', requireAuth, requireOwner, async (req, res) =>
 });
 
 // Purge all warnings (owner only)
-app.post('/api/owner/purge-warnings', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/purge-warnings', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         const [warnCases] = await AdminPanelHelper.connection.pool.query("SELECT case_id FROM moderation_cases WHERE action_type = 'WARN'");
         const caseIds = Array.isArray(warnCases) ? warnCases.map((row) => row.case_id).filter(Boolean) : [];
@@ -10554,7 +11428,7 @@ app.post('/api/owner/purge-warnings', requireAuth, requireOwner, async (req, res
 });
 
 // Wipe all user data (owner only) - EXTREME CAUTION
-app.post('/api/owner/wipe-all-data', requireAuth, requireOwner, async (req, res) => {
+app.post('/api/owner/wipe-all-data', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
     try {
         // Clear all user data tables
         const tables = ['levels', 'warns', 'reminders', 'giveaways'];
@@ -12924,11 +13798,27 @@ function getDiscordOAuthConfig(req) {
     const configuredRedirect = String(process.env.DISCORD_OAUTH_REDIRECT_URI || '').trim();
     const fallbackRedirect = `${req.protocol}://${req.get('host')}/api/account/discord/oauth/callback`;
     const redirectUri = configuredRedirect || fallbackRedirect;
+    let callbackOrigin = '';
+    let requestOrigin = '';
+    let hostMatchesRequest = true;
+
+    try {
+        callbackOrigin = new URL(redirectUri).origin;
+        requestOrigin = getRequestOrigin(req);
+        hostMatchesRequest = normalizeOriginValue(callbackOrigin) === normalizeOriginValue(requestOrigin);
+    } catch (_) {
+        callbackOrigin = '';
+        requestOrigin = getRequestOrigin(req);
+        hostMatchesRequest = true;
+    }
 
     return {
         clientId,
         clientSecret,
         redirectUri,
+        callbackOrigin,
+        requestOrigin,
+        hostMatchesRequest,
         ready: Boolean(clientId && clientSecret && redirectUri)
     };
 }
@@ -13089,7 +13979,63 @@ function parseUserAgent(userAgent) {
 }
 
 const TWO_FACTOR_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const TWO_FACTOR_CHALLENGE_MAX_ATTEMPTS = 5;
+const TWO_FACTOR_FAILURE_WINDOW_MS = 5 * 60 * 1000;
+const TWO_FACTOR_FAILURE_MAX_ATTEMPTS = 5;
+const TWO_FACTOR_FAILURE_BLOCK_MS = 5 * 60 * 1000;
 const twoFactorChallenges = new Map();
+const twoFactorAttemptFailures = new Map();
+
+function getTwoFactorAttemptKey(username, scope = 'default') {
+    return `${String(scope || 'default').trim().toLowerCase()}:${String(username || '').trim().toLowerCase()}`;
+}
+
+function cleanupTwoFactorAttemptFailures(now = Date.now()) {
+    for (const [key, record] of twoFactorAttemptFailures.entries()) {
+        const attempts = Array.isArray(record?.attempts)
+            ? record.attempts.filter((timestamp) => now - Number(timestamp || 0) <= TWO_FACTOR_FAILURE_WINDOW_MS)
+            : [];
+        const blockedUntil = Number(record?.blockedUntil || 0);
+
+        if (!attempts.length && blockedUntil <= now) {
+            twoFactorAttemptFailures.delete(key);
+            continue;
+        }
+
+        record.attempts = attempts;
+        if (blockedUntil <= now) {
+            record.blockedUntil = 0;
+        }
+    }
+}
+
+function isTwoFactorAttemptBlocked(username, scope = 'default') {
+    cleanupTwoFactorAttemptFailures();
+    const key = getTwoFactorAttemptKey(username, scope);
+    const record = twoFactorAttemptFailures.get(key);
+    return Boolean(record && Number(record.blockedUntil || 0) > Date.now());
+}
+
+function noteTwoFactorAttemptFailure(username, scope = 'default') {
+    const key = getTwoFactorAttemptKey(username, scope);
+    const now = Date.now();
+    const record = twoFactorAttemptFailures.get(key) || { attempts: [], blockedUntil: 0 };
+    record.attempts = Array.isArray(record.attempts)
+        ? record.attempts.filter((timestamp) => now - Number(timestamp || 0) <= TWO_FACTOR_FAILURE_WINDOW_MS)
+        : [];
+    record.attempts.push(now);
+
+    if (record.attempts.length >= TWO_FACTOR_FAILURE_MAX_ATTEMPTS) {
+        record.blockedUntil = now + TWO_FACTOR_FAILURE_BLOCK_MS;
+    }
+
+    twoFactorAttemptFailures.set(key, record);
+    return record;
+}
+
+function clearTwoFactorAttemptFailures(username, scope = 'default') {
+    twoFactorAttemptFailures.delete(getTwoFactorAttemptKey(username, scope));
+}
 
 function cleanupTwoFactorChallenges() {
     const now = Date.now();
@@ -13101,8 +14047,9 @@ function cleanupTwoFactorChallenges() {
 }
 
 setInterval(cleanupTwoFactorChallenges, 60 * 1000);
+setInterval(cleanupTwoFactorAttemptFailures, 60 * 1000);
 
-function createTwoFactorChallenge({ username, userId, role, ipAddress, userAgent }) {
+function createTwoFactorChallenge({ username, userId, role, ipAddress, userAgent, binding }) {
     const challengeId = crypto.randomBytes(24).toString('hex');
     twoFactorChallenges.set(challengeId, {
         username,
@@ -13110,6 +14057,8 @@ function createTwoFactorChallenge({ username, userId, role, ipAddress, userAgent
         role,
         ipAddress,
         userAgent,
+        binding,
+        attemptCount: 0,
         expiresAt: Date.now() + TWO_FACTOR_CHALLENGE_TTL_MS
     });
     return challengeId;

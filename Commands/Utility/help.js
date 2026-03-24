@@ -199,6 +199,7 @@ function getCommandEmoji(commandName) {
     banner: '🏳️',
     birthday: '🎂',
     crypto: '💰',
+    credits: '🙏',
     define: '📖',
     economy: '🪙',
     events: '📅',

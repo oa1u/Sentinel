@@ -1,9 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const MusicManager = require('../../Functions/MusicManager');
-const { sendErrorReply, sendSuccessReply, sendWarningReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
+const RateLimiter = require('../../Functions/RateLimiter');
+const { sendEmbedReply, sendErrorReply, sendSuccessReply, sendWarningReply, sendInfoReply } = require('../../Functions/EmbedBuilders');
 
 const MAX_LYRICS_CHARS = 3800;
 const PROGRESS_BAR_LENGTH = 18;
+const MUTATING_SUBCOMMANDS = new Set(['play', 'skip', 'stop', 'pause', 'resume', 'volume', 'shuffle', 'remove']);
 
 function cleanTrackTitle(input) {
     if (!input) return '';
@@ -83,6 +85,18 @@ async function fetchLyricsFromLrcLib({ artist, title }) {
     };
 }
 
+function buildUpcomingQueueLines(queue) {
+    return queue.tracks.slice(0, 10).map((track, index) => {
+        const duration = track.durationText || MusicManager.formatDuration(track.durationSec);
+        return `**${index + 1}.** [${track.title}](${track.url}) • ${duration}`;
+    });
+}
+
+function getUpcomingDurationLabel(tracks) {
+    const totalSeconds = tracks.reduce((sum, track) => sum + (Number(track?.durationSec) || 0), 0);
+    return MusicManager.formatDuration(totalSeconds);
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('music')
@@ -125,6 +139,23 @@ module.exports = {
         )
         .addSubcommand(subcommand =>
             subcommand
+                .setName('shuffle')
+                .setDescription('Shuffle the upcoming queue')
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('remove')
+                .setDescription('Remove a track from the upcoming queue')
+                .addIntegerOption(option =>
+                    option
+                        .setName('position')
+                        .setDescription('Upcoming queue position to remove')
+                        .setMinValue(1)
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(subcommand =>
+            subcommand
                 .setName('nowplaying')
                 .setDescription('Show the currently playing track')
         )
@@ -149,7 +180,7 @@ module.exports = {
                     option
                         .setName('query')
                         .setDescription('Optional: Artist - Title')
-                        .setRequired(true)
+                        .setRequired(false)
                 )
         ),
     category: 'voice',
@@ -166,6 +197,19 @@ module.exports = {
         const memberVoiceChannelId = interaction.member.voice?.channelId || null;
         const botVoiceChannelId = interaction.guild.members.me?.voice?.channelId || null;
         const queue = MusicManager.getQueue(interaction.guildId);
+
+        if (MUTATING_SUBCOMMANDS.has(subcommand) && !RateLimiter.isExempt(interaction.member)) {
+            const limitState = RateLimiter.checkLimit(interaction.user.id, `music:${subcommand}`);
+            if (limitState.limited) {
+                return sendWarningReply(
+                    interaction,
+                    'Slow Down',
+                    `You are using music controls too quickly. Try again in **${limitState.retryAfter}s**.`
+                );
+            }
+
+            RateLimiter.recordUsage(interaction.user.id, `music:${subcommand}`);
+        }
 
         try {
             if (subcommand === 'play') {
@@ -249,7 +293,7 @@ module.exports = {
                     .setDescription(clipped)
                     .setFooter({ text: `Artist: ${resolvedArtist || 'Unknown'}${sourceLabel ? ` • Source: ${sourceLabel}` : ''}` });
 
-                return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
+                return sendEmbedReply(interaction, embed, { ephemeral: true });
             }
 
             if (!queue) {
@@ -310,6 +354,25 @@ module.exports = {
                 return sendSuccessReply(interaction, 'Volume Updated', `Set volume to **${appliedLevel}%**.`);
             }
 
+            if (subcommand === 'shuffle') {
+                const shuffledCount = MusicManager.shuffle(interaction.guildId);
+                if (!shuffledCount) {
+                    return sendInfoReply(interaction, 'Not Enough Tracks', 'Add at least two upcoming tracks before shuffling the queue.');
+                }
+
+                return sendSuccessReply(interaction, 'Queue Shuffled', `Shuffled **${shuffledCount}** upcoming track(s).`);
+            }
+
+            if (subcommand === 'remove') {
+                const position = interaction.options.getInteger('position', true);
+                const removedTrack = MusicManager.removeTrack(interaction.guildId, position);
+                if (!removedTrack) {
+                    return sendInfoReply(interaction, 'Invalid Position', 'That upcoming queue position does not exist.');
+                }
+
+                return sendSuccessReply(interaction, 'Track Removed', `Removed **${removedTrack.title}** from the queue.`);
+            }
+
             if (subcommand === 'nowplaying') {
                 const current = queue.currentTrack || queue.tracks[0];
                 if (!current) {
@@ -330,7 +393,8 @@ module.exports = {
                         { name: 'Requested By', value: `<@${current.requestedBy}>`, inline: true },
                         { name: 'Volume', value: `${queue.volumePercent || 65}%`, inline: true },
                         { name: 'Backend', value: current.backend || 'play-dl', inline: true },
-                        { name: 'Queue Length', value: `${queue.tracks.length}`, inline: true }
+                        { name: 'Upcoming Tracks', value: `${queue.tracks.length}`, inline: true },
+                        { name: 'Upcoming Duration', value: getUpcomingDurationLabel(queue.tracks), inline: true }
                     )
                     .setTimestamp();
 
@@ -338,28 +402,34 @@ module.exports = {
                     embed.setThumbnail(thumbnail);
                 }
 
-                return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
+                return sendEmbedReply(interaction, embed, { ephemeral: true });
             }
 
             if (subcommand === 'queue') {
-                if (!queue.tracks.length) {
+                if (!queue.currentTrack && !queue.tracks.length) {
                     return sendInfoReply(interaction, 'Queue Empty', 'No tracks are currently queued.');
                 }
 
-                const queueLines = queue.tracks.slice(0, 10).map((track, index) => {
-                    const duration = track.durationText || MusicManager.formatDuration(track.durationSec);
-                    return `**${index + 1}.** [${track.title}](${track.url}) • ${duration}`;
-                });
+                const queueLines = buildUpcomingQueueLines(queue);
 
                 const moreCount = Math.max(queue.tracks.length - 10, 0);
+                const currentDescription = queue.currentTrack
+                    ? `**Now Playing:** [${queue.currentTrack.title}](${queue.currentTrack.url}) • ${queue.currentTrack.durationText || MusicManager.formatDuration(queue.currentTrack.durationSec)}`
+                    : '**Now Playing:** Waiting for the next track to start.';
                 const embed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('📜 Music Queue')
-                    .setDescription(queueLines.join('\n') + (moreCount ? `\n\n...and **${moreCount}** more track(s).` : ''))
-                    .setFooter({ text: `${queue.tracks.length} track(s) queued` })
+                    .setDescription([
+                        currentDescription,
+                        '',
+                        queueLines.length
+                            ? `**Up Next:**\n${queueLines.join('\n')}${moreCount ? `\n\n...and **${moreCount}** more track(s).` : ''}`
+                            : '**Up Next:** No additional tracks queued.'
+                    ].join('\n'))
+                    .setFooter({ text: `${queue.tracks.length} upcoming track(s) • ${getUpcomingDurationLabel(queue.tracks)} total` })
                     .setTimestamp();
 
-                return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
+                return sendEmbedReply(interaction, embed, { ephemeral: true });
             }
 
             return sendWarningReply(interaction, 'Unknown Action', 'That music action is not supported.');
