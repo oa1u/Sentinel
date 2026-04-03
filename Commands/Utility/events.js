@@ -54,6 +54,16 @@ const eventGroups = [
           '• Protects your server from raids and spam.',
           '_Users must complete verification to access the server._'
         ].join('\n')
+      },
+      {
+        key: 'verificationflow',
+        name: 'Verification Flow',
+        emoji: '🧩',
+        value: [
+          'Runs the multi-step verification challenge system behind the main verification event.',
+          '• Supports stricter checks for newer accounts and tracks failed attempts per step.',
+          '_Used to decide challenge type, timeout limits, and response validation._'
+        ].join('\n')
       }
     ]
   },
@@ -100,6 +110,26 @@ const eventGroups = [
           '• Use `/snipe` to view the last deleted message in a channel.',
           '_Great for catching message deletions!_'
         ].join('\n')
+      },
+      {
+        key: 'channelrevival',
+        name: 'Channel Revival',
+        emoji: '💬',
+        value: [
+          'Revives quiet channels by periodically posting prompts in inactive text channels.',
+          '• Respects cooldowns, channel targeting rules, and configurable message pools.',
+          '_Configured through revival settings and Config/revivalMessages.json._'
+        ].join('\n')
+      },
+      {
+        key: 'invitetracker',
+        name: 'Invite Tracker',
+        emoji: '🔗',
+        value: [
+          'Tracks which invite link brought in each member and maintains inviter join counts.',
+          '• Caches invite usage, handles vanity joins, and supports invite stats features.',
+          '_Used for invite leaderboards, referral insight, and join attribution._'
+        ].join('\n')
       }
     ]
   },
@@ -125,6 +155,16 @@ const eventGroups = [
           'Awards XP for messages, tracks user progress, and handles level-up notifications.',
           '• Level up and earn rewards for being active!',
           '_Check your level with `/rank` or `/leaderboard`._'
+        ].join('\n')
+      },
+      {
+        key: 'economyactivity',
+        name: 'Economy Activity',
+        emoji: '💰',
+        value: [
+          'Rewards users with economy currency for meaningful chat activity on a cooldown.',
+          '• Supports configurable reward ranges, bonus rolls, and quest progress updates.',
+          '_Helps tie everyday activity into the wider economy system._'
         ].join('\n')
       },
       {
@@ -156,7 +196,23 @@ const eventGroups = [
           '• Channels are auto-deleted when empty.',
           '_Join the JTC voice channel to create your own room!_'
         ].join('\n')
-	  }
+      }
+    ]
+  },
+  {
+    group: 'Background Services',
+    emoji: '⚙️',
+    events: [
+      {
+        key: 'jobscheduler',
+        name: 'Job Scheduler',
+        emoji: '⏱️',
+        value: [
+          'Runs recurring maintenance and delayed jobs in the background.',
+          '• Powers tasks like bank interest, inactive channel reports, revival checks, and profile sync.',
+          '_Keeps long-running automation reliable without blocking command execution._'
+        ].join('\n')
+      }
     ]
   }
 ];
@@ -165,15 +221,15 @@ const eventGroups = [
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('events')
-    .setDescription('Show descriptions of special server events and automations'),
+    .setDescription('Show descriptions of special server events, functions, and automations'),
   category: 'utility',
   async execute(interaction) {
     function buildMainMenuEmbed() {
       let desc = [
-        'Discover the advanced automations and event features that power your server!',
+        'Discover the events, helper systems, and background automations that power your server!',
         '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
         '',
-        'Click a button below to view details about a module:',
+        'Click a button below to view details about a module or service:',
         ''
       ];
       eventGroups.forEach((g, idx) => {
@@ -183,7 +239,7 @@ module.exports = {
       });
       return new EmbedBuilder()
         .setColor(0x7289DA)
-        .setTitle('✨  Server Events & Automations')
+        .setTitle('✨  Server Events, Functions & Automations')
         .setDescription(desc.join('\n'))
         .setFooter({ text: `Requested by ${interaction.user.tag}  •  ${new Date().toLocaleTimeString()}`, iconURL: interaction.user.displayAvatarURL({ size: 128 }) })
         .setTimestamp();
@@ -266,7 +322,7 @@ module.exports = {
     collector.on('end', async () => {
       try {
         await msg.edit({ components: [] });
-      } catch (_) {}
+      } catch (_) { }
     });
   }
 };

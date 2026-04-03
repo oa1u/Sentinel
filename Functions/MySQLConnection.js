@@ -609,9 +609,11 @@ class MySQLConnection {
                     "priority ENUM('low', 'medium', 'high') DEFAULT 'medium'",
                     'created_at BIGINT NOT NULL',
                     'claimed_by VARCHAR(20) DEFAULT NULL',
-                    "status ENUM('open', 'claimed', 'closed') DEFAULT 'open'",
+                    "status VARCHAR(32) DEFAULT 'open'",
+                    'claimed_by_name VARCHAR(100) DEFAULT NULL',
                     'closed_at BIGINT DEFAULT NULL',
                     'closed_by VARCHAR(20) DEFAULT NULL',
+                    'closed_by_name VARCHAR(100) DEFAULT NULL',
                     'close_reason TEXT DEFAULT NULL',
                     'transcript LONGTEXT DEFAULT NULL',
                     'transcript_created_at BIGINT DEFAULT NULL',
@@ -695,6 +697,9 @@ class MySQLConnection {
                     'giver_id VARCHAR(20) NOT NULL',
                     'target_id VARCHAR(20) NOT NULL',
                     'created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+                ],
+                migrationColumns: [
+                    { name: 'reason', type: 'VARCHAR(160) DEFAULT NULL' }
                 ],
                 indexes: [
                     { name: 'idx_rep_grants_guild_giver_time', definition: 'guild_id, giver_id, created_at' },
@@ -1144,22 +1149,44 @@ class MySQLConnection {
                     'id INT AUTO_INCREMENT PRIMARY KEY',
                     'user_id VARCHAR(20) NOT NULL',
                     'user_tag VARCHAR(100)',
-                    'ban_case_id VARCHAR(20)',
+                    'ban_case_id VARCHAR(50)',
                     'reason TEXT NOT NULL',
-                    "status ENUM('pending', 'accepted', 'denied') DEFAULT 'pending'",
+                    "status VARCHAR(32) DEFAULT 'pending'",
+                    "review_stage VARCHAR(32) DEFAULT 'submitted'",
+                    'user_email VARCHAR(254) DEFAULT NULL',
+                    'public_status_note TEXT',
+                    'internal_note TEXT',
+                    'evidence_json LONGTEXT',
+                    'withdraw_reason TEXT',
                     'owner_response TEXT',
                     'created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
-                    'decided_at TIMESTAMP NULL'
+                    'updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+                    'decided_at TIMESTAMP NULL',
+                    'withdrawn_at TIMESTAMP NULL',
+                    'decided_by_id VARCHAR(64) DEFAULT NULL',
+                    'decided_by_name VARCHAR(100) DEFAULT NULL',
+                    'review_updated_by_id VARCHAR(64) DEFAULT NULL',
+                    'review_updated_by_name VARCHAR(100) DEFAULT NULL'
                 ],
                 migrationColumns: [
+                    { name: 'review_stage', type: "VARCHAR(32) DEFAULT 'submitted'" },
                     { name: 'user_email', type: 'VARCHAR(254) DEFAULT NULL' },
+                    { name: 'public_status_note', type: 'TEXT' },
+                    { name: 'internal_note', type: 'TEXT' },
+                    { name: 'evidence_json', type: 'LONGTEXT' },
+                    { name: 'withdraw_reason', type: 'TEXT' },
+                    { name: 'updated_at', type: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' },
+                    { name: 'withdrawn_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
                     { name: 'decided_by_id', type: 'VARCHAR(64) DEFAULT NULL' },
-                    { name: 'decided_by_name', type: 'VARCHAR(100) DEFAULT NULL' }
+                    { name: 'decided_by_name', type: 'VARCHAR(100) DEFAULT NULL' },
+                    { name: 'review_updated_by_id', type: 'VARCHAR(64) DEFAULT NULL' },
+                    { name: 'review_updated_by_name', type: 'VARCHAR(100) DEFAULT NULL' }
                 ],
                 indexes: [
                     { name: 'idx_user', definition: 'user_id' },
                     { name: 'idx_status', definition: 'status' },
-                    { name: 'idx_ban_case_id', definition: 'ban_case_id' }
+                    { name: 'idx_ban_case_id', definition: 'ban_case_id' },
+                    { name: 'idx_ban_appeals_status_created', definition: 'status, created_at' }
                 ]
             },
             {
@@ -1397,6 +1424,47 @@ class MySQLConnection {
                 await this.ensureIndexes('ban_appeals', [
                     { name: 'idx_ban_appeals_status_created', definition: 'status, created_at' }
                 ]);
+            }
+        );
+
+        await this.runSchemaMigration(
+            '2026-03-ticket-lifecycle-statuses',
+            'Expand ticket lifecycle statuses and persist assignee/closer labels',
+            async () => {
+                await this.ensureColumns('tickets', [
+                    { name: 'claimed_by_name', type: 'VARCHAR(100) DEFAULT NULL' },
+                    { name: 'closed_by_name', type: 'VARCHAR(100) DEFAULT NULL' }
+                ]);
+
+                const ticketStatusColumn = await this.getColumnMetadata('tickets', 'status');
+                const statusType = String(ticketStatusColumn?.column_type || '').toLowerCase();
+                if (statusType.startsWith('enum(')) {
+                    await this.pool.execute("ALTER TABLE tickets MODIFY COLUMN status VARCHAR(32) DEFAULT 'open'");
+                }
+            }
+        );
+
+        await this.runSchemaMigration(
+            '2026-03-ban-appeals-workflow',
+            'Expand ban appeals to support review workflow, evidence, and withdrawals',
+            async () => {
+                await this.ensureColumns('ban_appeals', [
+                    { name: 'review_stage', type: "VARCHAR(32) DEFAULT 'submitted'" },
+                    { name: 'public_status_note', type: 'TEXT' },
+                    { name: 'internal_note', type: 'TEXT' },
+                    { name: 'evidence_json', type: 'LONGTEXT' },
+                    { name: 'withdraw_reason', type: 'TEXT' },
+                    { name: 'updated_at', type: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' },
+                    { name: 'withdrawn_at', type: 'TIMESTAMP NULL DEFAULT NULL' },
+                    { name: 'review_updated_by_id', type: 'VARCHAR(64) DEFAULT NULL' },
+                    { name: 'review_updated_by_name', type: 'VARCHAR(100) DEFAULT NULL' }
+                ]);
+
+                const appealStatusColumn = await this.getColumnMetadata('ban_appeals', 'status');
+                const appealStatusType = String(appealStatusColumn?.column_type || '').toLowerCase();
+                if (appealStatusType.startsWith('enum(')) {
+                    await this.pool.execute("ALTER TABLE ban_appeals MODIFY COLUMN status VARCHAR(32) DEFAULT 'pending'");
+                }
             }
         );
     }

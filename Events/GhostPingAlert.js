@@ -13,26 +13,23 @@ const GHOST_PING_WINDOW_MS = Number.isFinite(configuredWindow) && configuredWind
 exports.disabled = true;
 exports.execute = async function (message, client) {
     try {
-        console.log(`[GhostPingAlert] messageDelete triggered for message ID: ${message?.id}`);
-        if (!message) return console.log(`[GhostPingAlert] Abort: No message`);
+        if (!message) return;
 
         if (message.partial) {
-            console.log(`[GhostPingAlert] Message is partial, cannot read mentions reliably. Aborting.`);
-            // Cannot fetch a deleted message from Discord API
+            // Cannot fetch a deleted partial message from Discord API. This handler is skipped.
             return;
         }
 
         if (!message.guild || !message.channel || !message.author || message.author.bot) {
-            return console.log(`[GhostPingAlert] Abort: Missing guild/channel/author or is bot`);
+            return;
         }
 
         const createdAt = Number(message.createdTimestamp || 0);
-        if (!Number.isFinite(createdAt) || createdAt <= 0) return console.log(`[GhostPingAlert] Abort: Invalid createdAt: ${createdAt}`);
+        if (!Number.isFinite(createdAt) || createdAt <= 0) return;
 
         const ageMs = Date.now() - createdAt;
-        console.log(`[GhostPingAlert] Message age: ${ageMs}ms (Window: ${GHOST_PING_WINDOW_MS}ms)`);
         if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > GHOST_PING_WINDOW_MS) {
-            return console.log(`[GhostPingAlert] Abort: Age outside window`);
+            return;
         }
 
         const mentionedUsers = message.mentions?.users
@@ -43,9 +40,8 @@ exports.execute = async function (message, client) {
             : [];
         const hasEveryoneMention = Boolean(message.mentions?.everyone);
 
-        console.log(`[GhostPingAlert] Mentions - Users: ${mentionedUsers.length}, Roles: ${mentionedRoles.length}, Everyone: ${hasEveryoneMention}`);
         if (!mentionedUsers.length && !mentionedRoles.length && !hasEveryoneMention) {
-            return console.log(`[GhostPingAlert] Abort: No valid mentions`);
+            return;
         }
 
         const logs = await client.channels.fetch(serverLogChannelId).catch(() => null);

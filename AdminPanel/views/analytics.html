@@ -48,21 +48,20 @@
             margin: 0 auto;
         }
 
-        .welcome-section {
+        .admin-hero {
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            background: linear-gradient(140deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.1) 50%, rgba(30, 30, 36, 0.95) 100%);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 1.5rem;
             margin-bottom: 2rem;
-            background: var(--accent-gradient);
-            padding: 2.5rem;
-            border-radius: 1.5rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            color: white;
+            display: grid;
+            gap: 1.5rem;
             position: relative;
             overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
 
-        .welcome-section::after {
+        .admin-hero::after {
             content: '';
             position: absolute;
             top: 0;
@@ -70,51 +69,127 @@
             bottom: 0;
             left: 0;
             background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-            opacity: 0.6;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .admin-hero-main {
+            display: grid;
+            gap: 0.5rem;
+            position: relative;
             z-index: 1;
         }
 
-        .welcome-text {
-            position: relative;
-            z-index: 2;
+        .admin-eyebrow {
+            margin: 0;
+            color: #a5b4fc;
+            font-size: 0.75rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            font-weight: 700;
         }
 
-        .welcome-text h1 {
+        .admin-hero h1 {
             font-size: 2.5rem;
             font-weight: 800;
             margin: 0;
             line-height: 1.2;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            letter-spacing: -0.02em;
         }
 
-        .welcome-text p {
-            opacity: 0.9;
-            margin-top: 0.5rem;
+        .admin-hero-copy {
+            margin: 0;
+            color: #94a3b8;
+            line-height: 1.6;
+            max-width: 800px;
             font-size: 1.1rem;
-            font-weight: 500;
         }
 
-        .sys-status-badge {
-            position: relative;
-            z-index: 2;
-            background: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(10px);
-            padding: 0.5rem 1rem;
+        .admin-hero-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .admin-chip {
+            font-size: 0.8rem;
+            color: #e2e8f0;
+            border: 1px solid rgba(165, 180, 252, 0.3);
+            background: rgba(165, 180, 252, 0.1);
             border-radius: 999px;
+            padding: 0.35rem 0.85rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .admin-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .admin-kpi {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 0.45rem;
+        }
+
+        .admin-kpi .kpi-label {
+            color: #94a3b8;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
             font-weight: 600;
+        }
+
+        .admin-kpi .kpi-value {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            font-family: 'Consolas', monospace;
+        }
+
+        .admin-kpi-health .kpi-value {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            gap: 0.7rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 1.15rem;
         }
 
-        .sys-dot {
+        .admin-kpi-health.warning {
+            border-color: rgba(245, 158, 11, 0.35);
+            background: rgba(120, 53, 15, 0.25);
+        }
+
+        .admin-kpi-health.critical {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: rgba(127, 29, 29, 0.28);
+        }
+
+        .health-dot {
             width: 8px;
             height: 8px;
             background: #4ade80;
             border-radius: 50%;
             box-shadow: 0 0 8px #4ade80;
+            flex-shrink: 0;
+        }
+
+        .health-text {
+            color: white;
+            font-weight: 700;
         }
 
         .tabs-container-scroll {
@@ -394,10 +469,16 @@
                 grid-template-columns: 1fr;
             }
 
-            .welcome-section {
-                flex-direction: column;
-                gap: 1rem;
+            .admin-hero {
+                padding: 1.25rem;
+            }
+
+            .admin-hero-main {
                 text-align: center;
+            }
+
+            .admin-hero-chips {
+                justify-content: center;
             }
 
             .section-header {
@@ -550,7 +631,7 @@
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <script src="/public/notifications.js" defer></script>
     <script src="/public/shared.js"></script>
     <script src="/public/version.js"></script>
@@ -585,6 +666,8 @@
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
                         <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
@@ -596,16 +679,39 @@
 
     <div class="dashboard-container">
 
-        <div class="welcome-section">
-            <div class="welcome-text">
+        <section class="admin-hero">
+            <div class="admin-hero-main">
+                <p class="admin-eyebrow">Analytics Workspace</p>
                 <h1>Analytics Center</h1>
-                <p>Real-time performance monitoring and deep ecosystem insights</p>
+                <p class="admin-hero-copy">Track alerts, email delivery, verification flow, staff performance, and
+                    system health from one live reporting workspace.</p>
+                <div class="admin-hero-chips">
+                    <span class="admin-chip">Alert Monitoring</span>
+                    <span class="admin-chip">Email Delivery</span>
+                    <span class="admin-chip">Verification Insights</span>
+                    <span class="admin-chip">Staff Performance</span>
+                </div>
             </div>
-            <div id="systemHealthIndicator" class="sys-status-badge">
-                <div class="sys-dot"></div>
-                <span>System Operational</span>
+            <div class="admin-kpi-grid">
+                <div id="systemHealthIndicator" class="admin-kpi admin-kpi-health">
+                    <span class="kpi-label">System Status</span>
+                    <span class="kpi-value"><span class="health-dot"></span><span class="health-text">System
+                            Operational</span></span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Active Alerts</span>
+                    <span class="kpi-value" id="analyticsHeroAlerts">0</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Email Success</span>
+                    <span class="kpi-value" id="analyticsHeroEmail">-</span>
+                </div>
+                <div class="admin-kpi">
+                    <span class="kpi-label">Staff Actions</span>
+                    <span class="kpi-value" id="analyticsHeroStaff">-</span>
+                </div>
             </div>
-        </div>
+        </section>
 
         <div class="tabs-container-scroll" id="ownerTabs">
             <button class="tab active" data-tab="notifications" style="--tab-color:#ffd45b;"><span>🔔</span>
@@ -613,6 +719,8 @@
             <button class="tab" data-tab="email-analytics" style="--tab-color:#ffffff;"><span>📧</span> Email</button>
             <button class="tab" data-tab="verification-analytics" style="--tab-color:#5bffb8;"><span>✅</span>
                 Verification</button>
+            <button class="tab" data-tab="staff-performance" style="--tab-color:#60a5fa;"><span>⚖️</span>
+                Staff Performance</button>
             <button class="tab" data-tab="alert-analytics" style="--tab-color:#a70808;"><span>🚨</span> Alerts</button>
             <button class="tab" data-tab="system-health" style="--tab-color:#0887c7;"><span>🖥️</span> System
                 Health</button>
@@ -870,6 +978,108 @@
             </div>
         </div>
 
+        <div id="staff-performance" class="tab-content">
+            <div class="section-header">
+                <div class="section-title">Staff Performance Analysis</div>
+                <div class="action-buttons">
+                    <button class="btn-glass btn-primary" onclick="loadStaffPerformanceAnalytics()">🔄 Refresh</button>
+                    <button class="btn-glass" onclick="exportStaffPerformanceCsv()">📄 Export CSV</button>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#60a5fa; background:rgba(96, 165, 250, 0.12);">⚖️</div>
+                    <div class="kpi-content">
+                        <h3 id="staffPerfSummaryCount">0</h3>
+                        <p>Active Staff (30d)</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#34d399; background:rgba(52, 211, 153, 0.12);">⚡</div>
+                    <div class="kpi-content">
+                        <h3 id="staffPerfSummaryActions">0</h3>
+                        <p>Total Actions</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#f59e0b; background:rgba(245, 158, 11, 0.12);">📊</div>
+                    <div class="kpi-content">
+                        <h3 id="staffPerfSummaryAvg">0</h3>
+                        <p>Avg Actions / Staff</p>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon-wrapper" style="color:#a78bfa; background:rgba(167, 139, 250, 0.12);">🏆</div>
+                    <div class="kpi-content">
+                        <h3 id="staffPerfSummaryTop">-</h3>
+                        <p>Top Performer</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="content-card">
+                    <h3 style="margin-top:0;">Top Staff Activity</h3>
+                    <div class="chart-wrapper"><canvas id="staffPerformanceChart"></canvas></div>
+                </div>
+                <div class="content-card">
+                    <h3 style="margin-top:0;">Action Mix (Window)</h3>
+                    <div id="staffPerformanceMixBreakdown" style="padding:1rem;">Loading...</div>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <h3>Staff Leaderboard</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Staff</th>
+                                <th>Total</th>
+                                <th>Warns</th>
+                                <th>Timeouts</th>
+                                <th>Kicks</th>
+                                <th>Bans</th>
+                                <th>Score</th>
+                                <th>Last Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staffPerformanceTableBody">
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">Loading staff performance...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <h3>Recent Staff Actions</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Staff</th>
+                                <th>Action</th>
+                                <th>User</th>
+                                <th>Status</th>
+                                <th>Case</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staffPerformanceRecentBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading recent staff actions...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="staffPerformanceLastUpdated"
+                    style="text-align:right; margin-top:0.5rem; font-size:0.8rem; opacity:0.7;">Updated: --</div>
+            </div>
+        </div>
+
         <div id="alert-analytics" class="tab-content">
             <div class="section-header">
                 <div class="section-title">System Alerts</div>
@@ -1006,6 +1216,17 @@
         </div>
 
     </div>
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
 </body>
 
 </html>

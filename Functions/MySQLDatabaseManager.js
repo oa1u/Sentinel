@@ -3005,11 +3005,11 @@ class MySQLDatabaseManager {
 
     async createTicket(channelId, ticketData) {
         try {
-            const { userId, userName, reason, priority, createdAt, claimedBy, status } = ticketData;
+            const { userId, userName, reason, priority, createdAt, claimedBy, claimedByName, status } = ticketData;
             await this.connection.query(
-                `INSERT INTO tickets (channel_id, user_id, user_name, reason, priority, created_at, claimed_by, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [channelId, userId, userName, reason || null, priority || 'medium', createdAt || Date.now(), claimedBy || null, status || 'open']
+                `INSERT INTO tickets (channel_id, user_id, user_name, reason, priority, created_at, claimed_by, claimed_by_name, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [channelId, userId, userName, reason || null, priority || 'medium', createdAt || Date.now(), claimedBy || null, claimedByName || null, status || 'open']
             );
             return true;
         } catch (error) {
@@ -3034,9 +3034,11 @@ class MySQLDatabaseManager {
                     priority: ticket.priority,
                     createdAt: ticket.created_at,
                     claimedBy: ticket.claimed_by,
+                    claimedByName: ticket.claimed_by_name,
                     status: ticket.status,
                     closedAt: ticket.closed_at,
                     closedBy: ticket.closed_by,
+                    closedByName: ticket.closed_by_name,
                     closeReason: ticket.close_reason,
                     transcript: ticket.transcript,
                     transcriptCreatedAt: ticket.transcript_created_at
@@ -3058,6 +3060,10 @@ class MySQLDatabaseManager {
                 fields.push('claimed_by = ?');
                 values.push(updates.claimedBy);
             }
+            if (updates.claimedByName !== undefined) {
+                fields.push('claimed_by_name = ?');
+                values.push(updates.claimedByName);
+            }
             if (updates.status !== undefined) {
                 fields.push('status = ?');
                 values.push(updates.status);
@@ -3069,6 +3075,10 @@ class MySQLDatabaseManager {
             if (updates.closedBy !== undefined) {
                 fields.push('closed_by = ?');
                 values.push(updates.closedBy);
+            }
+            if (updates.closedByName !== undefined) {
+                fields.push('closed_by_name = ?');
+                values.push(updates.closedByName);
             }
             if (updates.closeReason !== undefined) {
                 fields.push('close_reason = ?');
@@ -3128,10 +3138,13 @@ class MySQLDatabaseManager {
                 priority: ticket.priority,
                 createdAt: ticket.created_at,
                 claimedBy: ticket.claimed_by,
+                claimedByName: ticket.claimed_by_name,
                 status: ticket.status,
                 closedAt: ticket.closed_at,
                 closedBy: ticket.closed_by,
-                closeReason: ticket.close_reason
+                closedByName: ticket.closed_by_name,
+                closeReason: ticket.close_reason,
+                transcriptCreatedAt: ticket.transcript_created_at
             }));
         } catch (error) {
             console.error('Error getting all tickets:', error);
@@ -3151,7 +3164,13 @@ class MySQLDatabaseManager {
                 reason: ticket.reason,
                 priority: ticket.priority,
                 createdAt: ticket.created_at,
-                status: ticket.status
+                claimedBy: ticket.claimed_by,
+                claimedByName: ticket.claimed_by_name,
+                status: ticket.status,
+                closedAt: ticket.closed_at,
+                closedBy: ticket.closed_by,
+                closedByName: ticket.closed_by_name,
+                closeReason: ticket.close_reason
             }));
         } catch (error) {
             console.error('Error getting user tickets:', error);
@@ -3487,6 +3506,7 @@ class MySQLDatabaseManager {
             const now = Date.now();
             const safeCooldownMs = Math.max(60_000, Math.min(7 * 24 * 60 * 60 * 1000, Number(options.cooldownMs) || 12 * 60 * 60 * 1000));
             const safeDailyLimit = Math.max(1, Math.min(100, Number(options.dailyLimit) || 3));
+            const safeReason = this.validateTextInput(options.reason, 160);
 
             const dayStart = new Date(now);
             dayStart.setUTCHours(0, 0, 0, 0);
@@ -3531,9 +3551,9 @@ class MySQLDatabaseManager {
             }
 
             await this.connection.query(
-                `INSERT INTO reputation_grants (guild_id, giver_id, target_id)
-                 VALUES (?, ?, ?)`,
-                [validGuildId, validGiverId, validTargetId]
+                `INSERT INTO reputation_grants (guild_id, giver_id, target_id, reason)
+                 VALUES (?, ?, ?, ?)`,
+                [validGuildId, validGiverId, validTargetId, safeReason]
             );
 
             await this.connection.query(
@@ -3548,7 +3568,8 @@ class MySQLDatabaseManager {
                 ok: true,
                 totalRep,
                 grantsToday: dailyCount + 1,
-                dailyLimit: safeDailyLimit
+                dailyLimit: safeDailyLimit,
+                reason: safeReason
             };
         } catch (error) {
             console.error('Error giving reputation point:', error);
@@ -3556,20 +3577,37 @@ class MySQLDatabaseManager {
         }
     }
 
-    async getReputationLeaderboard(guildId, limit = 10) {
+    async getReputationLeaderboard(guildId, limit = 10, timeframe = 'all') {
         try {
             const validGuildId = this.validateDiscordId(guildId);
             if (!validGuildId) return [];
 
             const safeLimit = Math.max(1, Math.min(50, Number(limit) || 10));
-            const rows = await this.connection.query(
-                `SELECT user_id, points
-                 FROM reputation_points
-                 WHERE guild_id = ?
-                 ORDER BY points DESC, updated_at ASC
-                 LIMIT ?`,
-                [validGuildId, safeLimit]
-            );
+            let rows = [];
+
+            if (timeframe === 'week' || timeframe === 'month') {
+                const startDate = new Date();
+                startDate.setUTCDate(startDate.getUTCDate() - (timeframe === 'week' ? 7 : 30));
+
+                rows = await this.connection.query(
+                    `SELECT target_id AS user_id, COUNT(*) AS points
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND created_at >= ?
+                     GROUP BY target_id
+                     ORDER BY points DESC, target_id ASC
+                     LIMIT ?`,
+                    [validGuildId, startDate, safeLimit]
+                );
+            } else {
+                rows = await this.connection.query(
+                    `SELECT user_id, points
+                     FROM reputation_points
+                     WHERE guild_id = ?
+                     ORDER BY points DESC, updated_at ASC
+                     LIMIT ?`,
+                    [validGuildId, safeLimit]
+                );
+            }
 
             return (rows || []).map(row => ({
                 user_id: String(row.user_id),
@@ -3581,21 +3619,50 @@ class MySQLDatabaseManager {
         }
     }
 
-    async getReputationRank(guildId, userId) {
+    async getReputationRank(guildId, userId, timeframe = 'all') {
         try {
             const validGuildId = this.validateDiscordId(guildId);
             const validUserId = this.validateDiscordId(userId);
             if (!validGuildId || !validUserId) return null;
 
-            const points = await this.getReputation(validGuildId, validUserId);
-            if (points <= 0) return null;
+            let points = 0;
+            let rows = [];
 
-            const rows = await this.connection.query(
-                `SELECT COUNT(*) AS higher_count
-                 FROM reputation_points
-                 WHERE guild_id = ? AND points > ?`,
-                [validGuildId, points]
-            );
+            if (timeframe === 'week' || timeframe === 'month') {
+                const startDate = new Date();
+                startDate.setUTCDate(startDate.getUTCDate() - (timeframe === 'week' ? 7 : 30));
+
+                const pointRows = await this.connection.query(
+                    `SELECT COUNT(*) AS points
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND target_id = ? AND created_at >= ?`,
+                    [validGuildId, validUserId, startDate]
+                );
+                points = Number(pointRows?.[0]?.points || 0);
+                if (points <= 0) return null;
+
+                rows = await this.connection.query(
+                    `SELECT COUNT(*) AS higher_count
+                     FROM (
+                        SELECT target_id, COUNT(*) AS total_points
+                        FROM reputation_grants
+                        WHERE guild_id = ? AND created_at >= ?
+                        GROUP BY target_id
+                     ) ranked
+                     WHERE total_points > ?`,
+                    [validGuildId, startDate, points]
+                );
+            } else {
+                points = await this.getReputation(validGuildId, validUserId);
+                if (points <= 0) return null;
+
+                rows = await this.connection.query(
+                    `SELECT COUNT(*) AS higher_count
+                     FROM reputation_points
+                     WHERE guild_id = ? AND points > ?`,
+                    [validGuildId, points]
+                );
+            }
 
             const higherCount = Number(rows?.[0]?.higher_count || 0);
             return {
@@ -3604,6 +3671,160 @@ class MySQLDatabaseManager {
             };
         } catch (error) {
             console.error('Error getting reputation rank:', error);
+            return null;
+        }
+    }
+
+    async getReputationProfile(guildId, userId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            const validUserId = this.validateDiscordId(userId);
+            if (!validGuildId || !validUserId) return null;
+
+            const dayStart = new Date();
+            dayStart.setUTCHours(0, 0, 0, 0);
+
+            const [points, rankInfo, receivedRows, givenRows, receivedTodayRows, givenTodayRows, lastReceivedRows, lastGivenRows, recentReasonRows] = await Promise.all([
+                this.getReputation(validGuildId, validUserId),
+                this.getReputationRank(validGuildId, validUserId),
+                this.connection.query(
+                    `SELECT COUNT(*) AS total
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND target_id = ?`,
+                    [validGuildId, validUserId]
+                ),
+                this.connection.query(
+                    `SELECT COUNT(*) AS total
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND giver_id = ?`,
+                    [validGuildId, validUserId]
+                ),
+                this.connection.query(
+                    `SELECT COUNT(*) AS total
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND target_id = ? AND created_at >= ?`,
+                    [validGuildId, validUserId, dayStart]
+                ),
+                this.connection.query(
+                    `SELECT COUNT(*) AS total
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND giver_id = ? AND created_at >= ?`,
+                    [validGuildId, validUserId, dayStart]
+                ),
+                this.connection.query(
+                    `SELECT UNIX_TIMESTAMP(MAX(created_at)) AS created_unix
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND target_id = ?`,
+                    [validGuildId, validUserId]
+                ),
+                this.connection.query(
+                    `SELECT UNIX_TIMESTAMP(MAX(created_at)) AS created_unix
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND giver_id = ?`,
+                    [validGuildId, validUserId]
+                ),
+                this.connection.query(
+                    `SELECT giver_id, reason, UNIX_TIMESTAMP(created_at) AS created_unix
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND target_id = ?
+                     ORDER BY id DESC
+                     LIMIT 3`,
+                    [validGuildId, validUserId]
+                )
+            ]);
+
+            return {
+                points: Number(points || 0),
+                rank: Number(rankInfo?.rank || 0) || null,
+                receivedCount: Number(receivedRows?.[0]?.total || 0),
+                givenCount: Number(givenRows?.[0]?.total || 0),
+                receivedToday: Number(receivedTodayRows?.[0]?.total || 0),
+                givenToday: Number(givenTodayRows?.[0]?.total || 0),
+                lastReceivedAt: Number(lastReceivedRows?.[0]?.created_unix || 0) > 0
+                    ? new Date(Number(lastReceivedRows[0].created_unix) * 1000)
+                    : null,
+                lastGivenAt: Number(lastGivenRows?.[0]?.created_unix || 0) > 0
+                    ? new Date(Number(lastGivenRows[0].created_unix) * 1000)
+                    : null,
+                recentReasons: (recentReasonRows || []).map((row) => ({
+                    giverId: String(row.giver_id),
+                    reason: this.validateTextInput(row.reason, 160) || null,
+                    createdAt: Number(row.created_unix || 0) > 0 ? new Date(Number(row.created_unix) * 1000) : null
+                }))
+            };
+        } catch (error) {
+            console.error('Error getting reputation profile:', error);
+            return null;
+        }
+    }
+
+    async getReputationServerStats(guildId) {
+        try {
+            const validGuildId = this.validateDiscordId(guildId);
+            if (!validGuildId) return null;
+
+            const dayStart = new Date();
+            dayStart.setUTCHours(0, 0, 0, 0);
+
+            const [summaryRows, totalGrantsRows, todayRows, topReceiverRows, topGiverRows] = await Promise.all([
+                this.connection.query(
+                    `SELECT COUNT(*) AS tracked_users, COALESCE(SUM(points), 0) AS total_points
+                     FROM reputation_points
+                     WHERE guild_id = ?`,
+                    [validGuildId]
+                ),
+                this.connection.query(
+                    `SELECT COUNT(*) AS total_grants
+                     FROM reputation_grants
+                     WHERE guild_id = ?`,
+                    [validGuildId]
+                ),
+                this.connection.query(
+                    `SELECT COUNT(*) AS total_grants_today
+                     FROM reputation_grants
+                     WHERE guild_id = ? AND created_at >= ?`,
+                    [validGuildId, dayStart]
+                ),
+                this.connection.query(
+                    `SELECT target_id AS user_id, COUNT(*) AS total
+                     FROM reputation_grants
+                     WHERE guild_id = ?
+                     GROUP BY target_id
+                     ORDER BY total DESC, target_id ASC
+                     LIMIT 1`,
+                    [validGuildId]
+                ),
+                this.connection.query(
+                    `SELECT giver_id AS user_id, COUNT(*) AS total
+                     FROM reputation_grants
+                     WHERE guild_id = ?
+                     GROUP BY giver_id
+                     ORDER BY total DESC, giver_id ASC
+                     LIMIT 1`,
+                    [validGuildId]
+                )
+            ]);
+
+            return {
+                trackedUsers: Number(summaryRows?.[0]?.tracked_users || 0),
+                totalPoints: Number(summaryRows?.[0]?.total_points || 0),
+                totalGrants: Number(totalGrantsRows?.[0]?.total_grants || 0),
+                grantsToday: Number(todayRows?.[0]?.total_grants_today || 0),
+                topReceiver: topReceiverRows?.[0]
+                    ? {
+                        userId: String(topReceiverRows[0].user_id),
+                        total: Number(topReceiverRows[0].total || 0)
+                    }
+                    : null,
+                topGiver: topGiverRows?.[0]
+                    ? {
+                        userId: String(topGiverRows[0].user_id),
+                        total: Number(topGiverRows[0].total || 0)
+                    }
+                    : null
+            };
+        } catch (error) {
+            console.error('Error getting reputation server stats:', error);
             return null;
         }
     }

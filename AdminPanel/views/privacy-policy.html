@@ -280,6 +280,8 @@
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
                         <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
@@ -294,7 +296,8 @@
             <div class="privacy-header">
                 <div class="privacy-icon">🔒</div>
                 <h1>Privacy Policy</h1>
-                <p>Transparent overview of how we handle, store, and protect your data.</p>
+                <p>Clear information about what the bot and dashboard collect, why the data is used, and what security
+                    protections are in place.</p>
             </div>
 
             <div class="tabs-container" role="tablist" aria-label="Privacy Policy Sections">
@@ -310,9 +313,17 @@
                     onclick="openTab('usage', this)">
                     <i>🎯</i> Data Usage
                 </button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="sharing"
+                    onclick="openTab('sharing', this)">
+                    <i>🤝</i> Sharing & Retention
+                </button>
                 <button class="tab-btn" role="tab" aria-selected="false" aria-controls="security"
                     onclick="openTab('security', this)">
                     <i>🧯</i> Security
+                </button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="controls"
+                    onclick="openTab('controls', this)">
+                    <i>🛠️</i> Your Controls
                 </button>
 
                 <button class="tab-btn" role="tab" aria-selected="false" aria-controls="version"
@@ -325,14 +336,20 @@
                 <div class="content-box">
                     <div class="section-title"><i>📌</i> The Basics</div>
                     <div class="content-text">
-                        <p>Hi! This Privacy Policy explains how <span class="websiteName"></span> ("we", "us") handles
-                            your information. We built this bot to help you manage your community, not to spy on you.
+                        <p>This Privacy Policy explains how <span class="websiteName"></span> ("we", "us") handles
+                            information when you use the Discord bot, the web dashboard, and the related admin APIs. We
+                            built these tools to help run communities and protect accounts, not to collect unnecessary
+                            data.
                         </p>
-                        <p>By using the bot or this dashboard, you're cool with how we handle things described here.</p>
+                        <p>By using the bot, dashboard, or linked security features, you agree to the data handling
+                            described here.</p>
                         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5rem 0;">
-                        <p style="color: #94a3b8; font-size: 0.95rem;"><em><strong>Heads Up:</strong> Every Discord
-                                server is different. The server owners who use our bot might have their own rules. We
-                                provide the tools, but they decide how to use them (like what words to ban).</em></p>
+                        <p><strong>What this covers:</strong> Discord account details used for commands and moderation,
+                            dashboard account data, session and security information, optional analytics, backups, and
+                            support or recovery flows.</p>
+                        <p><strong>What this does not mean:</strong> We do not claim ownership of your Discord content,
+                            and we do not sell personal data.</p>
+
                     </div>
                     <div class="content-text"
                         style="margin-top: 1.5rem; background: rgba(59, 130, 246, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
@@ -347,19 +364,34 @@
                 <div class="content-box">
                     <div class="section-title"><i>📦</i> What We Collect</div>
                     <ul class="content-list">
-                        <li><strong>Your Profile:</strong> We save your Discord ID, username, and avatar so we know
-                            who's who.</li>
-                        <li><strong>Server Settings:</strong> We store your server's config like channel IDs, role
-                            setups, and welcome messages so the bot works.</li>
-                        <li><strong>Mod History:</strong> If someone gets warned, kicked, or banned, we keep a record of
-                            it (the "case log") to help mods keep track.</li>
-                        <li><strong>Messages (Sometimes):</strong> We <strong>do not</strong> store chat logs by
-                            default. We only save specific messages if you enable "Message Logging" or when a command is
-                            used.</li>
-                        <li><strong>Login Info:</strong> When you log into this dashboard, we use cookies and your IP to
-                            keep your session secure.</li>
-                        <li><strong>Bot Stats:</strong> We track basic things like "how many times was the !help command
-                            used" to optimize performance.</li>
+                        <li><strong>Account and Profile Data:</strong> We may store usernames, display names, Discord
+                            IDs, linked Discord account details, avatars, email addresses, panel roles, and profile
+                            preferences so accounts can sign in and use the dashboard safely.</li>
+                        <li><strong>Authentication and Session Data:</strong> When you use the web panel, we process
+                            session cookies, CSRF tokens, IP information, browser or device details, login timestamps,
+                            activity timestamps, captcha challenge state, and two-factor authentication challenge data.
+                        </li>
+                        <li><strong>Security and Recovery Data:</strong> If you enable security features, we may store
+                            encrypted two-factor secrets, recovery code metadata, security approval state for sensitive
+                            actions, active session information, Discord trust state, and security event history.</li>
+                        <li><strong>Discord and Server Configuration:</strong> We store server IDs, channel IDs, role
+                            IDs, welcome settings, moderation settings, verification settings, auto-responder rules,
+                            analytics preferences, and other configuration required for the bot and dashboard to
+                            function.</li>
+                        <li><strong>Moderation and Operational Records:</strong> We may store case logs, warnings,
+                            punishments, notes, appeals, verification outcomes, ticket activity, and optional moderation
+                            history so staff can manage a server consistently.</li>
+                        <li><strong>Messages and Content Data:</strong> We do <strong>not</strong> keep full chat logs
+                            by default. Specific message content may be processed or stored when a command is used, when
+                            a feature explicitly requires it, when logging is enabled, or when content is needed for
+                            moderation, verification, or anti-abuse features.</li>
+                        <li><strong>Analytics and Diagnostic Data:</strong> We may collect command usage counts,
+                            moderation activity totals, verification analytics, email delivery analytics, alert settings
+                            analytics, error details, and performance information to keep the service stable and useful.
+                        </li>
+                        <li><strong>Backup Data:</strong> If backups are enabled, stored backup files can include server
+                            configuration, moderation data, and other operational records needed for recovery and
+                            restore workflows.</li>
                     </ul>
                 </div>
             </div>
@@ -368,16 +400,48 @@
                 <div class="content-box">
                     <div class="section-title"><i>🎯</i> How We Use It</div>
                     <ul class="content-list">
-                        <li><strong>To Run the Bot:</strong> We use data to reply to commands, give you roles, and show
-                            you pretty graphs on this dashboard.</li>
-                        <li><strong>To Keep It Safe:</strong> We use data for AutoMod (like catching bad words) and to
-                            stop spammers.</li>
-                        <li><strong>To Fix Bugs:</strong> If the bot crashes, we look at error logs to see what went
-                            wrong.</li>
-                        <li><strong>To Talk to You:</strong> Sometimes the bot needs to DM you (like "You were warned in
-                            Server X") or post in a log channel.</li>
-                        <li><strong>To Follow the Law:</strong> We have to follow the rules, including Discord's Terms
-                            of Service.</li>
+                        <li><strong>To Run Core Features:</strong> Data is used to execute commands, apply moderation
+                            actions, run verification flows, manage tickets, automate roles, and power the dashboard.
+                        </li>
+                        <li><strong>To Secure Accounts and the Panel:</strong> Session data, IP data, captcha state,
+                            CSRF protection, rate limiting, login telemetry, device checks, Discord link trust, and
+                            two-factor verification are used to reduce abuse and unauthorized access.</li>
+                        <li><strong>To Deliver Notifications:</strong> We may send security alerts, recovery emails,
+                            login notices, moderation notices, or Discord direct messages when a feature depends on
+                            those notifications.</li>
+                        <li><strong>To Improve Reliability:</strong> Diagnostic logs, analytics, delivery metrics, and
+                            error reports help us detect failures, tune features, and investigate issues.</li>
+                        <li><strong>To Support Recovery and Restore:</strong> Backups, restore manifests, and retention
+                            settings are used to recover configuration or operational data when the owner triggers those
+                            tools.</li>
+                        <li><strong>To Meet Platform and Legal Requirements:</strong> We may process data to comply with
+                            Discord requirements, security obligations, abuse prevention needs, and valid legal
+                            requests.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div id="sharing" class="tab-content">
+                <div class="content-box">
+                    <div class="section-title"><i>🤝</i> Sharing, Storage, and Retention</div>
+                    <ul class="content-list">
+                        <li><strong>No Data Sales:</strong> We do not sell personal data or trade account information
+                            for advertising purposes.</li>
+                        <li><strong>Service Providers:</strong> Data may be processed by infrastructure providers that
+                            make the bot and dashboard work, such as hosting, database, email, backup, and Discord
+                            platform services.</li>
+                        <li><strong>Server Owner Visibility:</strong> Server owners and staff may be able to view
+                            moderation records, tickets, verification results, analytics, and settings that belong to
+                            their own server because those tools are part of the service they manage.</li>
+                        <li><strong>Dashboard Storage:</strong> Web panel session data is stored for authentication and
+                            expires based on panel security policy, inactivity timeouts, or logout.</li>
+                        <li><strong>Security Records:</strong> Security alerts, login history, approval states, and
+                            other protection-related data may be retained while needed for account safety, fraud review,
+                            and abuse prevention.</li>
+                        <li><strong>Backups and Restore Files:</strong> Backup files and manifests remain stored until
+                            rotation, replacement, manual deletion, or configuration changes remove them.</li>
+                        <li><strong>Logs and Analytics:</strong> Operational logs and analytics may be kept for
+                            troubleshooting, service monitoring, and reporting, then rotated or deleted over time.</li>
                     </ul>
                 </div>
             </div>
@@ -386,13 +450,44 @@
                 <div class="content-box">
                     <div class="section-title"><i>🧯</i> Keeping It Safe</div>
                     <ul class="content-list">
-                        <li><strong>Encryption:</strong> We scramble sensitive stuff like tokens and passwords so nobody
-                            can read them.</li>
-                        <li><strong>Locked Doors:</strong> Only the main developers can access the database, and we use
-                            secure providers.</li>
-                        <li><strong>Less is More:</strong> We try not to hoard data. If we don't need it for a feature,
-                            we don't save it.</li>
-                        <li><strong>Cleaning House:</strong> The owner has options to delete certain rows of data.</li>
+                        <li><strong>Password and Secret Protection:</strong> Passwords are not stored as plain text, and
+                            sensitive secrets such as two-factor material are protected with encryption and server-side
+                            controls.</li>
+                        <li><strong>Session Protections:</strong> The panel uses authenticated sessions, CSRF
+                            protection, timeout policies, same-origin checks, and cookie controls to reduce unauthorized
+                            use.</li>
+                        <li><strong>Abuse Defenses:</strong> Captcha challenges, login throttling, identifier-based rate
+                            limiting, security signals, suspicious-device detection, and high-risk action approvals help
+                            block brute-force and misuse.</li>
+                        <li><strong>Access Control:</strong> Dashboard access is role-based. Owner, admin, moderator,
+                            and user permissions are separated, and sensitive actions can require extra verification.
+                        </li>
+                        <li><strong>Security Notifications:</strong> The service can generate email or Discord security
+                            alerts for events such as logins, new devices, password changes, recovery usage, and
+                            two-factor updates.</li>
+                        <li><strong>Operational Safeguards:</strong> Backups, manifests, restore checks, audit trails,
+                            and server-side logging are used to help recover from mistakes and investigate incidents.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div id="controls" class="tab-content">
+                <div class="content-box">
+                    <div class="section-title"><i>🛠️</i> Your Controls and Choices</div>
+                    <ul class="content-list">
+                        <li><strong>Account Security Settings:</strong> You can manage your password, enable or disable
+                            two-factor authentication, regenerate recovery codes, and review parts of your profile from
+                            the dashboard.</li>
+                        <li><strong>Session and Access Control:</strong> You can sign out, expire panel sessions, and
+                            remove access by changing credentials or using built-in security tools.</li>
+                        <li><strong>Discord Linking Controls:</strong> If Discord account linking is enabled, you can
+                            link or unlink your Discord account subject to the panel's security requirements.</li>
+                        <li><strong>Server-Level Controls:</strong> Server owners decide which moderation, logging,
+                            analytics, backup, and automation features are turned on for their own server.</li>
+                        <li><strong>Questions or Requests:</strong> If you need clarification, believe data should be
+                            removed, or need help with a privacy or security issue, contact the server owner or open an
+                            issue through the project contact channel listed on this page.</li>
                     </ul>
                 </div>
             </div>
@@ -401,8 +496,11 @@
                 <div class="content-box">
                     <div class="section-title"><i>📅</i> Policy Version</div>
                     <div class="content-text">
-                        <p><strong>Last updated:</strong> March 18, 2026</p>
-                        <p>Continued use after an update indicates acceptance of the revised policy terms.</p>
+                        <p><strong>Last updated:</strong> March 31, 2026</p>
+                        <p>This page may be updated when dashboard security, authentication, analytics, Discord
+                            integrations, or data-handling features change.</p>
+                        <p>Continued use of the bot, dashboard, or related services after an update indicates acceptance
+                            of the revised policy terms.</p>
                     </div>
                 </div>
             </div>

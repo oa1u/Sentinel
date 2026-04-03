@@ -6,6 +6,7 @@ const roles = require('./roles.json');
 const misc = require('./misc.json');
 const economy = require('./economy.json');
 const automod = require('./automod.json');
+const autoResponder = require('./autoResponder.json');
 const leveling = require('./leveling.json');
 const rules = require('./rules.json');
 const serverBackups = require('./serverBackups.json');
@@ -33,6 +34,7 @@ module.exports = {
     roles,
     misc,
     automod,
+    autoResponder,
     leveling,
     blockedWords,
     rules,
@@ -43,6 +45,7 @@ module.exports = {
     MISC: misc,
     ECONOMY: economy,
     AUTOMOD: automod,
+    AUTO_RESPONDER: autoResponder,
     LEVELING: leveling,
     BLOCKED_WORDS: blockedWords,
     RULES: rules,

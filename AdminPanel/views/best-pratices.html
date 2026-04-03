@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="websiteNameTitle">Best Practices</title>
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <style>
+        .practice-hero {
+            background: linear-gradient(140deg, rgba(52, 168, 83, 0.18) 0%, rgba(16, 18, 24, 0.96) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2.4rem 2.2rem;
+            margin-bottom: 2rem;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.26);
+        }
+
+        .practice-hero::before {
+            content: '';
+            position: absolute;
+            left: -90px;
+            bottom: -90px;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(52, 168, 83, 0.16) 0%, rgba(52, 168, 83, 0) 72%);
+            filter: blur(26px);
+            pointer-events: none;
+        }
+
+        .practice-hero-main {
+            position: relative;
+            z-index: 1;
+            max-width: 760px;
+        }
+
+        .practice-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.35rem 0.85rem;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #98e6a9;
+            background: rgba(52, 168, 83, 0.12);
+            border: 1px solid rgba(52, 168, 83, 0.22);
+            margin-bottom: 1rem;
+        }
+
+        .practice-hero h1 {
+            margin: 0 0 0.8rem 0;
+            font-size: 2.55rem;
+            line-height: 1.05;
+            color: var(--text-primary);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .practice-subtitle {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 1.02rem;
+            line-height: 1.65;
+        }
+
+        .practice-layout {
+            display: grid;
+            grid-template-columns: 300px minmax(0, 1fr);
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .playbook-sidebar {
+            position: sticky;
+            top: 20px;
+        }
+
+        .docs-sidebar {
+            padding: 1.45rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(18, 19, 25, 0.8);
+            backdrop-filter: blur(18px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        .docs-search {
+            position: relative;
+        }
+
+        .docs-search-input {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.26);
+            color: var(--text-primary);
+            padding: 0.9rem 1rem 0.9rem 2.75rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .docs-search-input:focus {
+            border-color: #4bd37f;
+            box-shadow: 0 0 0 1px #4bd37f;
+        }
+
+        .docs-search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .docs-nav-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .docs-nav-title {
+            margin: 0;
+            color: #99e8aa;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .docs-nav-item {
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: var(--radius-md);
+            padding: 0.9rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+        }
+
+        .docs-nav-item:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+        }
+
+        .docs-nav-item.active {
+            background: linear-gradient(90deg, rgba(52, 168, 83, 0.18), rgba(52, 168, 83, 0.04));
+            border-color: rgba(52, 168, 83, 0.2);
+            color: #b2f2c2;
+        }
+
+        .docs-nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 12%;
+            bottom: 12%;
+            width: 3px;
+            border-radius: 0 4px 4px 0;
+            background: #4bd37f;
+        }
+
+        .docs-nav-item i {
+            font-style: normal;
+            width: 1.45rem;
+            display: inline-flex;
+            justify-content: center;
+        }
+
+        .docs-nav-item .nav-caption {
+            margin-left: auto;
+            padding: 0.18rem 0.48rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .docs-nav-item.active .nav-caption {
+            color: #d8ffdf;
+            background: rgba(52, 168, 83, 0.14);
+            border-color: rgba(52, 168, 83, 0.22);
+        }
+
+        .practice-content {
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+            min-height: 480px;
+        }
+
+        .practice-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding-bottom: 1.2rem;
+            margin-bottom: 1.8rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .practice-title {
+            margin: 0;
+            font-size: 1.8rem;
+            color: var(--text-primary);
+        }
+
+        .practice-note {
+            margin: 0.45rem 0 0;
+            color: var(--text-secondary);
+            line-height: 1.68;
+            max-width: 740px;
+        }
+
+        .practice-meta {
+            white-space: nowrap;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #98e6a9;
+            padding: 0.45rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(52, 168, 83, 0.1);
+            border: 1px solid rgba(52, 168, 83, 0.18);
+        }
+
+        .practice-grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .practice-card {
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.02);
+            overflow: hidden;
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .practice-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(52, 168, 83, 0.2);
+        }
+
+        .practice-card.open {
+            background: rgba(20, 30, 24, 0.65);
+            border-color: rgba(52, 168, 83, 0.22);
+        }
+
+        .practice-trigger {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.15rem 1.35rem;
+            cursor: pointer;
+        }
+
+        .practice-trigger-main {
+            flex: 1;
+        }
+
+        .practice-kicker {
+            color: #99e7aa;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.3rem;
+        }
+
+        .practice-card-title {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .practice-chevron {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .practice-card.open .practice-chevron {
+            transform: rotate(180deg);
+            background: rgba(52, 168, 83, 0.16);
+        }
+
+        .practice-body {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            padding: 0 1.35rem;
+            color: var(--text-secondary);
+            transition: max-height 0.28s ease, opacity 0.2s ease, padding 0.2s ease;
+            border-top: 1px solid transparent;
+        }
+
+        .practice-card.open .practice-body {
+            opacity: 1;
+            padding-top: 1rem;
+            padding-bottom: 1.35rem;
+            border-top-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .practice-body p,
+        .practice-body li {
+            line-height: 1.72;
+        }
+
+        .practice-body ul,
+        .practice-body ol {
+            margin: 0.9rem 0 0;
+            padding-left: 1.15rem;
+        }
+
+        .practice-callout {
+            margin-top: 1rem;
+            padding: 0.95rem 1.1rem;
+            border-radius: 10px;
+            background: rgba(52, 168, 83, 0.07);
+            border-left: 3px solid rgba(52, 168, 83, 0.42);
+            color: var(--text-primary);
+            line-height: 1.65;
+        }
+
+        .practice-callout strong {
+            display: inline-block;
+            margin-right: 0.35rem;
+            color: #b9f6c6;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .practice-empty {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            border: 1px dashed rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 920px) {
+            .practice-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .docs-sidebar {
+                position: static;
+                max-height: none;
+            }
+
+            .practice-head {
+                flex-direction: column;
+            }
+
+            .practice-hero {
+                padding: 1.8rem 1.4rem;
+            }
+
+            .practice-hero h1 {
+                font-size: 2rem;
+            }
+
+            .practice-content {
+                padding: 1.25rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">✅ Best Practices</div>
+            <nav class="header-nav">
+                <a href="/dashboard" class="nav-link">Dashboard</a>
+                <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
+                <a href="/admin" class="nav-link" id="adminLink">Admin</a>
+                <a href="/owner" class="nav-link" id="ownerLink">Owner</a>
+            </nav>
+            <div class="user-info">
+                <div class="user-dropdown">
+                    <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
+                        <span class="username" id="headerUsername">Loading...</span>
+                        <span class="role-badge" id="headerRole">user</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="user-dropdown-menu" id="userDropdownMenu">
+                        <div class="user-dropdown-header">
+                            <span class="username" id="dropdownUsername">Loading...</span>
+                            <span class="role-badge" id="dropdownRole">user</span>
+                        </div>
+                        <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
+                        <a href="/features">✨ Features</a>
+                        <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
+                        <div class="user-dropdown-divider"></div>
+                        <button onclick="logout()">🚪 Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="practice-hero">
+            <div class="practice-hero-main">
+                <p class="practice-eyebrow">Operational Standards</p>
+                <h1>Best Practices for Running <span class="botNameDisplay">Sentinel</span></h1>
+                <p class="practice-subtitle">This page focuses on habits, not just features. Use it to tighten staff
+                    operations, reduce avoidable incidents, and keep the panel predictable as your server grows.</p>
+            </div>
+        </section>
+
+        <div class="practice-layout">
+            <aside class="playbook-sidebar">
+                <div class="docs-sidebar">
+                    <div class="docs-search">
+                        <span class="docs-search-icon">🔍</span>
+                        <input type="text" class="docs-search-input" placeholder="Search best practices..."
+                            id="playbookSearch" autocomplete="off">
+                    </div>
+
+                    <div class="docs-nav-group">
+                        <div class="docs-nav-title">Security & Operations</div>
+                        <a class="docs-nav-item active" data-playbook-tab="access-security">
+                            <i>🔒</i> Access & Security
+                            <span class="nav-caption">2</span>
+                        </a>
+                        <a class="docs-nav-item" data-playbook-tab="staff-operations">
+                            <i>🧭</i> Staff Operations
+                            <span class="nav-caption">2</span>
+                        </a>
+                        <a class="docs-nav-item" data-playbook-tab="ticket-handling">
+                            <i>🎫</i> Ticket Handling
+                            <span class="nav-caption">2</span>
+                        </a>
+                    </div>
+
+                    <div class="docs-nav-group">
+                        <div class="docs-nav-title">Reliability & Growth</div>
+                        <a class="docs-nav-item" data-playbook-tab="verification">
+                            <i>🧪</i> Verification
+                            <span class="nav-caption">2</span>
+                        </a>
+                        <a class="docs-nav-item" data-playbook-tab="backups-maintenance">
+                            <i>🗄️</i> Backups & Maintenance
+                            <span class="nav-caption">2</span>
+                        </a>
+                        <a class="docs-nav-item" data-playbook-tab="docs-rollouts">
+                            <i>📝</i> Documentation & Rollouts
+                            <span class="nav-caption">2</span>
+                        </a>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="practice-content" id="practiceContent"></section>
+        </div>
+    </main>
+
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
+
+    <script>
+        const practiceSections = [
+            {
+                id: 'access-security',
+                name: 'Access & Security',
+                icon: '🔒',
+                summary: 'Protect the panel before you add complexity elsewhere.',
+                items: [
+                    {
+                        kicker: 'Baseline',
+                        title: 'Require 2FA and unique accounts for all staff',
+                        answer: '<p>Shared accounts and optional 2FA are the fastest way to create security blind spots. Every staff member with panel access should have their own account, their own recovery codes, and their own session history.</p><ul><li>Enable 2FA before granting elevated access.</li><li>Store recovery codes offline, not in Discord DMs.</li><li>Review active sessions after any suspicious event.</li></ul>',
+                        tip: 'If you cannot tell which person used an account, that account setup is already wrong.'
+                    },
+                    {
+                        kicker: 'Secrets',
+                        title: 'Treat credentials.env and panel secrets like production keys',
+                        answer: '<p>Do not pass around screenshots of tokens, SMTP credentials, webhook secrets, or session keys. Rotate secrets immediately if they appear in screenshots, logs, or support messages.</p><ol><li>Keep secret files out of public repositories.</li><li>Use long random session and encryption keys.</li><li>Rotate leaked values before bringing the panel back into normal use.</li></ol>',
+                        tip: 'A leaked secret is not a theoretical problem. Assume it is already compromised.'
+                    }
+                ]
+            },
+            {
+                id: 'staff-operations',
+                name: 'Staff Operations',
+                icon: '🧭',
+                summary: 'Make moderation and staff action more consistent from shift to shift.',
+                items: [
+                    {
+                        kicker: 'Consistency',
+                        title: 'Use notes, cases, and clear reasons every time',
+                        answer: '<p>The panel becomes much more valuable when each action leaves usable context behind. Staff should write reasons for punishments and resolution notes for tickets in a way another moderator can understand later without guessing.</p><ul><li>Case reasons should explain both the behavior and the action.</li><li>Notes should record context, not personal commentary.</li><li>Escalations should reference earlier incidents when relevant.</li></ul>',
+                        tip: 'Write notes as if a different moderator needs them tomorrow.'
+                    },
+                    {
+                        kicker: 'Review',
+                        title: 'Use analytics as coaching input, not just a scoreboard',
+                        answer: '<p>Staff analytics should help you spot workload imbalance, training needs, and coverage gaps. High action counts are not automatically good, and low counts are not automatically bad.</p><ul><li>Compare totals against shift coverage and server activity.</li><li>Look for one person carrying too much of the team.</li><li>Use trends to guide staffing and mentoring.</li></ul>',
+                        tip: 'Ask whether the team is healthy, not just whether one person looks productive.'
+                    }
+                ]
+            },
+            {
+                id: 'ticket-handling',
+                name: 'Ticket Handling',
+                icon: '🎫',
+                summary: 'Keep tickets fast, readable, and easy for staff to transfer or review later.',
+                items: [
+                    {
+                        kicker: 'Clarity',
+                        title: 'Open with structure and close with a clean summary',
+                        answer: '<p>Support quality improves fast when tickets follow the same pattern. Ask for the right details early, make ownership clear, and leave a short resolution summary when the ticket closes.</p><ol><li>Claim or assign the ticket quickly.</li><li>State what information is still needed.</li><li>Summarize the final resolution before closing.</li></ol>',
+                        tip: 'A good closing summary prevents repeat tickets about the same problem.'
+                    },
+                    {
+                        kicker: 'Escalation',
+                        title: 'Separate routine support from disputes and sensitive issues',
+                        answer: '<p>Not every ticket should stay in the same workflow. Billing-like questions, moderation disputes, ban appeals, and account compromise reports should move to the right staff lane instead of sitting in a generic queue.</p><ul><li>Use categories or labels for priority and type.</li><li>Escalate policy disputes to admins or owners.</li><li>Keep transcripts for anything that may be reviewed later.</li></ul>',
+                        tip: 'If staff argue about who should handle a ticket, the process needs a clearer escalation rule.'
+                    }
+                ]
+            },
+            {
+                id: 'verification',
+                name: 'Verification',
+                icon: '🧪',
+                summary: 'Use analytics and real user feedback to tune verification instead of guessing.',
+                items: [
+                    {
+                        kicker: 'Tuning',
+                        title: 'Start simple and escalate only when abuse justifies it',
+                        answer: '<p>Verification should be just strong enough for the abuse level you actually face. Hardening too early creates support load and frustrates good members, while hardening too late invites abuse.</p><ul><li>Track where users fail or abandon verification.</li><li>Adjust wording and UX before increasing difficulty.</li><li>Reserve manual overrides for rare exceptions.</li></ul>',
+                        tip: 'Better instructions often solve more failed verifications than harder challenges.'
+                    },
+                    {
+                        kicker: 'Operational Response',
+                        title: 'Prepare for raids and edge cases before they happen',
+                        answer: '<p>Staff should already know what to do when verification gets hammered by bots or when a real user cannot complete the flow. That means documented manual review steps and clear owner thresholds for raising difficulty or enabling stricter checks.</p><ol><li>Watch analytics during invite spikes.</li><li>Record why manual approvals were granted.</li><li>Review patterns after an incident, not weeks later.</li></ol>',
+                        tip: 'Manual review without notes becomes invisible technical debt.'
+                    }
+                ]
+            },
+            {
+                id: 'backups-maintenance',
+                name: 'Backups & Maintenance',
+                icon: '🗄️',
+                summary: 'Keep the panel restorable and predictable during upgrades or incidents.',
+                items: [
+                    {
+                        kicker: 'Change Safety',
+                        title: 'Take backups before risky changes, not after',
+                        answer: '<p>Backups are not just for disasters. They are also for experimentation. Run or verify backups before changing permissions, AutoMod rules, role flows, or large config blocks.</p><ul><li>Check that backups finish successfully.</li><li>Keep restore paths documented for owners.</li><li>Do not assume old backups are usable without verifying them.</li></ul>',
+                        tip: 'A backup you have never tested is only a hope, not a recovery plan.'
+                    },
+                    {
+                        kicker: 'Routine Checks',
+                        title: 'Build a short recurring maintenance rhythm',
+                        answer: '<ol><li>Review alerts and failed jobs.</li><li>Confirm emails and notifications still deliver.</li><li>Check analytics freshness.</li><li>Review old staff accounts and unused access.</li><li>Update docs or playbooks after major workflow changes.</li></ol><p>Most web panel reliability problems are easier to prevent than to investigate later.</p>',
+                        tip: 'A fifteen-minute weekly review prevents a lot of silent failures.'
+                    }
+                ]
+            },
+            {
+                id: 'docs-rollouts',
+                name: 'Documentation & Rollouts',
+                icon: '📝',
+                summary: 'Make feature growth easier to sustain by documenting what changed and why.',
+                items: [
+                    {
+                        kicker: 'Adoption',
+                        title: 'Pair new features with guide pages and internal expectations',
+                        answer: '<p>When you add a feature, staff need to know more than where the button lives. They need to know who owns it, when to use it, what good output looks like, and what mistakes to avoid.</p><ul><li>Update docs when you add major features.</li><li>Document owner-only actions and recovery steps.</li><li>Use changelog entries to explain operational impact, not just code changes.</li></ul>',
+                        tip: 'If a feature requires staff memory instead of visible guidance, it will be used inconsistently.'
+                    },
+                    {
+                        kicker: 'Rollout Strategy',
+                        title: 'Introduce new systems in stages instead of all at once',
+                        answer: '<p>Turning on every module at once makes it hard to tell what caused a problem. Roll out major systems in a measured order: core moderation, security, tickets, verification, automation, then optional extras.</p><ol><li>Enable one major workflow at a time.</li><li>Validate it with staff before expanding scope.</li><li>Use analytics and ticket feedback to decide what to adjust.</li></ol>',
+                        tip: 'A slower rollout usually gets you to a stable setup faster.'
+                    }
+                ]
+            }
+        ];
+
+        function bindPracticeNav() {
+            document.querySelectorAll('.docs-nav-item[data-playbook-tab]').forEach((link) => {
+                link.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    showPracticeSection(link.dataset.playbookTab);
+                });
+            });
+        }
+
+        function setPracticeHeights(root = document) {
+            root.querySelectorAll('.practice-card.open .practice-body').forEach((body) => {
+                body.style.maxHeight = `${body.scrollHeight + 40}px`;
+            });
+        }
+
+        function attachPracticeAccordions(root) {
+            root.querySelectorAll('.practice-card').forEach((card) => {
+                const trigger = card.querySelector('.practice-trigger');
+                const body = card.querySelector('.practice-body');
+                if (!trigger || !body) return;
+
+                trigger.addEventListener('click', () => {
+                    const open = card.classList.toggle('open');
+                    body.style.maxHeight = open ? `${body.scrollHeight + 40}px` : '0px';
+                });
+            });
+        }
+
+        function renderPracticeResults(results, query) {
+            const content = document.getElementById('practiceContent');
+            let html = `
+                <div class="practice-head">
+                    <div>
+                        <h2 class="practice-title">🔍 Search Results</h2>
+                        <p class="practice-note">Matches for "${query}" across security, staff workflow, tickets, verification, maintenance, and rollout guidance.</p>
+                    </div>
+                    <div class="practice-meta">${results.length} ${results.length === 1 ? 'result' : 'results'}</div>
+                </div>
+            `;
+
+            if (!results.length) {
+                html += '<div class="practice-empty">No matching practice found. Try keywords like 2FA, ticket, backup, rollout, or analytics.</div>';
+                content.innerHTML = html;
+                return;
+            }
+
+            html += '<div class="practice-grid">';
+            results.forEach((item) => {
+                html += `
+                    <article class="practice-card open">
+                        <div class="practice-trigger">
+                            <div class="practice-trigger-main">
+                                <div class="practice-kicker">${item.section.icon} ${item.section.name} · ${item.kicker}</div>
+                                <h3 class="practice-card-title">${item.title}</h3>
+                            </div>
+                            <div class="practice-chevron">▼</div>
+                        </div>
+                        <div class="practice-body">
+                            ${item.answer}
+                            <div class="practice-callout"><strong>Tip</strong>${item.tip}</div>
+                        </div>
+                    </article>
+                `;
+            });
+            html += '</div>';
+            content.innerHTML = html;
+            attachPracticeAccordions(content);
+            requestAnimationFrame(() => setPracticeHeights(content));
+        }
+
+        function showPracticeSection(sectionId) {
+            const section = practiceSections.find((entry) => entry.id === sectionId) || practiceSections[0];
+            const content = document.getElementById('practiceContent');
+            document.querySelectorAll('.docs-nav-item[data-playbook-tab]').forEach((link) => {
+                link.classList.toggle('active', link.dataset.playbookTab === section.id);
+            });
+
+            let html = `
+                <div class="practice-head">
+                    <div>
+                        <h2 class="practice-title">${section.icon} ${section.name}</h2>
+                        <p class="practice-note">${section.summary}</p>
+                    </div>
+                    <div class="practice-meta">${section.items.length} practices</div>
+                </div>
+                <div class="practice-grid">
+            `;
+
+            section.items.forEach((item) => {
+                html += `
+                    <article class="practice-card">
+                        <div class="practice-trigger">
+                            <div class="practice-trigger-main">
+                                <div class="practice-kicker">${item.kicker}</div>
+                                <h3 class="practice-card-title">${item.title}</h3>
+                            </div>
+                            <div class="practice-chevron">▼</div>
+                        </div>
+                        <div class="practice-body">
+                            ${item.answer}
+                            <div class="practice-callout"><strong>Tip</strong>${item.tip}</div>
+                        </div>
+                    </article>
+                `;
+            });
+
+            html += '</div>';
+            content.innerHTML = html;
+            attachPracticeAccordions(content);
+
+            const firstCard = content.querySelector('.practice-card');
+            if (firstCard) {
+                firstCard.classList.add('open');
+                const body = firstCard.querySelector('.practice-body');
+                if (body) {
+                    body.style.maxHeight = `${body.scrollHeight + 40}px`;
+                }
+            }
+
+            requestAnimationFrame(() => setPracticeHeights(content));
+        }
+
+        function searchPractices() {
+            const input = document.getElementById('playbookSearch');
+            const query = input.value.trim().toLowerCase();
+            if (!query) {
+                showPracticeSection('access-security');
+                return;
+            }
+
+            const results = [];
+            practiceSections.forEach((section) => {
+                section.items.forEach((item) => {
+                    const haystack = [section.name, item.kicker, item.title, item.answer, item.tip].join(' ').toLowerCase();
+                    if (haystack.includes(query)) {
+                        results.push({ ...item, section });
+                    }
+                });
+            });
+
+            document.querySelectorAll('.docs-nav-item[data-playbook-tab]').forEach((link) => link.classList.remove('active'));
+            renderPracticeResults(results, input.value.trim());
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            bindPracticeNav();
+            showPracticeSection('access-security');
+
+            const input = document.getElementById('playbookSearch');
+            if (input) {
+                input.addEventListener('input', searchPractices);
+            }
+
+            initPage();
+        });
+
+        window.addEventListener('resize', () => setPracticeHeights());
+
+        async function initPage() {
+            try {
+                const res = await fetch('/api/account/info');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const safeText = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = value;
+                };
+
+                safeText('headerUsername', data.username || 'User');
+                safeText('headerRole', (data.role || 'user').toUpperCase());
+                safeText('dropdownUsername', data.username || 'User');
+                safeText('dropdownRole', (data.role || 'user').toUpperCase());
+
+                const moderatorLink = document.getElementById('moderatorLink');
+                const adminLink = document.getElementById('adminLink');
+                const ownerNavLink = document.getElementById('ownerNavLink');
+                const analyticsLink = document.getElementById('analyticsLink');
+
+                const role = data.role || 'user';
+                const isMod = ['moderator', 'admin', 'owner'].includes(role);
+                const isAdmin = ['admin', 'owner'].includes(role);
+                const isOwner = role === 'owner';
+
+                if (moderatorLink) moderatorLink.style.display = isMod ? 'block' : 'none';
+                if (adminLink) adminLink.style.display = isAdmin ? 'block' : 'none';
+                if (ownerNavLink) ownerNavLink.style.display = isOwner ? 'block' : 'none';
+                if (analyticsLink) analyticsLink.style.display = isOwner ? 'block' : 'none';
+            } catch (error) {
+                console.error('Failed to init best practices page', error);
+            }
+        }
+
+        function toggleUserDropdown() {
+            const menu = document.getElementById('userDropdownMenu');
+            const trigger = document.querySelector('.user-dropdown-trigger');
+            if (menu) menu.classList.toggle('show');
+            if (trigger) trigger.classList.toggle('active');
+        }
+
+        document.addEventListener('click', (event) => {
+            const dropdown = document.querySelector('.user-dropdown');
+            if (dropdown && !dropdown.contains(event.target)) {
+                document.getElementById('userDropdownMenu')?.classList.remove('show');
+                document.querySelector('.user-dropdown-trigger')?.classList.remove('active');
+            }
+        });
+    </script>
+
+    <script src="/public/shared.js"></script>
+    <script src="/public/version.js"></script>
+</body>
+
+</html>

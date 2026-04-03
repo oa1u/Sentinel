@@ -38,14 +38,33 @@ const { CHANNELS: { serverLogChannelId, discordChannelId, suggestionChannelId },
 const ADMIN_AVATAR_UPLOAD_DIR = path.join(__dirname, 'AdminPanel', 'public', 'uploads', 'avatars');
 const ADMIN_AVATAR_PUBLIC_PREFIX = '/public/uploads/avatars/';
 const ADMIN_AVATAR_SIZE = 256;
+const APPEAL_EVIDENCE_UPLOAD_DIR = path.join(__dirname, 'AdminPanel', 'public', 'uploads', 'appeals');
+const APPEAL_EVIDENCE_PUBLIC_PREFIX = '/public/uploads/appeals/';
 const ADMIN_AVATAR_ALLOWED_MIME_TYPES = Object.freeze({
     'image/png': 'png',
     'image/jpeg': 'jpg',
     'image/webp': 'webp',
     'image/gif': 'gif'
 });
+const APPEAL_EVIDENCE_ALLOWED_MIME_TYPES = Object.freeze({
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'application/pdf': 'pdf',
+    'text/plain': 'txt'
+});
+const APPEAL_REVIEW_STAGES = Object.freeze([
+    'submitted',
+    'triage',
+    'evidence-review',
+    'final-review',
+    'awaiting-decision',
+    'decision-issued',
+    'withdrawn'
+]);
 
 fs.mkdirSync(ADMIN_AVATAR_UPLOAD_DIR, { recursive: true });
+fs.mkdirSync(APPEAL_EVIDENCE_UPLOAD_DIR, { recursive: true });
 
 function validateCsrfHelperApi() {
     const requiredMethods = ['generateSecret', 'createToken', 'verifyToken', 'verifyOrigin'];
@@ -72,6 +91,17 @@ require('dotenv').config({
     debug: false,
     quiet: true
 });
+
+const MAIN_CONFIG = (() => {
+    try {
+        return JSON.parse(fs.readFileSync(path.join(__dirname, 'Config', 'main.json'), 'utf8'));
+    } catch {
+        return {};
+    }
+})();
+
+const PANEL_BOT_NAME = String(MAIN_CONFIG?.botName || 'Sentinel').trim() || 'Sentinel';
+const PANEL_SERVER_NAME = String(MAIN_CONFIG?.serverName || 'Sentinel').trim() || 'Sentinel';
 
 const app = express();
 app.disable('x-powered-by');
@@ -193,11 +223,13 @@ const suspiciousAlertThrottleByIp = new Map();
 
 const SUSPICIOUS_SIGNAL_WEIGHTS = Object.freeze({
     'host-header-blocked': 6,
+    'auth-origin-blocked': 5,
     'api-origin-blocked': 4,
     'csrf-token-failed': 3,
     'csrf-origin-failed': 2,
     'rate-limit-hit': 2,
     'login-ip-locked': 5,
+    'login-identifier-locked': 5,
     'login-bruteforce-threshold': 6,
     'new-device-login': 3,
     'device-binding-blocked': 8,
@@ -1117,7 +1149,7 @@ async function sendBotWebhook(event, data = {}, req = null) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'User-Agent': 'Sentinel-AdminPanel-Webhook',
+                    'User-Agent': 'adminpanel-webhook',
                 'X-Webhook-Timestamp': timestamp,
                 'X-Webhook-Signature': signature
             },
@@ -1196,6 +1228,66 @@ app.use(sessionMiddleware);
 
 app.use(bodyParser.json({ limit: '10kb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10kb' }));
+
+const PUBLIC_AUTH_POST_PATHS = new Set([
+    '/api/login',
+    '/api/login/recovery',
+    '/api/register',
+    '/api/account/password-reset/request',
+    '/api/account/password-reset/confirm',
+    '/api/account/password-reset/recovery'
+]);
+
+function isSameSiteRequest(req) {
+    const secFetchSite = String(req?.headers?.['sec-fetch-site'] || '').trim().toLowerCase();
+    if (!secFetchSite) return true;
+
+    return secFetchSite === 'same-origin' || secFetchSite === 'same-site' || secFetchSite === 'none';
+}
+
+function getOriginFromHeaderValue(value) {
+    const normalized = normalizeOriginValue(value);
+    if (normalized && /^https?:\/\//i.test(normalized)) {
+        return normalized;
+    }
+
+    return '';
+}
+
+app.use((req, res, next) => {
+    if (req.method !== 'POST' || !PUBLIC_AUTH_POST_PATHS.has(req.path)) return next();
+
+    if (!isSameSiteRequest(req)) {
+        emitSecuritySignal(req, 'auth-origin-blocked', {
+            path: req.path,
+            reason: 'sec-fetch-site',
+            secFetchSite: String(req.headers['sec-fetch-site'] || '')
+        }, 10 * 1000);
+        return res.status(403).json({ error: 'Cross-site authentication request blocked' });
+    }
+
+    const origin = getOriginFromHeaderValue(req.headers.origin);
+    if (origin && !isAllowedOrigin(origin)) {
+        emitSecuritySignal(req, 'auth-origin-blocked', {
+            path: req.path,
+            reason: 'origin',
+            origin
+        }, 10 * 1000);
+        return res.status(403).json({ error: 'Authentication request origin is not allowed' });
+    }
+
+    const refererOrigin = getOriginFromHeaderValue(req.headers.referer);
+    if (!origin && refererOrigin && !isAllowedOrigin(refererOrigin)) {
+        emitSecuritySignal(req, 'auth-origin-blocked', {
+            path: req.path,
+            reason: 'referer',
+            refererOrigin
+        }, 10 * 1000);
+        return res.status(403).json({ error: 'Authentication request referrer is not allowed' });
+    }
+
+    return next();
+});
 
 // Validate Origin for API requests when provided (defense-in-depth against cross-site abuse).
 app.use((req, res, next) => {
@@ -1545,6 +1637,15 @@ setInterval(() => {
             loginAttempts.set(ip, recentAttempts);
         }
     }
+
+    for (const [key, attempts] of authIdentifierAttempts.entries()) {
+        const recentAttempts = pruneAttemptTimestamps(attempts, AUTH_IDENTIFIER_WINDOW_MS, now);
+        if (recentAttempts.length === 0) {
+            authIdentifierAttempts.delete(key);
+        } else {
+            authIdentifierAttempts.set(key, recentAttempts);
+        }
+    }
 }, 30 * 60 * 1000); // 30 minutes
 
 const DISCORD_LINK_EXEMPT_PATHS = new Set([
@@ -1718,6 +1819,10 @@ const PUBLIC_API_PATTERNS = [
     /^\/api\/email\/verify$/,
     /^\/api\/csrf$/,
     /^\/api\/appeals\/submit$/,
+    /^\/api\/appeals\/check-status$/,
+    /^\/api\/appeals\/my-history$/,
+    /^\/api\/appeals\/update-pending$/,
+    /^\/api\/appeals\/withdraw$/,
     /^\/api\/appeals\/validate-case-id$/,
     /^\/api\/rules$/
 ];
@@ -1756,20 +1861,21 @@ function getRequiredRoleForApi(method, pathName) {
     return null;
 }
 
-async function refreshSessionRoleIfNeeded(req) {
+async function refreshSessionRoleIfNeeded(req, options = {}) {
     if (!req.session || !req.session.authenticated || !req.session.username) return;
 
     const now = Date.now();
     const verifiedAt = Number(req.session.roleVerifiedAt) || 0;
+    const forceRefresh = Boolean(options.forceRefresh);
     const roleFreshMs = 2 * 60 * 1000;
 
-    if (now - verifiedAt < roleFreshMs && req.session.role) {
+    // Skip refresh only if recent AND not forced AND still have a role
+    if (!forceRefresh && now - verifiedAt < roleFreshMs && req.session.role) {
         return;
     }
 
     const user = await AdminPanelHelper.getAdminUser(req.session.username);
     if (!user || !user.role) {
-        console.warn(`[Sessions] Refresh role failed for '${req.session.username}'. User not found or no role. marking unauth.`);
         req.session.authenticated = false;
         req.session.role = null;
         req.session.roleVerifiedAt = now;
@@ -1780,16 +1886,22 @@ async function refreshSessionRoleIfNeeded(req) {
 
     try {
         const state = await ensureDiscordLinkSecurityState(req, { user, forceRefresh: true });
+
+        if (!state.roleAlignmentOk) {
+            req.session.role = state?.trustedPanelRole || null; // Restrict to Discord trust level
+            req.session.roleVerifiedAt = now;
+            return;
+        }
+        
         if (state?.panelRole && state.panelRole !== effectiveRole) {
             effectiveRole = state.panelRole;
         }
     } catch (error) {
-        console.warn('[Sessions] Discord role alignment refresh failed:', error?.message || error);
+        // keep behavior, no console output
     }
 
-    // Log role mismatch or update
     if (req.session.role !== effectiveRole) {
-        console.info(`[Sessions] Updated role for '${req.session.username}': ${req.session.role} -> ${effectiveRole}`);
+        // role change applied silently
     }
 
     req.session.role = effectiveRole;
@@ -3560,14 +3672,6 @@ app.get('/', (req, res) => {
 });
 
 // Explicit admin panel route with role check
-app.get('/admin', requireAuth, (req, res) => {
-    if (req.session && req.session.role && (req.session.role === 'admin' || req.session.role === 'owner')) {
-        res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'admin.html'));
-    } else {
-        res.redirect('/unauthorized');
-    }
-});
-
 app.get('/login', (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'login.html'));
 });
@@ -3607,6 +3711,12 @@ app.get('/faq', requireAuth, (req, res) => {
 });
 app.get('/getting-started', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'getting-started.html'));
+});
+app.get('/guide', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'guide.html'));
+});
+app.get('/best-practices', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'best-practices.html'));
 });
 app.get('/api/getting-started/config-readiness', requireAuth, (req, res) => {
     try {
@@ -3694,13 +3804,71 @@ app.get('/dashboard', requireAuth, (req, res) => {
     });
 });
 
-app.get('/moderator', requireAuth, (req, res) => {
+app.get('/moderator', requireAuth, requireModerator, (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'moderator.html'));
 });
 
 // Track login attempts to prevent brute force attacks
 const loginAttempts = new Map();
+const authIdentifierAttempts = new Map();
 const captchaFailuresByIp = new Map();
+const AUTH_IDENTIFIER_WINDOW_MS = 30 * 60 * 1000;
+const AUTH_IDENTIFIER_MAX_ATTEMPTS = 8;
+
+function normalizeAuthIdentifier(identifier) {
+    return String(identifier || '').trim().toLowerCase();
+}
+
+function buildAuthIdentifierKey(identifier, mode = 'login') {
+    const normalizedIdentifier = normalizeAuthIdentifier(identifier);
+    const normalizedMode = String(mode || 'login').trim().toLowerCase();
+    if (!normalizedIdentifier) return '';
+
+    return `${normalizedMode}:${normalizedIdentifier}`;
+}
+
+function pruneAttemptTimestamps(attempts, windowMs, now = Date.now()) {
+    if (!Array.isArray(attempts)) return [];
+
+    return attempts.filter((timestamp) => Number.isFinite(Number(timestamp)) && (now - Number(timestamp) < windowMs));
+}
+
+function trackAuthIdentifierAttempt(identifier, mode = 'login') {
+    const key = buildAuthIdentifierKey(identifier, mode);
+    if (!key) return [];
+
+    const now = Date.now();
+    const attempts = pruneAttemptTimestamps(authIdentifierAttempts.get(key), AUTH_IDENTIFIER_WINDOW_MS, now);
+    attempts.push(now);
+    authIdentifierAttempts.set(key, attempts);
+    return attempts;
+}
+
+function clearAuthIdentifierAttempts(identifier, mode = 'login') {
+    const key = buildAuthIdentifierKey(identifier, mode);
+    if (!key) return;
+
+    authIdentifierAttempts.delete(key);
+}
+
+function getAuthIdentifierAttemptCount(identifier, mode = 'login') {
+    const key = buildAuthIdentifierKey(identifier, mode);
+    if (!key) return 0;
+
+    const now = Date.now();
+    const attempts = pruneAttemptTimestamps(authIdentifierAttempts.get(key), AUTH_IDENTIFIER_WINDOW_MS, now);
+    if (attempts.length > 0) {
+        authIdentifierAttempts.set(key, attempts);
+    } else {
+        authIdentifierAttempts.delete(key);
+    }
+
+    return attempts.length;
+}
+
+function isAuthIdentifierLocked(identifier, mode = 'login') {
+    return getAuthIdentifierAttemptCount(identifier, mode) >= AUTH_IDENTIFIER_MAX_ATTEMPTS;
+}
 
 function normalizeCaptchaScope(scope) {
     const normalized = String(scope || '').trim().toLowerCase();
@@ -3716,13 +3884,109 @@ function isCaptchaEnabledForScope(scope) {
 }
 
 function normalizeCaptchaAnswer(value) {
-    return String(value || '').trim().replace(/\s+/g, '');
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, '');
 }
 
 function randomIntInclusive(min, max) {
     const safeMin = Math.min(min, max);
     const safeMax = Math.max(min, max);
     return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+}
+
+const CAPTCHA_WORD_BANK = Object.freeze([
+    'SENTINEL',
+    'SECURE',
+    'VERIFY',
+    'PANEL',
+    'ACCESS',
+    'DISCORD',
+    'MODERATION',
+    'DASHBOARD'
+]);
+
+function getCaptchaDifficultyLabel(difficulty) {
+    if (difficulty >= 3) return 'Advanced challenge';
+    if (difficulty === 2) return 'Standard challenge';
+    return 'Quick challenge';
+}
+
+function buildSequenceCaptchaChallenge(minValue, maxValue, difficulty) {
+    const step = difficulty >= 3
+        ? randomIntInclusive(2, 5)
+        : randomIntInclusive(1, 3);
+    const startMax = Math.max(minValue + 4, maxValue - (step * 4));
+    const start = randomIntInclusive(minValue, startMax);
+    const sequence = [start, start + step, start + (step * 2), start + (step * 3)];
+    const answer = start + (step * 4);
+
+    return {
+        question: `Complete the pattern: ${sequence.join(', ')}, ?`,
+        answer: String(answer),
+        mode: 'sequence-next-number',
+        label: 'Number pattern',
+        answerType: 'number',
+        inputMode: 'numeric',
+        placeholder: 'Enter the next number',
+        tip: 'Look at how much the numbers increase each step.',
+        answerLength: String(answer).length
+    };
+}
+
+function buildComparisonCaptchaChallenge(minValue, maxValue) {
+    const values = new Set();
+    while (values.size < 4) {
+        values.add(randomIntInclusive(minValue, maxValue));
+    }
+
+    const list = Array.from(values);
+    const answer = Math.max(...list);
+
+    return {
+        question: `Pick the largest number: ${list.join(' • ')}.`,
+        answer: String(answer),
+        mode: 'comparison-largest',
+        label: 'Largest number check',
+        answerType: 'number',
+        inputMode: 'numeric',
+        placeholder: 'Enter the largest number',
+        tip: 'Compare each value once, then enter only the highest number.',
+        answerLength: String(answer).length
+    };
+}
+
+function buildWordCaptchaChallenge() {
+    const word = CAPTCHA_WORD_BANK[randomIntInclusive(0, CAPTCHA_WORD_BANK.length - 1)];
+
+    if (Math.random() > 0.5) {
+        const answer = word.split('').reverse().join('');
+        return {
+            question: `Type the word "${word}" backwards.`,
+            answer,
+            mode: 'word-reverse',
+            label: 'Word reversal',
+            answerType: 'text',
+            inputMode: 'text',
+            placeholder: 'Type the reversed word',
+            tip: 'Letters only. Uppercase and lowercase both work.',
+            answerLength: answer.length
+        };
+    }
+
+    const answer = `${word[0]}${word[word.length - 1]}`;
+    return {
+        question: `Type the first and last letters of "${word}" together.`,
+        answer,
+        mode: 'word-first-last',
+        label: 'Word letter check',
+        answerType: 'text',
+        inputMode: 'text',
+        placeholder: 'Enter the two letters',
+        tip: 'Do not add spaces or punctuation.',
+        answerLength: answer.length
+    };
 }
 
 function pruneCaptchaFailureEntry(entry, now = Date.now()) {
@@ -3801,14 +4065,26 @@ function buildMathCaptchaChallenge(minValue, maxValue, difficulty) {
             return {
                 question: `Solve: ${hi} - ${lo}`,
                 answer: String(hi - lo),
-                mode: 'basic-subtract'
+                mode: 'basic-subtract',
+                label: 'Math challenge',
+                answerType: 'number',
+                inputMode: 'numeric',
+                placeholder: 'Enter the result',
+                tip: 'Subtract the smaller number from the larger number.',
+                answerLength: String(hi - lo).length
             };
         }
 
         return {
             question: `Solve: ${a} + ${b}`,
             answer: String(a + b),
-            mode: 'basic-add'
+            mode: 'basic-add',
+            label: 'Math challenge',
+            answerType: 'number',
+            inputMode: 'numeric',
+            placeholder: 'Enter the result',
+            tip: 'Add both numbers together.',
+            answerLength: String(a + b).length
         };
     }
 
@@ -3820,14 +4096,26 @@ function buildMathCaptchaChallenge(minValue, maxValue, difficulty) {
             return {
                 question: `Solve: (${a} + ${b}) - ${extra}`,
                 answer: String((a + b) - extra),
-                mode: 'mid-parentheses'
+                mode: 'mid-parentheses',
+                label: 'Math challenge',
+                answerType: 'number',
+                inputMode: 'numeric',
+                placeholder: 'Enter the result',
+                tip: 'Solve inside the parentheses first.',
+                answerLength: String((a + b) - extra).length
             };
         }
 
         return {
             question: `Solve: (${a} × ${multiplier}) + ${extra}`,
             answer: String((a * multiplier) + extra),
-            mode: 'mid-multiply'
+            mode: 'mid-multiply',
+            label: 'Math challenge',
+            answerType: 'number',
+            inputMode: 'numeric',
+            placeholder: 'Enter the result',
+            tip: 'Multiply first, then add the last number.',
+            answerLength: String((a * multiplier) + extra).length
         };
     }
 
@@ -3840,8 +4128,28 @@ function buildMathCaptchaChallenge(minValue, maxValue, difficulty) {
     return {
         question: `Solve: (${dividend} ÷ ${divisor}) + (${c} × ${d})`,
         answer: String(quotient + (c * d)),
-        mode: 'advanced-divmul'
+        mode: 'advanced-divmul',
+        label: 'Math challenge',
+        answerType: 'number',
+        inputMode: 'numeric',
+        placeholder: 'Enter the result',
+        tip: 'Use standard order of operations.',
+        answerLength: String(quotient + (c * d)).length
     };
+}
+
+function buildCaptchaChallenge(minValue, maxValue, difficulty, scope) {
+    const factories = [
+        () => buildMathCaptchaChallenge(minValue, maxValue, difficulty),
+        () => buildSequenceCaptchaChallenge(minValue, maxValue, difficulty),
+        () => buildComparisonCaptchaChallenge(minValue, maxValue)
+    ];
+
+    if (difficulty >= 2 || scope === 'register') {
+        factories.push(() => buildWordCaptchaChallenge());
+    }
+
+    return factories[randomIntInclusive(0, factories.length - 1)]();
 }
 
 function createCaptchaChallenge(scope = 'auth', req = null) {
@@ -3850,14 +4158,20 @@ function createCaptchaChallenge(scope = 'auth', req = null) {
     const minValue = Number(captchaPolicyState.minValue || 1);
     const maxValue = Number(captchaPolicyState.maxValue || 20);
     const difficulty = getCaptchaDifficultyForRequest(safeScope, req);
-    const mathChallenge = buildMathCaptchaChallenge(minValue, maxValue, difficulty);
+    const challenge = buildCaptchaChallenge(minValue, maxValue, difficulty, safeScope);
 
     return {
         scope: safeScope,
         challengeId,
-        question: String(mathChallenge.question),
-        answer: normalizeCaptchaAnswer(mathChallenge.answer),
-        mode: String(mathChallenge.mode || 'basic'),
+        question: String(challenge.question),
+        answer: normalizeCaptchaAnswer(challenge.answer),
+        mode: String(challenge.mode || 'basic'),
+        label: String(challenge.label || getCaptchaDifficultyLabel(difficulty)),
+        answerType: String(challenge.answerType || 'number'),
+        inputMode: String(challenge.inputMode || 'numeric'),
+        placeholder: String(challenge.placeholder || 'Enter captcha answer'),
+        tip: String(challenge.tip || 'Solve the challenge exactly as shown.'),
+        answerLength: Number(challenge.answerLength || 0),
         difficulty,
         issuedAt: Date.now(),
         expiresAt: Date.now() + Number(captchaPolicyState.ttlMs),
@@ -3887,6 +4201,8 @@ function issueCaptchaChallenge(req, scope = 'auth') {
         challengeId: challenge.challengeId,
         answer: challenge.answer,
         mode: challenge.mode,
+        label: challenge.label,
+        answerType: challenge.answerType,
         difficulty: challenge.difficulty,
         issuedAt: challenge.issuedAt,
         expiresAt: challenge.expiresAt,
@@ -3898,6 +4214,12 @@ function issueCaptchaChallenge(req, scope = 'auth') {
         enabled: true,
         challengeId: challenge.challengeId,
         question: challenge.question,
+        label: challenge.label || getCaptchaDifficultyLabel(challenge.difficulty),
+        answerType: challenge.answerType || 'number',
+        inputMode: challenge.inputMode || 'numeric',
+        placeholder: challenge.placeholder || 'Enter captcha answer',
+        tip: challenge.tip || 'Solve the challenge exactly as shown.',
+        answerLength: Number(challenge.answerLength || 0),
         difficulty: challenge.difficulty,
         expiresInMs: Number(captchaPolicyState.ttlMs)
     };
@@ -4058,6 +4380,15 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
         return res.status(429).json({ error: 'Too many failed attempts. Try again in 30 minutes.' });
     }
 
+    if (isAuthIdentifierLocked(username, 'login')) {
+        emitSecuritySignal(req, 'login-identifier-locked', {
+            username: String(username || ''),
+            attempts: getAuthIdentifierAttemptCount(username, 'login'),
+            mode: 'password'
+        }, 30 * 1000);
+        return res.status(429).json({ error: 'Too many failed attempts for this account. Try again in 30 minutes.' });
+    }
+
     const loginIpReputation = evaluateRequestIpReputation(req, 'login', username);
     if (loginIpReputation.shouldBlock) {
         return res.status(403).json({
@@ -4113,11 +4444,12 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
         if (!user) {
             // Log this failed login attempt
             const attempts = trackLoginAttempt(clientIP);
+            const identifierAttempts = trackAuthIdentifierAttempt(username, 'login');
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'user-not-found', attempts: attempts.length });
-            if (attempts.length >= 5) {
+            if (attempts.length >= 5 || identifierAttempts.length >= AUTH_IDENTIFIER_MAX_ATTEMPTS) {
                 emitSecuritySignal(req, 'login-bruteforce-threshold', {
                     username: String(username || ''),
-                    attempts: attempts.length,
+                    attempts: Math.max(attempts.length, identifierAttempts.length),
                     reason: 'user-not-found'
                 }, 30 * 1000);
             }
@@ -4225,6 +4557,7 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
 
             // Reset failed login attempts for this IP
             loginAttempts.delete(clientIP);
+            clearAuthIdentifierAttempts(username, 'login');
 
             return await establishLoginSession(req, res, user, {
                 authMethod: 'password',
@@ -4237,11 +4570,12 @@ app.post('/api/login', createRateLimiter(3, 60000), async (req, res) => {
         } else {
             // Track failed attempt
             const attempts = trackLoginAttempt(clientIP);
+            const identifierAttempts = trackAuthIdentifierAttempt(username, 'login');
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'password-mismatch', attempts: attempts.length });
-            if (attempts.length >= 5) {
+            if (attempts.length >= 5 || identifierAttempts.length >= AUTH_IDENTIFIER_MAX_ATTEMPTS) {
                 emitSecuritySignal(req, 'login-bruteforce-threshold', {
                     username: String(username || ''),
-                    attempts: attempts.length,
+                    attempts: Math.max(attempts.length, identifierAttempts.length),
                     reason: 'password-mismatch'
                 }, 30 * 1000);
             }
@@ -4266,6 +4600,15 @@ app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) =>
             mode: 'recovery'
         }, 30 * 1000);
         return res.status(429).json({ error: 'Too many failed attempts. Try again in 30 minutes.' });
+    }
+
+    if (isAuthIdentifierLocked(username, 'recovery')) {
+        emitSecuritySignal(req, 'login-identifier-locked', {
+            username,
+            attempts: getAuthIdentifierAttemptCount(username, 'recovery'),
+            mode: 'recovery'
+        }, 30 * 1000);
+        return res.status(429).json({ error: 'Too many failed attempts for this account. Try again in 30 minutes.' });
     }
 
     const recoveryIpReputation = evaluateRequestIpReputation(req, 'recovery-login', username);
@@ -4293,11 +4636,12 @@ app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) =>
         const user = await AdminPanelHelper.getAdminUser(username);
         if (!user) {
             const attempts = trackLoginAttempt(clientIP);
+            const identifierAttempts = trackAuthIdentifierAttempt(username, 'recovery');
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'user-not-found', mode: 'recovery', attempts: attempts.length });
-            if (attempts.length >= 5) {
+            if (attempts.length >= 5 || identifierAttempts.length >= AUTH_IDENTIFIER_MAX_ATTEMPTS) {
                 emitSecuritySignal(req, 'login-bruteforce-threshold', {
                     username,
-                    attempts: attempts.length,
+                    attempts: Math.max(attempts.length, identifierAttempts.length),
                     reason: 'recovery-user-not-found',
                     mode: 'recovery'
                 }, 30 * 1000);
@@ -4311,11 +4655,12 @@ app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) =>
 
         if (index === -1) {
             const attempts = trackLoginAttempt(clientIP);
+            const identifierAttempts = trackAuthIdentifierAttempt(username, 'recovery');
             await logAdminAuthEvent(username, 'LOGIN_FAILED', req, { reason: 'recovery-code-mismatch', mode: 'recovery', attempts: attempts.length });
-            if (attempts.length >= 5) {
+            if (attempts.length >= 5 || identifierAttempts.length >= AUTH_IDENTIFIER_MAX_ATTEMPTS) {
                 emitSecuritySignal(req, 'login-bruteforce-threshold', {
                     username,
-                    attempts: attempts.length,
+                    attempts: Math.max(attempts.length, identifierAttempts.length),
                     reason: 'recovery-code-mismatch',
                     mode: 'recovery'
                 }, 30 * 1000);
@@ -4373,6 +4718,9 @@ app.post('/api/login/recovery', createRateLimiter(3, 60000), async (req, res) =>
             });
         }
 
+        loginAttempts.delete(clientIP);
+        clearAuthIdentifierAttempts(username, 'recovery');
+
         return await establishLoginSession(req, res, user, {
             authMethod: 'recovery-code',
             logMetadata: {
@@ -4414,6 +4762,99 @@ function deleteManagedAdminAvatarFile(avatarUrl) {
     if (fs.existsSync(targetPath)) {
         fs.unlinkSync(targetPath);
     }
+}
+
+function isManagedAppealEvidenceUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw.startsWith(APPEAL_EVIDENCE_PUBLIC_PREFIX)) return false;
+    const relative = raw.slice(APPEAL_EVIDENCE_PUBLIC_PREFIX.length);
+    return relative.length > 0 && !relative.includes('..') && !path.isAbsolute(relative);
+}
+
+function deleteManagedAppealEvidenceFiles(evidenceList = []) {
+    for (const evidence of Array.isArray(evidenceList) ? evidenceList : []) {
+        const evidenceUrl = String(evidence?.url || '').trim();
+        if (!isManagedAppealEvidenceUrl(evidenceUrl)) continue;
+
+        const filename = path.basename(evidenceUrl);
+        const targetPath = path.join(APPEAL_EVIDENCE_UPLOAD_DIR, filename);
+        if (fs.existsSync(targetPath)) {
+            fs.unlinkSync(targetPath);
+        }
+    }
+}
+
+function parseAppealEvidenceJson(rawValue) {
+    if (!rawValue) return [];
+    try {
+        const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .map((entry) => ({
+                name: String(entry?.name || entry?.originalName || 'Attachment').trim() || 'Attachment',
+                url: String(entry?.url || '').trim(),
+                mimeType: String(entry?.mimeType || '').trim(),
+                size: Number(entry?.size || 0),
+                uploadedAt: entry?.uploadedAt || null
+            }))
+            .filter((entry) => entry.url);
+    } catch (_error) {
+        return [];
+    }
+}
+
+function buildAppealEvidenceMetadata(files = []) {
+    return (Array.isArray(files) ? files : []).map((file) => ({
+        name: String(file?.originalname || 'Attachment').trim() || 'Attachment',
+        url: `${APPEAL_EVIDENCE_PUBLIC_PREFIX}${path.basename(String(file?.filename || ''))}`,
+        mimeType: String(file?.mimetype || '').trim(),
+        size: Number(file?.size || 0),
+        uploadedAt: new Date().toISOString()
+    })).filter((entry) => entry.url !== APPEAL_EVIDENCE_PUBLIC_PREFIX);
+}
+
+function cleanupAppealUploadFiles(files = []) {
+    deleteManagedAppealEvidenceFiles(buildAppealEvidenceMetadata(files));
+}
+
+function normalizeAppealReviewStage(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return APPEAL_REVIEW_STAGES.includes(normalized) ? normalized : 'submitted';
+}
+
+function buildPublicAppealRecord(appeal) {
+    const record = appeal || {};
+    const status = String(record.status || 'pending').toLowerCase();
+    let responseText = null;
+
+    if ((status === 'accepted' || status === 'denied') && record.owner_response) {
+        const decisionCode = String(record.owner_response).trim();
+        responseText = APPEAL_DECISION_EMAIL_TEXT[decisionCode] || record.owner_response;
+    }
+
+    if (status === 'withdrawn' && !responseText) {
+        responseText = 'This appeal was withdrawn before a final decision was issued.';
+    }
+
+    return {
+        id: record.id,
+        status,
+        userTag: String(record.user_tag || '').trim() || null,
+        caseId: record.ban_case_id,
+        submittedAt: record.created_at,
+        updatedAt: record.updated_at || record.created_at,
+        decidedAt: record.decided_at,
+        withdrawnAt: record.withdrawn_at || null,
+        reason: status === 'pending' ? String(record.reason || '').trim() || null : null,
+        email: status === 'pending' ? String(record.user_email || '').trim() || null : null,
+        withdrawReason: status === 'withdrawn' ? String(record.withdraw_reason || '').trim() || null : null,
+        reviewStage: normalizeAppealReviewStage(record.review_stage),
+        statusNote: String(record.public_status_note || '').trim() || null,
+        response: responseText,
+        evidence: parseAppealEvidenceJson(record.evidence_json),
+        canEdit: status === 'pending',
+        canWithdraw: status === 'pending'
+    };
 }
 
 async function normalizeAdminAvatarUpload(tempFilePath) {
@@ -4463,6 +4904,30 @@ const adminAvatarUpload = multer({
     fileFilter: (_req, file, callback) => {
         if (!ADMIN_AVATAR_ALLOWED_MIME_TYPES[file.mimetype]) {
             callback(new Error('Only PNG, JPG, GIF, and WEBP images are allowed'));
+            return;
+        }
+
+        callback(null, true);
+    }
+});
+
+const appealEvidenceUpload = multer({
+    storage: multer.diskStorage({
+        destination: (_req, _file, callback) => {
+            callback(null, APPEAL_EVIDENCE_UPLOAD_DIR);
+        },
+        filename: (_req, file, callback) => {
+            const ext = APPEAL_EVIDENCE_ALLOWED_MIME_TYPES[file.mimetype] || 'bin';
+            callback(null, `appeal-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`);
+        }
+    }),
+    limits: {
+        fileSize: 5 * 1024 * 1024,
+        files: 3
+    },
+    fileFilter: (_req, file, callback) => {
+        if (!APPEAL_EVIDENCE_ALLOWED_MIME_TYPES[file.mimetype]) {
+            callback(new Error('Only PNG, JPG, WEBP, PDF, and TXT files are allowed as appeal evidence'));
             return;
         }
 
@@ -4591,7 +5056,7 @@ function createSecureToken(bytes = 32) {
     return crypto.randomBytes(bytes).toString('hex');
 }
 
-async function sendDiscordSecurityAlertIfPossible(user, title, details = []) {
+async function sendDiscordSecurityAlertIfPossible(user, title, details = [], req = null) {
     if (!DISCORD_SECURITY_ALERTS_ENABLED) return false;
     const discordUserId = String(user?.discord_user_id || '').trim();
     if (!discordUserId || !discordClient?.users?.fetch) return false;
@@ -4602,12 +5067,228 @@ async function sendDiscordSecurityAlertIfPossible(user, title, details = []) {
             return false;
         }
 
-        const messageLines = [
-            `Security Alert: ${String(title || 'Notice')}`,
-            ...details.map((detail) => `- ${String(detail || '')}`)
-        ].filter(Boolean);
+        const safeTitle = String(title || 'Account security event').trim();
+        const safeDetails = Array.isArray(details) ? details.filter((detail) => detail != null) : [];
+        const ipAddress = req?.clientIP || req?.ip || 'Unknown';
+        const userAgentRaw = req?.userAgent || req?.headers?.['user-agent'] || 'Unknown';
+        const userAgent = String(userAgentRaw || 'Unknown').slice(0, 120);
+        const username = String(user?.username || 'Unknown');
+        const displayName = user?.display_name ? String(user.display_name) : null;
 
-        await discordUser.send(messageLines.join('\n')).catch(() => null);
+        const getEventProfile = (key) => {
+            const normalized = String(key || '').toLowerCase();
+
+            if (normalized.includes('new device')) {
+                return {
+                    color: 0xE67E22,
+                    emoji: '🚨',
+                    severity: 'High',
+                    summary: `A sign-in from a device ${PANEL_BOT_NAME} has not seen before was detected.`,
+                    actions: [
+                        'If this was you, no action is needed.',
+                        'If this was not you, change your password immediately.',
+                        'Review active sessions and revoke anything unfamiliar.'
+                    ]
+                };
+            }
+
+            if (normalized.includes('recovery code')) {
+                return {
+                    color: 0xE67E22,
+                    emoji: '🛟',
+                    severity: 'High',
+                    summary: 'A recovery code was used to access or recover this account.',
+                    actions: [
+                        'Generate a new recovery-code set after you sign in.',
+                        'Review two-factor authentication settings.',
+                        'Change your password if this was unexpected.'
+                    ]
+                };
+            }
+
+            if (normalized.includes('password reset') || normalized.includes('password changed') || normalized.includes('email address changed')) {
+                return {
+                    color: 0xF39C12,
+                    emoji: '🔐',
+                    severity: 'High',
+                    summary: 'Sensitive account credentials were updated.',
+                    actions: [
+                        'Confirm the change was made by you.',
+                        'Re-check account email and two-factor settings.',
+                        'Revoke other sessions if anything looks wrong.'
+                    ]
+                };
+            }
+
+            if (normalized.includes('two-factor authentication enabled')) {
+                return {
+                    color: 0x2ECC71,
+                    emoji: '✅',
+                    severity: 'Info',
+                    summary: 'Two-factor authentication was successfully enabled on this account.',
+                    actions: [
+                        'Store recovery codes somewhere safe.',
+                        'Keep your authenticator device backed up.'
+                    ]
+                };
+            }
+
+            if (normalized.includes('two-factor authentication disabled')) {
+                return {
+                    color: 0xE74C3C,
+                    emoji: '⚠️',
+                    severity: 'High',
+                    summary: 'Two-factor authentication was turned off, reducing account protection.',
+                    actions: [
+                        'Re-enable two-factor authentication if this was accidental.',
+                        'Change your password if you did not request this change.'
+                    ]
+                };
+            }
+
+            if (normalized.includes('email verified')) {
+                return {
+                    color: 0x1ABC9C,
+                    emoji: '📬',
+                    severity: 'Info',
+                    summary: 'The account email address was successfully verified.',
+                    actions: [
+                        'No action is needed if you completed this verification.'
+                    ]
+                };
+            }
+
+            if (normalized.includes('login')) {
+                return {
+                    color: 0x3498DB,
+                    emoji: '🛡️',
+                    severity: normalized.includes('recovery') ? 'High' : 'Info',
+                    summary: 'A successful panel login was recorded for this account.',
+                    actions: [
+                        'Confirm the device and IP look familiar.',
+                        'If this was not you, change your password and revoke all sessions.'
+                    ]
+                };
+            }
+
+            return {
+                color: 0x5865F2,
+                emoji: '🛡️',
+                severity: 'Info',
+                summary: 'A security-related change was recorded for this account.',
+                actions: [
+                    'Review the details below and confirm the activity is expected.'
+                ]
+            };
+        };
+
+        const profile = getEventProfile(safeTitle);
+        const structuredDetails = new Map();
+        const remainingDetails = [];
+
+        for (const detail of safeDetails) {
+            const text = String(detail).trim();
+            const splitIndex = text.indexOf(':');
+
+            if (splitIndex > 0) {
+                const label = text.slice(0, splitIndex).trim();
+                const value = text.slice(splitIndex + 1).trim();
+
+                if (label && value && !structuredDetails.has(label.toLowerCase())) {
+                    structuredDetails.set(label.toLowerCase(), { label, value: value.slice(0, 256) });
+                    continue;
+                }
+            }
+
+            if (text) {
+                remainingDetails.push(text.slice(0, 256));
+            }
+        }
+
+        const infoFieldNames = new Set(['method', 'device', 'time', 'ip address', 'location']);
+        const priorityDetails = Array.from(structuredDetails.values()).filter((entry) => infoFieldNames.has(entry.label.toLowerCase()));
+        const extraDetails = Array.from(structuredDetails.values()).filter((entry) => !infoFieldNames.has(entry.label.toLowerCase()));
+        const detailsSummary = [...extraDetails, ...remainingDetails.map((value) => ({ label: null, value }))]
+            .slice(0, 8)
+            .map((entry) => entry.label ? `• **${entry.label}:** ${entry.value}` : `• ${entry.value}`)
+            .join('\n');
+        const actionSummary = profile.actions.map((action, index) => `${index + 1}. ${action}`).join('\n');
+        const alertTimestamp = new Date();
+        const fallbackIconUrl = 'https://cdn.discordapp.com/embed/avatars/0.png';
+        const brandIconUrl = discordClient?.user?.displayAvatarURL?.({ size: 128 }) || fallbackIconUrl;
+        const recipientAvatarUrl = discordUser?.displayAvatarURL?.({ size: 256 }) || brandIconUrl;
+        const severityIcon = profile.severity === 'High'
+            ? '🔴'
+            : profile.severity === 'Info'
+                ? '🔵'
+                : '🟠';
+        const accountLabel = displayName ? `${displayName}\n@${username}` : `@${username}`;
+        const technicalDetails = [
+            `• IP: ${String(ipAddress || 'Unknown')}`,
+            `• Discord ID: ${String(user?.discord_user_id || 'Unknown')}`,
+            `• User Agent: ${userAgent || 'Unknown'}`
+        ].join('\n');
+
+        const embed = new EmbedBuilder()
+            .setColor(profile.color)
+            .setAuthor({
+                name: `${PANEL_BOT_NAME} Security Center`,
+                iconURL: brandIconUrl
+            })
+            .setTitle(`${profile.emoji} ${safeTitle}`)
+            .setThumbnail(recipientAvatarUrl)
+            .setDescription([
+                `**${profile.summary}**`,
+                '',
+                `> If this activity was not expected, secure your account immediately.`
+            ].join('\n'))
+            .addFields([
+                { name: '👤 Account', value: accountLabel, inline: true },
+                { name: '🚦 Severity', value: `${severityIcon} ${profile.severity}`, inline: true },
+                { name: '🕒 Detected', value: `<t:${Math.floor(alertTimestamp.getTime() / 1000)}:F>`, inline: true },
+                { name: '🌐 Server', value: PANEL_SERVER_NAME || 'Unknown', inline: true },
+                { name: '🛡️ Status', value: 'Security event recorded', inline: true },
+                { name: '📬 Delivery', value: 'Direct account notification', inline: true },
+                ...(priorityDetails.length > 0
+                    ? priorityDetails.map((entry) => ({
+                        name: `📌 ${entry.label}`,
+                        value: entry.value || 'Unknown',
+                        inline: true
+                    }))
+                    : []),
+                { name: '🔍 Technical Details', value: technicalDetails, inline: false },
+                { name: '✅ Recommended Next Steps', value: actionSummary, inline: false },
+                {
+                    name: '📝 Extra Details',
+                    value: detailsSummary || 'No additional details were supplied for this event.',
+                    inline: false
+                }
+            ])
+            .setTimestamp(alertTimestamp)
+            .setFooter({
+                text: `${PANEL_BOT_NAME} Security Notifications`,
+                iconURL: brandIconUrl
+            });
+
+        await discordUser.send({ embeds: [embed] }).catch(async () => {
+            // Fallback to plaintext if embed delivery fails
+            const fallbackMessage = [
+                `${profile.emoji} ${PANEL_BOT_NAME} Security Alert`,
+                `Event: ${safeTitle}`,
+                `Severity: ${profile.severity}`,
+                `Account: ${username}`,
+                `IP: ${String(ipAddress || 'Unknown')}`,
+                `When: ${new Date().toUTCString()}`,
+                '',
+                profile.summary,
+                '',
+                'Next steps:',
+                ...profile.actions.map((action) => `- ${action}`),
+                ...(safeDetails.length > 0 ? ['', 'Details:', ...safeDetails.map((detail) => `- ${String(detail)}`)] : [])
+            ].filter(Boolean).join('\n');
+            await discordUser.send(fallbackMessage).catch(() => null);
+        });
+
         return true;
     } catch (error) {
         console.error('[SecurityDiscord] Failed to send Discord security alert:', error?.message || error);
@@ -4629,7 +5310,7 @@ async function sendSecurityAlertIfPossible(user, title, details = [], req = null
         );
     }
 
-    jobs.push(sendDiscordSecurityAlertIfPossible(user, title, details));
+    jobs.push(sendDiscordSecurityAlertIfPossible(user, title, details, req));
 
     jobs.push(
         sendBotWebhook('security.alert', {
@@ -4967,6 +5648,13 @@ async function establishLoginSession(req, res, user, options = {}) {
         ...logMetadata
     }).catch(() => { });
 
+    // Notify user by Discord DM about successful account login
+    await sendSecurityAlertIfPossible(user, authMethod === 'recovery-code' ? 'Account login (recovery code)' : 'Account login', [
+        `Method: ${authMethod}`,
+        `IP Address: ${req.clientIP || 'Unknown'}`,
+        `User Agent: ${String(req.userAgent || 'Unknown').slice(0, 140)}`
+    ], req).catch(() => { });
+
     res.cookie('csrfToken', initialToken, {
         httpOnly: false,
         sameSite: 'strict',
@@ -4991,6 +5679,7 @@ app.post('/api/logout', (req, res) => {
             return res.status(500).json({ error: 'Logout failed' });
         }
         logAdminAuthEvent(username, 'LOGOUT', req, {}).catch(() => { });
+        res.setHeader('Clear-Site-Data', '"cache", "storage"');
         res.clearCookie('admin_session', {
             path: '/',
             sameSite: 'lax',
@@ -5002,6 +5691,29 @@ app.post('/api/logout', (req, res) => {
             secure: SESSION_COOKIE_SECURE
         });
         res.json({ success: true });
+    });
+});
+
+app.get('/logout', (req, res) => {
+    const username = req.session?.username || 'unknown';
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Session destroy error:', err);
+            return res.redirect('/login?logout=failed');
+        }
+        logAdminAuthEvent(username, 'LOGOUT', req, {}).catch(() => { });
+        res.setHeader('Clear-Site-Data', '"cache", "storage"');
+        res.clearCookie('admin_session', {
+            path: '/',
+            sameSite: 'lax',
+            secure: SESSION_COOKIE_SECURE
+        });
+        res.clearCookie('csrfToken', {
+            path: '/',
+            sameSite: 'strict',
+            secure: SESSION_COOKIE_SECURE
+        });
+        res.redirect('/login');
     });
 });
 
@@ -7152,6 +7864,11 @@ app.get('/verify-email', async (req, res) => {
         );
 
         await logAdminAuthEvent(user.username, 'EMAIL_VERIFIED', req, { route: '/verify-email' });
+        await sendSecurityAlertIfPossible(user, 'Email verified', [
+            'Your email address has been verified.',
+            `IP Address: ${req.clientIP || 'Unknown'}`,
+            `User Agent: ${String(req.userAgent || 'Unknown').slice(0, 140)}`
+        ], req).catch(() => { });
 
         return sendVerifyEmailStatusPage(res, {
             title: 'Email Verified',
@@ -7202,6 +7919,11 @@ app.post('/api/email/verify', createRateLimiter(8, 600000), async (req, res) => 
         );
 
         await logAdminAuthEvent(user.username, 'EMAIL_VERIFIED', req, { route: '/api/email/verify' });
+        await sendSecurityAlertIfPossible(user, 'Email verified', [
+            'Your email address has been verified via API endpoint.',
+            `IP Address: ${req.clientIP || 'Unknown'}`,
+            `User Agent: ${String(req.userAgent || 'Unknown').slice(0, 140)}`
+        ], req).catch(() => { });
         return res.json({ success: true, message: 'Email verified successfully' });
     } catch (error) {
         console.error('Error verifying email via API:', error);
@@ -7371,7 +8093,7 @@ app.post('/api/account/password-reset/confirm', createRateLimiter(5, 15 * 60 * 1
         );
 
         await logAdminAuthEvent(user.username, 'PASSWORD_RESET_COMPLETED', req, { route: '/api/account/password-reset/confirm', mode: 'email-token' });
-        await sendSecurityAlertIfPossible(user, 'Password reset completed', ['Method: Email reset token']);
+        await sendSecurityAlertIfPossible(user, 'Password reset completed', ['Method: Email reset token'], req);
 
         return res.json({ success: true, message: 'Password reset successfully' });
     } catch (error) {
@@ -7436,7 +8158,7 @@ app.post('/api/account/password-reset/recovery', createRateLimiter(5, 15 * 60 * 
         await sendSecurityAlertIfPossible(user, 'Password reset completed', [
             'Method: Recovery code',
             `Remaining recovery codes: ${hashes.length}`
-        ]);
+        ], req);
 
         return res.json({ success: true, message: 'Password reset successfully' });
     } catch (error) {
@@ -8844,11 +9566,35 @@ app.get('/api/activity', requireAuth, async (req, res) => {
     }
 });
 
-function requireAdmin(req, res, next) {
-    refreshSessionRoleIfNeeded(req)
+function requireModerator(req, res, next) {
+    refreshSessionRoleIfNeeded(req, { forceRefresh: true })
         .then(() => {
-            if (!hasAdminAccess({ role: req.session?.role })) {
+            // Check if session became invalid due to role alignment issues
+            if (!req.session?.authenticated) {
                 return res.redirect('/unauthorized');
+            }
+            const userRole = req.session?.role;
+            if (!hasModeratorAccess({ role: userRole })) {
+                return res.redirect('/profile');
+            }
+            next();
+        })
+        .catch(error => {
+            error.status = 500;
+            next(error);
+        });
+}
+
+function requireAdmin(req, res, next) {
+    refreshSessionRoleIfNeeded(req, { forceRefresh: true })
+        .then(() => {
+            // Check if session became invalid due to role alignment issues
+            if (!req.session?.authenticated) {
+                return res.redirect('/unauthorized');
+            }
+            const userRole = req.session?.role;
+            if (!hasAdminAccess({ role: userRole })) {
+                return res.redirect('/profile');
             }
             next();
         })
@@ -8864,7 +9610,7 @@ app.get('/admin', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Search page route
-app.get('/search', requireAuth, (req, res) => {
+app.get('/search', requireAuth, requireModerator, (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'search.html'));
 });
 
@@ -8920,7 +9666,7 @@ app.post('/api/user/change-password', createRateLimiter(3, 60000), requireAuth, 
         await sendSecurityAlertIfPossible(user, 'Password changed', [
             'Your account password was changed.',
             `Time: ${new Date().toLocaleString()}`
-        ]);
+        ], req);
         res.json({ success: true, message: 'Password changed successfully' });
     } catch (error) {
         console.error('Error changing password:', error);
@@ -9110,7 +9856,7 @@ app.post('/api/user/change-avatar', createRateLimiter(10, 60000), requireAuth, r
 });
 
 // Audit logs page route
-app.get('/audit-logs', requireAuth, (req, res) => {
+app.get('/audit-logs', requireAuth, requireModerator, (req, res) => {
     res.sendFile(path.join(__dirname, 'AdminPanel', 'views', 'audit-logs.html'));
 });
 
@@ -9240,20 +9986,25 @@ app.get('/api/admin/tickets', requireAuth, async (req, res) => {
         const tickets = await AdminPanelHelper.getAllTickets('all') || [];
 
         // Count by status
-        let open = 0, claimed = 0, closed = 0;
+        let open = 0, claimed = 0, waitingUser = 0, waitingStaff = 0, closed = 0;
 
         tickets.forEach(ticket => {
             if (ticket.status === 'open') open++;
             else if (ticket.status === 'claimed') claimed++;
+            else if (ticket.status === 'waiting_user') waitingUser++;
+            else if (ticket.status === 'waiting_staff') waitingStaff++;
             else if (ticket.status === 'closed') closed++;
         });
 
-        const total = open + claimed + closed;
+        const total = open + claimed + waitingUser + waitingStaff + closed;
 
         res.json({
             success: true,
             open: open,
             claimed: claimed,
+            waitingUser,
+            waitingStaff,
+            active: open + claimed + waitingUser + waitingStaff,
             closed: closed,
             total: total
         });
@@ -10804,10 +11555,14 @@ app.get('/analytics', requireAuth, requireOwner, (req, res) => {
 
 // Check if user is owner
 function requireOwner(req, res, next) {
-    refreshSessionRoleIfNeeded(req)
+    refreshSessionRoleIfNeeded(req, { forceRefresh: true })
         .then(() => {
-            if (!hasOwnerAccess({ role: req.session?.role })) {
+            // Check if session became invalid due to role alignment issues
+            if (!req.session?.authenticated) {
                 return res.redirect('/unauthorized');
+            }
+            if (!hasOwnerAccess({ role: req.session?.role })) {
+                return res.redirect('/profile');
             }
             next();
         })
@@ -12209,8 +12964,15 @@ app.get('/api/tickets', requireAuth, async (req, res) => {
             username: t.userName || t.user_name || t.username || 'Unknown',
             status: t.status || 'open',
             priority: t.priority || 'medium',
+            claimedBy: t.claimedBy || t.claimed_by || null,
+            claimedByName: t.claimedByName || t.claimed_by_name || null,
+            closedBy: t.closedBy || t.closed_by || null,
+            closedByName: t.closedByName || t.closed_by_name || null,
+            closeReason: t.closeReason || t.close_reason || '',
             reason: t.reason || '',
-            created_at: t.createdAt || t.created_at || null
+            created_at: t.createdAt || t.created_at || null,
+            closed_at: t.closedAt || t.closed_at || null,
+            transcript_created_at: t.transcriptCreatedAt || t.transcript_created_at || null
         })));
     } catch (error) {
         res.status(500).json({ error: 'Failed to get tickets' });
@@ -12256,7 +13018,11 @@ app.post('/api/tickets/:ticketId/claim', requireAuth, async (req, res) => {
         if (!ticketId) {
             return res.status(400).json({ error: 'Invalid ticket id' });
         }
-        const success = await AdminPanelHelper.claimTicket(ticketId, req.session.userId || req.session.username || 'system');
+        const success = await AdminPanelHelper.claimTicket(
+            ticketId,
+            req.session.userId || req.session.username || 'system',
+            req.session.username || req.session.userId || 'system'
+        );
         if (success) {
             res.json({ success: true, message: 'Ticket claimed' });
         } else {
@@ -14244,72 +15010,225 @@ app.get('/api/appeals/validate-case-id', createRateLimiter(30, 60000), handleVal
 app.get('/appeal/api/appeals/validate-case-id', createRateLimiter(30, 60000), handleValidateBanCaseId);
 
 // Submit a ban appeal
-app.post('/api/appeals/submit', createRateLimiter(1, 3600000), async (req, res) => {
+app.post('/api/appeals/submit', createRateLimiter(1, 3600000), (req, res) => {
+    appealEvidenceUpload.array('appealEvidence', 3)(req, res, async (uploadError) => {
+        try {
+            if (uploadError) {
+                const message = uploadError instanceof multer.MulterError
+                    ? (uploadError.code === 'LIMIT_FILE_SIZE'
+                        ? 'Each evidence file must be 5MB or smaller.'
+                        : 'Failed to process appeal evidence upload.')
+                    : (uploadError.message || 'Failed to process appeal evidence upload.');
+                return res.status(400).json({ error: message });
+            }
+
+            const { userId, userTag, caseId, reason, email } = req.body || {};
+            const normalizedUserId = String(userId || '').trim();
+            const normalizedUserTag = String(userTag || '').trim();
+            const normalizedCaseId = String(caseId || '').trim();
+            const normalizedReason = String(reason || '').trim();
+            const normalizedEmail = String(email || '').trim();
+            const evidenceFiles = buildAppealEvidenceMetadata(req.files || []);
+
+            if (!normalizedUserId || !normalizedUserTag || !normalizedCaseId || !normalizedReason || !normalizedEmail) {
+                cleanupAppealUploadFiles(req.files || []);
+                return res.status(400).json({ error: 'Missing required fields' });
+            }
+
+            const { isValidBanCaseId } = require('./Functions/AppealHelper');
+            const banCheck = await isValidBanCaseId(normalizedCaseId);
+            if (!banCheck.valid) {
+                cleanupAppealUploadFiles(req.files || []);
+                return res.status(400).json({ error: 'Ban case ID is invalid or user is not currently banned.' });
+            }
+
+            if (!isValidEmailAddress(normalizedEmail)) {
+                cleanupAppealUploadFiles(req.files || []);
+                return res.status(400).json({ error: 'Invalid email format' });
+            }
+
+            const [existing] = await MySQLDatabaseManager.connection.pool.execute(
+                'SELECT id FROM ban_appeals WHERE user_id = ? AND status = ? LIMIT 1',
+                [normalizedUserId, 'pending']
+            );
+
+            if (existing.length > 0) {
+                cleanupAppealUploadFiles(req.files || []);
+                return res.status(400).json({ error: 'You already have a pending appeal. Please wait for a response.' });
+            }
+
+            try {
+                await MySQLDatabaseManager.connection.pool.execute(
+                    `INSERT INTO ban_appeals
+                        (user_id, user_tag, ban_case_id, reason, user_email, evidence_json, review_stage)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        normalizedUserId,
+                        normalizedUserTag,
+                        normalizedCaseId,
+                        normalizedReason,
+                        normalizedEmail,
+                        JSON.stringify(evidenceFiles),
+                        'submitted'
+                    ]
+                );
+            } catch (insertError) {
+                if (insertError?.code === 'ER_BAD_FIELD_ERROR') {
+                    await MySQLDatabaseManager.connection.pool.execute(
+                        'INSERT INTO ban_appeals (user_id, user_tag, ban_case_id, reason) VALUES (?, ?, ?, ?)',
+                        [normalizedUserId, normalizedUserTag, normalizedCaseId, normalizedReason]
+                    );
+                    cleanupAppealUploadFiles(req.files || []);
+                } else {
+                    throw insertError;
+                }
+            }
+
+            const adminEmail = process.env.ADMIN_EMAIL;
+            if (EmailHelper.isReady() && adminEmail) {
+                await EmailHelper.sendNewAppealNotification(adminEmail, normalizedUserTag, normalizedUserId, normalizedReason).catch(err => {
+                    console.error('Failed to send admin notification:', err.message);
+                });
+            }
+
+            if (EmailHelper.isReady()) {
+                await EmailHelper.sendAppealReceivedEmail(normalizedEmail, normalizedUserTag, normalizedCaseId).catch(err => {
+                    console.error('Failed to send appeal received email:', err.message);
+                });
+            }
+
+            res.json({ success: true, message: 'Appeal submitted successfully', evidenceCount: evidenceFiles.length });
+        } catch (error) {
+            cleanupAppealUploadFiles(req.files || []);
+            console.error('Error submitting appeal:', error);
+            res.status(500).json({ error: 'Failed to submit appeal' });
+        }
+    });
+});
+
+app.post('/api/appeals/update-pending', createRateLimiter(5, 60000), (req, res) => {
+    appealEvidenceUpload.array('appealEvidence', 3)(req, res, async (uploadError) => {
+        try {
+            if (uploadError) {
+                const message = uploadError instanceof multer.MulterError
+                    ? (uploadError.code === 'LIMIT_FILE_SIZE'
+                        ? 'Each evidence file must be 5MB or smaller.'
+                        : 'Failed to process appeal evidence upload.')
+                    : (uploadError.message || 'Failed to process appeal evidence upload.');
+                return res.status(400).json({ error: message });
+            }
+
+            const normalizedCaseId = String(req.body?.caseId || '').trim();
+            const normalizedUserId = String(req.body?.userId || '').trim();
+            const normalizedReason = String(req.body?.reason || '').trim();
+            const normalizedEmail = String(req.body?.email || '').trim();
+            const uploadedEvidence = buildAppealEvidenceMetadata(req.files || []);
+
+            if (!normalizedCaseId || !normalizedUserId || !normalizedReason || !normalizedEmail) {
+                cleanupAppealUploadFiles(req.files || []);
+                return res.status(400).json({ error: 'Case ID, User ID, email, and appeal reason are required.' });
+            }
+
+            if (!isValidEmailAddress(normalizedEmail)) {
+                cleanupAppealUploadFiles(req.files || []);
+                return res.status(400).json({ error: 'Invalid email format' });
+            }
+
+            const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
+                `SELECT id, evidence_json
+                 FROM ban_appeals
+                 WHERE ban_case_id = ? AND user_id = ? AND status = 'pending'
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [normalizedCaseId, normalizedUserId]
+            );
+
+            if (!appeals.length) {
+                cleanupAppealUploadFiles(req.files || []);
+                return res.status(404).json({ error: 'No pending appeal found for this case and user.' });
+            }
+
+            const appeal = appeals[0];
+            const existingEvidence = parseAppealEvidenceJson(appeal.evidence_json);
+            const allowedUploadedCount = Math.max(0, 5 - existingEvidence.length);
+            const keptUploadedEvidence = uploadedEvidence.slice(0, allowedUploadedCount);
+            const discardedUploadedEvidence = uploadedEvidence.slice(allowedUploadedCount);
+            if (discardedUploadedEvidence.length) {
+                deleteManagedAppealEvidenceFiles(discardedUploadedEvidence);
+            }
+            const mergedEvidence = [...existingEvidence, ...keptUploadedEvidence].slice(0, 5);
+
+            await MySQLDatabaseManager.connection.pool.execute(
+                `UPDATE ban_appeals
+                 SET reason = ?,
+                     user_email = ?,
+                     evidence_json = ?,
+                     updated_at = NOW()
+                 WHERE id = ?`,
+                [normalizedReason, normalizedEmail, JSON.stringify(mergedEvidence), appeal.id]
+            );
+
+            const [updatedRows] = await MySQLDatabaseManager.connection.pool.execute(
+                `SELECT id, ban_case_id, status, created_at, updated_at, decided_at, withdrawn_at,
+                        review_stage, public_status_note, owner_response, evidence_json
+                 FROM ban_appeals
+                 WHERE id = ?
+                 LIMIT 1`,
+                [appeal.id]
+            );
+
+            res.json({
+                success: true,
+                message: 'Pending appeal updated successfully.',
+                appeal: buildPublicAppealRecord(updatedRows?.[0] || { id: appeal.id, ban_case_id: normalizedCaseId, status: 'pending', evidence_json: JSON.stringify(mergedEvidence) })
+            });
+        } catch (error) {
+            cleanupAppealUploadFiles(req.files || []);
+            console.error('Error updating pending appeal:', error);
+            res.status(500).json({ error: 'Failed to update pending appeal' });
+        }
+    });
+});
+
+app.post('/api/appeals/withdraw', createRateLimiter(5, 60000), async (req, res) => {
     try {
-        const { userId, userTag, caseId, reason, email } = req.body;
+        const normalizedCaseId = String(req.body?.caseId || '').trim();
+        const normalizedUserId = String(req.body?.userId || '').trim();
+        const withdrawReason = String(req.body?.withdrawReason || '').trim();
 
-        if (!userId || !userTag || !caseId || !reason || !email) {
-            return res.status(400).json({ error: 'Missing required fields' });
+        if (!normalizedCaseId || !normalizedUserId) {
+            return res.status(400).json({ error: 'Case ID and User ID are required.' });
         }
 
-        // Validate case ID format and ban status using AppealHelper
-        const { isValidBanCaseId } = require('./Functions/AppealHelper');
-        const banCheck = await isValidBanCaseId(caseId);
-        if (!banCheck.valid) {
-            return res.status(400).json({ error: 'Ban case ID is invalid or user is not currently banned.' });
-        }
-
-        // Validate email (required)
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            return res.status(400).json({ error: 'Invalid email format' });
-        }
-
-        // Check if user already has a pending appeal
-        const [existing] = await MySQLDatabaseManager.connection.pool.execute(
-            'SELECT id FROM ban_appeals WHERE user_id = ? AND status = ?',
-            [userId, 'pending']
+        const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
+            `SELECT id
+             FROM ban_appeals
+             WHERE ban_case_id = ? AND user_id = ? AND status = 'pending'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [normalizedCaseId, normalizedUserId]
         );
 
-        if (existing.length > 0) {
-            return res.status(400).json({ error: 'You already have a pending appeal. Please wait for a response.' });
+        if (!appeals.length) {
+            return res.status(404).json({ error: 'No pending appeal found for this case and user.' });
         }
 
-        // Submit appeal with ban case ID and email (fallback for older schemas without user_email)
-        try {
-            await MySQLDatabaseManager.connection.pool.execute(
-                'INSERT INTO ban_appeals (user_id, user_tag, ban_case_id, reason, user_email) VALUES (?, ?, ?, ?, ?)',
-                [userId, userTag, caseId, reason, email]
-            );
-        } catch (insertError) {
-            if (insertError?.code === 'ER_BAD_FIELD_ERROR') {
-                await MySQLDatabaseManager.connection.pool.execute(
-                    'INSERT INTO ban_appeals (user_id, user_tag, ban_case_id, reason) VALUES (?, ?, ?, ?)',
-                    [userId, userTag, caseId, reason]
-                );
-            } else {
-                throw insertError;
-            }
-        }
+        await MySQLDatabaseManager.connection.pool.execute(
+            `UPDATE ban_appeals
+             SET status = 'withdrawn',
+                 review_stage = 'withdrawn',
+                 withdraw_reason = ?,
+                 withdrawn_at = NOW(),
+                 updated_at = NOW(),
+                 public_status_note = COALESCE(NULLIF(public_status_note, ''), 'This appeal was withdrawn by the submitter before a final decision was made.')
+             WHERE id = ?`,
+            [withdrawReason || null, appeals[0].id]
+        );
 
-        // Send notification email to admin if configured
-        const adminEmail = process.env.ADMIN_EMAIL;
-        if (EmailHelper.isReady() && adminEmail) {
-            await EmailHelper.sendNewAppealNotification(adminEmail, userTag, userId, reason).catch(err => {
-                console.error('Failed to send admin notification:', err.message);
-            });
-        }
-
-        // Send appeal received confirmation to user
-        if (EmailHelper.isReady()) {
-            await EmailHelper.sendAppealReceivedEmail(email, userTag, caseId).catch(err => {
-                console.error('Failed to send appeal received email:', err.message);
-            });
-        }
-
-        res.json({ success: true, message: 'Appeal submitted successfully' });
+        res.json({ success: true, message: 'Appeal withdrawn successfully.' });
     } catch (error) {
-        console.error('Error submitting appeal:', error);
-        res.status(500).json({ error: 'Failed to submit appeal' });
+        console.error('Error withdrawing appeal:', error);
+        res.status(500).json({ error: 'Failed to withdraw appeal' });
     }
 });
 
@@ -14324,7 +15243,8 @@ app.post('/api/appeals/check-status', createRateLimiter(10, 60000), async (req, 
 
         // Query appeal by case ID and user ID for security
         const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
-            `SELECT id, user_tag, ban_case_id, status, created_at, decided_at, owner_response
+                `SELECT id, user_tag, ban_case_id, status, created_at, updated_at, decided_at, withdrawn_at,
+                    owner_response, review_stage, public_status_note, evidence_json, reason, user_email, withdraw_reason
              FROM ban_appeals 
              WHERE ban_case_id = ? AND user_id = ?
              ORDER BY created_at DESC
@@ -14335,27 +15255,9 @@ app.post('/api/appeals/check-status', createRateLimiter(10, 60000), async (req, 
         if (appeals.length === 0) {
             return res.status(404).json({ error: 'No appeal found matching this Case ID and User ID' });
         }
-
-        const appeal = appeals[0];
-
-        // Resolve decision code to human-readable text
-        let responseText = null;
-        if (appeal.status !== 'pending' && appeal.owner_response) {
-            const decisionCode = String(appeal.owner_response).trim();
-            responseText = APPEAL_DECISION_EMAIL_TEXT[decisionCode] || appeal.owner_response;
-        }
-
-        // Return safe appeal info
         res.json({
             success: true,
-            appeal: {
-                id: appeal.id,
-                status: appeal.status,
-                caseId: appeal.ban_case_id,
-                submittedAt: appeal.created_at,
-                decidedAt: appeal.decided_at,
-                response: responseText
-            }
+            appeal: buildPublicAppealRecord(appeals[0])
         });
     } catch (error) {
         console.error('Error checking appeal status:', error);
@@ -14374,7 +15276,8 @@ app.post('/api/appeals/my-history', createRateLimiter(10, 60000), async (req, re
 
         // Query all appeals for this user
         const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
-            `SELECT id, user_tag, ban_case_id, status, created_at, decided_at, owner_response
+                `SELECT id, user_tag, ban_case_id, status, created_at, updated_at, decided_at, withdrawn_at,
+                    owner_response, review_stage, public_status_note, evidence_json, reason, user_email, withdraw_reason
              FROM ban_appeals 
              WHERE user_id = ?
              ORDER BY created_at DESC
@@ -14382,24 +15285,7 @@ app.post('/api/appeals/my-history', createRateLimiter(10, 60000), async (req, re
             [userId]
         );
 
-        // Return safe appeal history
-        const history = appeals.map(appeal => {
-            // Resolve decision code to human-readable text
-            let responseText = null;
-            if (appeal.status !== 'pending' && appeal.owner_response) {
-                const decisionCode = String(appeal.owner_response).trim();
-                responseText = APPEAL_DECISION_EMAIL_TEXT[decisionCode] || appeal.owner_response;
-            }
-
-            return {
-                id: appeal.id,
-                status: appeal.status,
-                caseId: appeal.ban_case_id,
-                submittedAt: appeal.created_at,
-                decidedAt: appeal.decided_at,
-                response: responseText
-            };
-        });
+        const history = appeals.map((appeal) => buildPublicAppealRecord(appeal));
 
         res.json({ success: true, appeals: history });
     } catch (error) {
@@ -14412,7 +15298,12 @@ app.post('/api/appeals/my-history', createRateLimiter(10, 60000), async (req, re
 app.get('/api/appeals/pending', requireAuth, async (req, res) => {
     try {
         const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
-            'SELECT id, user_id, user_tag, ban_case_id, reason, created_at FROM ban_appeals WHERE status = ? ORDER BY created_at DESC',
+            `SELECT id, user_id, user_tag, ban_case_id, reason, created_at, updated_at, user_email,
+                    review_stage, public_status_note, internal_note, evidence_json,
+                    review_updated_by_id, review_updated_by_name
+             FROM ban_appeals
+             WHERE status = ?
+             ORDER BY created_at DESC`,
             ['pending']
         );
         res.json(appeals);
@@ -14429,12 +15320,12 @@ app.get('/api/appeals/decided', requireAuth, async (req, res) => {
         try {
             const [rows] = await MySQLDatabaseManager.connection.pool.execute(
                 `SELECT id, user_id, user_tag, ban_case_id, reason, status, owner_response AS decision_code,
-                        created_at, decided_at,
+                        created_at, updated_at, decided_at, withdrawn_at, review_stage, public_status_note, internal_note, evidence_json,
                         decided_by_id AS moderator_id,
                         COALESCE(NULLIF(decided_by_name, ''), 'Owner') AS moderator,
                         COALESCE(NULLIF(decided_by_name, ''), 'Owner') AS moderator_tag
                  FROM ban_appeals
-                 WHERE status IN ('accepted', 'denied')
+                 WHERE status IN ('accepted', 'denied', 'withdrawn')
                  ORDER BY decided_at DESC, created_at DESC`
             );
             appeals = rows;
@@ -14444,12 +15335,16 @@ app.get('/api/appeals/decided', requireAuth, async (req, res) => {
             // Backward compatibility for older schemas before decided_by_* columns exist.
             const [rows] = await MySQLDatabaseManager.connection.pool.execute(
                 `SELECT id, user_id, user_tag, ban_case_id, reason, status, owner_response AS decision_code,
-                        created_at, decided_at,
+                        created_at, updated_at, decided_at, withdrawn_at,
+                        'submitted' AS review_stage,
+                        NULL AS public_status_note,
+                        NULL AS internal_note,
+                        NULL AS evidence_json,
                         NULL AS moderator_id,
                         'Owner' AS moderator,
                         'Owner' AS moderator_tag
                  FROM ban_appeals
-                 WHERE status IN ('accepted', 'denied')
+                 WHERE status IN ('accepted', 'denied', 'withdrawn')
                  ORDER BY decided_at DESC, created_at DESC`
             );
             appeals = rows;
@@ -14499,14 +15394,57 @@ app.get('/api/appeals/stats', requireAuth, async (req, res) => {
             `SELECT 
                 COALESCE(SUM(status = 'pending'), 0) AS pending,
                 COALESCE(SUM(status = 'accepted'), 0) AS accepted,
-                COALESCE(SUM(status = 'denied'), 0) AS denied
+                COALESCE(SUM(status = 'denied'), 0) AS denied,
+                COALESCE(SUM(status = 'withdrawn'), 0) AS withdrawn
             FROM ban_appeals`
         );
-        const stats = rows?.[0] || { pending: 0, accepted: 0, denied: 0 };
+        const stats = rows?.[0] || { pending: 0, accepted: 0, denied: 0, withdrawn: 0 };
         res.json(stats);
     } catch (error) {
         console.error('Error fetching appeal stats:', error);
         res.status(500).json({ error: 'Failed to fetch appeal stats' });
+    }
+});
+
+app.post('/api/appeals/:id/review', requireAuth, requireModerator, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const reviewStage = normalizeAppealReviewStage(req.body?.reviewStage);
+        const publicStatusNote = String(req.body?.publicStatusNote || '').trim();
+        const internalNote = String(req.body?.internalNote || '').trim();
+
+        const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
+            'SELECT id FROM ban_appeals WHERE id = ? AND status = ? LIMIT 1',
+            [id, 'pending']
+        );
+
+        if (!appeals.length) {
+            return res.status(404).json({ error: 'Pending appeal not found' });
+        }
+
+        await MySQLDatabaseManager.connection.pool.execute(
+            `UPDATE ban_appeals
+             SET review_stage = ?,
+                 public_status_note = ?,
+                 internal_note = ?,
+                 review_updated_by_id = ?,
+                 review_updated_by_name = ?,
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [
+                reviewStage,
+                publicStatusNote || null,
+                internalNote || null,
+                String(req.session.userId || ''),
+                String(req.session.username || 'Moderator'),
+                id
+            ]
+        );
+
+        res.json({ success: true, message: 'Appeal review details updated' });
+    } catch (error) {
+        console.error('Error updating appeal review details:', error);
+        res.status(500).json({ error: 'Failed to update appeal review details' });
     }
 });
 
@@ -14530,8 +15468,8 @@ app.post('/api/appeals/:id/accept', requireAuth, requireOwner, async (req, res) 
 
         try {
             await MySQLDatabaseManager.connection.pool.execute(
-                'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW(), decided_by_id = ?, decided_by_name = ? WHERE id = ?',
-                ['accepted', resolvedDecisionCode, String(req.session.userId || ''), String(req.session.username || 'Owner'), id]
+                'UPDATE ban_appeals SET status = ?, review_stage = ?, owner_response = ?, decided_at = NOW(), decided_by_id = ?, decided_by_name = ?, updated_at = NOW() WHERE id = ?',
+                ['accepted', 'decision-issued', resolvedDecisionCode, String(req.session.userId || ''), String(req.session.username || 'Owner'), id]
             );
         } catch (updateError) {
             if (updateError?.code !== 'ER_BAD_FIELD_ERROR') throw updateError;
@@ -14597,8 +15535,8 @@ app.post('/api/appeals/:id/deny', requireAuth, requireOwner, async (req, res) =>
 
         try {
             await MySQLDatabaseManager.connection.pool.execute(
-                'UPDATE ban_appeals SET status = ?, owner_response = ?, decided_at = NOW(), decided_by_id = ?, decided_by_name = ? WHERE id = ?',
-                ['denied', resolvedDecisionCode, String(req.session.userId || ''), String(req.session.username || 'Owner'), id]
+                'UPDATE ban_appeals SET status = ?, review_stage = ?, owner_response = ?, decided_at = NOW(), decided_by_id = ?, decided_by_name = ?, updated_at = NOW() WHERE id = ?',
+                ['denied', 'decision-issued', resolvedDecisionCode, String(req.session.userId || ''), String(req.session.username || 'Owner'), id]
             );
         } catch (updateError) {
             if (updateError?.code !== 'ER_BAD_FIELD_ERROR') throw updateError;
@@ -15101,6 +16039,146 @@ app.get('/api/owner/verification-analytics', requireAuth, requireOwner, async (r
     } catch (error) {
         console.error('Error fetching verification analytics:', error);
         return res.status(500).json({ error: 'Failed to fetch verification analytics' });
+    }
+});
+
+app.get('/api/owner/staff-performance-analytics', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(180, parseInt(req.query.days, 10) || 30));
+        const windowStartMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+
+        const [staffRows] = await MySQLDatabaseManager.connection.pool.execute(
+            `SELECT
+                COALESCE(NULLIF(moderator_id, ''), CONCAT('name:', LOWER(TRIM(COALESCE(moderator_name, ''))))) AS staff_key,
+                NULLIF(moderator_id, '') AS moderator_id,
+                COALESCE(NULLIF(moderator_name, ''), NULLIF(moderator_id, ''), 'Unknown Staff') AS moderator_name,
+                SUM(CASE WHEN action_type = 'WARN' AND status NOT IN ('cleared', 'reversed') THEN 1 ELSE 0 END) AS warns,
+                SUM(CASE WHEN action_type = 'TIMEOUT' AND status <> 'reversed' THEN 1 ELSE 0 END) AS timeouts,
+                SUM(CASE WHEN action_type = 'KICK' AND status <> 'reversed' THEN 1 ELSE 0 END) AS kicks,
+                SUM(CASE WHEN action_type = 'BAN' AND status <> 'reversed' THEN 1 ELSE 0 END) AS bans,
+                COUNT(*) AS total_actions,
+                COUNT(DISTINCT DATE(FROM_UNIXTIME(created_at / 1000))) AS active_days,
+                MAX(created_at) AS last_action_at
+             FROM moderation_cases
+             WHERE created_at >= ?
+               AND (
+                    (moderator_id IS NOT NULL AND moderator_id <> '')
+                    OR (moderator_name IS NOT NULL AND moderator_name <> '')
+               )
+             GROUP BY staff_key, moderator_id, moderator_name
+             ORDER BY total_actions DESC
+             LIMIT 100`,
+            [windowStartMs]
+        );
+
+        const [recentRows] = await MySQLDatabaseManager.connection.pool.execute(
+            `SELECT
+                case_id,
+                action_type,
+                status,
+                user_id,
+                COALESCE(NULLIF(user_name, ''), user_id, 'Unknown User') AS user_name,
+                NULLIF(moderator_id, '') AS moderator_id,
+                COALESCE(NULLIF(moderator_name, ''), NULLIF(moderator_id, ''), 'Unknown Staff') AS moderator_name,
+                reason,
+                created_at
+             FROM moderation_cases
+             WHERE created_at >= ?
+               AND (
+                    (moderator_id IS NOT NULL AND moderator_id <> '')
+                    OR (moderator_name IS NOT NULL AND moderator_name <> '')
+               )
+             ORDER BY created_at DESC
+             LIMIT 25`,
+            [windowStartMs]
+        );
+
+        const staff = (staffRows || []).map((row) => {
+            const warns = Number(row?.warns || 0);
+            const timeouts = Number(row?.timeouts || 0);
+            const kicks = Number(row?.kicks || 0);
+            const bans = Number(row?.bans || 0);
+            const totalActions = Number(row?.total_actions || 0);
+            const activeDays = Math.max(1, Number(row?.active_days || 0));
+            const weightedScore = (warns * 1) + (timeouts * 1.5) + (kicks * 2) + (bans * 2.5);
+
+            return {
+                staffKey: row?.staff_key || row?.moderator_id || row?.moderator_name || 'unknown',
+                moderatorId: row?.moderator_id || null,
+                moderatorName: row?.moderator_name || 'Unknown Staff',
+                warns,
+                timeouts,
+                kicks,
+                bans,
+                totalActions,
+                activeDays,
+                actionsPerActiveDay: Number((totalActions / activeDays).toFixed(2)),
+                weightedScore: Number(weightedScore.toFixed(2)),
+                lastActionAt: Number(row?.last_action_at || 0) || null
+            };
+        });
+
+        staff.sort((a, b) => b.weightedScore - a.weightedScore || b.totalActions - a.totalActions);
+
+        const totals = staff.reduce((acc, entry) => {
+            acc.warns += entry.warns;
+            acc.timeouts += entry.timeouts;
+            acc.kicks += entry.kicks;
+            acc.bans += entry.bans;
+            acc.totalActions += entry.totalActions;
+            return acc;
+        }, {
+            warns: 0,
+            timeouts: 0,
+            kicks: 0,
+            bans: 0,
+            totalActions: 0
+        });
+
+        const topPerformer = staff[0] || null;
+        const avgActionsPerStaff = staff.length > 0
+            ? Number((totals.totalActions / staff.length).toFixed(2))
+            : 0;
+
+        return res.json({
+            success: true,
+            days,
+            summary: {
+                staffCount: staff.length,
+                totalActions: totals.totalActions,
+                avgActionsPerStaff,
+                topPerformer: topPerformer
+                    ? {
+                        moderatorName: topPerformer.moderatorName,
+                        moderatorId: topPerformer.moderatorId,
+                        weightedScore: topPerformer.weightedScore,
+                        totalActions: topPerformer.totalActions
+                    }
+                    : null,
+                actionMix: {
+                    warns: totals.warns,
+                    timeouts: totals.timeouts,
+                    kicks: totals.kicks,
+                    bans: totals.bans
+                }
+            },
+            staff,
+            recent: (recentRows || []).map((row) => ({
+                caseId: row?.case_id || null,
+                actionType: row?.action_type || 'UNKNOWN',
+                status: row?.status || 'open',
+                userId: row?.user_id || null,
+                userName: row?.user_name || row?.user_id || 'Unknown User',
+                moderatorId: row?.moderator_id || null,
+                moderatorName: row?.moderator_name || row?.moderator_id || 'Unknown Staff',
+                reason: row?.reason || null,
+                createdAt: Number(row?.created_at || 0) || null
+            })),
+            updatedAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error fetching staff performance analytics:', error);
+        return res.status(500).json({ error: 'Failed to fetch staff performance analytics' });
     }
 });
 

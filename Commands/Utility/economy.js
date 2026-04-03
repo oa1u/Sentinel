@@ -7,7 +7,7 @@ const RateLimiter = require('../../Functions/RateLimiter');
 
 const economyConfig = miscConfig?.economy || {};
 const CURRENCY_NAME = String(economyConfig.currencyName || 'coins');
-const CURRENCY_SYMBOL = String(economyConfig.currencySymbol || '🪙');
+const CURRENCY_SYMBOL = String(economyConfig.currencySymbol || '💰');
 const DAILY_MIN = Math.max(1, Math.min(1_000_000, Number(economyConfig.dailyMin) || 150));
 const DAILY_MAX = Math.max(DAILY_MIN, Math.min(5_000_000, Number(economyConfig.dailyMax) || 300));
 const DAILY_COOLDOWN_MS = Math.max(60_000, Math.min(7 * 24 * 60 * 60 * 1000, Number(economyConfig.dailyCooldownMs) || 24 * 60 * 60 * 1000));
@@ -212,6 +212,49 @@ module.exports = {
                     option
                         .setName('amount')
                         .setDescription('Wager: number, %, or all (e.g., 250, 25%, all)')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand((subcommand) =>
+            subcommand
+                .setName('coinflip')
+                .setDescription('Flip a coin! Double your wager if you call it right.')
+                .addStringOption((option) =>
+                    option
+                        .setName('side')
+                        .setDescription('Heads or Tails')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Heads', value: 'heads' },
+                            { name: 'Tails', value: 'tails' }
+                        )
+                )
+                .addStringOption((option) =>
+                    option
+                        .setName('amount')
+                        .setDescription('Wager: number, %, or all')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand((subcommand) =>
+            subcommand
+                .setName('slots')
+                .setDescription('Spin the slot machine to multiply your coins!')
+                .addStringOption((option) =>
+                    option
+                        .setName('amount')
+                        .setDescription('Wager (e.g., 100, 50%, all)')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand((subcommand) =>
+            subcommand
+                .setName('rob')
+                .setDescription('Attempt to steal coins from another user\'s wallet.')
+                .addUserOption((option) =>
+                    option
+                        .setName('target')
+                        .setDescription('User to rob')
                         .setRequired(true)
                 )
         )
@@ -1025,6 +1068,127 @@ module.exports = {
                 `Wager: ${moneyLine(gambleResult.wager)}\nLoss: ${moneyLine(Math.abs(gambleResult.netChange))}\nWallet: ${moneyLine(gambleResult.balance.wallet)}`,
                 { ephemeral: false }
             );
+        }
+
+        if (subcommand === 'coinflip') {
+            const amountInput = interaction.options.getString('amount', true);
+            const chosenSide = interaction.options.getString('side', true);
+            const balance = await DatabaseManager.getEconomyBalance(interaction.guildId, interaction.user.id);
+            const parsed = resolveAmountInput(amountInput, balance.wallet, MAX_GAMBLE);
+
+            if (!parsed.ok && parsed.code === 'invalid_amount') return sendWarningReply(interaction, 'Invalid Wager', 'Use a positive number, `%` value, or `all`.');
+            if (!parsed.ok && parsed.code === 'over_cap') return sendWarningReply(interaction, 'Wager Too High', `Maximum wager is ${moneyLine(parsed.maxCap)}.`);
+            if (!parsed.ok && parsed.code === 'insufficient_available') return sendWarningReply(interaction, 'Insufficient Wallet Funds', `Available wallet: ${moneyLine(parsed.available)}.`);
+
+            const resultSide = Math.random() < 0.5 ? 'heads' : 'tails';
+            const isWin = resultSide === chosenSide;
+
+            const gambleResult = await DatabaseManager.gambleEconomy(interaction.guildId, interaction.user.id, parsed.amount, {
+                winChance: isWin ? 1.0 : 0.0,
+                multiplier: 2.0,
+                cooldownMs: 5000 // Just 5s spam prevention
+            });
+
+            if (!gambleResult?.ok && gambleResult?.code === 'cooldown') return sendWarningReply(interaction, 'Coinflip Cooldown', `Try again in **${formatCooldown(gambleResult.retryAfterMs)}**.`);
+            if (!gambleResult?.ok) return sendErrorReply(interaction, 'Coinflip Failed', 'Could not flip the coin right now.');
+
+            DatabaseManager.updateEconomyQuestProgress(interaction.guildId, interaction.user.id, 'gamble_wager', gambleResult.wager).catch(() => { });
+
+            const emoji = resultSide === 'heads' ? '💰' : '🦅';
+            if (isWin) {
+                return sendSuccessReply(interaction, `It's ${resultSide}! You won! ${emoji}`, `You turned ${moneyLine(gambleResult.wager)} into ${moneyLine(gambleResult.payout)}.\nWallet: ${moneyLine(gambleResult.balance.wallet)}`, { ephemeral: false });
+            } else {
+                return sendWarningReply(interaction, `It's ${resultSide}! You lost! ${emoji}`, `You lost your wager of ${moneyLine(gambleResult.wager)}.\nWallet: ${moneyLine(gambleResult.balance.wallet)}`, { ephemeral: false });
+            }
+        }
+
+        if (subcommand === 'slots') {
+            const amountInput = interaction.options.getString('amount', true);
+            const balance = await DatabaseManager.getEconomyBalance(interaction.guildId, interaction.user.id);
+            const parsed = resolveAmountInput(amountInput, balance.wallet, MAX_GAMBLE);
+
+            if (!parsed.ok && parsed.code === 'invalid_amount') return sendWarningReply(interaction, 'Invalid Wager', 'Use a positive number, `%` value, or `all`.');
+            if (!parsed.ok && parsed.code === 'over_cap') return sendWarningReply(interaction, 'Wager Too High', `Maximum wager is ${moneyLine(parsed.maxCap)}.`);
+            if (!parsed.ok && parsed.code === 'insufficient_available') return sendWarningReply(interaction, 'Insufficient Wallet Funds', `Available wallet: ${moneyLine(parsed.available)}.`);
+
+            const symbols = ['💎', '🍒', '🍋', '🍇', '🍉', '🔔', '⭐'];
+            const p1 = symbols[Math.floor(Math.random() * symbols.length)];
+            const p2 = symbols[Math.floor(Math.random() * symbols.length)];
+            const p3 = symbols[Math.floor(Math.random() * symbols.length)];
+
+            let multiplier = 0;
+            if (p1 === p2 && p2 === p3) {
+                multiplier = p1 === '💎' ? 10 : 5;
+            } else if (p1 === p2 || p2 === p3 || p1 === p3) {
+                multiplier = 2;
+            }
+
+            const isWin = multiplier > 0;
+
+            const gambleResult = await DatabaseManager.gambleEconomy(interaction.guildId, interaction.user.id, parsed.amount, {
+                winChance: isWin ? 1.0 : 0.0,
+                multiplier: multiplier || 1,
+                cooldownMs: 30000 // 30 seconds
+            });
+
+            if (!gambleResult?.ok && gambleResult?.code === 'cooldown') return sendWarningReply(interaction, 'Slots Cooldown', `You can spin again in **${formatCooldown(gambleResult.retryAfterMs)}**.`);
+            if (!gambleResult?.ok) return sendErrorReply(interaction, 'Slots Failed', 'Could not run the slots right now.');
+
+            DatabaseManager.updateEconomyQuestProgress(interaction.guildId, interaction.user.id, 'gamble_wager', gambleResult.wager).catch(() => { });
+
+            const spinText = `**[ ${p1} | ${p2} | ${p3} ]**`;
+            if (isWin) {
+                return sendSuccessReply(interaction, 'Slots - You Won! 🎉', `${spinText}\nMultiplier: **${multiplier}x**\nNet: +${moneyLine(gambleResult.netChange)}\nWallet: ${moneyLine(gambleResult.balance.wallet)}`, { ephemeral: false });
+            } else {
+                return sendWarningReply(interaction, 'Slots - You Lost 🎰', `${spinText}\nBetter luck next time!\nLoss: ${moneyLine(Math.abs(gambleResult.netChange))}\nWallet: ${moneyLine(gambleResult.balance.wallet)}`, { ephemeral: false });
+            }
+        }
+
+        if (subcommand === 'rob') {
+            const targetUser = interaction.options.getUser('target', true);
+            if (targetUser.id === interaction.user.id) return sendWarningReply(interaction, 'Invalid Target', 'You cannot rob yourself.');
+            if (targetUser.bot) return sendWarningReply(interaction, 'Invalid Target', 'You cannot rob bots.');
+
+            const [robberBalance, targetBalance] = await Promise.all([
+                DatabaseManager.getEconomyBalance(interaction.guildId, interaction.user.id),
+                DatabaseManager.getEconomyBalance(interaction.guildId, targetUser.id)
+            ]);
+
+            const minRobAmount = 500;
+            if (robberBalance.wallet < minRobAmount) return sendWarningReply(interaction, 'Too Poor', `You need at least ${moneyLine(minRobAmount)} in your wallet to attempt a robbery.`);
+            if (targetBalance.wallet < minRobAmount) return sendWarningReply(interaction, 'Target Too Poor', `It's not worth it. They don't even have ${moneyLine(minRobAmount)} in their wallet.`);
+
+            const lastRobMs = await DatabaseManager.getLastEconomyTransaction(interaction.guildId, interaction.user.id, 'robbery');
+            const lastFineMs = await DatabaseManager.getLastEconomyTransaction(interaction.guildId, interaction.user.id, 'robbery_fine');
+            const now = Date.now();
+            const robCooldownMs = 1 * 60 * 60 * 1000;
+            const lastAttemptMs = Math.max(lastRobMs || 0, lastFineMs || 0);
+
+            if (lastAttemptMs && now - lastAttemptMs < robCooldownMs) {
+                return sendWarningReply(interaction, 'Rob Cooldown', `You are laying low. Try again in **${formatCooldown(robCooldownMs - (now - lastAttemptMs))}**.`);
+            }
+
+            const isWin = Math.random() < 0.40;
+
+            if (isWin) {
+                const stealPercent = (Math.floor(Math.random() * 21) + 10) / 100;
+                let stealAmount = Math.floor(targetBalance.wallet * stealPercent);
+                if (stealAmount < 1) stealAmount = 1;
+
+                await DatabaseManager.adminAdjustEconomyBalance(interaction.guildId, targetUser.id, -stealAmount, { scope: 'wallet', mode: 'remove', reason: 'Robbed by ' + interaction.user.tag });
+                const addRes = await DatabaseManager.awardEconomyActivity(interaction.guildId, interaction.user.id, stealAmount, { txType: 'robbery', note: 'Robbed ' + targetUser.tag });
+
+                return sendSuccessReply(interaction, 'Heist Successful 🦝', `You swiftly stole ${moneyLine(stealAmount)} from ${targetUser}!\nYour wallet: ${moneyLine(addRes.balance.wallet)}`, { ephemeral: false });
+            } else {
+                const finePercent = (Math.floor(Math.random() * 21) + 15) / 100;
+                let fineAmount = Math.floor(robberBalance.wallet * finePercent);
+                if (fineAmount < 1) fineAmount = 1;
+
+                await DatabaseManager.spendEconomyFunds(interaction.guildId, interaction.user.id, fineAmount, 'robbery_fine', 'Caught robbing ' + targetUser.tag);
+                await DatabaseManager.awardEconomyActivity(interaction.guildId, targetUser.id, fineAmount, { txType: 'robbery_compensation', note: 'Caught ' + interaction.user.tag + ' trying to rob' });
+
+                return sendWarningReply(interaction, 'Caught Red-Handed! 🚔', `You were caught trying to rob ${targetUser} and had to pay them ${moneyLine(fineAmount)} in damages.\nYour wallet: ${moneyLine(robberBalance.wallet - fineAmount)}`, { ephemeral: false });
+            }
         }
 
         if (subcommand === 'quests') {

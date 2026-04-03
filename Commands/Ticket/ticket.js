@@ -1,14 +1,25 @@
 const {
+  ActionRowBuilder,
   SlashCommandBuilder,
   EmbedBuilder,
   AttachmentBuilder,
+  ButtonStyle,
   ChannelType,
+  ModalBuilder,
   PermissionFlagsBits,
+  TextInputBuilder,
+  TextInputStyle,
   MessageFlags
 } = require('discord.js');
 const { CHANNELS: { ticketCategoryId, ticketLogChannelId }, ROLES: { administratorRoleId, supportTeamRoleId } } = require("../../Config/constants");
 const { createErrorEmbed, createWarningEmbed, createSuccessEmbed, sendWarningReply, sendInfoReply } = require("../../Functions/EmbedBuilders");
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
+const {
+  closeTicketChannel,
+  hasSupportOrAdmin,
+  isTicketChannel,
+  updateTicketChannelAssigneeName
+} = require('../../Functions/TicketLifecycle');
 
 const ticketOpenAttempts = new Map();
 const lastSuccessfulTicketOpen = new Map();
@@ -18,6 +29,10 @@ const TICKET_OPEN_WINDOW_MS = 10 * 60 * 1000;
 const TICKET_OPEN_MAX_ATTEMPTS = 4;
 const TICKET_CREATION_COOLDOWN_MS = 2 * 60 * 1000;
 const DUPLICATE_REASON_WINDOW_MS = 15 * 60 * 1000;
+const AUTO_TICKET_BUTTON_ID = 'ticket:auto_open';
+const AUTO_TICKET_MODAL_ID = 'ticket:auto_open_modal';
+const AUTO_TICKET_REASON_FIELD_ID = 'ticket_reason';
+const AUTO_TICKET_PRIORITY_FIELD_ID = 'ticket_priority';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -43,15 +58,75 @@ module.exports = {
   category: 'ticket',
   async execute(interaction) {
     return openTicket(interaction);
+  },
+  async handleComponent(interaction) {
+    if (!interaction.isButton() || interaction.customId !== AUTO_TICKET_BUTTON_ID) {
+      return false;
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(AUTO_TICKET_MODAL_ID)
+      .setTitle('Open Support Ticket');
+
+    const reasonInput = new TextInputBuilder()
+      .setCustomId(AUTO_TICKET_REASON_FIELD_ID)
+      .setLabel('What do you need help with?')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMinLength(8)
+      .setMaxLength(1000)
+      .setPlaceholder('Describe the issue clearly so staff can help faster.')
+      .setRequired(true);
+
+    const priorityInput = new TextInputBuilder()
+      .setCustomId(AUTO_TICKET_PRIORITY_FIELD_ID)
+      .setLabel('Priority (low, medium, high)')
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(10)
+      .setPlaceholder('medium')
+      .setRequired(false);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(reasonInput),
+      new ActionRowBuilder().addComponents(priorityInput)
+    );
+
+    await interaction.showModal(modal);
+    return true;
+  },
+  async handleModal(interaction) {
+    if (!interaction.isModalSubmit() || interaction.customId !== AUTO_TICKET_MODAL_ID) {
+      return false;
+    }
+
+    await openTicket(interaction);
+    return true;
   }
 };
 
-function isTicketChannel(interaction) {
-  return interaction.channel?.parentId === ticketCategoryId;
+function getTicketRequestData(interaction) {
+  if (typeof interaction.options?.getString === 'function') {
+    return {
+      reason: interaction.options.getString('reason'),
+      priority: interaction.options.getString('priority')
+    };
+  }
+
+  if (typeof interaction.fields?.getTextInputValue === 'function') {
+    return {
+      reason: interaction.fields.getTextInputValue(AUTO_TICKET_REASON_FIELD_ID),
+      priority: interaction.fields.getTextInputValue(AUTO_TICKET_PRIORITY_FIELD_ID)
+    };
+  }
+
+  return { reason: null, priority: null };
 }
 
-function hasSupportOrAdmin(member) {
-  return member.roles.cache.has(supportTeamRoleId) || member.permissions.has(PermissionFlagsBits.Administrator);
+function normalizePriority(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'low' || normalized === 'high' || normalized === 'medium') {
+    return normalized;
+  }
+  return 'medium';
 }
 
 function normalizeReasonFingerprint(reason) {
@@ -71,26 +146,13 @@ function registerTicketOpenAttempt(userId) {
   return attempts.length;
 }
 
-function getTicketChannelBaseName(name) {
-  return String(name || '')
-    .replace(/\s+-\s+👤\s+[^-]+$/u, '')
-    .replace(/\s+-\s+🚩\s+-\s+[^-]+$/u, '')
-    .trim();
-}
-
-async function updateTicketChannelAssigneeName(channel, user) {
-  if (!channel || !user) return;
-  const baseName = getTicketChannelBaseName(channel.name);
-  const nextName = `${baseName} - 👤 ${user.username}`.slice(0, 95);
-  await channel.setName(nextName).catch(() => { });
-}
-
 async function openTicket(interaction) {
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const reason = interaction.options.getString('reason');
-    const priority = interaction.options.getString('priority');
+    const requestData = getTicketRequestData(interaction);
+    const reason = requestData.reason;
+    const priority = normalizePriority(requestData.priority);
 
     if (!reason || reason.trim().length === 0) {
       return await interaction.editReply({ embeds: [createErrorEmbed('Invalid Input', 'Please provide a reason for your ticket.')] });
@@ -223,7 +285,7 @@ async function openTicket(interaction) {
         { name: 'Your Request', value: reason ? `\`\`\`${reason}\`\`\`` : 'No reason provided', inline: false },
         { name: 'How to Provide Info', value: '📝 Detailed description\n📸 Screenshots\n⏱️ Timing\n📎 Attach files', inline: true },
         { name: 'Support Actions', value: '✅ Review\n🔍 Clarify\n⚡ Solution\n📋 Document', inline: true },
-        { name: 'Close Ticket', value: 'Use `/ticket close` or click ❌\nTranscript will be saved.', inline: false }
+        { name: 'Close Ticket', value: 'Use `/ticket close` when your issue is resolved. The transcript is archived automatically.', inline: false }
       )
       .setFooter({ text: '🎫 Support System • Case #' + Date.now().toString().slice(-6) })
       .setTimestamp();
@@ -233,8 +295,6 @@ async function openTicket(interaction) {
       embeds: [welcomeEmbed]
     });
 
-    await ticketMessage.react('❌').catch(console.error);
-
     await MySQLDatabaseManager.createTicket(ticketChannel.id, {
       userId: interaction.user.id,
       userName: interaction.user.tag,
@@ -242,6 +302,7 @@ async function openTicket(interaction) {
       priority: priority,
       createdAt: Date.now(),
       claimedBy: null,
+      claimedByName: null,
       status: 'open'
     });
 
@@ -280,7 +341,7 @@ async function openTicket(interaction) {
         { name: 'Channel', value: `${ticketChannel}`, inline: true },
         { name: 'Your Issue', value: cleanReason ? `\`\`\`${cleanReason}\`\`\`` : 'No reason provided', inline: false },
         { name: 'What You Can Do', value: '✅ Add details\n📎 Share files\n💬 Ask questions\n⏳ Wait for support', inline: true },
-        { name: 'When Done', value: 'Use `/ticket close` or click ❌\nTranscript will be saved.', inline: true }
+        { name: 'When Done', value: 'Use `/ticket close` when the issue is resolved. Transcript logging stays automatic.', inline: true }
       )
       .setFooter({ text: 'Thank you for contacting support!' })
       .setTimestamp();
@@ -312,124 +373,17 @@ async function closeTicket(interaction) {
   }
 
   const closeReason = interaction.options.getString('reason') || 'No reason provided';
-  const ticketData = await MySQLDatabaseManager.getTicket(interaction.channel.id) || {};
-
-  let transcript = `📋 Ticket Transcript - ${interaction.channel.name}\n`;
-  transcript += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  transcript += `🎫 Ticket Information:\n`;
-  transcript += `   • Ticket Owner: ${ticketData.userName || 'Unknown'} (${ticketData.userId || 'N/A'})\n`;
-  transcript += `   • Created: ${ticketData.createdAt ? new Date(ticketData.createdAt).toLocaleString() : 'Unknown'}\n`;
-  transcript += `   • Closed: ${new Date().toLocaleString()}\n`;
-  transcript += `   • Closed By: ${interaction.user.tag} (${interaction.user.id})\n`;
-  transcript += `   • Close Reason: ${closeReason}\n`;
-  transcript += `   • Priority: ${ticketData.priority || 'medium'}\n`;
-  transcript += `   • Reason: ${ticketData.reason || 'No reason'}\n`;
-  if (ticketData.claimedBy) {
-    const claimer = await interaction.client.users.fetch(ticketData.claimedBy).catch(() => null);
-    transcript += `   • Claimed By: ${claimer ? claimer.tag : 'Unknown'}\n`;
-  }
-  transcript += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  transcript += `💬 Message History:\n\n`;
-
-  try {
-    const messages = await interaction.channel.messages.fetch({ limit: 100 });
-    const sortedMessages = Array.from(messages.values()).reverse();
-
-    for (const message of sortedMessages) {
-      const timestamp = message.createdAt.toLocaleString();
-      transcript += `[${timestamp}] ${message.author.tag}:\n`;
-      if (message.content) {
-        transcript += `   ${message.content}\n`;
-      }
-      if (message.embeds.length > 0) {
-        transcript += `   [Embed: ${message.embeds[0].title || 'No title'}]\n`;
-      }
-      if (message.attachments.size > 0) {
-        message.attachments.forEach(att => {
-          transcript += `   [Attachment: ${att.name} - ${att.url}]\n`;
-        });
-      }
-      transcript += `\n`;
-    }
-
-    transcript += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    transcript += `End of transcript - Total Messages: ${sortedMessages.length}\n`;
-  } catch (err) {
-    console.error('Error generating transcript:', err);
-    transcript += `\n⚠️ Error fetching message history\n`;
-  }
-
-  const closingEmbed = new EmbedBuilder()
-    .setColor(0xF04747)
-    .setTitle('🔒 Ticket Closing')
-    .setDescription(`This ticket is being closed and will be deleted shortly.\n\n**Closure Details:**`)
-    .addFields(
-      { name: '⏱️ Time Remaining', value: '\`5 seconds\`', inline: true },
-      { name: '💾 Transcript', value: '✅ Saved to logs', inline: true },
-      { name: '\u200b', value: '\u200b', inline: true },
-      { name: '🔒 Closed By', value: `${interaction.user}\n\`${interaction.user.tag}\``, inline: true },
-      { name: '📝 Close Reason', value: `\`\`\`${closeReason}\`\`\``, inline: false }
-    )
-    .setFooter({ text: 'Thank you for using our support system!' })
-    .setTimestamp();
-
-  await interaction.reply({ embeds: [closingEmbed] });
-
-  const logChannel = interaction.guild.channels.cache.get(ticketLogChannelId);
-  if (logChannel) {
-    const logEmbed = new EmbedBuilder()
-      .setColor(0xF04747)
-      .setTitle('🔒 Ticket Closed & Archived')
-      .setDescription(`━━━━━━━━━━━━━━━━━━━━━`)
-      .addFields(
-        { name: '🎫 Ticket Name', value: `\`${interaction.channel.name}\``, inline: false },
-        { name: '👤 Ticket Owner', value: `${ticketData.userName || 'Unknown'}\n\`${ticketData.userId || 'N/A'}\``, inline: true },
-        { name: '🔒 Closed By', value: `${interaction.user.tag}\n\`${interaction.user.id}\``, inline: true },
-        { name: '⚡ Priority', value: `${ticketData.priority === 'high' ? '🔴 High' : ticketData.priority === 'low' ? '🟢 Low' : '🟡 Medium'}`, inline: true },
-        { name: '📝 Close Reason', value: `\`\`\`${closeReason}\`\`\``, inline: false },
-        { name: '🕐 Opened', value: ticketData.createdAt ? `<t:${Math.floor(ticketData.createdAt / 1000)}:F>` : 'Unknown', inline: true },
-        { name: '🔒 Closed', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-        { name: '⏱️ Duration', value: ticketData.createdAt ? `<t:${Math.floor(ticketData.createdAt / 1000)}:R>` : 'Unknown', inline: true }
-      )
-      .setFooter({ text: '💾 Full transcript attached below' })
-      .setTimestamp();
-
-    const transcriptBuffer = Buffer.from(transcript, 'utf-8');
-    const attachment = new AttachmentBuilder(transcriptBuffer, {
-      name: `transcript-${interaction.channel.name}-${Date.now()}.txt`
-    });
-
-    await logChannel.send({ embeds: [logEmbed], files: [attachment] });
-
-    try {
-      const dmChannel = await interaction.user.createDM().catch(() => null);
-      if (dmChannel) {
-        await dmChannel.send({ embeds: [logEmbed], files: [attachment] }).catch((err) => {
-          console.error(`Failed to send ticket log to user DMs: ${err.message}`);
-        });
-      }
-    } catch (err) {
-      console.error(`Could not open DM with user: ${err.message}`);
-    }
-  }
-
-  await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
-    status: 'closed',
-    closedAt: Date.now(),
-    closedBy: interaction.user.id,
-    closeReason: closeReason,
-    transcript,
-    transcriptCreatedAt: Date.now()
+  await interaction.reply({
+    embeds: [createSuccessEmbed('Ticket Closure Started', 'The ticket transcript is being archived and this channel will be removed shortly.')]
   });
 
-  const channelId = interaction.channel.id;
-  setTimeout(async () => {
-    try {
-      await interaction.channel.delete();
-    } catch (err) {
-      console.error(`Failed to delete ticket channel: ${err.message}`);
-    }
-  }, 5000);
+  await closeTicketChannel({
+    client: interaction.client,
+    channel: interaction.channel,
+    closedByUser: interaction.user,
+    closeReason,
+    closeSource: 'slash-command'
+  });
 }
 
 async function addUserToTicket(interaction) {
@@ -572,10 +526,11 @@ async function claimTicket(interaction) {
 
   await MySQLDatabaseManager.updateTicket(ticketId, {
     claimedBy: interaction.user.id,
+    claimedByName: interaction.user.tag,
     status: 'claimed'
   });
 
-  await updateTicketChannelAssigneeName(interaction.channel, interaction.user);
+  await updateTicketChannelAssigneeName(interaction.channel, interaction.user.username);
 
   const successEmbed = createSuccessEmbed(
     'Ticket Claimed Successfully',
@@ -654,10 +609,11 @@ async function transferTicket(interaction) {
 
   await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
     claimedBy: targetUser.id,
+    claimedByName: targetUser.tag,
     status: 'claimed'
   });
 
-  await updateTicketChannelAssigneeName(interaction.channel, targetUser);
+  await updateTicketChannelAssigneeName(interaction.channel, targetUser.username);
 
   let previousAssigneeText = 'Unassigned';
   if (ticketData.claimedBy) {
@@ -707,16 +663,22 @@ async function markHandled(interaction) {
     );
   }
 
-  await interaction.channel.setName(`${interaction.channel.name} - 🚩 - ${interaction.user.username}`);
+  await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
+    claimedBy: interaction.user.id,
+    claimedByName: interaction.user.tag,
+    status: 'waiting_user'
+  });
+
+  await updateTicketChannelAssigneeName(interaction.channel, interaction.user.username);
 
   const successEmbed = createSuccessEmbed(
     'Ticket Marked as Handled',
-    `This ticket has been flagged as resolved!`
+    'The latest staff response is logged and the ticket is now waiting on the user.'
   ).addFields(
     { name: '👤 Handler', value: `${interaction.user.tag}\n\`${interaction.user.id}\``, inline: true },
-    { name: '🚩 Status', value: '**Handled**', inline: true },
+    { name: '🚩 Status', value: '**Waiting on User**', inline: true },
     { name: '⏰ Marked At', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-    { name: '💡 Next Steps', value: 'The ticket owner can now close this ticket using `/ticket close` or ❌ reaction', inline: false }
+    { name: '💡 Next Steps', value: 'If the ticket owner replies, the ticket will move back to Waiting on Staff automatically.', inline: false }
   ).setTimestamp();
 
   return interaction.reply({ embeds: [successEmbed] });

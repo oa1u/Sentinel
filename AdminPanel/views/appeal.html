@@ -35,27 +35,94 @@
         }
 
         body {
-            background: var(--bg-primary);
+            background:
+                radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 30%),
+                radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.12), transparent 24%),
+                linear-gradient(180deg, #081018 0%, #0b1118 42%, #0f1419 100%);
             color: var(--color-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             min-height: 100vh;
-            padding: 2rem 1rem;
+            padding: 2rem 1rem 3rem;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        body::before {
+            background-image:
+                linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+            background-size: 28px 28px;
+            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 88%);
+        }
+
+        body::after {
+            background:
+                radial-gradient(circle at 12% 20%, rgba(34, 197, 94, 0.08), transparent 18%),
+                radial-gradient(circle at 88% 72%, rgba(6, 182, 212, 0.1), transparent 22%);
         }
 
         .main-container {
-            max-width: 1400px;
+            max-width: 1680px;
             margin: 0 auto;
         }
 
         .header-section {
-            text-align: center;
-            margin-bottom: 3rem;
+            display: grid;
+            grid-template-columns: minmax(0, 1.5fr) minmax(320px, 420px);
+            gap: 1.5rem;
+            align-items: stretch;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 1.6rem;
+            background:
+                radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 30%),
+                radial-gradient(circle at top right, rgba(139, 92, 246, 0.14), transparent 30%),
+                linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(9, 14, 24, 0.98));
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+            position: relative;
+            overflow: hidden;
         }
 
-        .header-logo {
-            font-size: 3.5rem;
-            margin-bottom: 1rem;
-            animation: float 3s ease-in-out infinite;
+        .header-section::before {
+            content: '';
+            position: absolute;
+            inset: auto -8% -35% auto;
+            width: 360px;
+            height: 360px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(34, 197, 94, 0.16), transparent 70%);
+            pointer-events: none;
+        }
+
+        .header-primary {
+            position: relative;
+            z-index: 1;
+        }
+
+        .header-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.45rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid rgba(96, 165, 250, 0.22);
+            background: rgba(59, 130, 246, 0.1);
+            color: #dbeafe;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 1.1rem;
         }
 
         @keyframes float {
@@ -71,53 +138,156 @@
         }
 
         .header-title {
-            font-size: 2.5rem;
-            margin-bottom: 0.75rem;
-            background: linear-gradient(135deg, var(--color-blue), var(--color-purple));
+            font-size: clamp(2.4rem, 4vw, 4.2rem);
+            line-height: 1.03;
+            margin-bottom: 0.9rem;
+            letter-spacing: -0.045em;
+            background: linear-gradient(135deg, #ffffff, #c4d7ff 45%, #8bd8ff 85%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
 
         .header-subtitle {
-            font-size: 1.1rem;
+            font-size: 1.02rem;
+            color: rgba(226, 232, 240, 0.82);
+            line-height: 1.75;
+            max-width: 760px;
+        }
+
+        .header-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin-top: 1.35rem;
+        }
+
+        .header-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.8rem 1rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(15, 23, 42, 0.55);
+            font-size: 0.92rem;
+            color: rgba(226, 232, 240, 0.92);
+        }
+
+        .header-chip strong {
+            color: #ffffff;
+        }
+
+        .header-summary-grid {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+            align-content: start;
+        }
+
+        .header-summary-card {
+            padding: 1.15rem;
+            border-radius: 1.15rem;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.62));
+            backdrop-filter: blur(14px);
+            min-height: 122px;
+        }
+
+        .header-summary-card--feature {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .header-summary-icon {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(59, 130, 246, 0.14);
+            border: 1px solid rgba(96, 165, 250, 0.22);
+            font-size: 1.35rem;
+        }
+
+        .header-summary-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
             color: var(--color-muted);
+            margin-bottom: 0.55rem;
+        }
+
+        .header-summary-value {
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.4rem;
+        }
+
+        .header-summary-copy {
+            font-size: 0.86rem;
+            color: rgba(226, 232, 240, 0.74);
+            line-height: 1.55;
         }
 
         .action-tabs {
-            display: flex;
+            display: inline-flex;
             gap: 1rem;
-            justify-content: center;
+            justify-content: flex-start;
             margin-bottom: 2rem;
             flex-wrap: wrap;
+            padding: 0.9rem;
+            border-radius: 1.25rem;
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            background: rgba(15, 23, 42, 0.68);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
         }
 
         .action-tab {
-            background: var(--bg-secondary);
-            border: 2px solid var(--color-border);
-            border-radius: 0.75rem;
-            padding: 1.25rem 2rem;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.66), rgba(15, 23, 42, 0.38));
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 1rem;
+            padding: 1rem 1.2rem;
             cursor: pointer;
             transition: all 0.3s;
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            min-width: 180px;
+            min-width: 210px;
+            position: relative;
+            overflow: hidden;
         }
 
         .action-tab:hover {
-            border-color: var(--color-blue);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+            border-color: rgba(96, 165, 250, 0.42);
+            transform: translateY(-2px);
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
         }
 
         .action-tab.active {
-            border-color: var(--color-blue);
-            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(96, 165, 250, 0.5);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(6, 182, 212, 0.16));
+            box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.18), 0 18px 32px rgba(37, 99, 235, 0.14);
         }
 
         .action-tab-icon {
-            font-size: 1.75rem;
+            width: 2.9rem;
+            height: 2.9rem;
+            border-radius: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            font-size: 1.45rem;
         }
 
         .action-tab-content {
@@ -138,6 +308,7 @@
         .content-panel {
             display: none;
             animation: fadeIn 0.4s ease;
+            margin-top: 0.25rem;
         }
 
         .content-panel.active {
@@ -159,7 +330,12 @@
         .card-grid {
             display: grid;
             grid-template-columns: 1fr 350px;
-            gap: 2rem;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        .card-grid--submit {
+            grid-template-columns: minmax(280px, 320px) minmax(760px, 1.5fr) minmax(280px, 320px);
             align-items: start;
         }
 
@@ -170,21 +346,47 @@
         }
 
         .main-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--color-border);
-            border-radius: 0.75rem;
+            background: linear-gradient(180deg, rgba(24, 31, 46, 0.94), rgba(17, 24, 39, 0.98));
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 1.3rem;
             padding: 2.5rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+            backdrop-filter: blur(18px);
         }
 
         .sidebar-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--color-border);
-            border-radius: 0.75rem;
+            background: linear-gradient(180deg, rgba(19, 26, 38, 0.95), rgba(12, 17, 28, 0.98));
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 1.25rem;
             padding: 1.75rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
             position: sticky;
             top: 2rem;
+            backdrop-filter: blur(16px);
+        }
+
+        .sidebar-card--appeal {
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(10, 14, 20, 0.98));
+        }
+
+        .sidebar-card--appeal-main .sidebar-card-hero {
+            border-bottom-color: rgba(96, 165, 250, 0.16);
+        }
+
+        .sidebar-card--appeal-guide .sidebar-card-hero {
+            border-bottom-color: rgba(34, 197, 94, 0.16);
+            background:
+                radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 34%),
+                radial-gradient(circle at left center, rgba(34, 197, 94, 0.18), transparent 40%),
+                linear-gradient(155deg, rgba(20, 28, 40, 0.92), rgba(13, 19, 28, 0.98));
+        }
+
+        .sidebar-card--appeal-guide .sidebar-card-badge {
+            border-color: rgba(34, 197, 94, 0.24);
+            background: rgba(34, 197, 94, 0.14);
+            color: #dcfce7;
         }
 
         .wizard-progress {
@@ -412,6 +614,77 @@
             gap: 0.75rem;
         }
 
+        .appeal-prompts {
+            margin-top: 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .appeal-prompt-chip {
+            background: rgba(59, 130, 246, 0.12);
+            color: #bfdbfe;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 999px;
+            padding: 0.7rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .appeal-prompt-chip:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(96, 165, 250, 0.55);
+            transform: translateY(-1px);
+        }
+
+        .quality-checklist {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .quality-check-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.5rem;
+            padding: 0.85rem 0.95rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+
+        .quality-check-item.is-good {
+            border-color: rgba(34, 197, 94, 0.35);
+            background: rgba(34, 197, 94, 0.08);
+        }
+
+        .quality-check-item.is-missing {
+            border-color: rgba(255, 170, 0, 0.35);
+            background: rgba(255, 170, 0, 0.08);
+        }
+
+        .quality-check-icon {
+            font-size: 1.1rem;
+            line-height: 1;
+            margin-top: 0.1rem;
+        }
+
+        .quality-check-copy strong {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.88rem;
+        }
+
+        .quality-check-copy span {
+            display: block;
+            color: var(--color-muted);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
         .quality-metric {
             background: var(--bg-secondary);
             padding: 0.75rem;
@@ -428,6 +701,314 @@
         .quality-metric-value {
             font-weight: 600;
             font-size: 1rem;
+        }
+
+        .evidence-upload-shell {
+            margin-top: 1rem;
+            display: grid;
+            gap: 0.9rem;
+            border: 1px dashed rgba(148, 163, 184, 0.3);
+            border-radius: 1rem;
+            padding: 1rem;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.48), rgba(15, 23, 42, 0.22));
+        }
+
+        .evidence-file-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .evidence-dropzone {
+            position: relative;
+            display: grid;
+            gap: 0.85rem;
+            padding: 1.15rem;
+            border-radius: 1rem;
+            border: 1px dashed rgba(96, 165, 250, 0.28);
+            background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 45%), rgba(255, 255, 255, 0.02);
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .evidence-dropzone:hover,
+        .evidence-dropzone:focus-visible,
+        .evidence-dropzone.is-dragover {
+            border-color: rgba(96, 165, 250, 0.7);
+            background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.2), transparent 48%), rgba(37, 99, 235, 0.08);
+            box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.18), 0 20px 30px rgba(15, 23, 42, 0.18);
+            transform: translateY(-1px);
+            outline: none;
+        }
+
+        .evidence-dropzone-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .evidence-dropzone-copy {
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .evidence-dropzone-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--color-text);
+        }
+
+        .evidence-dropzone-text {
+            font-size: 0.88rem;
+            line-height: 1.6;
+            color: var(--color-muted);
+        }
+
+        .evidence-dropzone-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.38rem 0.68rem;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.14);
+            border: 1px solid rgba(96, 165, 250, 0.22);
+            color: #dbeafe;
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .evidence-dropzone-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.9rem;
+            flex-wrap: wrap;
+        }
+
+        .evidence-dropzone-buttons {
+            display: flex;
+            gap: 0.7rem;
+            flex-wrap: wrap;
+        }
+
+        .evidence-dropzone-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.7rem 0.95rem;
+            border-radius: 0.8rem;
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            background: rgba(37, 99, 235, 0.12);
+            color: #dbeafe;
+            font-size: 0.87rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .evidence-dropzone-btn:hover {
+            background: rgba(37, 99, 235, 0.18);
+            border-color: rgba(96, 165, 250, 0.34);
+            transform: translateY(-1px);
+        }
+
+        .evidence-dropzone-btn--ghost {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(148, 163, 184, 0.14);
+            color: var(--color-muted);
+        }
+
+        .evidence-dropzone-btn--ghost:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(148, 163, 184, 0.24);
+            color: var(--color-text);
+        }
+
+        .evidence-dropzone-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            flex-wrap: wrap;
+            font-size: 0.82rem;
+            color: var(--color-muted);
+        }
+
+        .evidence-dropzone-meta strong {
+            color: var(--color-text);
+            font-weight: 700;
+        }
+
+        .evidence-dropzone-help {
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .evidence-dropzone-help .form-help {
+            margin: 0;
+        }
+
+        .evidence-list {
+            display: grid;
+            gap: 0.7rem;
+            margin-top: 0.9rem;
+        }
+
+        .evidence-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.8rem 0.95rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.6rem;
+        }
+
+        .evidence-item-main {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            min-width: 0;
+        }
+
+        .evidence-item-visual {
+            width: 2.75rem;
+            height: 2.75rem;
+            min-width: 2.75rem;
+            border-radius: 0.85rem;
+            overflow: hidden;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(96, 165, 250, 0.16);
+            color: #dbeafe;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .evidence-item-visual img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .evidence-item-copy {
+            min-width: 0;
+        }
+
+        .evidence-item-copy strong,
+        .evidence-item-copy span {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .evidence-item-copy span {
+            color: var(--color-muted);
+            font-size: 0.82rem;
+            margin-top: 0.2rem;
+        }
+
+        .evidence-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+            margin-top: 0.28rem;
+        }
+
+        .evidence-type-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.22rem 0.48rem;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            color: #bfdbfe;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .evidence-type-badge--image {
+            background: rgba(34, 197, 94, 0.12);
+            border-color: rgba(34, 197, 94, 0.2);
+            color: #dcfce7;
+        }
+
+        .evidence-type-badge--pdf {
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.22);
+            color: #fecaca;
+        }
+
+        .evidence-type-badge--text {
+            background: rgba(250, 204, 21, 0.12);
+            border-color: rgba(250, 204, 21, 0.22);
+            color: #fef3c7;
+        }
+
+        .evidence-type-badge--other {
+            background: rgba(148, 163, 184, 0.12);
+            border-color: rgba(148, 163, 184, 0.2);
+            color: #e2e8f0;
+        }
+
+        .evidence-link {
+            color: #bfdbfe;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .evidence-link:hover {
+            text-decoration: underline;
+        }
+
+        .evidence-item-action {
+            border: 0;
+            background: transparent;
+            color: var(--color-muted);
+            font-size: 0.83rem;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0.3rem 0;
+            transition: color 0.2s ease;
+        }
+
+        .evidence-item-action:hover {
+            color: #fca5a5;
+        }
+
+        @media (max-width: 640px) {
+            .evidence-dropzone-header,
+            .evidence-dropzone-actions {
+                grid-template-columns: 1fr;
+                display: grid;
+            }
+
+            .evidence-dropzone-badge {
+                justify-self: start;
+            }
+
+            .evidence-item {
+                align-items: flex-start;
+                flex-direction: column;
+            }
         }
 
         .form-nav {
@@ -509,6 +1090,130 @@
             font-size: 1.1rem;
         }
 
+        .sidebar-title--hero {
+            margin-bottom: 0.55rem;
+            font-size: 1.3rem;
+            letter-spacing: -0.02em;
+        }
+
+        .sidebar-card-hero {
+            padding: 1.35rem 1.35rem 1.1rem;
+            border-bottom: 1px solid rgba(96, 165, 250, 0.16);
+            background:
+                radial-gradient(circle at top right, rgba(34, 197, 94, 0.14), transparent 34%),
+                radial-gradient(circle at left center, rgba(59, 130, 246, 0.18), transparent 40%),
+                linear-gradient(155deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.98));
+        }
+
+        .sidebar-card-kicker {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: #bfdbfe;
+            margin-bottom: 0.8rem;
+        }
+
+        .sidebar-card-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.9rem;
+        }
+
+        .sidebar-card-copy {
+            color: rgba(226, 232, 240, 0.88);
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        .sidebar-card-badge {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.45rem 0.72rem;
+            border-radius: 999px;
+            border: 1px solid rgba(96, 165, 250, 0.28);
+            background: rgba(59, 130, 246, 0.14);
+            color: #dbeafe;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .sidebar-card-body {
+            display: grid;
+            gap: 1rem;
+            padding: 1.2rem;
+        }
+
+        .sidebar-panel {
+            background: linear-gradient(180deg, rgba(15, 20, 25, 0.78), rgba(15, 20, 25, 0.48));
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 0.9rem;
+            padding: 1rem;
+        }
+
+        .sidebar-panel--warning {
+            border-color: rgba(250, 204, 21, 0.24);
+            background: linear-gradient(180deg, rgba(250, 204, 21, 0.08), rgba(15, 20, 25, 0.54));
+        }
+
+        .sidebar-panel--info {
+            border-color: rgba(6, 182, 212, 0.22);
+            background: linear-gradient(180deg, rgba(6, 182, 212, 0.08), rgba(15, 20, 25, 0.48));
+        }
+
+        .sidebar-panel--success {
+            border-color: rgba(34, 197, 94, 0.22);
+            background: linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(15, 20, 25, 0.48));
+        }
+
+        .sidebar-panel-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.9rem;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--color-text);
+        }
+
+        .sidebar-panel-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.3rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            color: #bfdbfe;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .sidebar-panel-tag--muted {
+            background: rgba(148, 163, 184, 0.1);
+            border-color: rgba(148, 163, 184, 0.16);
+            color: rgba(226, 232, 240, 0.76);
+        }
+
+        .sidebar-panel-copy {
+            color: rgba(226, 232, 240, 0.8);
+            font-size: 0.92rem;
+            line-height: 1.65;
+        }
+
+        .sidebar-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
         .sidebar-list {
             display: flex;
             flex-direction: column;
@@ -523,9 +1228,150 @@
             line-height: 1.5;
         }
 
+        .sidebar-list--compact {
+            gap: 0.65rem;
+        }
+
+        .sidebar-list--compact .sidebar-item {
+            padding: 0.72rem 0.8rem;
+            border-radius: 0.8rem;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(148, 163, 184, 0.08);
+        }
+
         .sidebar-item-icon {
             font-size: 1.25rem;
             min-width: 1.25rem;
+        }
+
+        .sidebar-item-icon--chip {
+            width: 2rem;
+            height: 2rem;
+            min-width: 2rem;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.92rem;
+            background: rgba(59, 130, 246, 0.14);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+        }
+
+        .sidebar-item-icon--success {
+            background: rgba(34, 197, 94, 0.14);
+            border-color: rgba(34, 197, 94, 0.22);
+        }
+
+        .sidebar-item-icon--warn {
+            background: rgba(250, 204, 21, 0.14);
+            border-color: rgba(250, 204, 21, 0.24);
+        }
+
+        .sidebar-item-icon--info {
+            background: rgba(6, 182, 212, 0.14);
+            border-color: rgba(6, 182, 212, 0.24);
+        }
+
+        .sidebar-status-grid {
+            display: grid;
+            gap: 0.8rem;
+        }
+
+        .sidebar-callout-list {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .sidebar-callout-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.85rem 0.9rem;
+            border-radius: 0.9rem;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(148, 163, 184, 0.08);
+        }
+
+        .sidebar-callout-item strong {
+            display: block;
+            margin-bottom: 0.2rem;
+            font-size: 0.92rem;
+        }
+
+        .sidebar-callout-item span {
+            display: block;
+            color: rgba(226, 232, 240, 0.74);
+            font-size: 0.85rem;
+            line-height: 1.55;
+        }
+
+        .sidebar-status-card {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            padding: 0.85rem 0.95rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .sidebar-status-card-icon {
+            width: 2.3rem;
+            height: 2.3rem;
+            min-width: 2.3rem;
+            border-radius: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+        }
+
+        .sidebar-status-card-icon--pending {
+            background: rgba(250, 204, 21, 0.12);
+            border-color: rgba(250, 204, 21, 0.24);
+            color: var(--color-yellow);
+        }
+
+        .sidebar-status-card-icon--accepted {
+            background: rgba(34, 197, 94, 0.12);
+            border-color: rgba(34, 197, 94, 0.24);
+            color: var(--color-green);
+        }
+
+        .sidebar-status-card-icon--denied {
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.24);
+            color: var(--color-red);
+        }
+
+        .sidebar-status-card-label {
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+
+        .sidebar-status-card-copy {
+            font-size: 0.88rem;
+            color: var(--color-muted);
+            line-height: 1.5;
+        }
+
+        .sidebar-status-card-label--pending {
+            color: var(--color-yellow);
+        }
+
+        .sidebar-status-card-label--accepted {
+            color: var(--color-green);
+        }
+
+        .sidebar-status-card-label--denied {
+            color: var(--color-red);
+        }
+
+        .sidebar-privacy-copy {
+            color: rgba(226, 232, 240, 0.82);
+            line-height: 1.6;
+            font-size: 0.92rem;
         }
 
         .sidebar-divider {
@@ -644,9 +1490,72 @@
             color: var(--color-red);
         }
 
+        .status-badge.withdrawn {
+            background: rgba(148, 163, 184, 0.18);
+            color: #cbd5e1;
+        }
+
         .status-details {
             display: grid;
             gap: 1rem;
+        }
+
+        .status-timeline {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.9rem;
+            margin: 1rem 0 1.35rem;
+        }
+
+        .status-timeline-step {
+            background: var(--bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            min-height: 110px;
+        }
+
+        .status-timeline-step.is-active {
+            border-color: rgba(59, 130, 246, 0.45);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
+        }
+
+        .status-timeline-step.is-complete {
+            border-color: rgba(34, 197, 94, 0.4);
+            background: rgba(34, 197, 94, 0.08);
+        }
+
+        .status-timeline-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 700;
+            margin-bottom: 0.45rem;
+        }
+
+        .status-timeline-copy {
+            color: var(--color-muted);
+            font-size: 0.86rem;
+            line-height: 1.5;
+        }
+
+        .status-guidance-box {
+            margin-top: 1rem;
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            border-radius: 0.65rem;
+            padding: 1rem 1.1rem;
+        }
+
+        .status-guidance-box strong {
+            display: block;
+            margin-bottom: 0.35rem;
+        }
+
+        .status-guidance-box p {
+            color: var(--color-muted);
+            line-height: 1.6;
+            font-size: 0.92rem;
         }
 
         .status-detail-row {
@@ -672,6 +1581,135 @@
             gap: 1rem;
             max-height: 500px;
             overflow-y: auto;
+        }
+
+        .history-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1rem;
+            margin: 0 0 1.5rem;
+        }
+
+        .history-summary-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--color-border);
+            border-radius: 0.75rem;
+            padding: 1rem 1.1rem;
+        }
+
+        .history-summary-label {
+            color: var(--color-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.5rem;
+        }
+
+        .history-summary-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .history-summary-note {
+            font-size: 0.82rem;
+            color: var(--color-muted);
+            margin-top: 0.45rem;
+            line-height: 1.4;
+        }
+
+        .sidebar-live-card {
+            background: linear-gradient(160deg, rgba(59, 130, 246, 0.14), rgba(6, 182, 212, 0.08));
+            border: 1px solid rgba(59, 130, 246, 0.28);
+            border-radius: 0.75rem;
+            padding: 1rem 1.1rem;
+        }
+
+        .sidebar-live-kpis {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .sidebar-live-kpi {
+            background: rgba(15, 20, 25, 0.35);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 0.6rem;
+            padding: 0.85rem;
+        }
+
+        .sidebar-live-kpi-label {
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-muted);
+            margin-bottom: 0.35rem;
+        }
+
+        .sidebar-live-kpi-value {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .sidebar-live-list {
+            display: grid;
+            gap: 0.6rem;
+            margin-top: 1rem;
+        }
+
+        .sidebar-live-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.65rem;
+            font-size: 0.9rem;
+            line-height: 1.45;
+            padding: 0.78rem 0.82rem;
+            border-radius: 0.8rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(148, 163, 184, 0.08);
+        }
+
+        .sidebar-live-row strong {
+            display: block;
+            margin-bottom: 0.15rem;
+        }
+
+        .sidebar-live-row span:first-child {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.9rem;
+            min-width: 1.9rem;
+            height: 1.9rem;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.14);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            font-size: 0.9rem;
+        }
+
+        .draft-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 0.75rem;
+            padding: 0.45rem 0.7rem;
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            border-radius: 999px;
+            font-size: 0.82rem;
+            color: #a5f3fc;
+        }
+
+        .status-quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .status-quick-actions .btn {
+            flex: 0 0 auto;
+            min-width: 180px;
         }
 
         .history-item {
@@ -722,6 +1760,59 @@
 
         .loading.show {
             display: block;
+        }
+
+        .upload-progress-card {
+            margin: 1rem auto 0;
+            max-width: 420px;
+            display: grid;
+            gap: 0.7rem;
+            padding: 1rem 1.05rem;
+            border-radius: 0.95rem;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(96, 165, 250, 0.18);
+        }
+
+        .upload-progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: var(--color-text);
+        }
+
+        .upload-progress-header strong {
+            font-size: 0.92rem;
+        }
+
+        .upload-progress-percent {
+            color: #bfdbfe;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .upload-progress-bar {
+            width: 100%;
+            height: 0.65rem;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(148, 163, 184, 0.14);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+        }
+
+        .upload-progress-fill {
+            width: 0%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #2563eb 0%, #06b6d4 100%);
+            transition: width 0.18s ease;
+        }
+
+        .upload-progress-note {
+            font-size: 0.82rem;
+            color: var(--color-muted);
+            line-height: 1.5;
         }
 
         .spinner {
@@ -852,10 +1943,6 @@
                 padding: 1rem 0.5rem;
             }
 
-            .header-logo {
-                font-size: 2.5rem;
-            }
-
             .header-title {
                 font-size: 1.75rem;
             }
@@ -865,8 +1952,19 @@
                 padding: 1.5rem;
             }
 
+            .sidebar-card--appeal {
+                padding: 0;
+            }
+
+            .sidebar-card-heading,
+            .sidebar-panel-title {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
             .action-tabs {
                 flex-direction: column;
+                width: 100%;
             }
 
             .action-tab {
@@ -888,6 +1986,77 @@
             .form-nav {
                 flex-direction: column;
             }
+
+            .status-timeline,
+            .history-summary-grid,
+            .sidebar-live-kpis,
+            .sidebar-mini-grid,
+            .header-summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 1080px) {
+            .header-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 1460px) {
+            .card-grid--submit {
+                grid-template-columns: minmax(0, 1.15fr) 300px;
+            }
+
+            .card-grid--submit .main-card {
+                grid-column: 1;
+                grid-row: 1 / span 2;
+            }
+
+            .card-grid--submit .sidebar-card--appeal-main {
+                grid-column: 2;
+                grid-row: 1;
+            }
+
+            .card-grid--submit .sidebar-card--appeal-guide {
+                grid-column: 2;
+                grid-row: 2;
+                position: static;
+                top: auto;
+            }
+        }
+
+        @media (max-width: 1280px) {
+            .main-container {
+                max-width: 1240px;
+            }
+
+            .card-grid--submit {
+                grid-template-columns: minmax(0, 1fr) 320px;
+            }
+        }
+
+        @media (max-width: 1100px) {
+            .card-grid--submit {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .card-grid--submit .main-card {
+                order: 1;
+            }
+
+            .card-grid--submit .sidebar-card--appeal-main {
+                order: 2;
+            }
+
+            .card-grid--submit .sidebar-card--appeal-guide {
+                order: 3;
+            }
+
+            .card-grid--submit .sidebar-card {
+                position: static;
+                top: auto;
+            }
         }
     </style>
 </head>
@@ -895,9 +2064,40 @@
 <body>
     <div class="main-container">
         <div class="header-section">
-            <div class="header-logo">⚖️</div>
-            <h1 class="header-title">Advanced Ban Appeal System</h1>
-            <p class="header-subtitle">Submit appeals, check status, and view your appeal history</p>
+            <div class="header-primary">
+                <div class="header-eyebrow">
+                    <span>⚖️</span>
+                    <span>Appeals Portal</span>
+                </div>
+                <h1 class="header-title">Ban Appeal</h1>
+                <p class="header-subtitle">If you want us to take a look at your ban, start here. This page walks you through what to include, lets you check progress later, and helps you send a clear appeal without guessing what staff needs to see.</p>
+                <div class="header-chip-row">
+                    <div class="header-chip"><span>🧭</span><strong>Guided</strong><span>step-by-step appeal form</span></div>
+                    <div class="header-chip"><span>📎</span><strong>Evidence</strong><span>attach files if they actually help</span></div>
+                    <div class="header-chip"><span>🔍</span><strong>Status</strong><span>check updates and past appeals here</span></div>
+                </div>
+            </div>
+
+            <div class="header-summary-grid">
+                <div class="header-summary-card header-summary-card--feature">
+                    <div class="header-summary-icon">🛡️</div>
+                    <div>
+                        <div class="header-summary-label">What helps most</div>
+                        <div class="header-summary-value">Clear, honest appeals</div>
+                        <div class="header-summary-copy">The more direct and specific you are, the easier it is for staff to review what happened and make a decision.</div>
+                    </div>
+                </div>
+                <div class="header-summary-card">
+                    <div class="header-summary-label">Usual review time</div>
+                    <div class="header-summary-value">24-48h</div>
+                    <div class="header-summary-copy">Most complete appeals are reviewed in this window.</div>
+                </div>
+                <div class="header-summary-card">
+                    <div class="header-summary-label">Fastest turnaround</div>
+                    <div class="header-summary-value">4-12h</div>
+                    <div class="header-summary-copy">A well-written appeal with enough context can move faster.</div>
+                </div>
+            </div>
         </div>
 
         <div class="action-tabs">
@@ -905,27 +2105,67 @@
                 <div class="action-tab-icon">📝</div>
                 <div class="action-tab-content">
                     <div class="action-tab-title">Submit Appeal</div>
-                    <div class="action-tab-desc">File a new ban appeal</div>
+                    <div class="action-tab-desc">Send a new appeal</div>
                 </div>
             </div>
             <div class="action-tab" onclick="switchPanel('status', event)">
                 <div class="action-tab-icon">🔍</div>
                 <div class="action-tab-content">
                     <div class="action-tab-title">Check Status</div>
-                    <div class="action-tab-desc">Look up appeal progress</div>
+                    <div class="action-tab-desc">See where your appeal stands</div>
                 </div>
             </div>
             <div class="action-tab" onclick="switchPanel('history', event)">
                 <div class="action-tab-icon">📚</div>
                 <div class="action-tab-content">
                     <div class="action-tab-title">My History</div>
-                    <div class="action-tab-desc">View past appeals</div>
+                    <div class="action-tab-desc">Look back at older appeals</div>
                 </div>
             </div>
         </div>
 
         <div id="submitPanel" class="content-panel active">
-            <div class="card-grid">
+            <div class="card-grid card-grid--submit">
+                <div class="sidebar-card sidebar-card--appeal sidebar-card--appeal-main">
+                    <div class="sidebar-card-hero">
+                        <div class="sidebar-card-kicker">Appeal Workspace</div>
+                        <div class="sidebar-card-heading">
+                            <div>
+                                <div class="sidebar-title sidebar-title--hero">📈 Before You Submit</div>
+                                <div class="sidebar-card-copy">See how far along your draft is and what still needs attention before you send it.</div>
+                            </div>
+                            <div class="sidebar-card-badge">Live</div>
+                        </div>
+                        <div class="draft-status" id="draftStatusBadge">
+                            <span>💾</span>
+                            <span id="draftStatusText">No draft saved yet</span>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-card-body">
+                        <div class="sidebar-live-kpis">
+                            <div class="sidebar-live-kpi">
+                                <div class="sidebar-live-kpi-label">Progress</div>
+                                <div class="sidebar-live-kpi-value" id="appealProgressValue">1 / 4 ready</div>
+                            </div>
+                            <div class="sidebar-live-kpi">
+                                <div class="sidebar-live-kpi-label">Expected review</div>
+                                <div class="sidebar-live-kpi-value" id="appealEtaValue">24-48h</div>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-panel sidebar-panel--info">
+                            <div class="sidebar-panel-title">
+                                <span>What is left</span>
+                                <span class="sidebar-panel-tag">4 steps</span>
+                            </div>
+                            <div class="sidebar-live-list" id="appealReadinessList">
+                                <div class="sidebar-live-row"><span>•</span><div><strong>Step 1</strong><span>Add your account details to get started.</span></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="main-card">
                     <div class="wizard-progress">
                         <div class="wizard-step active" data-step="1">
@@ -948,17 +2188,17 @@
 
                     <div id="successMessage" class="message success">
                         <span style="font-size: 1.5rem;">✅</span>
-                        <span id="successText">Your appeal has been submitted successfully!</span>
+                        <span id="successText">Your appeal was sent successfully.</span>
                     </div>
 
                     <div id="errorMessage" class="message error">
                         <span style="font-size: 1.5rem;">-</span>
-                        <span id="errorText">An error occurred. Please try again.</span>
+                        <span id="errorText">Something went wrong. Please try again.</span>
                     </div>
 
                     <div id="warningMessage" class="message warning">
                         <span style="font-size: 1.5rem;">⚠️</span>
-                        <span id="warningText">You already have a pending appeal.</span>
+                        <span id="warningText">You already have an appeal waiting for review.</span>
                     </div>
 
                     <div class="form-section active" data-step="1">
@@ -966,7 +2206,7 @@
                             <span>👤</span>
                             <span>Account Information</span>
                         </h2>
-                        <p class="form-section-desc">Enter your Discord account details so we can verify your identity.
+                        <p class="form-section-desc">Tell us which Discord account the appeal is for so we can match it correctly.
                         </p>
 
                         <div class="form-group">
@@ -976,7 +2216,7 @@
                             </label>
                             <input type="text" id="userTag" class="form-input" placeholder="e.g., Your Username"
                                 oninput="validateStep(1)">
-                            <p class="form-help">💡 Your current Discord username (not display name)</p>
+                            <p class="form-help">💡 Use your current Discord username, not your server nickname or display name.</p>
                             <div id="userTagValidation" class="form-validation"></div>
                         </div>
 
@@ -987,7 +2227,7 @@
                             </label>
                             <input type="text" id="userId" class="form-input" placeholder="e.g., 123456789012345678"
                                 oninput="validateStep(1)">
-                            <p class="form-help">💡 Right-click your name → Copy User ID (Developer Mode required)</p>
+                            <p class="form-help">💡 Right-click your profile and copy your User ID. Developer Mode needs to be enabled in Discord.</p>
                             <div id="userIdValidation" class="form-validation"></div>
                         </div>
 
@@ -998,7 +2238,7 @@
                             </label>
                             <input type="email" id="email" class="form-input" placeholder="e.g., your.email@example.com"
                                 required oninput="validateStep(1)">
-                            <p class="form-help">📧 Required for appeal status notifications and updates</p>
+                            <p class="form-help">📧 We use this to send appeal updates and any follow-up notes.</p>
                             <div id="emailValidation" class="form-validation"></div>
                         </div>
 
@@ -1019,7 +2259,7 @@
                             <span>🚫</span>
                             <span>Ban Information</span>
                         </h2>
-                        <p class="form-section-desc">Provide the ban case ID you received when you were banned.</p>
+                        <p class="form-section-desc">Enter the ban case ID from your ban message so we can pull up the right record.</p>
 
                         <div class="form-group">
                             <label class="form-label" for="caseId">
@@ -1029,14 +2269,14 @@
                             <input type="text" id="caseId" class="form-input" placeholder="e.g., BAN-kX7mP9qL2n"
                                 maxlength="54" autocomplete="off" spellcheck="false" pattern="^BAN-[A-Za-z0-9]{1,50}$"
                                 oninput="normalizeCaseIdInput(); validateStep(2); queueCaseIdDatabaseValidation()">
-                            <p class="form-help">💡 Find this in your ban notification DM (format: BAN-XXXXXXXXXX)</p>
+                            <p class="form-help">💡 You can usually find this in the ban DM you received. It starts with BAN-.</p>
                             <div id="caseIdValidation" class="form-validation"></div>
                         </div>
 
                         <div class="info-box">
                             <strong>📌 Where to find your Ban Case ID:</strong><br>
-                            • Check the direct message you received from the bot when you were banned<br>
-                            • Look for a code starting with "BAN-" followed by random characters<br>
+                            • Check the direct message you got when the ban was issued<br>
+                            • Look for a code that starts with "BAN-"<br>
                             • Example: BAN-kX7mP9qL2n
                         </div>
 
@@ -1057,20 +2297,18 @@
                             <span>✍️</span>
                             <span>Your Appeal</span>
                         </h2>
-                        <p class="form-section-desc">Explain why your ban should be reconsidered. Be honest, detailed,
-                            and respectful.</p>
+                        <p class="form-section-desc">Tell your side clearly. The best appeals are honest, specific, and respectful.</p>
 
                         <div class="form-group">
                             <label class="form-label" for="reason">
                                 <span>Appeal Reason</span>
                                 <span class="required">*</span>
                             </label>
-                            <textarea id="reason" class="form-input" placeholder="Explain your situation in detail..."
+                            <textarea id="reason" class="form-input" placeholder="Explain what happened, what you understand now, and why you should be given another chance..."
                                 maxlength="2000" oninput="analyzeAppealQuality()"></textarea>
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-                                <p class="form-help">💭 Include: what happened, why you were banned, why you should be
-                                    unbanned</p>
+                                <p class="form-help">💭 Try to cover what happened, your role in it, and what would be different going forward.</p>
                                 <span style="font-size: 0.85rem; color: var(--color-muted);">
                                     <span id="charCount">0</span> / 2000
                                 </span>
@@ -1082,7 +2320,7 @@
                             <div class="quality-header">
                                 <div class="quality-title">
                                     <span>📊</span>
-                                    <span>Appeal Quality Analysis</span>
+                                    <span>Appeal Feedback</span>
                                 </div>
                                 <div class="quality-score" id="qualityScore">-</div>
                             </div>
@@ -1104,14 +2342,66 @@
                                     <div class="quality-metric-value" id="metricEstimate">-</div>
                                 </div>
                             </div>
+                            <div class="quality-checklist" id="qualityChecklist"></div>
+                        </div>
+
+                        <div style="margin-top: 1rem;">
+                            <div style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-muted); margin-bottom: 0.75rem;">Need help starting?</div>
+                            <div class="appeal-prompts">
+                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('accountability')">Own the mistake</button>
+                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('context')">Add context</button>
+                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('plan')">Future plan</button>
+                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('evidence')">Mention evidence</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="appealEvidence">
+                                <span>Supporting Evidence</span>
+                            </label>
+                            <div class="evidence-upload-shell">
+                                <input class="evidence-file-input" type="file" id="appealEvidence" multiple accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,image/png,image/jpeg,image/webp,application/pdf,text/plain">
+                                <div class="evidence-dropzone" id="appealEvidenceDropzone" tabindex="0" role="button" aria-controls="appealEvidence" aria-label="Add supporting evidence files">
+                                    <div class="evidence-dropzone-header">
+                                        <div class="evidence-dropzone-copy">
+                                            <div class="evidence-dropzone-title">Drop files here or choose them from your device</div>
+                                            <div class="evidence-dropzone-text">Screenshots, PDFs, and text files help most when they directly back up your timeline or explain missing context.</div>
+                                        </div>
+                                        <div class="evidence-dropzone-badge">Up to 3 files</div>
+                                    </div>
+                                    <div class="evidence-dropzone-actions">
+                                        <div class="evidence-dropzone-buttons">
+                                            <button class="evidence-dropzone-btn" type="button" id="appealEvidenceBrowseBtn">
+                                                <span>📎</span>
+                                                <span>Choose files</span>
+                                            </button>
+                                            <button class="evidence-dropzone-btn evidence-dropzone-btn--ghost" type="button" id="appealEvidenceClearBtn">
+                                                <span>✕</span>
+                                                <span>Clear</span>
+                                            </button>
+                                        </div>
+                                        <div class="evidence-dropzone-meta" id="appealEvidenceMeta">
+                                            <strong>0 / 3 selected</strong>
+                                            <span>Max 5 MB per file</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="evidence-dropzone-help">
+                                    <p class="form-help">📎 Optional. You can attach up to 3 screenshots, PDF, or TXT files. Each file must be 5MB or smaller.</p>
+                                    <p class="form-help">Drag and drop works too. Only attach evidence if it gives staff something useful to check.</p>
+                                </div>
+                                <div class="evidence-list" id="appealEvidenceList">
+                                    <div class="sidebar-live-row"><span>📂</span><div><strong>No files selected</strong><span>You can still submit without evidence if your explanation already covers it.</span></div></div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="warning-box" style="margin-top: 1rem;">
-                            <strong>⚠️ Important Guidelines:</strong><br>
-                            • Be honest about what happened - lying may result in permanent rejection<br>
-                            • Show you understand why the rule exists and how you violated it<br>
-                            • Explain what you'll do differently if unbanned<br>
-                            • Avoid aggressive language or blaming others
+                            <strong>⚠️ A few things that help your appeal:</strong><br>
+                            • Be honest about what happened. False information can get the appeal rejected outright.<br>
+                            • Show that you understand the rule and why the moderation action happened.<br>
+                            • Explain what would change if you were allowed back.<br>
+                            • Keep the tone calm. Blaming others or arguing aggressively usually hurts your case.
                         </div>
 
                         <div class="form-nav">
@@ -1131,7 +2421,7 @@
                             <span>✅</span>
                             <span>Review & Submit</span>
                         </h2>
-                        <p class="form-section-desc">Please review your information before submitting.</p>
+                        <p class="form-section-desc">Take one last look before you send it.</p>
 
                         <div
                             style="background: var(--bg-tertiary); border: 1px solid var(--color-border); border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1.5rem;">
@@ -1162,27 +2452,46 @@
                                     <div style="font-weight: 400; line-height: 1.6; max-height: 150px; overflow-y: auto;"
                                         id="reviewReason">-</div>
                                 </div>
+                                <div>
+                                    <div style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">
+                                        Evidence Files</div>
+                                    <div id="reviewEvidenceList" class="evidence-list">
+                                        <div class="sidebar-live-row"><span>📂</span><div><strong>No evidence attached</strong><span>That is fine if your explanation already gives enough detail.</span></div></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <div
                             style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-left: 4px solid var(--color-green); padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
-                            <label style="display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer;">
+                            <label style="display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; margin-bottom: 0.85rem;">
                                 <input type="checkbox" id="rulesCheckbox"
                                     style="margin-top: 0.25rem; min-width: 18px; width: 18px; height: 18px; accent-color: var(--color-green); cursor: pointer;"
                                     oninput="validateStep(4)">
                                 <span style="line-height: 1.6;">
-                                    I confirm that all information is accurate, and I agree to follow the <a href="#"
-                                        onclick="showRulesModal(event)"
-                                        style="color: var(--color-green); text-decoration: underline;">server rules</a>
-                                    if my appeal is accepted.
+                                    I confirm that the information here is accurate, and I will follow the server rules if this appeal is accepted.
                                 </span>
                             </label>
+                            <button type="button" id="viewRulesBtn"
+                                style="display: inline-flex; align-items: center; gap: 0.55rem; background: rgba(15, 23, 42, 0.44); color: #bbf7d0; border: 1px solid rgba(34, 197, 94, 0.26); border-radius: 999px; padding: 0.6rem 0.95rem; font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                                <span>📜</span>
+                                <span>View server rules</span>
+                            </button>
                         </div>
 
                         <div id="loadingBox" class="loading">
                             <div class="spinner"></div>
-                            <p style="margin-top: 1rem; color: var(--color-muted);">Submitting your appeal...</p>
+                            <p id="loadingText" style="margin-top: 1rem; color: var(--color-muted);">Sending your appeal...</p>
+                            <div class="upload-progress-card" id="uploadProgressCard" style="display: none;">
+                                <div class="upload-progress-header">
+                                    <strong id="uploadProgressTitle">Uploading evidence</strong>
+                                    <span class="upload-progress-percent" id="uploadProgressPercent">0%</span>
+                                </div>
+                                <div class="upload-progress-bar" aria-hidden="true">
+                                    <div class="upload-progress-fill" id="uploadProgressFill"></div>
+                                </div>
+                                <div class="upload-progress-note" id="uploadProgressNote">Preparing your appeal package...</div>
+                            </div>
                         </div>
 
                         <div class="form-nav">
@@ -1198,67 +2507,56 @@
                     </div>
                 </div>
 
-                <div class="sidebar-card">
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">⏱️ Review Timeline</div>
-                        <div class="sidebar-list">
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">⚡</div>
-                                <div>
-                                    <div style="font-weight: 500; margin-bottom: 0.25rem;">Standard Review</div>
-                                    <div style="color: var(--color-green); font-weight: 600;">24-48 hours</div>
-                                </div>
+                <div class="sidebar-card sidebar-card--appeal sidebar-card--appeal-guide">
+                    <div class="sidebar-card-hero">
+                        <div class="sidebar-card-kicker">Appeal Guide</div>
+                        <div class="sidebar-card-heading">
+                            <div>
+                                <div class="sidebar-title sidebar-title--hero">🧭 What Staff Looks For</div>
+                                <div class="sidebar-card-copy">A quick reference for what makes an appeal easier to review and more likely to get a fair read.</div>
                             </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">🚀</div>
-                                <div>
-                                    <div style="font-weight: 500; margin-bottom: 0.25rem;">High Quality</div>
-                                    <div style="color: var(--color-cyan); font-weight: 600;">4-12 hours</div>
-                                </div>
-                            </div>
+                            <div class="sidebar-card-badge">Guide</div>
                         </div>
                     </div>
 
-                    <div class="sidebar-divider"></div>
-
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">💡 Tips for Success</div>
-                        <div class="sidebar-list">
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">✅</div>
-                                <div>Be honest and take responsibility</div>
+                    <div class="sidebar-card-body">
+                        <div class="sidebar-panel sidebar-panel--success">
+                            <div class="sidebar-panel-title">
+                                <span>⏱️ Review timing</span>
+                                <span class="sidebar-panel-tag">Typical pace</span>
                             </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">✅</div>
-                                <div>Provide detailed explanations</div>
-                            </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">✅</div>
-                                <div>Show you understand the rules</div>
-                            </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">✅</div>
-                                <div>Remain respectful throughout</div>
+                            <div class="sidebar-list sidebar-list--compact">
+                                <div class="sidebar-item">
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--success">⚡</div>
+                                    <div>
+                                        <div style="font-weight: 600; margin-bottom: 0.2rem;">Most appeals</div>
+                                        <div style="color: var(--color-green); font-weight: 700;">24-48 hours</div>
+                                    </div>
+                                </div>
+                                <div class="sidebar-item">
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--info">🚀</div>
+                                    <div>
+                                        <div style="font-weight: 600; margin-bottom: 0.2rem;">Clear and complete</div>
+                                        <div style="color: var(--color-cyan); font-weight: 700;">4-12 hours</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="sidebar-divider"></div>
-
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">⚠️ Important Notes</div>
-                        <div class="sidebar-list">
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">-</div>
-                                <div>Only one pending appeal allowed</div>
+                        <div class="sidebar-panel sidebar-panel--warning">
+                            <div class="sidebar-panel-title">
+                                <span>⚠️ Before you submit</span>
+                                <span class="sidebar-panel-tag sidebar-panel-tag--muted">Before submit</span>
                             </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">📧</div>
-                                <div>Email required for notifications</div>
-                            </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">⚖️</div>
-                                <div>Owner makes final decisions</div>
+                            <div class="sidebar-list sidebar-list--compact">
+                                <div class="sidebar-item">
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">1</div>
+                                    <div>You can only have one appeal waiting for review at a time.</div>
+                                </div>
+                                <div class="sidebar-item">
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">⚖️</div>
+                                    <div>Final decisions are made by the server owner or senior staff handling appeals.</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1273,16 +2571,16 @@
                         <span>🔍</span>
                         <span>Check Appeal Status</span>
                     </h2>
-                    <p class="form-section-desc">Enter your Case ID and User ID to check the status of your appeal.</p>
+                    <p class="form-section-desc">Enter your Case ID and User ID to check for updates on your appeal.</p>
 
                     <div id="statusSuccessMessage" class="message success">
                         <span style="font-size: 1.5rem;">✅</span>
-                        <span id="statusSuccessText">Appeal found!</span>
+                        <span id="statusSuccessText">We found your appeal.</span>
                     </div>
 
                     <div id="statusErrorMessage" class="message error">
                         <span style="font-size: 1.5rem;">-</span>
-                        <span id="statusErrorText">No appeal found.</span>
+                        <span id="statusErrorText">We could not find an appeal with those details.</span>
                     </div>
 
                     <div class="form-group">
@@ -1299,7 +2597,7 @@
                             <span class="required">*</span>
                         </label>
                         <input type="text" id="statusUserId" class="form-input" placeholder="e.g., 123456789012345678">
-                        <p class="form-help">🔒 Required for security verification</p>
+                        <p class="form-help">🔒 We ask for this so only you can view your appeal details.</p>
                     </div>
 
                     <button class="btn btn-primary" onclick="checkAppealStatus()" style="max-width: 300px;">
@@ -1307,15 +2605,41 @@
                         <span>Check Status</span>
                     </button>
 
+                    <div class="status-quick-actions">
+                        <button class="btn btn-secondary" type="button" onclick="copyStatusLookup()">
+                            <span>📋</span>
+                            <span>Copy lookup details</span>
+                        </button>
+                        <button class="btn btn-secondary" type="button" onclick="prefillFromDraft()">
+                            <span>✨</span>
+                            <span>Use saved draft</span>
+                        </button>
+                    </div>
+
                     <div id="statusLoadingBox" class="loading">
                         <div class="spinner"></div>
-                        <p style="margin-top: 1rem; color: var(--color-muted);">Checking appeal status...</p>
+                        <p style="margin-top: 1rem; color: var(--color-muted);">Checking for updates...</p>
                     </div>
 
                     <div id="statusResult" class="status-result">
                         <div id="statusBadge" class="status-badge pending">
                             <span>⏳</span>
                             <span>Pending Review</span>
+                        </div>
+
+                        <div class="status-timeline" id="statusTimeline">
+                            <div class="status-timeline-step is-complete" data-status-step="submitted">
+                                <div class="status-timeline-label"><span>1.</span><span>Submitted</span></div>
+                                <div class="status-timeline-copy">Your appeal was received and is waiting in the review queue.</div>
+                            </div>
+                            <div class="status-timeline-step" data-status-step="review">
+                                <div class="status-timeline-label"><span>2.</span><span>Under review</span></div>
+                                <div class="status-timeline-copy">Staff is reviewing the case details, your explanation, and any evidence.</div>
+                            </div>
+                            <div class="status-timeline-step" data-status-step="decision">
+                                <div class="status-timeline-label"><span>3.</span><span>Decision</span></div>
+                                <div class="status-timeline-copy">You get a final decision and any next steps you need to follow.</div>
+                            </div>
                         </div>
 
                         <div class="status-details">
@@ -1327,6 +2651,14 @@
                                 <span class="status-detail-label">Submitted</span>
                                 <span class="status-detail-value" id="statusResultSubmitted">-</span>
                             </div>
+                            <div class="status-detail-row" id="statusResultUpdatedRow" style="display: none;">
+                                <span class="status-detail-label">Last Updated</span>
+                                <span class="status-detail-value" id="statusResultUpdated">-</span>
+                            </div>
+                            <div class="status-detail-row">
+                                <span class="status-detail-label">Review Stage</span>
+                                <span class="status-detail-value" id="statusResultStage">Submitted</span>
+                            </div>
                             <div id="statusResultDecidedRow" class="status-detail-row" style="display: none;">
                                 <span class="status-detail-label">Decided</span>
                                 <span class="status-detail-value" id="statusResultDecided">-</span>
@@ -1335,44 +2667,77 @@
                                 <span class="status-detail-label">Response</span>
                                 <span class="status-detail-value" id="statusResultResponse">-</span>
                             </div>
+                            <div id="statusResultNoteRow" class="status-detail-row" style="display: none;">
+                                <span class="status-detail-label">Status Note</span>
+                                <span class="status-detail-value" id="statusResultNote">-</span>
+                            </div>
+                        </div>
+
+                        <div class="content-block" id="statusEvidenceBlock" style="display: none; margin-top: 1rem;">
+                            <label>📎 Evidence on File</label>
+                            <div class="evidence-list" id="statusEvidenceList"></div>
+                        </div>
+
+                        <div class="status-guidance-box" id="statusGuidanceBox">
+                            <strong>What happens next</strong>
+                            <p id="statusGuidanceText">If your appeal is still pending, give the review team time to finish before sending another one.</p>
+                        </div>
+
+                        <div class="status-quick-actions" id="statusPendingActions" style="display: none;">
+                            <button class="btn btn-secondary" type="button" onclick="loadPendingAppealIntoForm()">
+                                <span>✏️</span>
+                                <span>Edit pending appeal</span>
+                            </button>
+                            <button class="btn btn-secondary" type="button" onclick="withdrawPendingAppeal()">
+                                <span>🗃️</span>
+                                <span>Withdraw appeal</span>
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="sidebar-card">
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">📌 Status Guide</div>
-                        <div class="sidebar-list">
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">⏳</div>
-                                <div>
-                                    <div style="font-weight: 500; color: var(--color-yellow);">Pending</div>
-                                    <div style="font-size: 0.85rem; color: var(--color-muted);">Awaiting review</div>
-                                </div>
+                <div class="sidebar-card sidebar-card--appeal">
+                    <div class="sidebar-card-hero">
+                        <div class="sidebar-card-kicker">Appeal Tracking</div>
+                        <div class="sidebar-card-heading">
+                            <div>
+                                <div class="sidebar-title sidebar-title--hero">📌 Status Guide</div>
+                                <div class="sidebar-card-copy">Here is what each status means while you wait for updates or a final decision.</div>
                             </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">✅</div>
-                                <div>
-                                    <div style="font-weight: 500; color: var(--color-green);">Accepted</div>
-                                    <div style="font-size: 0.85rem; color: var(--color-muted);">Ban lifted</div>
-                                </div>
-                            </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">-</div>
-                                <div>
-                                    <div style="font-weight: 500; color: var(--color-red);">Denied</div>
-                                    <div style="font-size: 0.85rem; color: var(--color-muted);">Appeal rejected</div>
-                                </div>
-                            </div>
+                            <div class="sidebar-card-badge">Guide</div>
                         </div>
                     </div>
 
-                    <div class="sidebar-divider"></div>
-
-                    <div class="info-box">
-                        <strong>🔒 Privacy Notice:</strong><br>
-                        We require your User ID and Case ID to verify ownership of the appeal. Your information is kept
-                        confidential.
+                    <div class="sidebar-card-body">
+                        <div class="sidebar-panel">
+                            <div class="sidebar-panel-title">
+                                <span>Decision States</span>
+                                <span class="sidebar-panel-tag">Live meanings</span>
+                            </div>
+                            <div class="sidebar-status-grid">
+                                <div class="sidebar-status-card">
+                                    <div class="sidebar-status-card-icon sidebar-status-card-icon--pending">⏳</div>
+                                    <div>
+                                        <div class="sidebar-status-card-label sidebar-status-card-label--pending">Pending</div>
+                                        <div class="sidebar-status-card-copy">Your appeal is waiting to be reviewed.</div>
+                                    </div>
+                                </div>
+                                <div class="sidebar-status-card">
+                                    <div class="sidebar-status-card-icon sidebar-status-card-icon--accepted">✅</div>
+                                    <div>
+                                        <div class="sidebar-status-card-label sidebar-status-card-label--accepted">Accepted</div>
+                                        <div class="sidebar-status-card-copy">Your appeal was approved.</div>
+                                    </div>
+                                </div>
+                                <div class="sidebar-status-card">
+                                    <div class="sidebar-status-card-icon sidebar-status-card-icon--denied">⛔</div>
+                                    <div>
+                                        <div class="sidebar-status-card-label sidebar-status-card-label--denied">Denied</div>
+                                        <div class="sidebar-status-card-copy">Your appeal was reviewed and not approved.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1385,7 +2750,7 @@
                         <span>📚</span>
                         <span>Your Appeal History</span>
                     </h2>
-                    <p class="form-section-desc">View all appeals you've submitted from this account.</p>
+                    <p class="form-section-desc">View the appeals connected to this Discord account.</p>
 
                     <div id="historyErrorMessage" class="message error">
                         <span style="font-size: 1.5rem;">-</span>
@@ -1398,12 +2763,12 @@
                             <span class="required">*</span>
                         </label>
                         <input type="text" id="historyUserId" class="form-input" placeholder="e.g., 123456789012345678">
-                        <p class="form-help">🔒 Enter your User ID to access your appeal history</p>
+                        <p class="form-help">🔒 Enter your User ID so we only show your own appeal history.</p>
                     </div>
 
                     <button class="btn btn-primary" onclick="loadAppealHistory()" style="max-width: 300px;">
                         <span>📚</span>
-                        <span>Load History</span>
+                        <span>View History</span>
                     </button>
 
                     <div id="historyLoadingBox" class="loading">
@@ -1412,6 +2777,28 @@
                     </div>
 
                     <div id="historyResults" style="display: none; margin-top: 2rem;">
+                        <div class="history-summary-grid" id="historySummaryGrid">
+                            <div class="history-summary-card">
+                                <div class="history-summary-label">Total appeals</div>
+                                <div class="history-summary-value" id="historySummaryTotal">0</div>
+                                <div class="history-summary-note">Appeals linked to this account.</div>
+                            </div>
+                            <div class="history-summary-card">
+                                <div class="history-summary-label">Pending</div>
+                                <div class="history-summary-value" id="historySummaryPending">0</div>
+                                <div class="history-summary-note">Still waiting on a decision.</div>
+                            </div>
+                            <div class="history-summary-card">
+                                <div class="history-summary-label">Accepted</div>
+                                <div class="history-summary-value" id="historySummaryAccepted">0</div>
+                                <div class="history-summary-note">Appeals that were approved.</div>
+                            </div>
+                            <div class="history-summary-card">
+                                <div class="history-summary-label">Latest decision</div>
+                                <div class="history-summary-value" id="historySummaryLatest">-</div>
+                                <div class="history-summary-note" id="historySummaryLatestNote">No decision history yet.</div>
+                            </div>
+                        </div>
                         <h3
                             style="font-size: 1.25rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
                             <span>📊</span>
@@ -1423,49 +2810,58 @@
                     <div id="historyEmpty"
                         style="display: none; margin-top: 2rem; text-align: center; padding: 3rem; background: var(--bg-tertiary); border: 1px dashed var(--color-border); border-radius: 0.5rem;">
                         <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
-                        <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">No Appeals Found</div>
-                        <div style="color: var(--color-muted);">You haven't submitted any appeals yet.</div>
+                        <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">No appeals yet</div>
+                        <div style="color: var(--color-muted);">We could not find any appeals linked to that account.</div>
                     </div>
                 </div>
 
-                <div class="sidebar-card">
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">💡 About History</div>
-                        <div class="sidebar-list">
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">📊</div>
-                                <div>View up to 10 recent appeals</div>
+                <div class="sidebar-card sidebar-card--appeal">
+                    <div class="sidebar-card-hero">
+                        <div class="sidebar-card-kicker">History Workspace</div>
+                        <div class="sidebar-card-heading">
+                            <div>
+                                <div class="sidebar-title sidebar-title--hero">📚 Appeal History Guide</div>
+                                <div class="sidebar-card-copy">Use this view to keep track of past appeals, decisions, and any feedback you have already received.</div>
                             </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">🔒</div>
-                                <div>Secure user verification required</div>
-                            </div>
-                            <div class="sidebar-item">
-                                <div class="sidebar-item-icon">📅</div>
-                                <div>Sorted by submission date</div>
-                            </div>
+                            <div class="sidebar-card-badge">Records</div>
                         </div>
                     </div>
 
-                    <div class="sidebar-divider"></div>
-
-                    <div class="warning-box">
-                        <strong>⚠️ Reminder:</strong><br>
-                        Multiple rejected appeals do not improve your chances. Focus on quality over quantity.
+                    <div class="sidebar-card-body">
+                        <div class="sidebar-panel sidebar-panel--info">
+                            <div class="sidebar-panel-title">
+                                <span>What history shows</span>
+                                <span class="sidebar-panel-tag">Overview</span>
+                            </div>
+                            <div class="sidebar-callout-list">
+                                <div class="sidebar-callout-item">
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--info">📊</div>
+                                    <div><strong>Recent overview</strong><span>See up to 10 recent appeals linked to your Discord account.</span></div>
+                                </div>
+                                <div class="sidebar-callout-item">
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--success">🧾</div>
+                                    <div><strong>Decision trail</strong><span>Review outcomes, timestamps, and the latest staff response.</span></div>
+                                </div>
+                                <div class="sidebar-callout-item">
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">🔒</div>
+                                    <div><strong>Verified access</strong><span>Your User ID is required so only your own history is shown.</span></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="rulesModal" class="modal-overlay" onclick="closeRulesModal(event)">
-        <div class="modal-box" onclick="event.stopPropagation()">
+    <div id="rulesModal" class="modal-overlay">
+        <div class="modal-box">
             <div class="modal-header">
                 <div class="modal-title">
                     <span>📜</span>
                     <span>Server Rules</span>
                 </div>
-                <button class="modal-close" onclick="closeRulesModal()">&times;</button>
+                <button class="modal-close" type="button" id="rulesModalCloseBtn">&times;</button>
             </div>
             <div class="modal-content" id="rulesContent">
                 <div style="text-align: center; color: var(--color-muted);">
@@ -1479,12 +2875,31 @@
     <script>
         let appealCsrfToken = '';
         let currentStep = 1;
+        let lastStatusLookupAppeal = null;
+        let pendingAppealEditMode = false;
+        const APPEAL_DRAFT_STORAGE_KEY = 'appeal_form_draft_v2';
         const caseIdDbValidationState = {
             pending: false,
             lastChecked: '',
             isValid: false,
             debounceTimer: null,
             requestSeq: 0
+        };
+
+        const appealPromptTemplates = {
+            accountability: 'I understand why this action was taken, and I take responsibility for the part I played in the situation.\n\n',
+            context: 'The context behind what happened is: \n- What led up to it:\n- What I did:\n- What I should have done instead:\n\n',
+            plan: 'If I am allowed back, I will do the following differently:\n1. \n2. \n3. \n\n',
+            evidence: 'Additional context or evidence I would like the team to consider:\n- \n- \n\n'
+        };
+        const appealReviewStageLabels = {
+            submitted: 'Submitted',
+            triage: 'Triage',
+            'evidence-review': 'Evidence Review',
+            'final-review': 'Final Review',
+            'awaiting-decision': 'Awaiting Decision',
+            'decision-issued': 'Decision Issued',
+            withdrawn: 'Withdrawn'
         };
 
         async function getAppealCsrfToken(forceRefresh = false) {
@@ -1500,6 +2915,502 @@
             }
 
             return '';
+        }
+
+        function formatDate(dateValue) {
+            if (!dateValue) return '-';
+            const parsed = new Date(dateValue);
+            return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString();
+        }
+
+        function formatFileSize(bytes) {
+            const size = Number(bytes || 0);
+            if (!Number.isFinite(size) || size <= 0) return 'Unknown size';
+            if (size < 1024) return `${size} B`;
+            if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+            return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        function formatReviewStageLabel(stage) {
+            return appealReviewStageLabels[String(stage || '').trim().toLowerCase()] || 'Submitted';
+        }
+
+        function getAppealEvidenceTypeInfo(entry) {
+            const mimeType = String(entry?.type || entry?.mimeType || '').toLowerCase();
+            const fileName = String(entry?.name || entry?.originalName || '').toLowerCase();
+
+            if (mimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(fileName)) {
+                return { label: 'Image', className: 'evidence-type-badge evidence-type-badge--image', icon: '🖼️' };
+            }
+
+            if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {
+                return { label: 'PDF', className: 'evidence-type-badge evidence-type-badge--pdf', icon: '📄' };
+            }
+
+            if (mimeType.startsWith('text/') || fileName.endsWith('.txt')) {
+                return { label: 'Text', className: 'evidence-type-badge evidence-type-badge--text', icon: '📝' };
+            }
+
+            return { label: 'File', className: 'evidence-type-badge evidence-type-badge--other', icon: '📎' };
+        }
+
+        function getAppealEvidencePreviewMarkup(entry) {
+            const typeInfo = getAppealEvidenceTypeInfo(entry);
+            const mimeType = String(entry?.type || entry?.mimeType || '').toLowerCase();
+            const isImage = typeInfo.label === 'Image';
+
+            if (isImage) {
+                try {
+                    const previewSource = entry instanceof File
+                        ? URL.createObjectURL(entry)
+                        : entry?.url;
+
+                    if (previewSource) {
+                        return `<span class="evidence-item-visual"><img src="${sanitizeHTML(previewSource)}" alt="${sanitizeHTML(entry?.name || entry?.originalName || 'Evidence preview')}" ${entry instanceof File ? 'onload="URL.revokeObjectURL(this.src)"' : ''}></span>`;
+                    }
+                } catch (_error) {
+                    // Fall through to icon badge preview.
+                }
+            }
+
+            return `<span class="evidence-item-visual">${typeInfo.icon}</span>`;
+        }
+
+        function resetUploadProgress() {
+            const card = document.getElementById('uploadProgressCard');
+            const fill = document.getElementById('uploadProgressFill');
+            const percent = document.getElementById('uploadProgressPercent');
+            const title = document.getElementById('uploadProgressTitle');
+            const note = document.getElementById('uploadProgressNote');
+            const loadingText = document.getElementById('loadingText');
+
+            if (card) card.style.display = 'none';
+            if (fill) fill.style.width = '0%';
+            if (percent) percent.textContent = '0%';
+            if (title) title.textContent = 'Uploading evidence';
+            if (note) note.textContent = 'Getting your appeal ready...';
+            if (loadingText) loadingText.textContent = 'Sending your appeal...';
+        }
+
+        function setUploadProgress(progress, mode = 'submit') {
+            const card = document.getElementById('uploadProgressCard');
+            const fill = document.getElementById('uploadProgressFill');
+            const percent = document.getElementById('uploadProgressPercent');
+            const title = document.getElementById('uploadProgressTitle');
+            const note = document.getElementById('uploadProgressNote');
+            const loadingText = document.getElementById('loadingText');
+            const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+            const actionLabel = mode === 'update' ? 'Updating appeal' : 'Submitting appeal';
+
+            if (card) card.style.display = 'grid';
+            if (fill) fill.style.width = `${normalizedProgress}%`;
+            if (percent) percent.textContent = `${normalizedProgress}%`;
+            if (title) title.textContent = normalizedProgress >= 100 ? 'Finalizing request' : 'Uploading evidence';
+            if (note) {
+                note.textContent = normalizedProgress >= 100
+                        ? 'Upload finished. The server is wrapping up your appeal now.'
+                        : `${actionLabel} with your appeal details and any attached evidence.`;
+            }
+                    if (loadingText) loadingText.textContent = normalizedProgress >= 100 ? 'Finishing things up...' : `${actionLabel}...`;
+        }
+
+        function getSelectedAppealEvidenceFiles() {
+            return Array.isArray(window.__appealEvidenceFiles) ? [...window.__appealEvidenceFiles] : [];
+        }
+
+        function syncAppealEvidenceInput() {
+            const input = document.getElementById('appealEvidence');
+            const files = getSelectedAppealEvidenceFiles();
+
+            if (input && typeof DataTransfer !== 'undefined') {
+                const dataTransfer = new DataTransfer();
+                files.forEach((file) => dataTransfer.items.add(file));
+                input.files = dataTransfer.files;
+            }
+
+            const meta = document.getElementById('appealEvidenceMeta');
+            const clearBtn = document.getElementById('appealEvidenceClearBtn');
+            if (meta) {
+                const totalBytes = files.reduce((sum, file) => sum + Number(file?.size || 0), 0);
+                meta.innerHTML = `<strong>${files.length} / 3 selected</strong><span>${files.length ? `${formatFileSize(totalBytes)} total` : 'Max 5 MB per file'}</span>`;
+            }
+            if (clearBtn) {
+                clearBtn.style.display = files.length ? 'inline-flex' : 'none';
+            }
+        }
+
+        function setSelectedAppealEvidenceFiles(files) {
+            window.__appealEvidenceFiles = Array.isArray(files) ? files : [];
+            syncAppealEvidenceInput();
+        }
+
+        function removeAppealEvidenceFile(index) {
+            const files = getSelectedAppealEvidenceFiles();
+            files.splice(index, 1);
+            setSelectedAppealEvidenceFiles(files);
+            renderEvidenceList('appealEvidenceList', files, {
+                emptyTitle: 'No files selected',
+                emptyText: 'Only add evidence if it actually helps explain your appeal.',
+                removable: true
+            });
+            updateReview();
+        }
+
+        function clearAppealEvidenceFiles() {
+            setSelectedAppealEvidenceFiles([]);
+            renderEvidenceList('appealEvidenceList', [], {
+                emptyTitle: 'No files selected',
+                emptyText: 'Only add evidence if it actually helps explain your appeal.',
+                removable: true
+            });
+            updateReview();
+        }
+
+        function addAppealEvidenceFiles(fileList) {
+            const incomingFiles = Array.from(fileList || []);
+            if (!incomingFiles.length) return;
+
+            const existingFiles = getSelectedAppealEvidenceFiles();
+            const nextFiles = [...existingFiles];
+            const rejected = [];
+
+            incomingFiles.forEach((file) => {
+                const duplicate = nextFiles.some((entry) => entry.name === file.name && entry.size === file.size && entry.lastModified === file.lastModified);
+                if (duplicate) return;
+
+                if (file.size > 5 * 1024 * 1024) {
+                    rejected.push(`${file.name} is larger than 5 MB`);
+                    return;
+                }
+
+                if (nextFiles.length >= 3) {
+                    rejected.push(`${file.name} was skipped because only 3 files are allowed`);
+                    return;
+                }
+
+                nextFiles.push(file);
+            });
+
+            setSelectedAppealEvidenceFiles(nextFiles);
+            renderEvidenceList('appealEvidenceList', nextFiles, {
+                emptyTitle: 'No files selected',
+                emptyText: 'Only add evidence if it actually helps explain your appeal.',
+                removable: true
+            });
+            updateReview();
+
+            if (rejected.length) {
+                showMessage('warning', rejected.slice(0, 2).join('. ') + (rejected.length > 2 ? '...' : ''));
+            }
+        }
+
+        function renderEvidenceList(containerId, filesOrEntries, options = {}) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const entries = Array.isArray(filesOrEntries) ? filesOrEntries : [];
+            const emptyTitle = options.emptyTitle || 'No evidence attached';
+            const emptyText = options.emptyText || 'Add files only when they directly support your appeal.';
+            const linked = options.linked === true;
+            const removable = options.removable === true;
+
+            if (!entries.length) {
+                container.innerHTML = `<div class="sidebar-live-row"><span>📂</span><div><strong>${sanitizeHTML(emptyTitle)}</strong><span>${sanitizeHTML(emptyText)}</span></div></div>`;
+                return;
+            }
+
+            container.innerHTML = entries.map((entry, index) => {
+                const name = sanitizeHTML(entry.name || entry.originalName || `Attachment ${index + 1}`);
+                const typeInfo = getAppealEvidenceTypeInfo(entry);
+                const meta = sanitizeHTML(linked
+                    ? `${formatFileSize(entry.size)} • ${entry.mimeType || 'File'}`
+                    : `${formatFileSize(entry.size)} • ${entry.type || entry.mimeType || 'File'}`);
+                const action = linked && entry.url
+                    ? `<a class="evidence-link" href="${sanitizeHTML(entry.url)}" target="_blank" rel="noopener noreferrer">Open</a>`
+                    : removable
+                    ? `<button class="evidence-item-action" type="button" onclick="removeAppealEvidenceFile(${index})">Remove</button>`
+                    : `<span style="font-size:0.82rem; color:var(--color-muted);">Ready</span>`;
+
+                return `
+                    <div class="evidence-item">
+                        <div class="evidence-item-main">
+                            ${getAppealEvidencePreviewMarkup(entry)}
+                            <div class="evidence-item-copy">
+                                <strong>${name}</strong>
+                                <div class="evidence-item-meta">
+                                    <span class="${typeInfo.className}">${sanitizeHTML(typeInfo.label)}</span>
+                                    <span>${meta}</span>
+                                </div>
+                            </div>
+                        </div>
+                        ${action}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function sendAppealFormDataRequest(endpoint, formData, csrfToken, onProgress) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', endpoint, true);
+                xhr.withCredentials = true;
+
+                if (csrfToken) {
+                    xhr.setRequestHeader('x-csrf-token', csrfToken);
+                }
+
+                if (typeof onProgress === 'function') {
+                    xhr.upload.addEventListener('progress', (event) => {
+                        if (!event.lengthComputable) return;
+                        onProgress((event.loaded / event.total) * 100);
+                    });
+                }
+
+                xhr.onload = () => {
+                    let data = {};
+                    try {
+                        data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+                    } catch (_error) {
+                        data = {};
+                    }
+
+                    resolve({
+                        response: {
+                            ok: xhr.status >= 200 && xhr.status < 300,
+                            status: xhr.status,
+                            headers: {
+                                get(name) {
+                                    return xhr.getResponseHeader(name);
+                                }
+                            }
+                        },
+                        data
+                    });
+                };
+
+                xhr.onerror = () => reject(new Error('Network error'));
+                xhr.send(formData);
+            });
+        }
+
+        async function submitAppealFormData(endpoint, formData, options = {}) {
+            const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+            let csrfToken = await getAppealCsrfToken();
+            let result = await sendAppealFormDataRequest(endpoint, formData, csrfToken, onProgress);
+
+            if (result.response.status === 403) {
+                csrfToken = await getAppealCsrfToken(true);
+                result = await sendAppealFormDataRequest(endpoint, formData, csrfToken, onProgress);
+            }
+
+            return result;
+        }
+
+        function getAppealDraft() {
+            try {
+                return JSON.parse(localStorage.getItem(APPEAL_DRAFT_STORAGE_KEY) || '{}');
+            } catch (_error) {
+                return {};
+            }
+        }
+
+        function updateDraftBadge(text) {
+            const draftStatusText = document.getElementById('draftStatusText');
+            if (draftStatusText) draftStatusText.textContent = text;
+        }
+
+        function saveAppealDraft() {
+            const draft = {
+                userTag: document.getElementById('userTag')?.value?.trim() || '',
+                userId: document.getElementById('userId')?.value?.trim() || '',
+                email: document.getElementById('email')?.value?.trim() || '',
+                caseId: document.getElementById('caseId')?.value?.trim() || '',
+                reason: document.getElementById('reason')?.value || '',
+                updatedAt: new Date().toISOString()
+            };
+
+            try {
+                localStorage.setItem(APPEAL_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+                updateDraftBadge(`Draft saved ${new Date(draft.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+            } catch (_error) {
+                updateDraftBadge('Draft could not be saved on this device');
+            }
+        }
+
+        function clearAppealDraft() {
+            localStorage.removeItem(APPEAL_DRAFT_STORAGE_KEY);
+            updateDraftBadge('Draft cleared after successful submission');
+        }
+
+        function restoreAppealDraft() {
+            const draft = getAppealDraft();
+            if (!draft || (!draft.userTag && !draft.userId && !draft.email && !draft.caseId && !draft.reason)) {
+                updateDraftBadge('No draft saved yet');
+                return;
+            }
+
+            if (draft.userTag) document.getElementById('userTag').value = draft.userTag;
+            if (draft.userId) document.getElementById('userId').value = draft.userId;
+            if (draft.email) document.getElementById('email').value = draft.email;
+            if (draft.caseId) document.getElementById('caseId').value = draft.caseId;
+            if (draft.reason) document.getElementById('reason').value = draft.reason;
+
+            updateDraftBadge(draft.updatedAt ? `Draft restored from ${formatDate(draft.updatedAt)}` : 'Draft restored');
+        }
+
+        function prefillFromDraft() {
+            const draft = getAppealDraft();
+            const caseId = String(draft.caseId || '').trim();
+            const userId = String(draft.userId || '').trim();
+
+            if (!caseId && !userId) {
+                showStatusMessage('error', 'There is no saved draft on this device yet.');
+                return;
+            }
+
+            if (caseId) document.getElementById('statusCaseId').value = caseId;
+            if (userId) {
+                document.getElementById('statusUserId').value = userId;
+                document.getElementById('historyUserId').value = userId;
+            }
+
+            showStatusMessage('success', 'Your saved draft details were copied into the lookup form.');
+        }
+
+        function updateSubmitSidebar() {
+            const step1Ready = validateStep(1, true);
+            const step2Ready = validateStep(2, true);
+            const step3Ready = validateStep(3, true);
+            const step4Ready = Boolean(document.getElementById('rulesCheckbox')?.checked);
+            const readyCount = [step1Ready, step2Ready, step3Ready, step4Ready].filter(Boolean).length;
+            const progressValue = document.getElementById('appealProgressValue');
+            const etaValue = document.getElementById('appealEtaValue');
+            const readinessList = document.getElementById('appealReadinessList');
+            const qualityText = document.getElementById('metricEstimate')?.textContent || '24-48h';
+
+            if (progressValue) progressValue.textContent = `${readyCount} / 4 ready`;
+            if (etaValue) etaValue.textContent = qualityText === '-' ? '24-48h' : qualityText;
+
+            if (readinessList) {
+                const rows = [
+                    { label: 'Account details', ok: step1Ready, good: 'Your account details are filled in.', bad: 'Add your username, user ID, and email.' },
+                    { label: 'Ban case lookup', ok: step2Ready, good: 'The case ID matches a ban record.', bad: 'Check that your BAN- case ID is valid first.' },
+                    { label: 'Appeal message', ok: step3Ready, good: 'Your explanation has enough detail to review.', bad: 'Add more context and explain what would change.' },
+                    { label: 'Final check', ok: step4Ready, good: 'You are ready to send it.', bad: 'Review the summary and confirm the rules checkbox.' }
+                ];
+
+                readinessList.innerHTML = rows.map((row) => `
+                    <div class="sidebar-live-row">
+                        <span>${row.ok ? '✅' : '⏳'}</span>
+                        <div><strong>${row.label}</strong><span>${row.ok ? row.good : row.bad}</span></div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function insertAppealPrompt(promptKey) {
+            const reasonEl = document.getElementById('reason');
+            const snippet = appealPromptTemplates[promptKey] || '';
+            if (!reasonEl || !snippet) return;
+
+            const currentValue = reasonEl.value || '';
+            reasonEl.value = currentValue && !currentValue.endsWith('\n\n')
+                ? `${currentValue}\n\n${snippet}`
+                : `${currentValue}${snippet}`;
+
+            reasonEl.focus();
+            analyzeAppealQuality();
+            saveAppealDraft();
+        }
+
+        function renderQualityChecklist(items) {
+            const checklistEl = document.getElementById('qualityChecklist');
+            if (!checklistEl) return;
+
+            checklistEl.innerHTML = items.map((item) => `
+                <div class="quality-check-item ${item.ok ? 'is-good' : 'is-missing'}">
+                    <div class="quality-check-icon">${item.ok ? '✅' : '⚠️'}</div>
+                    <div class="quality-check-copy">
+                        <strong>${item.title}</strong>
+                        <span>${item.text}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStatusTimeline(status) {
+            const steps = {
+                submitted: document.querySelector('[data-status-step="submitted"]'),
+                review: document.querySelector('[data-status-step="review"]'),
+                decision: document.querySelector('[data-status-step="decision"]')
+            };
+            Object.values(steps).forEach((step) => {
+                step?.classList.remove('is-active', 'is-complete');
+            });
+
+            steps.submitted?.classList.add('is-complete');
+
+            if (status === 'pending') {
+                steps.review?.classList.add('is-active');
+            } else {
+                steps.review?.classList.add('is-complete');
+                steps.decision?.classList.add('is-complete');
+            }
+        }
+
+        function updateStatusGuidance(appeal) {
+            const guidanceText = document.getElementById('statusGuidanceText');
+            if (!guidanceText) return;
+
+            if (appeal.status === 'pending') {
+                const stageLabel = formatReviewStageLabel(appeal.reviewStage || 'submitted');
+                guidanceText.textContent = `Your appeal is still pending. Current review stage: ${stageLabel}. Avoid submitting duplicates while this one is open, and watch your email for updates.`;
+                return;
+            }
+
+            if (appeal.status === 'accepted') {
+                guidanceText.textContent = 'Your appeal has been accepted. Follow any instructions in the response and rejoin only if the moderation team has told you the restriction was lifted.';
+                return;
+            }
+
+            if (appeal.status === 'withdrawn') {
+                guidanceText.textContent = 'This appeal was withdrawn before a decision was made. You can submit a fresh appeal later if you still need a review.';
+                return;
+            }
+
+            guidanceText.textContent = 'Your appeal was denied. If new evidence becomes available later, wait before trying again and make sure any future appeal adds new context instead of repeating the same points.';
+        }
+
+        function renderHistorySummary(appeals) {
+            const total = appeals.length;
+            const pending = appeals.filter((appeal) => appeal.status === 'pending').length;
+            const accepted = appeals.filter((appeal) => appeal.status === 'accepted').length;
+            const latestDecided = appeals.find((appeal) => appeal.decidedAt);
+
+            document.getElementById('historySummaryTotal').textContent = String(total);
+            document.getElementById('historySummaryPending').textContent = String(pending);
+            document.getElementById('historySummaryAccepted').textContent = String(accepted);
+            document.getElementById('historySummaryLatest').textContent = latestDecided ? latestDecided.status : '-';
+            document.getElementById('historySummaryLatestNote').textContent = latestDecided
+                ? `Latest decision on ${formatDate(latestDecided.decidedAt)}`
+                : 'No decision history yet.';
+        }
+
+        async function copyStatusLookup() {
+            const caseId = document.getElementById('statusCaseId')?.value?.trim() || '';
+            const userId = document.getElementById('statusUserId')?.value?.trim() || '';
+            if (!caseId && !userId) {
+                showStatusMessage('error', 'Enter a Case ID or User ID first.');
+                return;
+            }
+
+            const text = `Case ID: ${caseId || '-'}\nUser ID: ${userId || '-'}`;
+            try {
+                await navigator.clipboard.writeText(text);
+                showStatusMessage('success', 'Lookup details copied to clipboard.');
+            } catch (_error) {
+                showStatusMessage('error', 'Clipboard access was blocked in this browser.');
+            }
         }
 
         function switchPanel(panel, event) {
@@ -1613,7 +3524,7 @@
             }, 300);
         }
 
-        function validateStep(step) {
+        function validateStep(step, suppressSidebarUpdate = false) {
             if (step === 1) {
                 const userTag = document.getElementById('userTag').value.trim();
                 const userId = document.getElementById('userId').value.trim();
@@ -1652,6 +3563,7 @@
                 }
 
                 document.getElementById('step1Next').disabled = !valid;
+                if (!suppressSidebarUpdate) updateSubmitSidebar();
                 return valid;
             }
 
@@ -1661,26 +3573,32 @@
                 if (caseId.length === 0) {
                     setValidation('caseId', null);
                     document.getElementById('step2Next').disabled = true;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return false;
                 } else if (!isValidBanCaseIdFormat(caseId)) {
                     setValidation('caseId', false, 'Invalid format (use BAN- followed by 1-50 letters/numbers)');
                     document.getElementById('step2Next').disabled = true;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return false;
                 } else if (caseIdDbValidationState.pending) {
                     setValidation('caseId', false, 'Checking case ID in database...');
                     document.getElementById('step2Next').disabled = true;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return false;
                 } else if (caseIdDbValidationState.lastChecked === caseId && !caseIdDbValidationState.isValid) {
                     setValidation('caseId', false, 'This Ban Case ID was not found as an active ban.');
                     document.getElementById('step2Next').disabled = true;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return false;
                 } else if (caseIdDbValidationState.lastChecked !== caseId) {
                     setValidation('caseId', false, 'Checking case ID in database...');
                     document.getElementById('step2Next').disabled = true;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return false;
                 } else {
                     setValidation('caseId', true, 'Valid Case ID (verified in database)');
                     document.getElementById('step2Next').disabled = false;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return true;
                 }
             }
@@ -1691,14 +3609,17 @@
                 if (reason.length === 0) {
                     setValidation('reason', null);
                     document.getElementById('step3Next').disabled = true;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return false;
                 } else if (reason.length < 50) {
                     setValidation('reason', false, 'Please provide more detail (at least 50 characters)');
                     document.getElementById('step3Next').disabled = true;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return false;
                 } else {
                     setValidation('reason', true, 'Good length');
                     document.getElementById('step3Next').disabled = false;
+                    if (!suppressSidebarUpdate) updateSubmitSidebar();
                     return true;
                 }
             }
@@ -1706,6 +3627,7 @@
             if (step === 4) {
                 const rulesCheckbox = document.getElementById('rulesCheckbox').checked;
                 document.getElementById('submitBtn').disabled = !rulesCheckbox;
+                if (!suppressSidebarUpdate) updateSubmitSidebar();
                 return rulesCheckbox;
             }
 
@@ -1791,6 +3713,9 @@
             const planHits = planPhrases.filter((phrase) => lowerReason.includes(phrase)).length;
             score += Math.min(15, planHits * 4);
 
+            const contextHits = ['because', 'after', 'before', 'at the time', 'context', 'situation'].filter((phrase) => lowerReason.includes(phrase)).length;
+            const evidenceHits = ['screenshot', 'evidence', 'proof', 'logs', 'chat', 'message'].filter((phrase) => lowerReason.includes(phrase)).length;
+
             const cappedScore = Math.max(0, Math.min(100, Math.round(score)));
 
             let scoreLabel = 'Poor';
@@ -1826,7 +3751,31 @@
             if (metricAvgLengthEl) metricAvgLengthEl.textContent = String(avgWordLength);
             if (metricEstimateEl) metricEstimateEl.textContent = estimate;
 
+            renderQualityChecklist([
+                {
+                    title: 'Ownership',
+                    ok: accountabilityHits > 0,
+                    text: accountabilityHits > 0 ? 'You acknowledged responsibility or showed understanding.' : 'Add a sentence owning the mistake and showing you understand the rule.'
+                },
+                {
+                    title: 'Context',
+                    ok: contextHits > 0,
+                    text: contextHits > 0 ? 'You included surrounding context for the incident.' : 'Explain what happened before and during the situation without making excuses.'
+                },
+                {
+                    title: 'Future plan',
+                    ok: planHits > 0,
+                    text: planHits > 0 ? 'You explained what you will do differently next time.' : 'Add a short plan for how you will avoid repeating the behavior.'
+                },
+                {
+                    title: 'Evidence or specifics',
+                    ok: evidenceHits > 0 || wordCount >= 120,
+                    text: evidenceHits > 0 || wordCount >= 120 ? 'Your appeal includes specifics that are easier to review.' : 'Mention any logs, screenshots, or concrete details that can be checked.'
+                }
+            ]);
+
             validateStep(3);
+            updateSubmitSidebar();
         }
 
         function updateReview() {
@@ -1836,6 +3785,12 @@
             document.getElementById('reviewEmail').textContent = email;
             document.getElementById('reviewCaseId').textContent = document.getElementById('caseId').value.trim();
             document.getElementById('reviewReason').textContent = document.getElementById('reason').value.trim();
+            renderEvidenceList('reviewEvidenceList', getSelectedAppealEvidenceFiles(), {
+                emptyTitle: 'No evidence attached',
+                emptyText: 'You can still submit without files if your explanation is clear.'
+            });
+            const submitBtnLabel = document.querySelector('#submitBtn span:last-child');
+            if (submitBtnLabel) submitBtnLabel.textContent = pendingAppealEditMode ? 'Update Appeal' : 'Submit Appeal';
         }
 
         async function submitAppeal() {
@@ -1845,9 +3800,10 @@
             const email = document.getElementById('email').value.trim();
             const reason = document.getElementById('reason').value.trim();
             const rulesCheckbox = document.getElementById('rulesCheckbox').checked;
+            const evidenceFiles = getSelectedAppealEvidenceFiles();
 
             if (!isValidBanCaseIdFormat(caseId)) {
-                showMessage('error', 'Please enter a valid Ban Case ID (BAN- followed by 1-50 letters/numbers).');
+                showMessage('error', 'Enter a valid Ban Case ID starting with BAN- followed by letters or numbers.');
                 return;
             }
 
@@ -1858,72 +3814,82 @@
                 caseIdDbValidationState.pending = false;
 
                 if (!caseDbCheck.valid) {
-                    showMessage('error', 'This Ban Case ID is not valid in our database. Please check and try again.');
+                    showMessage('error', 'That Ban Case ID does not match our records. Double-check it and try again.');
                     validateStep(2);
                     return;
                 }
             }
 
             if (!rulesCheckbox) {
-                showMessage('error', 'You must agree to the server rules');
+                showMessage('error', 'Please confirm that you agree to follow the server rules.');
                 return;
             }
 
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('loadingBox').classList.add('show');
+            resetUploadProgress();
 
             try {
-                const submitAppealRequest = async (csrfToken) => {
-                    return window.AdminPanel.api.requestJson('/api/appeals/submit', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-csrf-token': csrfToken
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({
-                            userId,
-                            userTag,
-                            caseId,
-                            reason,
-                            email
-                        })
-                    });
-                };
+                const formData = new FormData();
+                formData.append('userId', userId);
+                formData.append('userTag', userTag);
+                formData.append('caseId', caseId);
+                formData.append('reason', reason);
+                formData.append('email', email);
+                evidenceFiles.forEach((file) => formData.append('appealEvidence', file));
 
-                let csrfToken = await getAppealCsrfToken();
-                let { response, data } = await submitAppealRequest(csrfToken);
+                const endpoint = pendingAppealEditMode ? '/api/appeals/update-pending' : '/api/appeals/submit';
+                const mode = pendingAppealEditMode ? 'update' : 'submit';
+                if (evidenceFiles.length) {
+                    setUploadProgress(0, mode);
+                }
 
-                if (response.status === 403) {
-                    csrfToken = await getAppealCsrfToken(true);
-                    if (csrfToken) {
-                        const retryResult = await submitAppealRequest(csrfToken);
-                        response = retryResult.response;
-                        data = retryResult.data;
-                    }
+                const { response, data } = await submitAppealFormData(endpoint, formData, {
+                    onProgress: evidenceFiles.length
+                        ? (progressValue) => setUploadProgress(progressValue, mode)
+                        : null
+                });
+
+                if (evidenceFiles.length) {
+                    setUploadProgress(100, mode);
                 }
 
                 if (response.ok) {
-                    document.getElementById('userTag').value = '';
-                    document.getElementById('userId').value = '';
-                    document.getElementById('caseId').value = '';
-                    document.getElementById('email').value = '';
-                    document.getElementById('reason').value = '';
-                    document.getElementById('rulesCheckbox').checked = false;
-                    document.getElementById('charCount').textContent = '0';
-                    document.getElementById('qualityAnalyzer').style.display = 'none';
+                    clearAppealEvidenceFiles();
+                    document.getElementById('statusCaseId').value = caseId;
+                    document.getElementById('statusUserId').value = userId;
+                    document.getElementById('historyUserId').value = userId;
 
-                    document.querySelectorAll('.wizard-step').forEach(step => {
-                        step.classList.remove('active', 'completed');
-                    });
-                    document.querySelectorAll('.form-section').forEach(section => {
-                        section.classList.remove('active');
-                    });
-                    document.querySelector('.wizard-step[data-step="1"]').classList.add('active');
-                    document.querySelector('.form-section[data-step="1"]').classList.add('active');
-                    currentStep = 1;
+                    if (pendingAppealEditMode) {
+                        pendingAppealEditMode = false;
+                        lastStatusLookupAppeal = data.appeal || lastStatusLookupAppeal;
+                        showMessage('success', '✨ Your pending appeal was updated successfully.');
+                    } else {
+                        document.getElementById('userTag').value = '';
+                        document.getElementById('userId').value = '';
+                        document.getElementById('caseId').value = '';
+                        document.getElementById('email').value = '';
+                        document.getElementById('reason').value = '';
+                        document.getElementById('rulesCheckbox').checked = false;
+                        document.getElementById('charCount').textContent = '0';
+                        document.getElementById('qualityAnalyzer').style.display = 'none';
+                        document.getElementById('qualityChecklist').innerHTML = '';
 
-                    showMessage('success', '✨ Your appeal has been submitted successfully! Check the "Check Status" tab to track progress.');
+                        document.querySelectorAll('.wizard-step').forEach(step => {
+                            step.classList.remove('active', 'completed');
+                        });
+                        document.querySelectorAll('.form-section').forEach(section => {
+                            section.classList.remove('active');
+                        });
+                        document.querySelector('.wizard-step[data-step="1"]').classList.add('active');
+                        document.querySelector('.form-section[data-step="1"]').classList.add('active');
+                        currentStep = 1;
+                        clearAppealDraft();
+                        showMessage('success', '✨ Your appeal was submitted. You can use the "Check Status" tab any time to see updates.');
+                    }
+
+                    clearAppealEvidenceFiles();
+                    updateSubmitSidebar();
 
                     setTimeout(() => {
                         document.getElementById('successMessage').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1937,17 +3903,18 @@
                     }
 
                     if (data.error.includes('already have a pending appeal')) {
-                        showMessage('warning', 'You already have a pending appeal. Please wait for a response before submitting another.');
+                        showMessage('warning', 'You already have an appeal waiting for review. Please wait for a response before sending another one.');
                     } else {
-                        showMessage('error', data.error || 'Failed to submit appeal');
+                        showMessage('error', data.error || 'We could not submit your appeal.');
                     }
                 }
             } catch (error) {
                 console.error('Error submitting appeal:', error);
-                showMessage('error', 'Network error. Please check your connection and try again.');
+                showMessage('error', 'We hit a network problem. Check your connection and try again.');
             } finally {
                 document.getElementById('submitBtn').disabled = false;
                 document.getElementById('loadingBox').classList.remove('show');
+                resetUploadProgress();
             }
         }
 
@@ -1956,7 +3923,7 @@
             const userId = document.getElementById('statusUserId').value.trim();
 
             if (!caseId || !userId) {
-                showStatusMessage('error', 'Please enter both Case ID and User ID');
+                showStatusMessage('error', 'Enter both the Case ID and User ID to continue.');
                 return;
             }
 
@@ -1973,6 +3940,7 @@
 
                 if (response.ok && data.success) {
                     const appeal = data.appeal;
+                    lastStatusLookupAppeal = appeal;
 
                     const badgeEl = document.getElementById('statusBadge');
                     badgeEl.className = `status-badge ${appeal.status}`;
@@ -1985,6 +3953,9 @@
                     } else if (appeal.status === 'accepted') {
                         badgeIcon = '✅';
                         badgeText = 'Accepted';
+                    } else if (appeal.status === 'withdrawn') {
+                        badgeIcon = '🗃️';
+                        badgeText = 'Withdrawn';
                     } else if (appeal.status === 'denied') {
                         badgeIcon = '-';
                         badgeText = 'Denied';
@@ -1992,11 +3963,19 @@
                     badgeEl.innerHTML = `<span>${badgeIcon}</span><span>${badgeText}</span>`;
 
                     document.getElementById('statusResultCaseId').textContent = appeal.caseId;
-                    document.getElementById('statusResultSubmitted').textContent = new Date(appeal.submittedAt).toLocaleString();
+                    document.getElementById('statusResultSubmitted').textContent = formatDate(appeal.submittedAt);
+                    document.getElementById('statusResultStage').textContent = formatReviewStageLabel(appeal.reviewStage || 'submitted');
+
+                    if (appeal.updatedAt) {
+                        document.getElementById('statusResultUpdatedRow').style.display = 'flex';
+                        document.getElementById('statusResultUpdated').textContent = formatDate(appeal.updatedAt);
+                    } else {
+                        document.getElementById('statusResultUpdatedRow').style.display = 'none';
+                    }
 
                     if (appeal.decidedAt) {
                         document.getElementById('statusResultDecidedRow').style.display = 'flex';
-                        document.getElementById('statusResultDecided').textContent = new Date(appeal.decidedAt).toLocaleString();
+                        document.getElementById('statusResultDecided').textContent = formatDate(appeal.decidedAt);
                     } else {
                         document.getElementById('statusResultDecidedRow').style.display = 'none';
                     }
@@ -2008,16 +3987,110 @@
                         document.getElementById('statusResultResponseRow').style.display = 'none';
                     }
 
+                    if (appeal.statusNote) {
+                        document.getElementById('statusResultNoteRow').style.display = 'flex';
+                        document.getElementById('statusResultNote').textContent = appeal.statusNote;
+                    } else {
+                        document.getElementById('statusResultNoteRow').style.display = 'none';
+                    }
+
+                    const evidenceBlock = document.getElementById('statusEvidenceBlock');
+                    if (Array.isArray(appeal.evidence) && appeal.evidence.length) {
+                        evidenceBlock.style.display = 'block';
+                        renderEvidenceList('statusEvidenceList', appeal.evidence, { linked: true });
+                    } else {
+                        evidenceBlock.style.display = 'none';
+                    }
+
+                    const pendingActions = document.getElementById('statusPendingActions');
+                    if (pendingActions) pendingActions.style.display = appeal.canEdit || appeal.canWithdraw ? 'flex' : 'none';
+
+                    updateStatusTimeline(appeal.status);
+                    updateStatusGuidance(appeal);
+
                     document.getElementById('statusResult').classList.add('show');
-                    showStatusMessage('success', 'Appeal found!');
+                    showStatusMessage('success', 'We found your appeal.');
                 } else {
-                    showStatusMessage('error', data.error || 'No appeal found matching this Case ID and User ID');
+                    showStatusMessage('error', data.error || 'We could not find an appeal matching that Case ID and User ID.');
                 }
             } catch (error) {
                 console.error('Error checking status:', error);
-                showStatusMessage('error', 'Network error. Please try again.');
+                showStatusMessage('error', 'We hit a network problem while checking status. Please try again.');
             } finally {
                 document.getElementById('statusLoadingBox').classList.remove('show');
+            }
+        }
+
+        function loadPendingAppealIntoForm() {
+            if (!lastStatusLookupAppeal || !lastStatusLookupAppeal.canEdit) {
+                showStatusMessage('error', 'Look up a pending appeal first, then you can edit it.');
+                return;
+            }
+
+            pendingAppealEditMode = true;
+            document.getElementById('userTag').value = lastStatusLookupAppeal.userTag || document.getElementById('userTag').value.trim();
+            document.getElementById('userId').value = document.getElementById('statusUserId').value.trim();
+            document.getElementById('caseId').value = lastStatusLookupAppeal.caseId || '';
+            document.getElementById('email').value = lastStatusLookupAppeal.email || '';
+            document.getElementById('reason').value = lastStatusLookupAppeal.reason || '';
+            document.getElementById('rulesCheckbox').checked = true;
+
+            analyzeAppealQuality();
+            saveAppealDraft();
+            updateReview();
+            updateSubmitSidebar();
+            document.querySelectorAll('.content-panel').forEach((panel) => panel.classList.remove('active'));
+            document.getElementById('submitPanel').classList.add('active');
+            document.querySelectorAll('.action-tab').forEach((tab) => tab.classList.remove('active'));
+            document.querySelector('.action-tab')?.classList.add('active');
+            document.querySelectorAll('.wizard-step').forEach((step) => {
+                step.classList.remove('active', 'completed');
+            });
+            document.querySelectorAll('.form-section').forEach((section) => section.classList.remove('active'));
+            document.querySelector('.wizard-step[data-step="1"]').classList.add('completed');
+            document.querySelector('.wizard-step[data-step="2"]').classList.add('completed');
+            document.querySelector('.wizard-step[data-step="3"]').classList.add('active');
+            document.querySelector('.form-section[data-step="3"]').classList.add('active');
+            currentStep = 3;
+            showMessage('success', 'Your pending appeal is loaded. Add anything new that helps, then submit the update.');
+        }
+
+        async function withdrawPendingAppeal() {
+            if (!lastStatusLookupAppeal || !lastStatusLookupAppeal.canWithdraw) {
+                showStatusMessage('error', 'Look up a pending appeal first, then you can withdraw it.');
+                return;
+            }
+
+            const confirmed = window.confirm('Withdraw this pending appeal? It will be removed from the current review queue.');
+            if (!confirmed) return;
+
+            try {
+                const csrfToken = await getAppealCsrfToken();
+                const response = await fetch('/api/appeals/withdraw', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {})
+                    },
+                    body: JSON.stringify({
+                        caseId: document.getElementById('statusCaseId').value.trim(),
+                        userId: document.getElementById('statusUserId').value.trim()
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    showStatusMessage('error', data.error || 'We could not withdraw this appeal.');
+                    return;
+                }
+
+                showStatusMessage('success', 'Your pending appeal was withdrawn.');
+                await checkAppealStatus();
+                await loadAppealHistory();
+            } catch (error) {
+                console.error('Error withdrawing pending appeal:', error);
+                showStatusMessage('error', 'We hit a network problem while withdrawing the appeal. Please try again.');
             }
         }
 
@@ -2048,6 +4121,7 @@
                         document.getElementById('historyEmpty').style.display = 'block';
                     } else {
                         document.getElementById('historyCount').textContent = appeals.length;
+                        renderHistorySummary(appeals);
 
                         const historyList = document.getElementById('historyList');
                         historyList.innerHTML = '';
@@ -2059,16 +4133,22 @@
                             if (appeal.status === 'accepted') {
                                 statusIcon = '✅';
                                 statusText = 'Accepted';
+                            } else if (appeal.status === 'withdrawn') {
+                                statusIcon = '🗃️';
+                                statusText = 'Withdrawn';
                             } else if (appeal.status === 'denied') {
                                 statusIcon = '-';
                                 statusText = 'Denied';
                             }
 
+                            const safeResponse = sanitizeHTML(appeal.response || '');
+                            const safeCaseId = sanitizeHTML(appeal.caseId || 'Unknown');
+
                             const itemEl = document.createElement('div');
                             itemEl.className = 'history-item';
                             itemEl.innerHTML = `
                                 <div class="history-item-header">
-                                    <div class="history-item-case">${appeal.caseId}</div>
+                                    <div class="history-item-case">${safeCaseId}</div>
                                     <div class="status-badge ${statusBadgeClass}">
                                         <span>${statusIcon}</span>
                                         <span>${statusText}</span>
@@ -2077,18 +4157,34 @@
                                 <div class="history-item-details">
                                     <div class="history-item-detail">
                                         <span class="history-item-detail-label">Submitted:</span>
-                                        <span>${new Date(appeal.submittedAt).toLocaleString()}</span>
+                                        <span>${formatDate(appeal.submittedAt)}</span>
                                     </div>
                                     ${appeal.decidedAt ? `
                                         <div class="history-item-detail">
                                             <span class="history-item-detail-label">Decided:</span>
-                                            <span>${new Date(appeal.decidedAt).toLocaleString()}</span>
+                                            <span>${formatDate(appeal.decidedAt)}</span>
                                         </div>
                                     ` : ''}
-                                    ${appeal.response ? `
+                                    <div class="history-item-detail">
+                                        <span class="history-item-detail-label">Review Stage:</span>
+                                        <span>${sanitizeHTML(formatReviewStageLabel(appeal.reviewStage || 'submitted'))}</span>
+                                    </div>
+                                    ${appeal.statusNote ? `
+                                        <div class="history-item-detail" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                                            <span class="history-item-detail-label">Status Note:</span>
+                                            <span style="line-height: 1.5;">${sanitizeHTML(appeal.statusNote)}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${Array.isArray(appeal.evidence) && appeal.evidence.length ? `
+                                        <div class="history-item-detail">
+                                            <span class="history-item-detail-label">Evidence:</span>
+                                            <span>${appeal.evidence.length} attachment(s)</span>
+                                        </div>
+                                    ` : ''}
+                                    ${safeResponse ? `
                                         <div class="history-item-detail" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
                                             <span class="history-item-detail-label">Response:</span>
-                                            <span style="line-height: 1.5;">${appeal.response}</span>
+                                            <span style="line-height: 1.5;">${safeResponse}</span>
                                         </div>
                                     ` : ''}
                                 </div>
@@ -2170,7 +4266,6 @@
         async function showRulesModal(event) {
             if (event) {
                 event.preventDefault();
-                event.stopPropagation();
             }
 
             const modal = document.getElementById('rulesModal');
@@ -2230,15 +4325,25 @@
             }
         }
 
-        function closeRulesModal(event) {
-            if (event && event.target !== event.currentTarget && event.type === 'click') {
-                return;
-            }
-
+        function closeRulesModal() {
             const modal = document.getElementById('rulesModal');
             modal.classList.remove('show');
             document.body.style.overflow = '';
         }
+
+        const rulesModalElement = document.getElementById('rulesModal');
+        const rulesModalBox = rulesModalElement?.querySelector('.modal-box');
+        const rulesModalTrigger = document.getElementById('viewRulesBtn');
+        const rulesModalCloseButton = document.getElementById('rulesModalCloseBtn');
+
+        rulesModalTrigger?.addEventListener('click', showRulesModal);
+        rulesModalCloseButton?.addEventListener('click', closeRulesModal);
+        rulesModalBox?.addEventListener('click', (event) => event.stopPropagation());
+        rulesModalElement?.addEventListener('click', (event) => {
+            if (event.target === rulesModalElement) {
+                closeRulesModal();
+            }
+        });
 
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
@@ -2250,6 +4355,80 @@
         reasonInput.addEventListener('input', () => {
             analyzeAppealQuality();
         });
+
+        document.getElementById('appealEvidence')?.addEventListener('change', (event) => {
+            addAppealEvidenceFiles(event.target?.files || []);
+            if (event.target) {
+                event.target.value = '';
+            }
+        });
+
+        const appealEvidenceDropzone = document.getElementById('appealEvidenceDropzone');
+        const appealEvidenceInput = document.getElementById('appealEvidence');
+        document.getElementById('appealEvidenceBrowseBtn')?.addEventListener('click', () => {
+            appealEvidenceInput?.click();
+        });
+        document.getElementById('appealEvidenceClearBtn')?.addEventListener('click', () => {
+            clearAppealEvidenceFiles();
+        });
+
+        appealEvidenceDropzone?.addEventListener('click', (event) => {
+            if (event.target.closest('button')) return;
+            appealEvidenceInput?.click();
+        });
+
+        appealEvidenceDropzone?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                appealEvidenceInput?.click();
+            }
+        });
+
+        ['dragenter', 'dragover'].forEach((eventName) => {
+            appealEvidenceDropzone?.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                appealEvidenceDropzone.classList.add('is-dragover');
+            });
+        });
+
+        ['dragleave', 'dragend', 'drop'].forEach((eventName) => {
+            appealEvidenceDropzone?.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                if (eventName === 'drop') {
+                    addAppealEvidenceFiles(event.dataTransfer?.files || []);
+                }
+                appealEvidenceDropzone.classList.remove('is-dragover');
+            });
+        });
+
+        setSelectedAppealEvidenceFiles(Array.from(appealEvidenceInput?.files || []));
+        renderEvidenceList('appealEvidenceList', getSelectedAppealEvidenceFiles(), {
+            emptyTitle: 'No files selected',
+            emptyText: 'Add evidence only if it directly supports your appeal.',
+            removable: true
+        });
+        updateReview();
+
+        ['userTag', 'userId', 'email', 'caseId', 'reason'].forEach((fieldId) => {
+            const element = document.getElementById(fieldId);
+            element?.addEventListener('input', () => {
+                saveAppealDraft();
+                updateSubmitSidebar();
+            });
+        });
+
+        restoreAppealDraft();
+        renderEvidenceList('appealEvidenceList', getSelectedAppealEvidenceFiles(), {
+            emptyTitle: 'No files selected',
+            emptyText: 'Add evidence only if it directly supports your appeal.',
+            removable: true
+        });
+        analyzeAppealQuality();
+        validateStep(1);
+        validateStep(2);
+        validateStep(3);
+        validateStep(4);
+        updateSubmitSidebar();
     </script>
 </body>
 

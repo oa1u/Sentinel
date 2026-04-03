@@ -56,7 +56,31 @@
 	},
 	"reputation": {
 		"dailyLimit": 3,
-		"pairCooldownMs": 43200000
+		"pairCooldownMs": 43200000,
+		"leaderboardDefaultLimit": 10,
+		"reasonMaxLength": 160,
+		"roleRewards": [
+			{
+				"tier": "Recognized",
+				"minPoints": 10,
+				"roleId": ""
+			},
+			{
+				"tier": "Trusted",
+				"minPoints": 25,
+				"roleId": ""
+			},
+			{
+				"tier": "Elite",
+				"minPoints": 50,
+				"roleId": ""
+			},
+			{
+				"tier": "Legend",
+				"minPoints": 100,
+				"roleId": ""
+			}
+		]
 	},
 	"economy": {
 		"currencyName": "coins",
@@ -108,6 +132,26 @@
 		"challengeTimeoutMs": 600000,
 		"maxWrongAttemptsPerStep": 3,
 		"strictAccountAgeDays": 7,
+		"tiers": {
+			"standardRiskScoreThreshold": 30,
+			"advancedRiskScoreThreshold": 55
+		},
+		"failurePolicy": {
+			"multipliers": {
+				"captcha_timeout": 1,
+				"challenge_timeout": 1.15,
+				"captcha_max_attempts": 1.35,
+				"challenge_max_attempts": 1.5,
+				"risk_auto_fail": 1.75,
+				"anti_raid_lockdown_auto_fail": 1.8,
+				"dm_closed_and_no_verify_channel": 0,
+				"verified_role_missing": 0,
+				"role_assignment_blocked": 0,
+				"unexpected_error": 0,
+				"system_unavailable": 0,
+				"session_creation_failed": 0.5
+			}
+		},
 		"riskBased": {
 			"enabled": true,
 			"strictScoreThreshold": 30,

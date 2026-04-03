@@ -21,22 +21,33 @@ module.exports = {
         .setDescription('Show how long the bot has been online'),
     category: 'utility',
     async execute(interaction) {
-        const client = interaction.client;
-        const uptimeSeconds = client.uptime ? client.uptime / 1000 : process.uptime();
-        const readyAt = client.readyAt ? client.readyAt : null;
-        const startedAt = readyAt ? Math.floor(readyAt.getTime() / 1000) : null;
+        try {
+            const client = interaction.client;
+            const uptimeSeconds = client.uptime ? client.uptime / 1000 : process.uptime();
+            const readyAt = client.readyAt ? client.readyAt : null;
+            const startedAt = readyAt ? Math.floor(readyAt.getTime() / 1000) : null;
 
-        const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle('⏱️ Bot Uptime')
-            .setDescription('Current runtime since last start.')
-            .addFields(
-                { name: 'Uptime', value: `**${formatDuration(uptimeSeconds)}**`, inline: true },
-                { name: 'Started', value: startedAt ? `<t:${startedAt}:F>` : 'Unknown', inline: true }
-            )
-            .setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-            .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle('⏱️ Bot Uptime')
+                .setDescription('Current runtime since last start.')
+                .addFields(
+                    { name: 'Uptime', value: `**${formatDuration(uptimeSeconds)}**`, inline: true },
+                    { name: 'Started', value: startedAt ? `<t:${startedAt}:F>` : 'Unknown', inline: true }
+                )
+                .setFooter({ text: `Requested by ${interaction.user?.tag || 'Unknown'}`, iconURL: interaction.user?.displayAvatarURL?.({ dynamic: true }) || null })
+                .setTimestamp();
 
-        return interaction.reply({ embeds: [embed] });
+            // Use editReply if deferred, otherwise use reply
+            if (interaction.deferred || interaction.replied) {
+                return await interaction.editReply({ embeds: [embed] });
+            } else {
+                return await interaction.reply({ embeds: [embed] });
+            }
+        } catch (error) {
+            console.error('Error in uptime command:', error);
+            // Let the main handler catch this error
+            throw error;
+        }
     }
 };

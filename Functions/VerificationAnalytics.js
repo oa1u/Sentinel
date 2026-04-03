@@ -18,22 +18,91 @@ function getDefaultAnalytics() {
             staffOverrides: 0,
             multiStepChallenges: 0,
             captchaStepPassed: 0,
-            challengeStepPassed: 0
+            challengeStepPassed: 0,
+            riskAssessed: 0,
+            systemUnavailable: 0,
+            antiRaidBlocks: 0,
+            manualReviewBlocks: 0,
+            standardTierSessions: 0,
+            elevatedTierSessions: 0,
+            advancedTierSessions: 0
         },
         breakdown: {
             challengeTypes: {
                 math: 0,
                 reverse: 0,
-                phrase: 0
+                token: 0,
+                word_pair: 0,
+                sequence: 0,
+                largest_number: 0,
+                vowel_count: 0,
+                odd_one_out: 0,
+                sort_letters: 0,
+                captcha: 0
             },
             verificationModes: {
                 dm: 0,
                 channel_fallback: 0
+            },
+            tierUsage: {
+                standard: 0,
+                elevated: 0,
+                advanced: 0
+            },
+            failureReasons: {
+                captcha_timeout: 0,
+                challenge_timeout: 0,
+                captcha_max_attempts: 0,
+                challenge_max_attempts: 0,
+                risk_auto_fail: 0,
+                anti_raid_lockdown_auto_fail: 0,
+                verified_role_missing: 0,
+                role_assignment_blocked: 0,
+                system_unavailable: 0
+            }
+        },
+        signals: {
+            antiRaidLinkedSessions: 0,
+            riskScoreBands: {
+                low: 0,
+                medium: 0,
+                high: 0
             }
         },
         recent: [],
         updatedAt: null
     };
+}
+
+function extractReasonLabel(reason) {
+    const raw = String(reason || '').trim();
+    if (!raw) return null;
+
+    const pipePart = raw.split('|')[0].trim();
+    const colonPart = pipePart.split(':')[0].trim();
+    return colonPart || null;
+}
+
+function extractTierLabel(reason) {
+    const match = String(reason || '').match(/tier=(\d+|standard|elevated|advanced)/i);
+    if (!match) return null;
+
+    const value = String(match[1] || '').toLowerCase();
+    if (value === '1') return 'standard';
+    if (value === '2') return 'elevated';
+    if (value === '3') return 'advanced';
+    return value || null;
+}
+
+function extractRiskScore(reason) {
+    const match = String(reason || '').match(/score=(\d+(?:\.\d+)?)/i);
+    if (!match) return null;
+    const value = Number(match[1]);
+    return Number.isFinite(value) ? value : null;
+}
+
+function isAntiRaidLinked(reason) {
+    return /antiRaid=true|antiRaidLinked=true|anti_raid/i.test(String(reason || ''));
 }
 
 function normalizeAnalyticsEvent(event = {}) {
@@ -69,7 +138,14 @@ function getEventIncrementMap(eventType) {
         staff_overrides: eventType === 'staff_override' ? 1 : 0,
         multi_step_challenges: eventType === 'multi_step_issued' ? 1 : 0,
         captcha_step_passed: eventType === 'step_captcha_passed' ? 1 : 0,
-        challenge_step_passed: eventType === 'step_challenge_passed' ? 1 : 0
+        challenge_step_passed: eventType === 'step_challenge_passed' ? 1 : 0,
+        risk_assessed: eventType === 'risk_assessed' ? 1 : 0,
+        system_unavailable: eventType === 'failure' ? 0 : 0,
+        anti_raid_blocks: eventType === 'failure' ? 0 : 0,
+        manual_review_blocks: eventType === 'failure' ? 0 : 0,
+        standard_tier_sessions: 0,
+        elevated_tier_sessions: 0,
+        advanced_tier_sessions: 0
     };
 }
 
@@ -85,7 +161,14 @@ function mapTotalsRowToSummary(row = {}) {
         staffOverrides: toSafeNumber(row.staff_overrides),
         multiStepChallenges: toSafeNumber(row.multi_step_challenges),
         captchaStepPassed: toSafeNumber(row.captcha_step_passed),
-        challengeStepPassed: toSafeNumber(row.challenge_step_passed)
+        challengeStepPassed: toSafeNumber(row.challenge_step_passed),
+        riskAssessed: toSafeNumber(row.risk_assessed),
+        systemUnavailable: toSafeNumber(row.system_unavailable),
+        antiRaidBlocks: toSafeNumber(row.anti_raid_blocks),
+        manualReviewBlocks: toSafeNumber(row.manual_review_blocks),
+        standardTierSessions: toSafeNumber(row.standard_tier_sessions),
+        elevatedTierSessions: toSafeNumber(row.elevated_tier_sessions),
+        advancedTierSessions: toSafeNumber(row.advanced_tier_sessions)
     };
 }
 
@@ -114,9 +197,27 @@ async function ensureVerificationAnalyticsDbReady() {
                 multi_step_challenges BIGINT UNSIGNED NOT NULL DEFAULT 0,
                 captcha_step_passed BIGINT UNSIGNED NOT NULL DEFAULT 0,
                 challenge_step_passed BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                risk_assessed BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                system_unavailable BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                anti_raid_blocks BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                manual_review_blocks BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                standard_tier_sessions BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                elevated_tier_sessions BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                advanced_tier_sessions BIGINT UNSIGNED NOT NULL DEFAULT 0,
                 updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
+
+        await MySQLDatabaseManager.connection.query(`
+            ALTER TABLE ${VERIFICATION_ANALYTICS_TOTALS_TABLE}
+                ADD COLUMN IF NOT EXISTS risk_assessed BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS system_unavailable BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS anti_raid_blocks BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS manual_review_blocks BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS standard_tier_sessions BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS elevated_tier_sessions BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS advanced_tier_sessions BIGINT UNSIGNED NOT NULL DEFAULT 0
+        `).catch(() => {});
 
         await MySQLDatabaseManager.connection.query(`
             CREATE TABLE IF NOT EXISTS ${VERIFICATION_ANALYTICS_EVENTS_TABLE} (
@@ -160,6 +261,14 @@ async function recordVerificationEventToDatabase(event = {}) {
 
     const normalized = normalizeAnalyticsEvent(event);
     const increments = getEventIncrementMap(normalized.type);
+    const reasonLabel = extractReasonLabel(normalized.reason);
+    const tierLabel = extractTierLabel(normalized.reason);
+    const systemUnavailableIncrement = reasonLabel === 'system_unavailable' ? 1 : 0;
+    const antiRaidBlockIncrement = reasonLabel === 'anti_raid_lockdown_auto_fail' ? 1 : 0;
+    const manualReviewBlockIncrement = reasonLabel === 'risk_auto_fail' ? 1 : 0;
+    const standardTierIncrement = tierLabel === 'standard' ? 1 : 0;
+    const elevatedTierIncrement = tierLabel === 'elevated' ? 1 : 0;
+    const advancedTierIncrement = tierLabel === 'advanced' ? 1 : 0;
 
     await MySQLDatabaseManager.connection.query(
         `UPDATE ${VERIFICATION_ANALYTICS_TOTALS_TABLE}
@@ -174,6 +283,13 @@ async function recordVerificationEventToDatabase(event = {}) {
              multi_step_challenges = multi_step_challenges + ?,
              captcha_step_passed = captcha_step_passed + ?,
              challenge_step_passed = challenge_step_passed + ?,
+             risk_assessed = risk_assessed + ?,
+             system_unavailable = system_unavailable + ?,
+             anti_raid_blocks = anti_raid_blocks + ?,
+             manual_review_blocks = manual_review_blocks + ?,
+             standard_tier_sessions = standard_tier_sessions + ?,
+             elevated_tier_sessions = elevated_tier_sessions + ?,
+             advanced_tier_sessions = advanced_tier_sessions + ?,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = 1`,
         [
@@ -187,7 +303,14 @@ async function recordVerificationEventToDatabase(event = {}) {
             increments.staff_overrides,
             increments.multi_step_challenges,
             increments.captcha_step_passed,
-            increments.challenge_step_passed
+            increments.challenge_step_passed,
+            increments.risk_assessed,
+            systemUnavailableIncrement,
+            antiRaidBlockIncrement,
+            manualReviewBlockIncrement,
+            standardTierIncrement,
+            elevatedTierIncrement,
+            advancedTierIncrement
         ]
     );
 
@@ -220,6 +343,8 @@ async function getVerificationAnalyticsFromDatabase({ days = 30 } = {}) {
         `SELECT sessions_started, successes, failures, timeouts, fallback_used,
                 role_assignment_failures, penalties_applied, staff_overrides,
                 multi_step_challenges, captcha_step_passed, challenge_step_passed,
+                risk_assessed, system_unavailable, anti_raid_blocks, manual_review_blocks,
+                standard_tier_sessions, elevated_tier_sessions, advanced_tier_sessions,
                 updated_at
          FROM ${VERIFICATION_ANALYTICS_TOTALS_TABLE}
          WHERE id = 1
@@ -257,6 +382,13 @@ async function getVerificationAnalyticsFromDatabase({ days = 30 } = {}) {
          GROUP BY mode`
     );
 
+    const reasonRows = await MySQLDatabaseManager.connection.query(
+        `SELECT reason, COUNT(*) AS count
+         FROM ${VERIFICATION_ANALYTICS_EVENTS_TABLE}
+         WHERE reason IS NOT NULL AND reason <> ''
+         GROUP BY reason`
+    );
+
     const recentRows = await MySQLDatabaseManager.connection.query(
         `SELECT event_timestamp, event_type, user_id, username, guild_id, guild_name, mode, challenge_type, duration_ms, reason
          FROM ${VERIFICATION_ANALYTICS_EVENTS_TABLE}
@@ -270,7 +402,17 @@ async function getVerificationAnalyticsFromDatabase({ days = 30 } = {}) {
         },
         verificationModes: {
             ...getDefaultAnalytics().breakdown.verificationModes
+        },
+        tierUsage: {
+            ...getDefaultAnalytics().breakdown.tierUsage
+        },
+        failureReasons: {
+            ...getDefaultAnalytics().breakdown.failureReasons
         }
+    };
+
+    const signals = {
+        ...getDefaultAnalytics().signals
     };
 
     for (const row of challengeRows || []) {
@@ -290,6 +432,39 @@ async function getVerificationAnalyticsFromDatabase({ days = 30 } = {}) {
         }
         breakdown.verificationModes[key] = Number(row?.count || 0);
     }
+
+    for (const row of reasonRows || []) {
+        const reasonLabel = extractReasonLabel(row?.reason);
+        if (!reasonLabel) continue;
+
+        if (Object.prototype.hasOwnProperty.call(breakdown.tierUsage, reasonLabel)) {
+            breakdown.tierUsage[reasonLabel] += Number(row?.count || 0);
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(breakdown.failureReasons, reasonLabel)) {
+            breakdown.failureReasons[reasonLabel] = 0;
+        }
+        breakdown.failureReasons[reasonLabel] += Number(row?.count || 0);
+
+        if (isAntiRaidLinked(row?.reason)) {
+            signals.antiRaidLinkedSessions += Number(row?.count || 0);
+        }
+
+        const riskScore = extractRiskScore(row?.reason);
+        if (riskScore !== null) {
+            if (riskScore >= 60) {
+                signals.riskScoreBands.high += Number(row?.count || 0);
+            } else if (riskScore >= 30) {
+                signals.riskScoreBands.medium += Number(row?.count || 0);
+            } else {
+                signals.riskScoreBands.low += Number(row?.count || 0);
+            }
+        }
+    }
+
+    breakdown.tierUsage.standard = summary.standardTierSessions;
+    breakdown.tierUsage.elevated = summary.elevatedTierSessions;
+    breakdown.tierUsage.advanced = summary.advancedTierSessions;
 
     const recent = (recentRows || []).map((row) => ({
         timestamp: row?.event_timestamp ? new Date(row.event_timestamp).toISOString() : new Date().toISOString(),
@@ -319,6 +494,7 @@ async function getVerificationAnalyticsFromDatabase({ days = 30 } = {}) {
             fallbackUsed: Number(windowRow?.fallbackUsed || 0)
         },
         breakdown,
+        signals,
         recent,
         updatedAt: totalsRow?.updated_at ? new Date(totalsRow.updated_at).toISOString() : null
     };

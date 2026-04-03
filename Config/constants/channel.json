@@ -36,5 +36,9 @@
     "REVIVAL_TARGET_ID_1",
     "REVIVAL_TARGET_ID_2"
   ],
-  "lockdownChannelIds": ["advanced_users_touch_only"]
+  "lockdownChannelIds": [
+    "advanced_users_touch_only"
+  ],
+  "autoResponderAllowedChannelIds": ["AUTO_RESPONDER_ALLOWED_CHANNEL_ID_1", "AUTO_RESPONDER_ALLOWED_CHANNEL_ID_2"],
+  "autoResponderBlockedChannelIds": ["AUTO_RESPONDER_BLOCKED_CHANNEL_ID_1", "AUTO_RESPONDER_BLOCKED_CHANNEL_ID_2"]
 }

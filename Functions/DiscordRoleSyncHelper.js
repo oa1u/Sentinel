@@ -188,7 +188,6 @@ async function resolveDiscordGuildMembership(discordClient, discordUserId) {
             reason: member ? '' : 'Linked Discord account is not in the configured server'
         });
     } catch (error) {
-        console.warn('[DiscordRoleSync] Failed to verify guild membership:', error?.message || error);
         return buildMembershipResult({ reason: 'Guild membership verification is temporarily unavailable' });
     }
 }
@@ -283,22 +282,66 @@ async function persistDiscordVerificationState({ databaseManager, user, state })
         );
         return true;
     } catch (error) {
-        console.warn('[DiscordRoleSync] Failed to persist Discord verification state:', error?.message || error);
         return false;
     }
 }
 
 async function applyDiscordRoleSyncPolicy({ databaseManager, user, state }) {
-    if (!databaseManager?.connection?.pool || !user || !state?.linked || !state.roleSyncConfigured || !DISCORD_ROLE_TRUST_ENFORCED) {
-        return { user, state };
-    }
-
-    const trustedRole = String(state.trustedPanelRole || '').trim();
-    if (!trustedRole) {
+    if (!databaseManager?.connection?.pool || !user || !state.roleSyncConfigured || !DISCORD_ROLE_TRUST_ENFORCED) {
         return { user, state };
     }
 
     const currentRank = getRoleRank(user.role);
+
+    // If user is not linked to Discord but has a staff role, block access
+    if (!state?.linked && currentRank > 0) {
+        state.roleAlignmentOk = false;
+        state.securityReason = 'Discord account linking is required for staff roles';
+        return { user, state };
+    }
+
+    if (!state?.linked) {
+        return { user, state };
+    }
+
+    const trustedRole = String(state.trustedPanelRole || '').trim() || null;
+    
+    // If user has no Discord staff roles but panel role is staff, downgrade to null/user
+    if (!trustedRole && currentRank > 0 && DISCORD_ROLE_SYNC_MODE === 'downgrade') {
+        const previousRole = user.role;
+        
+        try {
+            await databaseManager.connection.pool.execute(
+                `UPDATE admin_users
+                 SET role = NULL, discord_last_role_sync_at = NOW()
+                 WHERE id = ?`,
+                [user.id]
+            );
+
+            user.role = null;
+            state.panelRole = null;
+            state.roleAlignmentOk = true;
+            state.roleAutoSynced = true;
+            state.roleSyncReason = `Panel role was removed (was ${previousRole}) because linked Discord account has no staff roles`;
+            state.previousPanelRole = previousRole;
+        } catch (error) {
+        }
+
+        return { user, state };
+    }
+
+    // Also enforce when user has no Discord roles (not just when trustedRole is empty string)
+    if (!trustedRole && currentRank > 0 && DISCORD_ROLE_SYNC_MODE === 'enforce') {
+        // In enforce mode, prevent access but don't modify the database role
+        state.roleAlignmentOk = false;
+        return { user, state };
+    }
+
+    // Existing logic for when user HAS Discord roles
+    if (!trustedRole) {
+        return { user, state };
+    }
+
     const trustedRank = getRoleRank(trustedRole);
     if (!currentRank || !trustedRank || trustedRank >= currentRank || DISCORD_ROLE_SYNC_MODE !== 'downgrade') {
         return { user, state };
@@ -321,7 +364,6 @@ async function applyDiscordRoleSyncPolicy({ databaseManager, user, state }) {
         state.roleSyncReason = `Panel role was reduced from ${previousRole} to ${trustedRole} to match Discord trust`;
         state.previousPanelRole = previousRole;
     } catch (error) {
-        console.error('[DiscordRoleSync] Failed to auto-sync panel role to Discord trust:', error?.message || error);
     }
 
     return { user, state };

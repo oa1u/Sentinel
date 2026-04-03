@@ -70,7 +70,20 @@ module.exports = {
           const cmdName = command?.data?.name || 'unknown';
           const emoji = getCommandEmoji(cmdName);
           const desc = typeof command?.data?.description === 'string' ? command.data.description : 'No description';
-          return `${emoji} \`/${cmdName}\` - ${desc}`;
+
+          let line = `${emoji} \`/${cmdName}\` - ${desc}`;
+
+          if (command.data && typeof command.data.toJSON === 'function') {
+            const dataJson = command.data.toJSON();
+            if (dataJson.options && Array.isArray(dataJson.options)) {
+              const subcommands = dataJson.options.filter(o => o.type === 1 || o.type === 2).map(o => o.name);
+              if (subcommands.length > 0) {
+                line += `\n> *Subcommands: ${subcommands.join(', ')}*`;
+              }
+            }
+          }
+
+          return line;
         });
 
       if (commands.length === 0) {
@@ -201,7 +214,7 @@ function getCommandEmoji(commandName) {
     crypto: '💰',
     credits: '🙏',
     define: '📖',
-    economy: '🪙',
+    economy: '💰',
     events: '📅',
     help: '🧭',
     invites: '📨',
@@ -227,7 +240,7 @@ function getCommandEmoji(commandName) {
     streak: '🔥',
 
     '8ball': '🎱',
-    coinflip: '🪙',
+    coinflip: '💰',
     dadjoke: '👴',
     fact: '💡',
     joke: '😂',

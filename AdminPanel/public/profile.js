@@ -2753,6 +2753,12 @@ async function unlinkDiscordAccount() {
             return;
         }
         if (!response.ok) {
+            if (response.status === 400 && String(data?.error || '').toLowerCase().includes('approval token is invalid or expired')) {
+                clearStoredHighRiskApproval('discord-unlink');
+                profileShowError('Approval token is invalid or expired. Please retry unlinking to request new authorization.');
+                return;
+            }
+
             if (handleDiscordProtectedError(data, 'Link Discord to manage Discord connection settings.')) {
                 return;
             }
@@ -2764,6 +2770,11 @@ async function unlinkDiscordAccount() {
         profileShowSuccess('Discord account unlinked.');
         loadSecurityCenter();
     } catch (error) {
+        if (error?.message?.startsWith('Security delay in progress.')) {
+            profileShowError(error.message);
+            return;
+        }
+
         console.error('Error unlinking Discord account:', error);
         profileShowError(error.message || 'Failed to unlink Discord account');
     } finally {

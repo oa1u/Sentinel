@@ -8,7 +8,7 @@
     <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/style.css">
 
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
 </head>
 
 <body>
@@ -40,6 +40,8 @@
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
                         <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
@@ -183,6 +185,10 @@
                     <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🎱</span>
                         <b>Games:</b> /8ball, /coinflip, /trivia, <b>/riddle</b>
                     </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🎰</span>
+                        <b>Economy Betting:</b> Risk your wallet with <b>/economy slots</b>, <b>/economy coinflip</b>,
+                        and player-to-player <b>/economy rob</b>
+                    </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#ffd45b;">🧩</span>
                         <b>Riddle:</b> Solve a riddle for XP (API/local fallback)
                     </div>
@@ -221,7 +227,15 @@
                         and functions
                     </div>
                     <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🏦</span>
-                        <b>Economy & Social:</b> /economy, /rep, reputation flows, and engagement tracking systems
+                        <b>Economy System:</b> /economy for bank interest, daily quests, item shops, and wallet/bank
+                        management.
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🎰</span>
+                        <b>Economy Games:</b> Multiply your coins with <b>/economy slots</b> and <b>/economy
+                            coinflip</b>, or risk it all by stealing from other players with <b>/economy rob</b>!
+                    </div>
+                    <div class="feature-item"><span class="feature-bullet" style="color:#5bffb8;">🤝</span>
+                        <b>Social:</b> /rep, reputation flows, and engagement tracking systems
                     </div>
                 </div>
             </div>

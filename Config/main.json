@@ -1,5 +1,6 @@
 {
   "serverID": "SERVER_ID_HERE",
+  "OwnerID": "OWNER_ID_HERE",
   "ServerInvite": "SERVER_INVITE_LINK_HERE",
   "AppealLink": "APPEAL_LINK_HERE",
   "WebsiteLink": "WEBSITE_LINK_HERE",
@@ -8,5 +9,5 @@
   "serverName": "SERVER_NAME_HERE",
   "PanelEmoji": "🛡️",
   "botName": "Sentinel",
-  "Version": "8.2.0"
+  "Version": "8.3.0"
 }

@@ -164,12 +164,26 @@ webhookApp.listen(BOT_WEBHOOK_PORT, () => {
 client.commands = new Collection();
 client.slashCommands = new Collection();
 client.events = new Collection();
+client.interactionHandlers = {
+  component: [],
+  modal: []
+};
 client.runtimeHealth = {
   healthCheckIntervalMs: HEALTH_CHECK_INTERVAL_MS,
   consecutiveDatabaseHealthFailures: 0,
   lastDatabaseHealthCheckAt: null,
   lastDatabaseHealth: null,
   lastDatabaseHealthError: null
+};
+client.runtimeMetrics = {
+  commandsExecuted: 0,
+  commandErrors: 0,
+  buttonsHandled: 0,
+  modalsHandled: 0,
+  interactionErrors: 0,
+  lastCommandDurationMs: 0,
+  slowCommandThresholdMs: Math.max(250, Number(process.env.SLOW_COMMAND_THRESHOLD_MS) || 4000),
+  recentSlowCommands: []
 };
 client.jobScheduler = null;
 let jobScheduler = null;
@@ -230,6 +244,61 @@ function buildSlashCommandPayloadsFromCollection(collection) {
 
 function createSlashCommandSignature(commands = []) {
   return JSON.stringify(Array.isArray(commands) ? commands : []);
+}
+
+function refreshInteractionHandlerRegistry() {
+  const commands = Array.from(client.slashCommands.values());
+  client.interactionHandlers.component = commands.filter((command) => typeof command?.handleComponent === 'function');
+  client.interactionHandlers.modal = commands.filter((command) => typeof command?.handleModal === 'function');
+
+  console.log(
+    `🧩 Interaction handlers ready: buttons=${client.interactionHandlers.component.length}, modals=${client.interactionHandlers.modal.length}`
+  );
+}
+
+function recordSlowCommandMetric(commandName, durationMs) {
+  const entry = {
+    commandName: String(commandName || 'unknown'),
+    durationMs: Math.max(0, Number(durationMs) || 0),
+    recordedAt: Date.now()
+  };
+
+  client.runtimeMetrics.recentSlowCommands.push(entry);
+  if (client.runtimeMetrics.recentSlowCommands.length > 25) {
+    client.runtimeMetrics.recentSlowCommands.shift();
+  }
+}
+
+async function dispatchRegisteredInteraction(interaction, handlerType) {
+  const handlerList = Array.isArray(client.interactionHandlers?.[handlerType])
+    ? client.interactionHandlers[handlerType]
+    : [];
+
+  for (const command of handlerList) {
+    const handler = handlerType === 'modal' ? command.handleModal : command.handleComponent;
+    if (typeof handler !== 'function') continue;
+
+    const handled = await handler.call(command, interaction);
+    if (handled) {
+      if (handlerType === 'modal') {
+        client.runtimeMetrics.modalsHandled += 1;
+      } else {
+        client.runtimeMetrics.buttonsHandled += 1;
+      }
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function sendInteractionFailure(interaction, content) {
+  if (!interaction.replied && !interaction.deferred) {
+    await interaction.reply({
+      content,
+      flags: MessageFlags.Ephemeral
+    }).catch(() => { });
+  }
 }
 
 // Load and register slash commands with Discord (guild-scoped when possible).
@@ -309,6 +378,8 @@ async function initializeBot() {
       process.exit(1);
     });
 
+    refreshInteractionHandlerRegistry();
+
     const initialCommandsPayload = buildSlashCommandPayloadsFromCollection(client.slashCommands);
     const registered = await registerCommands({ commandsOverride: initialCommandsPayload, reason: 'startup' });
     if (!registered) {
@@ -336,6 +407,7 @@ async function initializeBot() {
         debounceMs: Number(process.env.COMMANDS_WATCH_DEBOUNCE_MS) || 500,
         onReload: async ({ event, result }) => {
           console.log(`🔄 Reloaded slash commands (${event}) -> loaded=${result.loaded}, errors=${result.errors}`);
+          refreshInteractionHandlerRegistry();
           if (result?.errors > 0) {
             console.warn('⚠️  Skipping slash command registration because loader reported errors.');
             return;
@@ -968,19 +1040,24 @@ async function finalizeGiveaway(message, giveawayId, client, prize, host) {
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
     try {
-      const announceCommand = client.slashCommands.get('announce');
-      if (announceCommand && typeof announceCommand.handleComponent === 'function') {
-        const handled = await announceCommand.handleComponent(interaction);
-        if (handled) return;
-      }
+      const handled = await dispatchRegisteredInteraction(interaction, 'component');
+      if (handled) return;
     } catch (error) {
+      client.runtimeMetrics.interactionErrors += 1;
       console.error('🗑️Error handling button interaction:', error.message || error);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: '- There was an error while processing that button.',
-          flags: MessageFlags.Ephemeral
-        }).catch(() => { });
-      }
+      await sendInteractionFailure(interaction, '- There was an error while processing that button.');
+      return;
+    }
+  }
+
+  if (interaction.isModalSubmit()) {
+    try {
+      const handled = await dispatchRegisteredInteraction(interaction, 'modal');
+      if (handled) return;
+    } catch (error) {
+      client.runtimeMetrics.interactionErrors += 1;
+      console.error('🗑️Error handling modal interaction:', error.message || error);
+      await sendInteractionFailure(interaction, '- There was an error while processing that form.');
       return;
     }
   }
@@ -1060,12 +1137,68 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   try {
-    await command.execute(interaction);
+    const originalReply = interaction.reply.bind(interaction);
+    interaction.reply = async (payload) => {
+      if (!interaction.deferred && !interaction.replied) {
+        return originalReply(payload);
+      }
+
+      if (interaction.deferred && !interaction.replied) {
+        const editPayload = typeof payload === 'string' ? { content: payload } : { ...(payload || {}) };
+        // The initial response flags are locked after deferReply.
+        if (editPayload && typeof editPayload === 'object' && Object.prototype.hasOwnProperty.call(editPayload, 'flags')) {
+          delete editPayload.flags;
+        }
+        return interaction.editReply(editPayload);
+      }
+
+      return interaction.followUp(payload);
+    };
+
+    // Auto-defer only if the command has not replied quickly.
+    // This avoids breaking commands that intentionally call interaction.reply().
+    const autoDeferTimer = setTimeout(() => {
+      if (!interaction.deferred && !interaction.replied) {
+        interaction.deferReply().catch(() => { });
+      }
+    }, 1500);
+
+    const startedAt = Date.now();
+    try {
+      await command.execute(interaction);
+    } finally {
+      clearTimeout(autoDeferTimer);
+    }
+    const durationMs = Date.now() - startedAt;
+    client.runtimeMetrics.commandsExecuted += 1;
+    client.runtimeMetrics.lastCommandDurationMs = durationMs;
+    if (durationMs >= client.runtimeMetrics.slowCommandThresholdMs) {
+      recordSlowCommandMetric(interaction.commandName, durationMs);
+      console.warn(`🐢 Slow command detected: /${interaction.commandName} took ${durationMs}ms`);
+    }
     await logInteraction('SUCCESS');
   } catch (error) {
-    console.error(`- Error executing command /${interaction.commandName}:`, error.message);
+    client.runtimeMetrics.commandErrors += 1;
+    console.error(`- Error executing command /${interaction.commandName}:`, error);
+    console.error(`  Message: ${error.message}`);
+    console.error(`  Stack: ${error.stack}`);
     await logInteraction('ERROR', error.message);
-    await sendCommandErrorResponse(interaction);
+
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({
+          content: '- There was an error while executing this command!',
+          flags: MessageFlags.Ephemeral
+        }).catch(err => console.error('Failed to send error response via followUp:', err.message));
+      } else {
+        await interaction.reply({
+          content: '- There was an error while executing this command!',
+          flags: MessageFlags.Ephemeral
+        }).catch(err => console.error('Failed to send error response via reply:', err.message));
+      }
+    } catch (responseError) {
+      console.error('Failed to send error response:', responseError.message);
+    }
   }
 });
 

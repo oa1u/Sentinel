@@ -119,10 +119,16 @@ function getServerBadgeList({ level, reputation, streak, bestStreak, joinedTimes
         badges.push('🥉 First Milestone');
     }
 
-    if (reputation >= 25) {
+    if (reputation >= 100) {
+        badges.push('👑 Community Legend');
+    } else if (reputation >= 50) {
+        badges.push('💠 Elite Helper');
+    } else if (reputation >= 25) {
         badges.push('🤝 Trusted Member');
     } else if (reputation >= 10) {
         badges.push('💬 Helpful Member');
+    } else if (reputation >= 1) {
+        badges.push('✨ First Reputation');
     }
 
     if (streak >= 30) {
@@ -210,8 +216,21 @@ module.exports = {
         ),
     category: 'utility',
     async execute(interaction) {
+        async function sendInteractionResponse(payload) {
+            if (interaction.deferred) {
+                const { flags, ...safePayload } = payload;
+                return interaction.editReply(safePayload);
+            }
+
+            if (interaction.replied) {
+                return interaction.followUp(payload);
+            }
+
+            return interaction.reply(payload);
+        }
+
         if (!interaction.guild || !interaction.guildId) {
-            return interaction.reply({
+            return sendInteractionResponse({
                 content: 'This command can only be used in a server.',
                 flags: MessageFlags.Ephemeral
             });
@@ -221,7 +240,7 @@ module.exports = {
 
         const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
         if (!member) {
-            return interaction.reply({
+            return sendInteractionResponse({
                 content: 'That user is not currently a member of this server.',
                 flags: MessageFlags.Ephemeral
             });
@@ -359,6 +378,6 @@ module.exports = {
             embed.setImage(bannerUrl);
         }
 
-        return interaction.reply({ embeds: [embed] });
+        return sendInteractionResponse({ embeds: [embed] });
     }
 };

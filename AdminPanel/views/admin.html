@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/css/style.css">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <script src="/public/shared.js"></script>
     <script src="/public/security.js"></script>
     <script src="/public/admin.js?v=9" defer></script>
@@ -42,6 +42,8 @@
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
                         <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
@@ -62,24 +64,26 @@
                 <div class="admin-hero-chips">
                     <span class="admin-chip">Appeals</span>
                     <span class="admin-chip">AutoMod Settings</span>
+                    <span class="admin-chip">Suggestion Review</span>
+                    <span class="admin-chip">Queue Management</span>
                 </div>
             </div>
             <div class="admin-kpi-grid">
                 <div class="admin-kpi">
-                    <span class="kpi-label">Total Users</span>
-                    <span class="kpi-value" id="kpiTotalUsers">Loading...</span>
+                    <span class="kpi-label">Pending Appeals</span>
+                    <span class="kpi-value" id="kpiPendingAppeals">Loading...</span>
                 </div>
                 <div class="admin-kpi">
-                    <span class="kpi-label">Active Tickets</span>
-                    <span class="kpi-value" id="kpiActiveTickets">Loading...</span>
+                    <span class="kpi-label">Priority Queue</span>
+                    <span class="kpi-value" id="kpiPriorityAppeals">Loading...</span>
                 </div>
                 <div class="admin-kpi">
-                    <span class="kpi-label">Banned Users</span>
-                    <span class="kpi-value" id="kpiBannedUsers">Loading...</span>
+                    <span class="kpi-label">Pending Suggestions</span>
+                    <span class="kpi-value" id="kpiPendingSuggestions">Loading...</span>
                 </div>
                 <div class="admin-kpi">
-                    <span class="kpi-label">Total Warnings</span>
-                    <span class="kpi-value" id="kpiTotalWarns">Loading...</span>
+                    <span class="kpi-label">Decisions (7d)</span>
+                    <span class="kpi-value" id="kpiAppealDecisions7d">Loading...</span>
                 </div>
             </div>
         </section>
@@ -101,94 +105,116 @@
         <style>
             .admin-hero {
                 border: 1px solid var(--border-color);
-                border-radius: var(--radius-lg);
-                background: linear-gradient(140deg, rgba(91, 127, 255, 0.2) 0%, rgba(91, 255, 184, 0.09) 38%, rgba(20, 20, 20, 0.95) 100%);
-                box-shadow: var(--shadow-lg);
-                padding: 1.25rem 1.3rem;
-                margin-bottom: 1.1rem;
+                border-radius: 1rem;
+                background: linear-gradient(140deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.1) 50%, rgba(30, 30, 36, 0.95) 100%);
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+                padding: 1.5rem;
+                margin-bottom: 2rem;
                 display: grid;
-                gap: 0.95rem;
+                gap: 1.5rem;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .admin-hero::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                left: 0;
+                background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+                pointer-events: none;
+                z-index: 0;
             }
 
             .admin-hero-main {
                 display: grid;
-                gap: 0.42rem;
+                gap: 0.5rem;
+                position: relative;
+                z-index: 1;
             }
 
             .admin-eyebrow {
                 margin: 0;
-                color: var(--text-secondary);
-                font-size: 0.72rem;
-                letter-spacing: 0.1em;
+                color: #a5b4fc;
+                font-size: 0.75rem;
+                letter-spacing: 0.15em;
                 text-transform: uppercase;
                 font-weight: 700;
             }
 
             .admin-hero h1 {
                 margin: 0;
-                color: var(--text-primary);
-                font-size: 1.95rem;
-                line-height: 1.15;
-                letter-spacing: 0.01em;
+                color: white;
+                font-size: 2.5rem;
+                line-height: 1.1;
+                font-weight: 800;
+                letter-spacing: -0.02em;
             }
 
             .admin-hero-copy {
                 margin: 0;
-                color: var(--text-secondary);
+                color: #94a3b8;
                 line-height: 1.6;
-                max-width: 880px;
-                font-size: 0.95rem;
+                max-width: 800px;
+                font-size: 1.1rem;
             }
 
             .admin-hero-chips {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 0.5rem;
-                margin-top: 0.2rem;
+                gap: 0.75rem;
+                margin-top: 1rem;
             }
 
             .admin-chip {
-                font-size: 0.76rem;
-                color: var(--text-primary);
-                border: 1px solid rgba(91, 127, 255, 0.35);
-                background: rgba(10, 10, 10, 0.35);
+                font-size: 0.8rem;
+                color: #e2e8f0;
+                border: 1px solid rgba(165, 180, 252, 0.3);
+                background: rgba(165, 180, 252, 0.1);
                 border-radius: 999px;
-                padding: 0.28rem 0.64rem;
-                letter-spacing: 0.04em;
+                padding: 0.35rem 0.85rem;
+                letter-spacing: 0.05em;
                 text-transform: uppercase;
                 font-weight: 700;
             }
 
             .admin-kpi-grid {
                 display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-                gap: 0.55rem;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1rem;
+                position: relative;
+                z-index: 1;
             }
 
             .admin-kpi {
-                border: 1px solid rgba(91, 127, 255, 0.28);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 12px;
-                background: linear-gradient(160deg, rgba(31, 31, 31, 0.95) 0%, rgba(22, 22, 22, 0.97) 100%);
-                padding: 0.7rem 0.8rem;
-                min-height: 78px;
-                display: grid;
-                align-content: center;
+                background: rgba(0, 0, 0, 0.3);
+                backdrop-filter: blur(5px);
+                padding: 1rem 1.25rem;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                min-height: 104px;
             }
 
             .admin-kpi .kpi-label {
-                color: var(--text-secondary);
-                font-size: 0.7rem;
+                color: #94a3b8;
+                font-size: 0.75rem;
                 text-transform: uppercase;
-                letter-spacing: 0.07em;
-                font-weight: 700;
-                margin-bottom: 0.18rem;
+                letter-spacing: 0.1em;
+                font-weight: 600;
+                margin-bottom: 0.5rem;
             }
 
             .admin-kpi .kpi-value {
-                color: var(--text-primary);
-                font-size: 0.94rem;
+                color: white;
+                font-size: 1.5rem;
                 font-weight: 700;
-                line-height: 1.35;
+                line-height: 1.2;
+                font-family: 'Consolas', monospace;
             }
 
 
@@ -465,8 +491,8 @@
             }
 
             @media (max-width: 980px) {
-                .admin-kpi-grid {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                .admin-hero-main {
+                    align-content: start;
                 }
 
                 .automod-metrics-grid {
@@ -1725,6 +1751,14 @@
                                     <label>Submission Date</label>
                                     <span id="appealsDetailSubmitted">---</span>
                                 </div>
+                                <div class="meta-item">
+                                    <label>Review Stage</label>
+                                    <span id="appealsDetailStageLabel">Submitted</span>
+                                </div>
+                                <div class="meta-item">
+                                    <label>Last Updated</label>
+                                    <span id="appealsDetailUpdated">---</span>
+                                </div>
                             </div>
 
                             <div class="content-block">
@@ -1739,6 +1773,33 @@
                                 <label>🛡️ Moderator Response</label>
                                 <div class="text-block" id="appealsDetailResponse">
                                     <em style="color:var(--text-muted)">No response yet.</em>
+                                </div>
+                            </div>
+
+                            <div class="content-block">
+                                <label>📎 Evidence</label>
+                                <div class="text-block" id="appealsDetailEvidence">
+                                    <em style="color:var(--text-muted)">No evidence attached.</em>
+                                </div>
+                            </div>
+
+                            <div class="content-block">
+                                <label>🧭 Review Workflow</label>
+                                <div style="display:grid; gap:0.85rem;">
+                                    <select id="appealsDetailStageSelect" class="form-input">
+                                        <option value="submitted">Submitted</option>
+                                        <option value="triage">Triage</option>
+                                        <option value="evidence-review">Evidence Review</option>
+                                        <option value="final-review">Final Review</option>
+                                        <option value="awaiting-decision">Awaiting Decision</option>
+                                    </select>
+                                    <textarea id="appealsDetailPublicNote" class="form-input" rows="3"
+                                        placeholder="Visible status note shown to the appeal submitter."></textarea>
+                                    <textarea id="appealsDetailInternalNote" class="form-input" rows="4"
+                                        placeholder="Internal moderation notes for this appeal."></textarea>
+                                    <button id="appealsDetailSaveReviewBtn" class="btn btn-secondary" disabled>
+                                        <span>💾</span> Save Review Details
+                                    </button>
                                 </div>
                             </div>
 

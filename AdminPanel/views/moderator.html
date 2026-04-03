@@ -9,7 +9,6 @@
     <link rel="stylesheet" href="/css/style.css">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/public/notifications.js" defer></script>
     <script src="/public/shared.js"></script>
@@ -43,6 +42,8 @@
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
                         <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
@@ -60,7 +61,9 @@
                 <p class="admin-hero-copy">Handle tickets, warnings, bans, and timeouts from one place.</p>
                 <div class="admin-hero-chips">
                     <span class="admin-chip">Live Tickets</span>
-                    <span class="admin-chip">Active Bans</span>
+                    <span class="admin-chip">Warnings Queue</span>
+                    <span class="admin-chip">Timeout Review</span>
+                    <span class="admin-chip">Ban Actions</span>
                 </div>
             </div>
             <div class="admin-kpi-grid">
@@ -99,94 +102,116 @@
         <style>
             .admin-hero {
                 border: 1px solid var(--border-color);
-                border-radius: var(--radius-lg);
-                background: linear-gradient(140deg, rgba(91, 127, 255, 0.2) 0%, rgba(91, 255, 184, 0.09) 38%, rgba(20, 20, 20, 0.95) 100%);
-                box-shadow: var(--shadow-lg);
-                padding: 1.25rem 1.3rem;
-                margin-bottom: 1.1rem;
+                border-radius: 1rem;
+                background: linear-gradient(140deg, rgba(91, 127, 255, 0.16) 0%, rgba(91, 255, 184, 0.08) 50%, rgba(30, 30, 36, 0.95) 100%);
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+                padding: 1.5rem;
+                margin-bottom: 2rem;
                 display: grid;
-                gap: 0.95rem;
+                gap: 1.5rem;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .admin-hero::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                left: 0;
+                background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+                pointer-events: none;
+                z-index: 0;
             }
 
             .admin-hero-main {
                 display: grid;
-                gap: 0.42rem;
+                gap: 0.5rem;
+                position: relative;
+                z-index: 1;
             }
 
             .admin-eyebrow {
                 margin: 0;
-                color: var(--text-secondary);
-                font-size: 0.72rem;
-                letter-spacing: 0.1em;
+                color: #8fb0ff;
+                font-size: 0.75rem;
+                letter-spacing: 0.15em;
                 text-transform: uppercase;
                 font-weight: 700;
             }
 
             .admin-hero h1 {
                 margin: 0;
-                color: var(--text-primary);
-                font-size: 1.95rem;
-                line-height: 1.15;
-                letter-spacing: 0.01em;
+                color: white;
+                font-size: 2.5rem;
+                line-height: 1.1;
+                font-weight: 800;
+                letter-spacing: -0.02em;
             }
 
             .admin-hero-copy {
                 margin: 0;
-                color: var(--text-secondary);
+                color: #aeb9ca;
                 line-height: 1.6;
-                max-width: 880px;
-                font-size: 0.95rem;
+                max-width: 800px;
+                font-size: 1.1rem;
             }
 
             .admin-hero-chips {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 0.5rem;
-                margin-top: 0.2rem;
+                gap: 0.75rem;
+                margin-top: 1rem;
             }
 
             .admin-chip {
-                font-size: 0.76rem;
-                color: var(--text-primary);
-                border: 1px solid rgba(91, 127, 255, 0.35);
-                background: rgba(10, 10, 10, 0.35);
+                font-size: 0.8rem;
+                color: #e2e8f0;
+                border: 1px solid rgba(91, 127, 255, 0.28);
+                background: rgba(91, 127, 255, 0.08);
                 border-radius: 999px;
-                padding: 0.28rem 0.64rem;
-                letter-spacing: 0.04em;
+                padding: 0.35rem 0.85rem;
+                letter-spacing: 0.05em;
                 text-transform: uppercase;
                 font-weight: 700;
             }
 
             .admin-kpi-grid {
                 display: grid;
-                grid-template-columns: repeat(4, minmax(0, 1fr));
-                gap: 0.55rem;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1rem;
+                position: relative;
+                z-index: 1;
             }
 
             .admin-kpi {
-                border: 1px solid rgba(91, 127, 255, 0.28);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 12px;
-                background: linear-gradient(160deg, rgba(31, 31, 31, 0.95) 0%, rgba(22, 22, 22, 0.97) 100%);
-                padding: 0.7rem 0.8rem;
-                min-height: 78px;
-                display: grid;
-                align-content: center;
+                background: rgba(0, 0, 0, 0.28);
+                backdrop-filter: blur(5px);
+                padding: 1rem 1.25rem;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                min-height: 104px;
             }
 
             .admin-kpi .kpi-label {
-                color: var(--text-secondary);
-                font-size: 0.7rem;
+                color: #9fb0c4;
+                font-size: 0.75rem;
                 text-transform: uppercase;
-                letter-spacing: 0.07em;
-                font-weight: 700;
-                margin-bottom: 0.18rem;
+                letter-spacing: 0.1em;
+                font-weight: 600;
+                margin-bottom: 0.5rem;
             }
 
             .admin-kpi .kpi-value {
-                color: var(--text-primary);
-                font-size: 0.94rem;
+                color: white;
+                font-size: 1.5rem;
                 font-weight: 700;
-                line-height: 1.35;
+                line-height: 1.2;
+                font-family: 'Consolas', monospace;
             }
 
             .tabs {
@@ -934,6 +959,8 @@
                             <option value="all">Every Status</option>
                             <option value="open">🟢 Open</option>
                             <option value="claimed">🟡 Claimed</option>
+                            <option value="waiting_staff">🔵 Waiting on Staff</option>
+                            <option value="waiting_user">🟣 Waiting on User</option>
                             <option value="closed">🔴 Closed</option>
                         </select>
                     </div>
@@ -951,13 +978,15 @@
                                 <th>Ticket ID</th>
                                 <th>User</th>
                                 <th>Status</th>
+                                <th>Assignee</th>
+                                <th>Priority</th>
                                 <th style="text-align: right;">Created</th>
                                 <th style="text-align: right;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="ticketsTable">
                             <tr>
-                                <td colspan="5" class="text-center text-muted" style="padding: 4rem;">
+                                <td colspan="7" class="text-center text-muted" style="padding: 4rem;">
                                     <div
                                         style="display:flex; flex-direction:column; align-items:center; gap:1rem; opacity: 0.5;">
                                         <i class="fas fa-inbox" style="font-size: 3rem;"></i>
@@ -1378,6 +1407,10 @@
                     <div id="ticketDetailStatus" class="form-input" style="background: var(--bg-secondary);"></div>
                 </div>
                 <div class="form-group">
+                    <div class="form-label">Assignee</div>
+                    <div id="ticketDetailAssignee" class="form-input" style="background: var(--bg-secondary);"></div>
+                </div>
+                <div class="form-group">
                     <div class="form-label">Priority</div>
                     <div id="ticketDetailPriority" class="form-input" style="background: var(--bg-secondary);">
                     </div>
@@ -1389,6 +1422,14 @@
                 <div class="form-group">
                     <div class="form-label">Reason</div>
                     <div id="ticketDetailReason" class="form-input" style="background: var(--bg-secondary);"></div>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Closed By</div>
+                    <div id="ticketDetailClosedBy" class="form-input" style="background: var(--bg-secondary);"></div>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Close Reason</div>
+                    <div id="ticketDetailCloseReason" class="form-input" style="background: var(--bg-secondary);"></div>
                 </div>
                 <div class="ticket-transcript-panel">
                     <div class="ticket-transcript-header">
@@ -1409,6 +1450,7 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button class="btn btn-primary" id="ticketClaimBtn" type="button">Claim</button>
                 <button class="btn btn-secondary" onclick="closeTicketDetails()">Close</button>
             </div>
         </div>

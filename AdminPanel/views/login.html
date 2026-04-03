@@ -214,6 +214,98 @@
             margin-top: 0;
         }
 
+        .auth-progress {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .auth-step {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.7rem 0.8rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+        }
+
+        .auth-step.is-active {
+            border-color: rgba(91, 127, 255, 0.55);
+            background: rgba(91, 127, 255, 0.12);
+            color: var(--text-primary);
+        }
+
+        .auth-step.is-complete {
+            border-color: rgba(40, 167, 69, 0.45);
+            background: rgba(40, 167, 69, 0.12);
+            color: #75ec9c;
+        }
+
+        .auth-step-badge {
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.78rem;
+            font-weight: 700;
+            border: 1px solid currentColor;
+            flex-shrink: 0;
+        }
+
+        .auth-step-copy {
+            min-width: 0;
+        }
+
+        .auth-step-title {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: inherit;
+        }
+
+        .auth-step-description {
+            display: block;
+            font-size: 0.72rem;
+            opacity: 0.88;
+        }
+
+        .auth-status-card {
+            margin-bottom: 1rem;
+            border-radius: 14px;
+            border: 1px solid rgba(91, 127, 255, 0.2);
+            background: linear-gradient(135deg, rgba(91, 127, 255, 0.14) 0%, rgba(91, 127, 255, 0.06) 100%);
+            padding: 0.9rem 1rem;
+        }
+
+        .auth-status-eyebrow {
+            margin: 0 0 0.2rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-blue);
+        }
+
+        .auth-status-title {
+            margin: 0;
+            font-size: 0.96rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .auth-status-text {
+            margin: 0.28rem 0 0;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
         .auth-actions .btn {
             min-width: 0;
             width: 100%;
@@ -267,22 +359,198 @@
             color: var(--text-primary);
         }
 
+        .captcha-shell {
+            display: grid;
+            gap: 0.8rem;
+            padding: 0.9rem;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%),
+                rgba(7, 10, 18, 0.34);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .captcha-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .captcha-heading {
+            min-width: 0;
+        }
+
+        .captcha-kicker {
+            margin: 0 0 0.2rem;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.58);
+        }
+
+        .captcha-heading .form-label {
+            margin: 0;
+            font-size: 0.92rem;
+        }
+
         .captcha-row {
             display: grid;
             grid-template-columns: 1fr auto;
-            gap: 0.5rem;
-            align-items: center;
+            gap: 0.65rem;
+            align-items: stretch;
         }
 
         .captcha-question {
-            font-size: 0.82rem;
+            margin: 0;
+            padding: 0.9rem 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.025) 100%);
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            color: var(--text-primary);
+            line-height: 1.5;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+        }
+
+        .captcha-meta {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) auto auto;
+            gap: 0.55rem;
+            align-items: stretch;
+        }
+
+        .captcha-status {
+            display: flex;
+            align-items: center;
+            min-height: 42px;
+            padding: 0.65rem 0.8rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.03);
+            font-size: 0.78rem;
+            font-weight: 600;
+            line-height: 1.45;
+            color: var(--text-primary);
+        }
+
+        .captcha-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 42px;
+            padding: 0.2rem 0.85rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            font-size: 0.73rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-align: center;
+        }
+
+        .captcha-expiry {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 42px;
+            padding: 0.2rem 0.85rem;
+            border-radius: 12px;
+            border: 1px solid rgba(91, 127, 255, 0.14);
+            background: rgba(91, 127, 255, 0.08);
+            color: #d5ddff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .captcha-tip {
+            margin: 0;
+            padding-left: 0.15rem;
+            font-size: 0.77rem;
             color: var(--text-secondary);
-            margin: 0.2rem 0 0;
+            line-height: 1.5;
         }
 
         .captcha-refresh {
             min-height: 42px;
             white-space: nowrap;
+            padding-inline: 1rem;
+        }
+
+        .form-group.is-locked {
+            opacity: 0.66;
+        }
+
+        .form-group.is-locked .form-input,
+        .form-group.is-locked .aux-link,
+        .form-group.is-locked .captcha-refresh {
+            pointer-events: none;
+        }
+
+        .two-factor-shell {
+            display: grid;
+            gap: 0.9rem;
+            padding: 1rem;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+        }
+
+        .verification-note {
+            margin: 0;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .verification-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.55rem;
+        }
+
+        .verification-secondary {
+            display: grid;
+            gap: 0.7rem;
+            padding-top: 0.85rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .verification-secondary.hidden {
+            display: none;
+        }
+
+        .recovery-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .recovery-panel-title {
+            margin: 0;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .recovery-panel-copy {
+            margin: 0.2rem 0 0;
+            font-size: 0.76rem;
+            color: var(--text-secondary);
+            line-height: 1.45;
+        }
+
+        .recovery-disclaimer {
+            margin: 0;
+            font-size: 0.74rem;
+            color: var(--text-secondary);
         }
 
         .message {
@@ -316,6 +584,11 @@
                 padding: 1rem;
             }
 
+            .auth-progress,
+            .verification-actions {
+                grid-template-columns: 1fr;
+            }
+
             .brand-header {
                 grid-template-columns: 1fr;
                 grid-template-areas:
@@ -331,6 +604,20 @@
 
             .aux-actions {
                 grid-template-columns: 1fr;
+            }
+
+            .captcha-header,
+            .captcha-row,
+            .captcha-meta {
+                grid-template-columns: 1fr;
+                display: grid;
+            }
+
+            .captcha-chip,
+            .captcha-expiry,
+            .captcha-status,
+            .captcha-refresh {
+                width: 100%;
             }
         }
     </style>
@@ -348,6 +635,38 @@
                 <div class="brand-icon">🔐</div>
                 <h1 class="form-title"><span class="websiteName"></span></h1>
                 <p class="form-subtitle">Sign in to continue to your dashboard</p>
+            </div>
+
+            <div class="auth-progress" id="authProgress" aria-label="Login progress">
+                <div class="auth-step is-active" data-step="credentials">
+                    <span class="auth-step-badge">1</span>
+                    <span class="auth-step-copy">
+                        <span class="auth-step-title">Credentials</span>
+                        <span class="auth-step-description">Confirm your account details</span>
+                    </span>
+                </div>
+                <div class="auth-step" data-step="captcha">
+                    <span class="auth-step-badge">2</span>
+                    <span class="auth-step-copy">
+                        <span class="auth-step-title">Captcha</span>
+                        <span class="auth-step-description">Solve the current challenge</span>
+                    </span>
+                </div>
+                <div class="auth-step" data-step="verify">
+                    <span class="auth-step-badge">3</span>
+                    <span class="auth-step-copy">
+                        <span class="auth-step-title">Verify</span>
+                        <span class="auth-step-description">Complete 2FA or recovery</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="auth-status-card" id="authStatusCard" aria-live="polite">
+                <p class="auth-status-eyebrow" id="authStatusEyebrow">Step 1</p>
+                <h2 class="auth-status-title" id="authStatusTitle">Enter your admin credentials</h2>
+                <p class="auth-status-text" id="authStatusText">Start with your username, password, and current captcha
+                    challenge. <span class="botNameDisplay">Sentinel</span> will only ask for 2FA after the password
+                    check passes.</p>
             </div>
 
             <div id="errorMsg" class="message error hidden"></div>
@@ -374,27 +693,78 @@
                 </div>
 
                 <div class="form-group" id="loginCaptchaGroup">
-                    <label for="captchaAnswer" class="form-label">Captcha</label>
-                    <p id="captchaQuestion" class="captcha-question">Loading captcha challenge...</p>
-                    <div class="captcha-row">
-                        <div class="input-wrapper">
-                            <input type="text" id="captchaAnswer" name="captchaAnswer" class="form-input"
-                                placeholder="Enter captcha answer" required autocomplete="off" inputmode="numeric">
-                            <span class="input-icon">🛡️</span>
+                    <div class="captcha-shell">
+                        <div class="captcha-header">
+                            <div class="captcha-heading">
+                                <p class="captcha-kicker">Security Check</p>
+                                <label for="captchaAnswer" class="form-label">Captcha challenge</label>
+                            </div>
+                            <span id="captchaTypeText" class="captcha-chip">Adaptive challenge</span>
                         </div>
-                        <button type="button" id="refreshCaptchaBtn" class="btn aux-link captcha-refresh"
-                            aria-label="Refresh captcha">↻ Refresh</button>
+                        <p id="captchaQuestion" class="captcha-question">Loading captcha challenge...</p>
+                        <div class="captcha-row">
+                            <div class="input-wrapper">
+                                <input type="text" id="captchaAnswer" name="captchaAnswer" class="form-input"
+                                    placeholder="Enter captcha answer" required autocomplete="off" inputmode="text">
+                                <span class="input-icon">🛡️</span>
+                            </div>
+                            <button type="button" id="refreshCaptchaBtn" class="btn aux-link captcha-refresh"
+                                aria-label="Refresh captcha">↻ Refresh</button>
+                        </div>
+                        <div class="captcha-meta">
+                            <span id="captchaStatusText" class="captcha-status">Challenge ready</span>
+                            <span id="captchaExpiryText" class="captcha-expiry">Expires in --:--</span>
+                        </div>
+                        <p class="captcha-tip" id="captchaTipText">Refresh it if the challenge changes or no longer
+                            matches what you see.</p>
                     </div>
                 </div>
 
                 <div class="form-group" id="loginTwoFactorGroup" style="display:none;">
-                    <label class="form-label" for="loginTwoFactorCode">2FA Code</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="loginTwoFactorCode" class="form-input" placeholder="Enter 6-digit code"
-                            inputmode="numeric" maxlength="6" autocomplete="one-time-code">
-                        <span class="input-icon">🔐</span>
+                    <div class="two-factor-shell">
+                        <div>
+                            <label class="form-label" for="loginTwoFactorCode">2FA Code</label>
+                            <div class="input-wrapper">
+                                <input type="text" id="loginTwoFactorCode" class="form-input"
+                                    placeholder="Enter 6-digit code" inputmode="numeric" maxlength="6"
+                                    autocomplete="one-time-code">
+                                <span class="input-icon">🔐</span>
+                            </div>
+                            <small class="form-hint">Use the code from your authenticator app. The original username and
+                                password stay locked while verification is pending.</small>
+                        </div>
+
+                        <p class="verification-note" id="twoFactorInstruction">Password verified. Finish the sign-in
+                            with a valid 6-digit authenticator code, or switch to a recovery code if you no longer have
+                            access to your device.</p>
+
+                        <div class="verification-actions">
+                            <button type="button" id="toggleRecoveryModeBtn" class="btn aux-link">Use Recovery Code
+                                Instead</button>
+                            <button type="button" id="restartLoginFlowBtn" class="btn aux-link">Start Over</button>
+                        </div>
+
+                        <div class="verification-secondary hidden" id="loginRecoveryPanel">
+                            <div class="recovery-panel-header">
+                                <div>
+                                    <p class="recovery-panel-title">Recovery Code Fallback</p>
+                                    <p class="recovery-panel-copy">Use one of your saved recovery codes if your
+                                        authenticator device is unavailable.</p>
+                                </div>
+                                <button type="button" id="hideRecoveryModeBtn" class="btn aux-link">Back to 2FA</button>
+                            </div>
+                            <div class="input-wrapper">
+                                <input type="text" id="loginRecoveryCode" class="form-input"
+                                    placeholder="XXXX-XXXX-XXXX" autocomplete="one-time-code" inputmode="text"
+                                    maxlength="14">
+                                <span class="input-icon">🧾</span>
+                            </div>
+                            <p class="recovery-disclaimer">Recovery sign-in consumes one code immediately and will send
+                                a security alert email if the account has an address attached.</p>
+                            <button type="button" id="recoveryLoginBtnInline" class="btn aux-link">Sign In With Recovery
+                                Code</button>
+                        </div>
                     </div>
-                    <small class="form-hint">Use the code from your authenticator app.</small>
                 </div>
             </form>
 

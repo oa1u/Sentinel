@@ -258,6 +258,10 @@
             display: block;
         }
 
+        .docs-section.owner-hidden {
+            display: none !important;
+        }
+
         .docs-breadcrumbs {
             display: flex;
             align-items: center;
@@ -403,6 +407,103 @@
             overflow-x: auto;
             margin: 0;
             white-space: pre;
+            line-height: 1.6;
+        }
+
+        .config-showcase {
+            display: grid;
+            gap: 1.25rem;
+            margin: 2rem 0;
+        }
+
+        .code-block.env-sample {
+            padding: 0;
+        }
+
+        .code-block.env-sample pre {
+            margin: 0;
+            padding: 1.5rem;
+            font: inherit;
+            color: inherit;
+            white-space: pre;
+            line-height: inherit;
+            overflow-x: auto;
+        }
+
+        .env-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+
+        .env-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-md);
+            padding: 1.1rem 1.15rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .env-card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .env-card-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.18);
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .env-card h4 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+
+        .env-card p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            line-height: 1.6;
+        }
+
+        .env-card ul {
+            margin: 0;
+            padding-left: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .env-card li {
+            margin-bottom: 0.45rem;
+            line-height: 1.55;
+        }
+
+        .env-card li:last-child {
+            margin-bottom: 0;
+        }
+
+        .env-tip {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.65rem;
+            padding: 0.9rem 1rem;
+            border-radius: var(--radius-md);
+            background: rgba(34, 197, 94, 0.08);
+            border: 1px solid rgba(34, 197, 94, 0.18);
+            color: var(--text-secondary);
+            font-size: 0.92rem;
             line-height: 1.6;
         }
 
@@ -595,6 +696,8 @@
                         <a href="/features">✨ Features</a>
                         <a href="/faq">❓ FAQ</a>
                         <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
                         <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
                         <div class="user-dropdown-divider"></div>
                         <button onclick="logout()">🚪 Logout</button>
@@ -628,6 +731,9 @@
 
                 <div class="docs-nav-group">
                     <div class="docs-nav-title">Core Features</div>
+                    <a class="docs-nav-item" onclick="showSection('panel', this)">
+                        <i>🖥️</i> Web Panel
+                    </a>
                     <a class="docs-nav-item" onclick="showSection('moderation', this)">
                         <i>🛡️</i> Moderation
                     </a>
@@ -643,11 +749,20 @@
                 </div>
 
                 <div class="docs-nav-group">
-                    <div class="docs-nav-title">Advanced</div>
+                    <div class="docs-nav-title">Operations</div>
+                    <a class="docs-nav-item" onclick="showSection('security', this)">
+                        <i>🔒</i> Security & Access
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('analytics-docs', this)">
+                        <i>📈</i> Analytics & Reports
+                    </a>
+                    <a class="docs-nav-item" onclick="showSection('automation', this)">
+                        <i>🧰</i> Automation & Jobs
+                    </a>
                     <a class="docs-nav-item" onclick="showSection('permissions', this)">
                         <i>🔐</i> Permissions
                     </a>
-                    <a class="docs-nav-item" onclick="showSection('api', this)">
+                    <a class="docs-nav-item" id="adminApiNavItem" onclick="showSection('api', this)">
                         <i>💻</i> Admin API
                     </a>
                     <a class="docs-nav-item" onclick="showSection('troubleshooting', this)">
@@ -665,7 +780,7 @@
 
                 <div id="overview" class="docs-section active">
                     <div class="docs-header">
-                        <h1>Hi! Welcome to Sentinel.</h1>
+                        <h1>Hi! Welcome to <span class="botNameDisplay">Sentinel</span>.</h1>
                         <p>This is your personal guide to setting up and running your own private discord bot.</p>
                     </div>
 
@@ -675,12 +790,37 @@
                             <h4>Get Started</h4>
                             <p>Jump right into the installation steps.</p>
                         </a>
+                        <a onclick="showSection('panel', findNavLink('panel'))" class="quick-card">
+                            <div class="quick-card-icon">🖥️</div>
+                            <h4>Use the Panel</h4>
+                            <p>Learn what each page is for and where to manage things.</p>
+                        </a>
                         <a onclick="showSection('configuration', findNavLink('configuration'))" class="quick-card">
                             <div class="quick-card-icon">⚙️</div>
                             <h4>Config</h4>
                             <p>Learn how to tweak the settings.</p>
                         </a>
-                        <a onclick="showSection('api', findNavLink('api'))" class="quick-card">
+                        <a onclick="showSection('security', findNavLink('security'))" class="quick-card">
+                            <div class="quick-card-icon">🔒</div>
+                            <h4>Secure It</h4>
+                            <p>Set up 2FA, recovery codes, and safer login habits.</p>
+                        </a>
+                        <a href="/guide" class="quick-card">
+                            <div class="quick-card-icon">📘</div>
+                            <h4>Read the Guide</h4>
+                            <p>Roles, ticket handling, and verification guidance in one place.</p>
+                        </a>
+                        <a href="/best-practices" class="quick-card">
+                            <div class="quick-card-icon">✅</div>
+                            <h4>Best Practices</h4>
+                            <p>Recommended habits for security, staffing, backups, and rollouts.</p>
+                        </a>
+                        <a onclick="showSection('analytics-docs', findNavLink('analytics-docs'))" class="quick-card">
+                            <div class="quick-card-icon">📈</div>
+                            <h4>Read Analytics</h4>
+                            <p>Understand what the dashboard metrics and reports mean.</p>
+                        </a>
+                        <a id="adminApiQuickCard" onclick="showSection('api', findNavLink('api'))" class="quick-card">
                             <div class="quick-card-icon">💻</div>
                             <h4>For Developers</h4>
                             <p>Check out the API docs.</p>
@@ -689,8 +829,10 @@
 
                     <div class="docs-block">
                         <h2>What is this? <a href="#" class="docs-anchor">#</a></h2>
-                        <p>Sentinel is a Discord bot that you host yourself. Unlike those big public bots that are in
-                            millions of servers, Sentinel is designed to live in <strong>just one place</strong>: your
+                        <p><span class="botNameDisplay">Sentinel</span> is a Discord bot that you host yourself. Unlike
+                            those big public bots that are in
+                            millions of servers, <span class="botNameDisplay">Sentinel</span> is designed to live in
+                            <strong>just one place</strong>: your
                             server.</p>
                         <p>Because it's private, you don't have to share resources with anyone else. It's faster, more
                             secure, and you have complete control over every single piece of data it handles.</p>
@@ -718,6 +860,92 @@
                             <li><strong>Fun stuff:</strong> XP and leveling to keep chat active.</li>
                             <li><strong>Easy management:</strong> This dashboard you're looking at right now!</li>
                         </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Recommended first hour <a href="#" class="docs-anchor">#</a></h2>
+                        <ol>
+                            <li>Finish <strong>installation</strong> and verify the bot comes online in your server.
+                            </li>
+                            <li>Open <strong>configuration</strong> and confirm <span
+                                    class="inline-code">serverID</span>, <span class="inline-code">OwnerID</span>, <span
+                                    class="inline-code">botName</span>, and invite links.</li>
+                            <li>Visit the <strong>web panel</strong> section to understand where moderation, users,
+                                analytics, and owner tools live.</li>
+                            <li>Turn on <strong>security basics</strong> like 2FA, recovery codes, and session review
+                                from your profile page.</li>
+                            <li>Test <strong>moderation</strong>, <strong>AutoMod</strong>, and <strong>tickets</strong>
+                                with a spare account before using them live.</li>
+                            <li>Check the <strong>analytics</strong> and <strong>automation</strong> tabs so you know
+                                where to monitor staff activity, jobs, and alerts later.</li>
+                        </ol>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>More docs worth bookmarking <a href="#" class="docs-anchor">#</a></h2>
+                        <ul>
+                            <li><strong><a href="/guide" style="color: var(--docs-accent);">Guide</a>:</strong> Use this
+                                for roles and permissions, ticket workflow, and verification guidance.</li>
+                            <li><strong><a href="/best-practices" style="color: var(--docs-accent);">Best
+                                        Practices</a>:</strong> Use this for safer habits around security, staff
+                                operations, backups, and rollouts.</li>
+                            <li><strong><a href="/moderation-playbook" style="color: var(--docs-accent);">Moderation
+                                        Playbook</a>:</strong> Use this when staff need action examples and escalation
+                                patterns.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="panel" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Using the Web Panel</h1>
+                        <p>Where to click, what each page does, and which role usually needs it.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Main pages <a href="#" class="docs-anchor">#</a></h2>
+                        <ul>
+                            <li><strong>Dashboard:</strong> Your general snapshot. Use it for a quick status check
+                                before digging deeper.</li>
+                            <li><strong>Moderator:</strong> The day-to-day workspace for punishments, user history, and
+                                case actions.</li>
+                            <li><strong>Admin:</strong> The control area for accounts, notes, lookups, and broader
+                                server management.</li>
+                            <li><strong>Owner:</strong> High-trust tools like system health, backups, security events,
+                                and deeper operations.</li>
+                            <li><strong>Profile:</strong> Personal account settings such as password, 2FA, recovery
+                                codes, Discord link, and active sessions.</li>
+                            <li><strong>Analytics:</strong> Trend reporting for moderation, verification, staff
+                                performance, emails, and alerts.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Best daily workflow <a href="#" class="docs-anchor">#</a></h2>
+                        <ol>
+                            <li>Start on the dashboard to see whether anything unusual happened overnight.</li>
+                            <li>Move to moderator tools if you need to warn, timeout, ban, or review a user's case
+                                history.</li>
+                            <li>Use admin lookup and notes when a member needs closer tracking or context for staff.
+                            </li>
+                            <li>Open analytics when you need trends, not just a single action.</li>
+                            <li>Use owner pages for backups, health checks, security review, or configuration-level
+                                decisions.</li>
+                        </ol>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>What to keep open <a href="#" class="docs-anchor">#</a></h2>
+                        <div class="info-box">
+                            <div class="info-box-icon">🧭</div>
+                            <div class="info-content">
+                                <span class="info-box-title">Simple Rule</span>
+                                Use the lightest page that solves the problem. Moderator pages are for action, analytics
+                                pages are for patterns, and owner pages are for high-trust system work.
+                            </div>
+                        </div>
+                        <p>If you're running the server live during busy hours, keep the dashboard, moderator panel, and
+                            your profile security tab nearby. Those three cover most real-time needs.</p>
                     </div>
                 </div>
 
@@ -797,7 +1025,7 @@
                 <div id="configuration" class="docs-section">
                     <div class="docs-header">
                         <h1>Configuring your Bot</h1>
-                        <p>Making sure Sentinel knows where its home is.</p>
+                        <p>Making sure <span class="botNameDisplay">Sentinel</span> knows where its home is.</p>
                     </div>
 
                     <div class="docs-block">
@@ -806,51 +1034,256 @@
                             live. <br><strong>Do not share this file with anyone!</strong> It contains your bot token
                             and database passwords.</p>
 
-                        <div class="code-wrapper">
-                            <div class="code-header">
-                                <span>CONFIG/CREDENTIALS.ENV</span>
-                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
-                            </div>
-                            <div class="code-block"><span class="hl-keyword">DISCORD_TOKEN</span>=<span
-                                    class="hl-string">put_your_bot_token_here</span>
-                                <span class="hl-keyword">MYSQL_HOST</span>=<span class="hl-string">localhost</span>
-                                <span class="hl-keyword">MYSQL_USER</span>=<span class="hl-string">root</span>
-                                <span class="hl-keyword">MYSQL_PASSWORD</span>=<span
-                                    class="hl-string">your_db_password</span>
-                                <span class="hl-keyword">MYSQL_DATABASE</span>=<span
-                                    class="hl-string">discord_bot</span>
+                        <div class="info-box warning">
+                            <div class="info-box-icon">🔐</div>
+                            <div class="info-content">
+                                <span class="info-box-title">Private File</span>
+                                Treat <span class="inline-code">Config/credentials.env</span> like a vault. Keep real
+                                tokens, webhook secrets, SMTP passwords, and session keys out of screenshots, GitHub
+                                commits, and support messages. If one of these values leaks, rotate it before bringing
+                                the panel back online.
                             </div>
                         </div>
+
+                        <div class="config-showcase">
+                            <div class="code-wrapper">
+                                <div class="code-header">
+                                    <span>CONFIG/CREDENTIALS.ENV</span>
+                                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                                </div>
+                                <div class="code-block env-sample">
+                                    <pre><span class="hl-comment"># Discord application</span>
+<span class="hl-keyword">TOKEN</span>=<span class="hl-string">your_discord_bot_token</span>
+<span class="hl-keyword">CLIENT_ID</span>=<span class="hl-string">your_application_id</span>
+<span class="hl-keyword">GUILD_ID</span>=<span class="hl-string">your_server_id</span>
+
+<span class="hl-comment"># Database connection</span>
+<span class="hl-keyword">MYSQL_HOST</span>=<span class="hl-string">127.0.0.1</span>
+<span class="hl-keyword">MYSQL_PORT</span>=<span class="hl-string">3306</span>
+<span class="hl-keyword">MYSQL_USER</span>=<span class="hl-string">your_mysql_user</span>
+<span class="hl-keyword">MYSQL_PASSWORD</span>=<span class="hl-string">your_mysql_password</span>
+<span class="hl-keyword">MYSQL_DATABASE</span>=<span class="hl-string">your_database_name</span>
+
+<span class="hl-comment"># Admin panel security</span>
+<span class="hl-keyword">ENABLE_ADMIN_PANEL</span>=<span class="hl-string">true</span>
+<span class="hl-keyword">ADMIN_PORT</span>=<span class="hl-string">3000</span>
+<span class="hl-keyword">SESSION_SECRET</span>=<span class="hl-string">your_random_session_secret</span>
+<span class="hl-keyword">TOTP_ENCRYPTION_KEY</span>=<span class="hl-string">your_random_totp_key</span>
+
+<span class="hl-comment"># Email and recovery</span>
+<span class="hl-keyword">SMTP_HOST</span>=<span class="hl-string">smtp.example.com</span>
+<span class="hl-keyword">SMTP_PORT</span>=<span class="hl-string">587</span>
+<span class="hl-keyword">SMTP_USER</span>=<span class="hl-string">your_email_user</span>
+<span class="hl-keyword">SMTP_PASS</span>=<span class="hl-string">your_email_password</span>
+<span class="hl-keyword">ADMIN_EMAIL</span>=<span class="hl-string">owner@example.com</span></pre>
+                                </div>
+                            </div>
+
+                            <div class="env-grid">
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">🤖</span>
+                                        <h4>Discord Connection</h4>
+                                    </div>
+                                    <p>These values link the bot to your Discord application and main guild.</p>
+                                    <ul>
+                                        <li><span class="inline-code">TOKEN</span> logs the bot into Discord.</li>
+                                        <li><span class="inline-code">CLIENT_ID</span> is your application ID.</li>
+                                        <li><span class="inline-code">GUILD_ID</span> keeps commands scoped to your
+                                            server.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">🗄️</span>
+                                        <h4>Database Access</h4>
+                                    </div>
+                                    <p>This group tells the bot and panel where your MySQL database lives and how to
+                                        sign in.</p>
+                                    <ul>
+                                        <li>Use a dedicated database user instead of root.</li>
+                                        <li>Keep the database name stable after setup.</li>
+                                        <li>Rotate the password if it is ever exposed.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">🛡️</span>
+                                        <h4>Panel Security</h4>
+                                    </div>
+                                    <p>These values protect web sessions, encrypted 2FA secrets, and panel access.</p>
+                                    <ul>
+                                        <li><span class="inline-code">SESSION_SECRET</span> should be long and random.
+                                        </li>
+                                        <li><span class="inline-code">TOTP_ENCRYPTION_KEY</span> should never be reused
+                                            elsewhere.</li>
+                                        <li>Only enable the panel after these are set.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">📨</span>
+                                        <h4>Email and Recovery</h4>
+                                    </div>
+                                    <p>SMTP powers password recovery, owner alerts, and account security messages.</p>
+                                    <ul>
+                                        <li>Use a real mailbox you control for <span
+                                                class="inline-code">ADMIN_EMAIL</span>.</li>
+                                        <li>Test password reset and alert delivery after setup.</li>
+                                        <li>Prefer app passwords over your main mailbox password.</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="env-tip">
+                                <span>💡</span>
+                                <span>If you are setting this up for the first time, fill in Discord and database values
+                                    first, then add panel security keys, then finish SMTP once login and recovery are
+                                    ready to test.</span>
+                            </div>
+                        </div>
+
+                        <ul>
+                            <li><span class="inline-code">TOKEN</span>, <span class="inline-code">CLIENT_ID</span>, and
+                                <span class="inline-code">GUILD_ID</span> connect the bot to your Discord application
+                                and primary server.</li>
+                            <li><span class="inline-code">MYSQL_*</span> values tell the bot and panel where your
+                                database lives and how to log into it.</li>
+                            <li><span class="inline-code">SESSION_SECRET</span> and <span
+                                    class="inline-code">TOTP_ENCRYPTION_KEY</span> protect panel sessions and stored 2FA
+                                secrets. Generate long random values for both.</li>
+                            <li><span class="inline-code">SMTP_*</span> and <span class="inline-code">ADMIN_EMAIL</span>
+                                power recovery emails, alerts, and security notifications from the panel.</li>
+                            <li>Webhook and moderation keys can live in this same file too. Keep optional integrations
+                                disabled until you have valid credentials ready.</li>
+                        </ul>
                     </div>
 
                     <div class="docs-block">
                         <h2>General Settings <a href="#" class="docs-anchor">#</a></h2>
                         <p>Next, check <span class="inline-code">Config/main.json</span>. This is where you tell the bot
-                            which server it belongs to. Since Sentinel is private, it needs to know your <strong>Server
+                            which server it belongs to. Since <span class="botNameDisplay">Sentinel</span> is private,
+                            it needs to know your <strong>Server
                                 ID</strong> (Guild ID) so it can ignore commands from anywhere else.</p>
 
-                        <div class="code-wrapper">
-                            <div class="code-header">
-                                <span>CONFIG/MAIN.JSON</span>
-                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                        <div class="config-showcase">
+                            <div class="code-wrapper">
+                                <div class="code-header">
+                                    <span>CONFIG/MAIN.JSON</span>
+                                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                                </div>
+                                <div class="code-block env-sample">
+                                    <pre>{
+  <span class="hl-keyword">"serverID"</span>: <span class="hl-string">"1477214846381588561"</span>,
+  <span class="hl-keyword">"OwnerID"</span>: <span class="hl-string">"255175516603154432"</span>,
+  <span class="hl-keyword">"ServerInvite"</span>: <span class="hl-string">"SERVER_INVITE_LINK_HERE"</span>,
+  <span class="hl-keyword">"AppealLink"</span>: <span class="hl-string">"https://your-domain.example/appeal"</span>,
+  <span class="hl-keyword">"WebsiteLink"</span>: <span class="hl-string">"https://your-domain.example/"</span>,
+  <span class="hl-keyword">"githublink"</span>: <span class="hl-string">"https://github.com/yourname/yourrepo"</span>,
+  <span class="hl-keyword">"websiteName"</span>: <span class="hl-string">"Your Panel Name"</span>,
+  <span class="hl-keyword">"serverName"</span>: <span class="hl-string">"Your Server Name"</span>,
+  <span class="hl-keyword">"PanelEmoji"</span>: <span class="hl-string">"🛡️"</span>,
+  <span class="hl-keyword">"botName"</span>: <span class="hl-string">"Your Bot Name"</span>,
+  <span class="hl-keyword">"Version"</span>: <span class="hl-string">"7.2.0"</span>
+}</pre>
+                                </div>
                             </div>
-                            <div class="code-block">{
-                                <span class="hl-keyword">"serverID"</span>: <span
-                                    class="hl-string">"YOUR_SERVER_ID_GOES_HERE"</span>,
-                                <span class="hl-keyword">"OwnerID"</span>: <span
-                                    class="hl-string">"YOUR_PERSONAL_ID"</span>,
-                                <span class="hl-keyword">"botName"</span>: <span class="hl-string">"My Awesome
-                                    Bot"</span>,
-                                <span class="hl-keyword">"PanelEmoji"</span>: <span class="hl-string">"🛡️"</span>
-                                }
+
+                            <div class="env-grid">
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">🏠</span>
+                                        <h4>Guild Ownership</h4>
+                                    </div>
+                                    <p>These values decide which Discord server the bot protects and which account gets
+                                        owner-level panel access.</p>
+                                    <ul>
+                                        <li><span class="inline-code">serverID</span> should match your main Discord
+                                            guild.</li>
+                                        <li><span class="inline-code">OwnerID</span> should be your personal Discord ID,
+                                            not the bot ID.</li>
+                                        <li>Wrong values here can make commands or owner pages appear unavailable.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">🔗</span>
+                                        <h4>Public Links</h4>
+                                    </div>
+                                    <p>This group powers buttons, invite links, appeals, and web panel shortcuts shown
+                                        throughout the bot and dashboard.</p>
+                                    <ul>
+                                        <li><span class="inline-code">ServerInvite</span> should point to your real
+                                            guild invite.</li>
+                                        <li><span class="inline-code">WebsiteLink</span> should be the main admin panel
+                                            URL.</li>
+                                        <li><span class="inline-code">AppealLink</span> should stay live if you use
+                                            moderation appeals.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">🎨</span>
+                                        <h4>Branding</h4>
+                                    </div>
+                                    <p>These fields shape how the bot and web panel look to users, including names shown
+                                        in embeds, pages, and docs.</p>
+                                    <ul>
+                                        <li><span class="inline-code">botName</span> is the main display name used
+                                            across the project.</li>
+                                        <li><span class="inline-code">websiteName</span> controls the browser title and
+                                            panel branding.</li>
+                                        <li><span class="inline-code">PanelEmoji</span> gives the dashboard a
+                                            recognizable icon.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="env-card">
+                                    <div class="env-card-header">
+                                        <span class="env-card-icon">🛰️</span>
+                                        <h4>Release Metadata</h4>
+                                    </div>
+                                    <p>This is the lightweight project identity block used for docs, changelogs, status
+                                        text, and repository references.</p>
+                                    <ul>
+                                        <li><span class="inline-code">serverName</span> is the friendly label shown for
+                                            your community.</li>
+                                        <li><span class="inline-code">githublink</span> is useful for docs, credits, and
+                                            source links.</li>
+                                        <li><span class="inline-code">Version</span> should match your actual release so
+                                            pages stay accurate.</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="env-tip">
+                                <span>🧭</span>
+                                <span>Set <span class="inline-code">serverID</span>, <span
+                                        class="inline-code">OwnerID</span>, <span class="inline-code">botName</span>,
+                                    and <span class="inline-code">WebsiteLink</span> first. Those four values affect
+                                    most of the bot behavior and panel branding right away.</span>
                             </div>
                         </div>
 
                         <ul>
-                            <li><span class="inline-code">serverID</span>: Right-click your server icon and click "Copy
-                                ID". Paste it here.</li>
-                            <li><span class="inline-code">OwnerID</span>: Right-click your own profile and copy your ID.
-                                This gives you full admin access to the dashboard.</li>
+                            <li><span class="inline-code">serverID</span>: Right-click your Discord server and use
+                                <strong>Copy ID</strong> from Developer Mode.</li>
+                            <li><span class="inline-code">OwnerID</span>: Use your own Discord account ID so the
+                                owner-only tools unlock correctly.</li>
+                            <li><span class="inline-code">botName</span>, <span class="inline-code">websiteName</span>,
+                                and <span class="inline-code">PanelEmoji</span> drive most of the visible branding
+                                across the bot and panel.</li>
+                            <li><span class="inline-code">ServerInvite</span>, <span
+                                    class="inline-code">WebsiteLink</span>, and <span
+                                    class="inline-code">AppealLink</span> should be checked after every domain, invite,
+                                or hosting change.</li>
+                            <li><span class="inline-code">Version</span> is worth updating when you ship panel or bot
+                                changes so docs and release labels stay trustworthy.</li>
                         </ul>
                     </div>
                 </div>
@@ -877,7 +1310,8 @@
 
                     <div class="docs-block">
                         <h2>Tracking Cases <a href="#" class="docs-anchor">#</a></h2>
-                        <p>Sentinel remembers everything. Every time you warn or ban someone, it creates a <strong>Case
+                        <p><span class="botNameDisplay">Sentinel</span> remembers everything. Every time you warn or ban
+                            someone, it creates a <strong>Case
                                 ID</strong>. You can look these up later if you forget why someone was banned, or if
                             they appeal.</p>
 
@@ -937,15 +1371,164 @@
                     </div>
                     <div class="docs-block">
                         <p>Sometimes users need to talk to staff privately. Instead of messy DMs, they can open a
-                            ticket. Sentinel creates a private channel just for them and the staff team.</p>
+                            ticket. <span class="botNameDisplay">Sentinel</span> creates a private channel just for them
+                            and the staff team.</p>
                         <h3>Cool Features</h3>
                         <ul>
-                            <li><strong>Transcripts:</strong> When you close a ticket, Sentinel saves a pretty HTML file
+                            <li><strong>Transcripts:</strong> When you close a ticket, <span
+                                    class="botNameDisplay">Sentinel</span> saves a pretty HTML file
                                 of the whole conversation, just in case you need it later.</li>
                             <li><strong>Categories:</strong> You can have different types of tickets, ranging from
                                 "Low", "Medium", to "High", depending on how important the user thinks the issue is.
                             </li>
                         </ul>
+                    </div>
+                </div>
+
+                <div id="security" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Security & Access</h1>
+                        <p>How to keep your panel account and server tools locked down without overcomplicating it.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Start with your profile <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Your profile page is the main place to manage account safety. That includes password changes,
+                            two-factor authentication, recovery codes, active sessions, and Discord account linking.</p>
+                        <ul>
+                            <li><strong>Enable 2FA:</strong> This adds a second check after your password.</li>
+                            <li><strong>Save recovery codes:</strong> Keep them somewhere private in case you lose your
+                                authenticator app.</li>
+                            <li><strong>Review sessions:</strong> If a device or browser looks unfamiliar, revoke it.
+                            </li>
+                            <li><strong>Use a unique password:</strong> Never reuse the same password from Discord,
+                                email, or another site.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>How login protection works <a href="#" class="docs-anchor">#</a></h2>
+                        <p>The panel uses multiple checks during sign-in. Depending on your setup, this can include
+                            captcha challenges, two-factor verification, recovery codes, rate limits, and suspicious
+                            activity detection.</p>
+                        <div class="info-box warning">
+                            <div class="info-box-icon">⚠️</div>
+                            <div class="info-content">
+                                <span class="info-box-title">Important</span>
+                                Recovery codes are for emergencies, not normal daily sign-in. Once you use one, replace
+                                and store your fresh set again.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Practical safety checklist <a href="#" class="docs-anchor">#</a></h2>
+                        <ul>
+                            <li>Do not share owner credentials with moderators or admins.</li>
+                            <li>Use separate accounts for staff instead of shared logins.</li>
+                            <li>Check security notifications when you see new-device or recovery activity.</li>
+                            <li>Rotate passwords if a team member leaves or loses device access.</li>
+                            <li>Keep <span class="inline-code">Config/credentials.env</span> private and out of public
+                                repos.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="analytics-docs" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Analytics & Reports</h1>
+                        <p>Turn raw activity into useful decisions for moderation, staffing, and server health.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>What analytics is good for <a href="#" class="docs-anchor">#</a></h2>
+                        <ul>
+                            <li><strong>Moderation trends:</strong> See if spam, punishments, or specific rule breaks
+                                are climbing.</li>
+                            <li><strong>Staff performance:</strong> Track who is handling actions consistently and where
+                                coverage is weak.</li>
+                            <li><strong>Verification funnels:</strong> Find out where users drop off during
+                                verification.</li>
+                            <li><strong>Email and alert health:</strong> Check whether security or operational
+                                notifications are being delivered.</li>
+                            <li><strong>System metrics:</strong> For owners, watch runtime health and background process
+                                stability.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>How to read staff performance <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Use the staff performance section as a workload and coverage tool, not just a scoreboard.
+                            High totals can be good, but they can also mean one person is carrying too much. Very low
+                            totals may mean a staff member needs training.</p>
+                        <p>Good review questions include:</p>
+                        <ul>
+                            <li>Are actions spread across the team or concentrated on one person?</li>
+                            <li>Are moderation spikes happening at the same times every week?</li>
+                            <li>Do ticket or verification issues increase when certain staff are offline?</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Use analytics with context <a href="#" class="docs-anchor">#</a></h2>
+                        <div class="info-box">
+                            <div class="info-box-icon">📌</div>
+                            <div class="info-content">
+                                <span class="info-box-title">Best Practice</span>
+                                Numbers explain patterns. They do not explain intent by themselves. Always compare
+                                charts with notes, case history, and what was happening in the server at the time.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="automation" class="docs-section">
+                    <div class="docs-header">
+                        <h1>Automation & Jobs</h1>
+                        <p>The quiet systems that keep the bot useful even when no one is manually watching it.</p>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>What runs automatically <a href="#" class="docs-anchor">#</a></h2>
+                        <ul>
+                            <li><strong>AutoMod checks:</strong> Filters spam, invites, bad words, and message patterns.
+                            </li>
+                            <li><strong>Scheduled jobs:</strong> Background tasks like maintenance, cleanup, reporting,
+                                or economy-related work.</li>
+                            <li><strong>Alerts:</strong> The panel can surface failures, suspicious activity, and
+                                owner-level notifications.</li>
+                            <li><strong>Backups:</strong> Owner tools can monitor and trigger database or server backup
+                                activity.</li>
+                            <li><strong>Auto-responses and flows:</strong> Things like verification, welcome flows, and
+                                support automation reduce manual work.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>When to check jobs <a href="#" class="docs-anchor">#</a></h2>
+                        <p>Open owner operations or analytics when something feels "quiet" in the wrong way. Missing
+                            emails, backups not running, no expected alerts, or stale analytics data often point to a
+                            background task that needs review.</p>
+                        <div class="code-wrapper">
+                            <div class="code-header">
+                                <span>USEFUL ENDPOINTS</span>
+                                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                            </div>
+                            <div class="code-block">GET /api/jobs
+                                POST /api/jobs/:id/retry
+                                GET /api/owner/system-metrics
+                                GET /api/alerts/active</div>
+                        </div>
+                    </div>
+
+                    <div class="docs-block">
+                        <h2>Maintenance habits that save time <a href="#" class="docs-anchor">#</a></h2>
+                        <ol>
+                            <li>Check alerts before changing config so you do not hide the original problem.</li>
+                            <li>Retry failed jobs only after reading what the job was supposed to do.</li>
+                            <li>Keep backups recent before major configuration or permission changes.</li>
+                            <li>Review AutoMod simulations before switching strict rules on for a live server.</li>
+                        </ol>
                     </div>
                 </div>
 
@@ -966,7 +1549,7 @@
                     </div>
                 </div>
 
-                <div id="api" class="docs-section">
+                <div id="api" class="docs-section" data-owner-only="true">
                     <div class="docs-header">
                         <h1>Developer API</h1>
                         <p>For when you want to build cool integrations.</p>
@@ -981,6 +1564,129 @@
                                 your own risk!
                             </div>
                         </div>
+
+                        <h3>Admin / Developer API</h3>
+                        <p>These are the main internal endpoints used by the admin, moderator, analytics, and owner
+                            panels. Most of them require an authenticated session, and owner routes also require owner
+                            permissions.</p>
+
+                        <h3>Auth & Session</h3>
+                        <ul>
+                            <li><span class="inline-code">GET /api/csrf</span>: Fetch a CSRF token for dashboard POST
+                                and DELETE requests.</li>
+                            <li><span class="inline-code">GET /api/captcha/challenge</span>: Get the login/register
+                                captcha challenge payload.</li>
+                            <li><span class="inline-code">POST /api/login</span>: Create an admin panel session.</li>
+                            <li><span class="inline-code">POST /api/login/recovery</span>: Login with a recovery code.
+                            </li>
+                            <li><span class="inline-code">POST /api/logout</span>: End the current session.</li>
+                            <li><span class="inline-code">GET /api/account/info</span>: Return the logged-in account
+                                summary used across the dashboard.</li>
+                        </ul>
+
+                        <h3>Moderation & Cases</h3>
+                        <ul>
+                            <li><span class="inline-code">GET /api/moderation/overview</span>: Load overview cards for
+                                the moderator dashboard.</li>
+                            <li><span class="inline-code">GET /api/moderation/recent-actions</span>: Fetch the latest
+                                moderation actions.</li>
+                            <li><span class="inline-code">POST /api/moderation/warn</span>: Warn a member from the
+                                panel.</li>
+                            <li><span class="inline-code">POST /api/moderation/ban</span>: Ban a member from the
+                                panel.</li>
+                            <li><span class="inline-code">POST /api/moderation/timeout</span>: Timeout a member from
+                                the panel.</li>
+                            <li><span class="inline-code">GET /api/moderation/case/:caseId</span>: Look up a single
+                                moderation case.</li>
+                            <li><span class="inline-code">GET /api/moderation/user/:userId/history</span>: Fetch a
+                                member's moderation history.</li>
+                            <li><span class="inline-code">GET /api/moderation/actions/search</span>: Search moderation
+                                actions by query, type, and pagination.</li>
+                        </ul>
+
+                        <h3>Users, Notes & Admin Lookup</h3>
+                        <ul>
+                            <li><span class="inline-code">GET /api/admin/users</span>: List panel users.</li>
+                            <li><span class="inline-code">POST /api/admin/users</span>: Create a new panel user.</li>
+                            <li><span class="inline-code">PUT /api/admin/users/:userId</span>: Update a panel user.
+                            </li>
+                            <li><span class="inline-code">DELETE /api/admin/users/:userId</span>: Remove a panel
+                                user.</li>
+                            <li><span class="inline-code">GET /api/admin/users/:userId/details</span>: Load extended
+                                account details for a panel user.</li>
+                            <li><span class="inline-code">GET /api/admin/search-users-advanced</span>: Advanced user
+                                search with filters and pagination.</li>
+                            <li><span class="inline-code">GET /api/admin/system/lookup/:query</span>: Resolve a user,
+                                account, or moderation profile from a lookup string.</li>
+                            <li><span class="inline-code">POST /api/admin/system/lookup/:userId/notes</span>: Save
+                                lookup notes for a tracked member.</li>
+                            <li><span class="inline-code">GET /api/members/:userId/notes</span>: Read stored member
+                                notes.</li>
+                            <li><span class="inline-code">POST /api/members/:userId/notes</span>: Update stored member
+                                notes.</li>
+                        </ul>
+
+                        <h3>Analytics & Intelligence</h3>
+                        <ul>
+                            <li><span class="inline-code">GET /api/stats</span>: Load global bot/dashboard stats.</li>
+                            <li><span class="inline-code">GET /api/stats/today</span>: Fetch today's activity totals.
+                            </li>
+                            <li><span class="inline-code">GET /api/dashboard/all</span>: Load dashboard summary data
+                                in one request.</li>
+                            <li><span class="inline-code">GET /api/moderation/analytics</span>: Return moderation
+                                trend data.</li>
+                            <li><span class="inline-code">GET /api/moderation/intelligence</span>: Fetch moderation
+                                intelligence and risk-style insights.</li>
+                            <li><span class="inline-code">GET /api/owner/verification-analytics</span>: Verification
+                                funnel metrics for the owner analytics page.</li>
+                            <li><span class="inline-code">GET /api/owner/staff-performance-analytics</span>: Staff
+                                performance leaderboard and action totals.</li>
+                            <li><span class="inline-code">GET /api/owner/email-analytics</span>: Email delivery,
+                                failures, and template trends.</li>
+                            <li><span class="inline-code">GET /api/owner/alert-settings-analytics</span>: Alert
+                                configuration and trigger analytics.</li>
+                        </ul>
+
+                        <h3>Owner Controls & Operations</h3>
+                        <ul>
+                            <li><span class="inline-code">GET /api/owner/system-metrics</span>: System usage and
+                                runtime metrics for owner dashboards.</li>
+                            <li><span class="inline-code">GET /api/owner/system-stats</span>: Owner-facing platform
+                                stats summary.</li>
+                            <li><span class="inline-code">GET /api/jobs</span>: View scheduled jobs and statuses.</li>
+                            <li><span class="inline-code">POST /api/jobs/:id/retry</span>: Retry a failed scheduled
+                                job.</li>
+                            <li><span class="inline-code">GET /api/automod/config</span>: Read the active AutoMod
+                                config.</li>
+                            <li><span class="inline-code">POST /api/automod/config</span>: Update AutoMod config or
+                                profiles.</li>
+                            <li><span class="inline-code">POST /api/automod/simulate</span>: Run a test message
+                                through the AutoMod evaluator.</li>
+                            <li><span class="inline-code">GET /api/automod/advanced</span>: Advanced AutoMod review
+                                queue and trends.</li>
+                            <li><span class="inline-code">POST /api/automod/workflow/:violationId</span>: Update the
+                                review workflow for an AutoMod violation.</li>
+                        </ul>
+
+                        <h3>Backups, Security & Alerts</h3>
+                        <ul>
+                            <li><span class="inline-code">GET /api/owner/backups/status</span>: Read database backup
+                                status.</li>
+                            <li><span class="inline-code">POST /api/owner/backups/run</span>: Trigger a database
+                                backup job.</li>
+                            <li><span class="inline-code">GET /api/owner/server-backups/status</span>: Read server
+                                backup status.</li>
+                            <li><span class="inline-code">POST /api/owner/server-backups/restore</span>: Start a
+                                server backup restore operation.</li>
+                            <li><span class="inline-code">GET /api/system/health</span>: Check owner-visible health
+                                status for the panel and bot environment.</li>
+                            <li><span class="inline-code">GET /api/security/events</span>: Query recorded security
+                                events for the owner panel.</li>
+                            <li><span class="inline-code">GET /api/alerts/active</span>: List currently active owner
+                                alerts.</li>
+                            <li><span class="inline-code">POST /api/alerts/:id/resolve</span>: Resolve an active
+                                alert.</li>
+                        </ul>
                     </div>
                 </div>
 
@@ -995,7 +1701,8 @@
                             <div class="info-box-icon">⚠️</div>
                             <div class="info-content">
                                 <span class="info-box-title">Remember</span>
-                                Sentinel is a <strong>private bot</strong>. It only works in the server ID you put in
+                                <span class="botNameDisplay">Sentinel</span> is a <strong>private bot</strong>. It only
+                                works in the server ID you put in
                                 the config. If you invite it to a second server, it will just sit there and ignore
                                 everyone.
                             </div>
@@ -1011,7 +1718,8 @@
                         </ul>
 
                         <h3>Where are my slash commands? <a href="#" class="docs-anchor">#</a></h3>
-                        <p>Sometimes Discord takes a minute. Since Sentinel registers commands instantly to your
+                        <p>Sometimes Discord takes a minute. Since <span class="botNameDisplay">Sentinel</span>
+                            registers commands instantly to your
                             specific guild ID, they should be there. Try restarting the bot. If that fails, kick the bot
                             and re-invite it.</p>
                     </div>
@@ -1043,11 +1751,15 @@
     <script src="/public/shared.js"></script>
     <script src="/public/version.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            if (typeof initPage === 'function') initPage();
+        let currentPageRole = 'user';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (typeof initPage === 'function') {
+                await initPage();
+            }
 
             const hash = window.location.hash.substring(1);
-            if (hash) {
+            if (hash && canAccessSection(hash)) {
                 const section = document.getElementById(hash);
                 if (section && section.classList.contains('docs-section')) {
                     const navLink = findNavLink(hash);
@@ -1069,7 +1781,17 @@
             return null;
         }
 
+        function canAccessSection(sectionId) {
+            if (sectionId !== 'api') return true;
+            return currentPageRole === 'owner';
+        }
+
         function showSection(sectionId, navElement) {
+            if (!canAccessSection(sectionId)) {
+                sectionId = 'overview';
+                navElement = findNavLink('overview');
+            }
+
             document.querySelectorAll('.docs-section').forEach(el => {
                 el.classList.remove('active');
                 el.style.animation = 'none';
@@ -1185,8 +1907,12 @@
                 const adminLink = document.getElementById("adminLink");
                 const ownerNavLink = document.getElementById("ownerNavLink");
                 const analyticsLink = document.getElementById("analyticsLink");
+                const adminApiNavItem = document.getElementById("adminApiNavItem");
+                const adminApiQuickCard = document.getElementById("adminApiQuickCard");
+                const adminApiSection = document.getElementById("api");
 
                 const role = data.role || 'user';
+                currentPageRole = role;
                 const isMod = ["moderator", "admin", "owner"].includes(role);
                 const isAdmin = ["admin", "owner"].includes(role);
                 const isOwner = (role === "owner");
@@ -1195,6 +1921,13 @@
                 if (adminLink) adminLink.style.display = isAdmin ? "block" : "none";
                 if (ownerNavLink) ownerNavLink.style.display = isOwner ? "block" : "none";
                 if (analyticsLink) analyticsLink.style.display = isOwner ? "block" : "none";
+                if (adminApiNavItem) adminApiNavItem.style.display = isOwner ? "flex" : "none";
+                if (adminApiQuickCard) adminApiQuickCard.style.display = isOwner ? "block" : "none";
+                if (adminApiSection) adminApiSection.classList.toggle("owner-hidden", !isOwner);
+
+                if (!isOwner && window.location.hash.substring(1) === 'api') {
+                    showSection('overview', findNavLink('overview'));
+                }
 
             } catch (err) {
                 console.error("Failed to init page", err);
@@ -1216,8 +1949,15 @@
             }
         });
 
-        function logout() {
-            window.location.href = "/logout";
+        async function logout() {
+            try {
+                await fetch('/api/logout', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+            } finally {
+                window.location.href = '/login';
+            }
         }
     </script>
 </body>

@@ -1,0 +1,160 @@
+{
+    "enabled": true,
+    "cooldownMs": 30000,
+    "maxMatches": 3,
+    "ignoredPrefixes": [
+        "/"
+    ],
+    "ticketButton": {
+        "enabled": true,
+        "label": "Open Ticket",
+        "style": "Primary"
+    },
+    "quickLinks": [
+        "/ticket",
+        "/help"
+    ],
+    "categories": {
+        "general": {
+            "color": 4534268,
+            "emoji": "🧭"
+        },
+        "account": {
+            "color": 16755200,
+            "emoji": "🔐"
+        },
+        "verification": {
+            "color": 51400,
+            "emoji": "✉️"
+        },
+        "security": {
+            "color": 11167436,
+            "emoji": "🛡️"
+        }
+    },
+    "entries": [
+        {
+            "id": "general-help",
+            "category": "general",
+            "title": "Need help?",
+            "summary": "General support guidance",
+            "triggers": [
+                "help",
+                "need help",
+                "support",
+                "assist"
+            ],
+            "response": "It looks like you need assistance. Please describe your issue clearly and a staff member will help, or open a ticket with `/ticket`."
+        },
+        {
+            "id": "installation-help",
+            "category": "account",
+            "title": "Installation help",
+            "summary": "Game or launcher setup issues",
+            "triggers": [
+                "install issue",
+                "cant install",
+                "can't install",
+                "launcher issue",
+                "download problem"
+            ],
+            "response": "If you are having trouble installing or updating, include what platform you are on, what step fails, and any error code you see. That gives support enough detail to help quickly."
+        },
+        {
+            "id": "linking-help",
+            "category": "verification",
+            "title": "Account linking help",
+            "summary": "Linking game, website, or platform accounts",
+            "triggers": [
+                "link account",
+                "account linking",
+                "linking issue",
+                "cant link",
+                "can't link"
+            ],
+            "response": "If account linking is failing, share which platforms you are connecting and the exact step where it stops working. A screenshot or exact error message helps a lot."
+        },
+        {
+            "id": "security-help",
+            "category": "security",
+            "title": "Security help",
+            "summary": "Suspicious activity or account safety concerns",
+            "triggers": [
+                "security issue",
+                "account compromised",
+                "suspicious activity",
+                "hacked account",
+                "unauthorized access"
+            ],
+            "response": "If you think your account or profile was compromised, explain what changed, when it happened, and whether you still have access. Open a ticket right away if the issue is active."
+        },
+        {
+            "id": "connection-help",
+            "category": "account",
+            "title": "Connection help",
+            "summary": "Login, server, or matchmaking connection issues",
+            "triggers": [
+                "cant connect",
+                "can't connect",
+                "connection issue",
+                "server issue",
+                "matchmaking issue"
+            ],
+            "response": "If you cannot connect, include your region, platform, and whether the issue happens during login, matchmaking, or joining a server. If there is an error message, include it exactly."
+        },
+        {
+            "id": "access-help",
+            "category": "security",
+            "title": "Access issue help",
+            "summary": "Missing access, permissions, or locked features",
+            "triggers": [
+                "locked out",
+                "no access",
+                "cant access",
+                "can't access",
+                "missing permissions"
+            ],
+            "response": "If you are missing access to a feature, channel, or server area, explain what you expected to access and what is currently blocked. Staff can check roles, permissions, or account status from there."
+        },
+        {
+            "id": "bug-report",
+            "category": "general",
+            "title": "Bug report help",
+            "summary": "Report a bug the useful way",
+            "triggers": [
+                "bug",
+                "broken",
+                "not working",
+                "issue report",
+                "error happened"
+            ],
+            "response": "If you are reporting a bug, include what you expected, what happened instead, when it happened, and any screenshots or logs. That makes support much faster."
+        },
+        {
+            "id": "ticket-help",
+            "category": "general",
+            "title": "Ticket help",
+            "summary": "How to contact support",
+            "triggers": [
+                "open ticket",
+                "how do i make a ticket",
+                "how to open a ticket",
+                "contact support"
+            ],
+            "response": "Use `/ticket` for the normal support flow, or press the Open Ticket button below if this auto-response applies to your issue."
+        },
+        {
+            "id": "report-review-help",
+            "category": "general",
+            "title": "Report or review help",
+            "summary": "Reports, appeals, moderation review, or disputed actions",
+            "triggers": [
+                "appeal",
+                "report player",
+                "report bug abuse",
+                "review action"
+            ],
+            "response": "If you need staff to review a report or action, explain what happened clearly, include usernames or IDs if relevant, and share any evidence or context that supports your case."
+        }
+    ]
+}

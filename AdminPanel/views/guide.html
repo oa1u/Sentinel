@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="websiteNameTitle">Guide</title>
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <style>
+        .guide-hero {
+            background: linear-gradient(140deg, rgba(47, 128, 237, 0.16) 0%, rgba(16, 18, 24, 0.96) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2.5rem 2.2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .guide-hero::after {
+            content: '';
+            position: absolute;
+            right: -80px;
+            top: -90px;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(47, 128, 237, 0.15) 0%, rgba(47, 128, 237, 0) 72%);
+            filter: blur(24px);
+            pointer-events: none;
+        }
+
+        .guide-hero-main {
+            max-width: 760px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .guide-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.35rem 0.85rem;
+            border-radius: 999px;
+            border: 1px solid rgba(47, 128, 237, 0.22);
+            background: rgba(47, 128, 237, 0.12);
+            color: #8bb8ff;
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        .guide-hero h1 {
+            margin: 0 0 0.85rem 0;
+            font-size: 2.6rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+            line-height: 1.04;
+        }
+
+        .guide-subtitle {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 1.04rem;
+            line-height: 1.65;
+            max-width: 700px;
+        }
+
+        .guide-layout {
+            display: grid;
+            grid-template-columns: 280px minmax(0, 1fr);
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .guide-sidebar,
+        .faq-sidebar {
+            position: sticky;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.4rem;
+            padding: 1.5rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(18, 19, 25, 0.78);
+            backdrop-filter: blur(18px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        .guide-search,
+        .faq-search-container {
+            position: relative;
+        }
+
+        .guide-search input,
+        .faq-search-input {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.25);
+            color: var(--text-primary);
+            padding: 0.9rem 1rem 0.9rem 2.75rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        .guide-search input:focus,
+        .faq-search-input:focus {
+            border-color: var(--color-blue);
+            box-shadow: 0 0 0 1px var(--color-blue);
+            transform: translateY(-1px);
+        }
+
+        .guide-search-icon,
+        .faq-search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .faq-search-container:focus-within .faq-search-icon {
+            color: var(--color-blue);
+        }
+
+        .guide-sidebar-title,
+        .faq-sidebar h2 {
+            margin: 0;
+            padding-left: 0.25rem;
+            color: #89b7ff;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .faq-sidebar h2 {
+            margin-top: 1rem;
+        }
+
+        .guide-nav,
+        .faq-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .guide-nav-btn,
+        .faq-nav-btn {
+            width: 100%;
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--text-secondary);
+            text-align: left;
+            padding: 0.85rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            transition: all 0.22s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .guide-nav-btn:hover,
+        .faq-nav-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .guide-nav-btn.active,
+        .faq-nav-btn.active {
+            background: linear-gradient(90deg, rgba(47, 128, 237, 0.18), rgba(47, 128, 237, 0.03));
+            border-color: rgba(47, 128, 237, 0.22);
+            color: #9bc2ff;
+            box-shadow: 0 10px 26px rgba(47, 128, 237, 0.08);
+        }
+
+        .guide-nav-btn.active::before,
+        .faq-nav-btn.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 12%;
+            bottom: 12%;
+            width: 3px;
+            border-radius: 0 4px 4px 0;
+            background: var(--color-blue);
+        }
+
+        .faq-nav-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .faq-nav-label {
+            flex: 1;
+        }
+
+        .guide-nav-count,
+        .faq-nav-count {
+            margin-left: auto;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            padding: 0.2rem 0.48rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .guide-nav-btn.active .guide-nav-count,
+        .faq-nav-btn.active .faq-nav-count {
+            color: #b4d0ff;
+            background: rgba(47, 128, 237, 0.14);
+            border-color: rgba(47, 128, 237, 0.22);
+        }
+
+        .guide-content {
+            min-height: 460px;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+        }
+
+        .guide-category-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding-bottom: 1.2rem;
+            margin-bottom: 1.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .guide-category-title {
+            margin: 0;
+            font-size: 1.75rem;
+            color: var(--text-primary);
+        }
+
+        .guide-category-note {
+            margin: 0.45rem 0 0;
+            color: var(--text-secondary);
+            line-height: 1.65;
+            max-width: 720px;
+        }
+
+        .guide-category-meta {
+            white-space: nowrap;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #8ab5ff;
+            padding: 0.45rem 0.75rem;
+            border-radius: 999px;
+            background: rgba(47, 128, 237, 0.1);
+            border: 1px solid rgba(47, 128, 237, 0.18);
+        }
+
+        .guide-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .guide-card {
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.02);
+            overflow: hidden;
+            transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .guide-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(47, 128, 237, 0.18);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .guide-card.open {
+            border-color: rgba(47, 128, 237, 0.22);
+            background: rgba(19, 25, 35, 0.72);
+        }
+
+        .guide-question {
+            padding: 1.15rem 1.35rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            cursor: pointer;
+        }
+
+        .guide-question-main {
+            flex: 1;
+        }
+
+        .guide-question-kicker {
+            color: #7dadff;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.35rem;
+        }
+
+        .guide-question-title {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.08rem;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .guide-chevron {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            transition: transform 0.22s ease, background 0.22s ease;
+            flex-shrink: 0;
+        }
+
+        .guide-card.open .guide-chevron {
+            transform: rotate(180deg);
+            background: rgba(47, 128, 237, 0.15);
+            color: #a9caff;
+        }
+
+        .guide-answer {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            padding: 0 1.35rem;
+            color: var(--text-secondary);
+            transition: max-height 0.28s ease, opacity 0.2s ease, padding 0.2s ease;
+            border-top: 1px solid transparent;
+        }
+
+        .guide-card.open .guide-answer {
+            opacity: 1;
+            padding-top: 1rem;
+            padding-bottom: 1.35rem;
+            border-top-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .guide-answer p,
+        .guide-answer li {
+            line-height: 1.72;
+        }
+
+        .guide-answer ul,
+        .guide-answer ol {
+            margin: 0.85rem 0 0;
+            padding-left: 1.15rem;
+        }
+
+        .guide-tip {
+            margin-top: 1rem;
+            padding: 0.95rem 1.1rem;
+            border-radius: 10px;
+            background: rgba(47, 128, 237, 0.07);
+            border-left: 3px solid rgba(47, 128, 237, 0.42);
+            color: var(--text-primary);
+            line-height: 1.65;
+        }
+
+        .guide-tip strong {
+            display: inline-block;
+            margin-right: 0.35rem;
+            color: #9ec5ff;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-size: 0.75rem;
+        }
+
+        .guide-empty {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            border-radius: 14px;
+            border: 1px dashed rgba(255, 255, 255, 0.12);
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        @media (max-width: 920px) {
+            .guide-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .guide-sidebar,
+            .faq-sidebar {
+                position: static;
+                max-height: none;
+            }
+
+            .guide-category-head {
+                flex-direction: column;
+            }
+
+            .guide-hero {
+                padding: 1.8rem 1.4rem;
+            }
+
+            .guide-hero h1 {
+                font-size: 2rem;
+            }
+
+            .guide-content {
+                padding: 1.25rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">📘 Guide</div>
+            <nav class="header-nav">
+                <a href="/dashboard" class="nav-link">Dashboard</a>
+                <a href="/moderator" class="nav-link" id="moderatorLink">Moderator</a>
+                <a href="/admin" class="nav-link" id="adminLink">Admin</a>
+                <a href="/owner" class="nav-link" id="ownerLink">Owner</a>
+            </nav>
+            <div class="user-info">
+                <div class="user-dropdown">
+                    <div class="user-dropdown-trigger" onclick="toggleUserDropdown()">
+                        <span class="username" id="headerUsername">Loading...</span>
+                        <span class="role-badge" id="headerRole">user</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="user-dropdown-menu" id="userDropdownMenu">
+                        <div class="user-dropdown-header">
+                            <span class="username" id="dropdownUsername">Loading...</span>
+                            <span class="role-badge" id="dropdownRole">user</span>
+                        </div>
+                        <a href="/profile">👤 My Profile</a>
+                        <a href="/analytics" class="nav-link" id="analyticsLink">📊 Analytics</a>
+                        <a href="/features">✨ Features</a>
+                        <a href="/faq">❓ FAQ</a>
+                        <a href="/getting-started">🚀 Getting Started</a>
+                        <a href="/guide">📘 Guide</a>
+                        <a href="/best-practices">✅ Best Practices</a>
+                        <a href="/moderation-playbook">🛡️ Moderation Playbook</a>
+                        <div class="user-dropdown-divider"></div>
+                        <button onclick="logout()">🚪 Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="guide-hero">
+            <div class="guide-hero-main">
+                <p class="guide-eyebrow">Operator Handbook</p>
+                <h1>Everyday Guide for <span class="botNameDisplay">Sentinel</span></h1>
+                <p class="guide-subtitle">This page is the day-to-day version of the handbook. Use it when you need a
+                    quick answer about staff access, tickets, or verification without digging through setup docs.</p>
+            </div>
+        </section>
+
+        <div class="guide-layout">
+            <aside class="faq-sidebar">
+                <div class="faq-search-container">
+                    <span class="faq-search-icon">🔍</span>
+                    <input type="text" class="faq-search-input" id="globalSearch" placeholder="Search answers..."
+                        autocomplete="off">
+                </div>
+
+                <h2>Browse Categories</h2>
+                <nav class="faq-nav" id="faq-nav"></nav>
+            </aside>
+
+            <section class="guide-content" id="guideContent"></section>
+        </div>
+    </main>
+
+    <footer class="page-footer">
+        <div class="footer-links">
+            <span>© 2026 <strong><span class="websiteName"></span></strong></span>
+            <span class="footer-sep">•</span>
+            <a href="/changelog">Changelog</a>
+            <span class="footer-sep">•</span>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <span class="footer-sep">•</span>
+            <a href="/license">License</a>
+        </div>
+    </footer>
+
+    <script>
+        const guideSections = [
+            {
+                name: 'Roles & Permissions',
+                icon: '🔐',
+                summary: 'Who should be able to do what, and how to keep roles clear so staff are not stepping on each other.',
+                items: [
+                    {
+                        kicker: 'Access Model',
+                        title: 'How owner, admin, and moderator access should usually be split',
+                        answer: '<p>The easiest way to avoid confusion is to treat panel roles like trust levels. Owners should keep the keys to the whole system. Admins should run the server day to day without touching the most sensitive settings. Moderators should stay focused on cases, tickets, and member issues.</p><ul><li><strong>Owner:</strong> backups, security, system settings, user management, and anything high risk.</li><li><strong>Admin:</strong> daily server operations, member lookups, notes, and config review where it makes sense.</li><li><strong>Moderator:</strong> warnings, timeouts, bans, tickets, case review, and routine moderation work.</li></ul>',
+                        tip: 'Keep owner access tied to real people, not shared staff logins. It makes mistakes and audits much easier to untangle.'
+                    },
+                    {
+                        kicker: 'Permission Hygiene',
+                        title: 'Could this staff member do the job without panel access?',
+                        answer: '<p>Only give panel access to people who really need it. If someone can do their job from Discord alone, they probably do not need a panel account yet. Every extra login means another password to manage and another place where accidental changes can happen.</p><ol><li>Start with the lowest role that still lets the person do their job.</li><li>Review access whenever responsibilities change.</li><li>Remove or downgrade access as soon as someone leaves staff.</li></ol>',
+                        tip: 'Make 2FA part of onboarding. It is much easier to require it at the start than to chase people later.'
+                    },
+                    {
+                        kicker: 'Practical Review',
+                        title: 'Easy signs your permissions setup needs a cleanup',
+                        answer: '<ul><li>Moderators can open pages meant only for owners.</li><li>Staff are sharing one account instead of using their own.</li><li>Former staff still show up in panel user lists.</li><li>People can claim or close tickets without the right role.</li><li>Too many people can edit AutoMod, alerts, or backups.</li></ul><p>If any of those sound familiar, fix the permissions first before adding more tools on top.</p>',
+                        tip: 'Permission problems usually show up as confusion before they show up as damage.'
+                    }
+                ]
+            },
+            {
+                name: 'Ticket System',
+                icon: '🎫',
+                summary: 'How tickets should open, move through staff hands, and close in a way that feels clear for both the user and the team.',
+                items: [
+                    {
+                        kicker: 'Member Experience',
+                        title: 'What a good ticket flow feels like from the user side',
+                        answer: '<p>When someone opens a ticket, they should not be guessing what happens next. The first message should confirm the ticket opened, explain what staff need, and set expectations for the next step. A good ticket flow answers the obvious questions before the user has to ask them.</p><ul><li>Confirm the ticket opened successfully.</li><li>Ask for the right details early, like usernames, evidence, or a short summary.</li><li>Give a rough expectation for response time.</li><li>Make it clear whether the ticket will be handled, escalated, or closed.</li></ul>',
+                        tip: 'If staff keep asking the same first question, turn that question into part of the ticket template.'
+                    },
+                    {
+                        kicker: 'Staff Workflow',
+                        title: 'How staff should handle tickets once they are open',
+                        answer: '<p>Tickets go a lot smoother when ownership is obvious. Staff should be able to tell at a glance who has the ticket, what kind of issue it is, how urgent it is, and whether someone else needs to step in. That keeps two staff members from replying at once and stops tickets from drifting.</p><ol><li>Claim or assign the ticket quickly.</li><li>Mark the type or urgency if your setup supports it.</li><li>Leave a short summary before closing.</li><li>Keep notes or transcripts for anything that might matter later.</li></ol>',
+                        tip: 'If a ticket connects to moderation or appeals, link the case history before closing it.'
+                    },
+                    {
+                        kicker: 'Closure Standards',
+                        title: 'What should happen before a ticket gets closed',
+                        answer: '<ul><li>Make sure the user actually got an answer or next step.</li><li>Leave a short resolution note in plain language.</li><li>Keep a transcript for important or disputed tickets.</li><li>Confirm any promised follow-up was actually done.</li></ul><p>Closing a ticket should feel like finishing work, not making it disappear.</p>',
+                        tip: 'If you cannot explain the close reason in one sentence, the ticket probably needs a better closing note.'
+                    }
+                ]
+            },
+            {
+                name: 'Verification',
+                icon: '✅',
+                summary: 'How to make verification strong enough to block abuse without turning normal members away.',
+                items: [
+                    {
+                        kicker: 'Friction Balance',
+                        title: 'How strict verification actually needs to be',
+                        answer: '<p>The best verification flow is not the hardest one. It is the one that slows down bots and raiders while still being easy enough for real members to finish without asking staff for help. If normal users keep failing, staff will start bypassing the system, and that defeats the point.</p><ul><li>Use the easiest challenge that still blocks the abuse you actually see.</li><li>Only raise the difficulty when your analytics show you need to.</li><li>Tell people clearly what they need to do and what success looks like.</li></ul>',
+                        tip: 'Clear instructions usually improve verification more than adding another layer of friction.'
+                    },
+                    {
+                        kicker: 'Failure Signals',
+                        title: 'What different failure patterns usually point to',
+                        answer: '<ul><li><strong>A lot of instant failures:</strong> usually bots or scripted joins.</li><li><strong>People dropping off after the first step:</strong> instructions may be unclear.</li><li><strong>Real users retrying over and over:</strong> the challenge may be too hard or the UI may be confusing.</li><li><strong>Big spikes at certain times:</strong> you may be looking at a join wave or invite abuse.</li></ul><p>Use the numbers to guide your settings. Guessing usually makes verification worse, not better.</p>',
+                        tip: 'Look at where real people stop, not just how many total failures you have.'
+                    },
+                    {
+                        kicker: 'Escalation Path',
+                        title: 'What staff should do when a real user gets stuck',
+                        answer: '<p>Have a manual path ready before you need it. Staff should know where manual review happens, what proof is acceptable, and who is allowed to bypass the normal flow. That keeps help consistent instead of improvising every time someone gets stuck.</p><ol><li>Figure out whether the problem is difficulty, device trouble, or suspicious behavior.</li><li>Escalate only to roles that are allowed to manually verify people.</li><li>Log why the user was manually approved if the case looks unusual.</li></ol>',
+                        tip: 'Manual verification should stay rare. If it becomes common, the flow needs to be simplified or redesigned.'
+                    }
+                ]
+            }
+        ];
+
+        function renderGuideNav() {
+            const nav = document.getElementById('faq-nav');
+            nav.innerHTML = '';
+
+            guideSections.forEach((section, index) => {
+                const button = document.createElement('button');
+                button.className = `faq-nav-btn ${index === 0 ? 'active' : ''}`;
+                button.dataset.index = String(index);
+                button.innerHTML = `
+                    <span class="faq-nav-icon">${section.icon}</span>
+                    <span class="faq-nav-label">${section.name}</span>
+                    <span class="faq-nav-count">${section.items.length}</span>
+                `;
+                button.addEventListener('click', () => showGuideSection(index));
+                nav.appendChild(button);
+            });
+        }
+
+        function setAnswerHeights(root = document) {
+            root.querySelectorAll('.guide-card.open .guide-answer').forEach((answer) => {
+                answer.style.maxHeight = `${answer.scrollHeight + 40}px`;
+            });
+        }
+
+        function attachGuideAccordions(root) {
+            root.querySelectorAll('.guide-card').forEach((card) => {
+                const trigger = card.querySelector('.guide-question');
+                const answer = card.querySelector('.guide-answer');
+                if (!trigger || !answer) return;
+
+                trigger.addEventListener('click', () => {
+                    const isOpen = card.classList.toggle('open');
+                    answer.style.maxHeight = isOpen ? `${answer.scrollHeight + 40}px` : '0px';
+                });
+            });
+        }
+
+        function renderGuideResults(results, query) {
+            const content = document.getElementById('guideContent');
+            const resultCount = `${results.length} ${results.length === 1 ? 'result' : 'results'}`;
+
+            let html = `
+                <div class="guide-category-head">
+                    <div>
+                        <h2 class="guide-category-title">🔍 Search Results</h2>
+                        <p class="guide-category-note">Matches for "${query}" across roles, ticket flow, and verification guidance.</p>
+                    </div>
+                    <div class="guide-category-meta">${resultCount}</div>
+                </div>
+            `;
+
+            if (!results.length) {
+                html += '<div class="guide-empty">No matching guidance found. Try different keywords like role, claim, close, captcha, or recovery.</div>';
+                content.innerHTML = html;
+                return;
+            }
+
+            html += '<div class="guide-list">';
+            results.forEach((item) => {
+                html += `
+                    <article class="guide-card open">
+                        <div class="guide-question">
+                            <div class="guide-question-main">
+                                <div class="guide-question-kicker">${item.section.icon} ${item.section.name} · ${item.kicker}</div>
+                                <h3 class="guide-question-title">${item.title}</h3>
+                            </div>
+                            <div class="guide-chevron">▼</div>
+                        </div>
+                        <div class="guide-answer">
+                            ${item.answer}
+                            <div class="guide-tip"><strong>Tip</strong>${item.tip}</div>
+                        </div>
+                    </article>
+                `;
+            });
+            html += '</div>';
+            content.innerHTML = html;
+            attachGuideAccordions(content);
+            requestAnimationFrame(() => setAnswerHeights(content));
+        }
+
+        function showGuideSection(index) {
+            const section = guideSections[index];
+            const content = document.getElementById('guideContent');
+            document.querySelectorAll('.faq-nav-btn').forEach((button, buttonIndex) => {
+                button.classList.toggle('active', buttonIndex === index);
+            });
+
+            let html = `
+                <div class="guide-category-head">
+                    <div>
+                        <h2 class="guide-category-title">${section.icon} ${section.name}</h2>
+                        <p class="guide-category-note">${section.summary}</p>
+                    </div>
+                    <div class="guide-category-meta">${section.items.length} sections</div>
+                </div>
+                <div class="guide-list">
+            `;
+
+            section.items.forEach((item) => {
+                html += `
+                    <article class="guide-card">
+                        <div class="guide-question">
+                            <div class="guide-question-main">
+                                <div class="guide-question-kicker">${item.kicker}</div>
+                                <h3 class="guide-question-title">${item.title}</h3>
+                            </div>
+                            <div class="guide-chevron">▼</div>
+                        </div>
+                        <div class="guide-answer">
+                            ${item.answer}
+                            <div class="guide-tip"><strong>Tip</strong>${item.tip}</div>
+                        </div>
+                    </article>
+                `;
+            });
+
+            html += '</div>';
+            content.innerHTML = html;
+            attachGuideAccordions(content);
+
+            const firstCard = content.querySelector('.guide-card');
+            if (firstCard) {
+                firstCard.classList.add('open');
+                const firstAnswer = firstCard.querySelector('.guide-answer');
+                if (firstAnswer) {
+                    firstAnswer.style.maxHeight = `${firstAnswer.scrollHeight + 40}px`;
+                }
+            }
+
+            requestAnimationFrame(() => setAnswerHeights(content));
+        }
+
+        function searchGuide() {
+            const input = document.getElementById('globalSearch');
+            const query = input.value.trim().toLowerCase();
+            if (!query) {
+                showGuideSection(0);
+                return;
+            }
+
+            const results = [];
+            guideSections.forEach((section) => {
+                section.items.forEach((item) => {
+                    const haystack = [section.name, item.kicker, item.title, item.answer, item.tip].join(' ').toLowerCase();
+                    if (haystack.includes(query)) {
+                        results.push({ ...item, section });
+                    }
+                });
+            });
+
+            document.querySelectorAll('.faq-nav-btn').forEach((button) => button.classList.remove('active'));
+            renderGuideResults(results, input.value.trim());
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            renderGuideNav();
+            showGuideSection(0);
+
+            const searchInput = document.getElementById('globalSearch');
+            if (searchInput) {
+                searchInput.addEventListener('input', searchGuide);
+            }
+
+            initPage();
+        });
+
+        window.addEventListener('resize', () => setAnswerHeights());
+
+        async function initPage() {
+            try {
+                const res = await fetch('/api/account/info');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const safeText = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = value;
+                };
+
+                safeText('headerUsername', data.username || 'User');
+                safeText('headerRole', (data.role || 'user').toUpperCase());
+                safeText('dropdownUsername', data.username || 'User');
+                safeText('dropdownRole', (data.role || 'user').toUpperCase());
+
+                const moderatorLink = document.getElementById('moderatorLink');
+                const adminLink = document.getElementById('adminLink');
+                const ownerNavLink = document.getElementById('ownerNavLink');
+                const analyticsLink = document.getElementById('analyticsLink');
+
+                const role = data.role || 'user';
+                const isMod = ['moderator', 'admin', 'owner'].includes(role);
+                const isAdmin = ['admin', 'owner'].includes(role);
+                const isOwner = role === 'owner';
+
+                if (moderatorLink) moderatorLink.style.display = isMod ? 'block' : 'none';
+                if (adminLink) adminLink.style.display = isAdmin ? 'block' : 'none';
+                if (ownerNavLink) ownerNavLink.style.display = isOwner ? 'block' : 'none';
+                if (analyticsLink) analyticsLink.style.display = isOwner ? 'block' : 'none';
+            } catch (error) {
+                console.error('Failed to init guide page', error);
+            }
+        }
+
+        function toggleUserDropdown() {
+            const menu = document.getElementById('userDropdownMenu');
+            const trigger = document.querySelector('.user-dropdown-trigger');
+            if (menu) menu.classList.toggle('show');
+            if (trigger) trigger.classList.toggle('active');
+        }
+
+        document.addEventListener('click', (event) => {
+            const dropdown = document.querySelector('.user-dropdown');
+            if (dropdown && !dropdown.contains(event.target)) {
+                document.getElementById('userDropdownMenu')?.classList.remove('show');
+                document.querySelector('.user-dropdown-trigger')?.classList.remove('active');
+            }
+        });
+    </script>
+
+    <script src="/public/shared.js"></script>
+    <script src="/public/version.js"></script>
+</body>
+
+</html>

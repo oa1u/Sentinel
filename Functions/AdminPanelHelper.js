@@ -444,10 +444,11 @@ class AdminPanelHelper {
         try {
             let query = 'SELECT * FROM tickets';
             const params = [];
+            const normalizedStatus = status && status !== 'all' ? status : null;
 
-            if (status) {
+            if (normalizedStatus) {
                 query += ' WHERE status = ?';
-                params.push(status);
+                params.push(normalizedStatus);
             }
 
             query += ' ORDER BY created_at DESC LIMIT 100';
@@ -472,11 +473,12 @@ class AdminPanelHelper {
     }
 
     // Claims a ticket in the database.
-    static async claimTicket(channelId, claimedBy) {
+    static async claimTicket(channelId, claimedBy, claimedByName = null) {
         try {
             if (!channelId) return false;
             const updates = {
                 claimedBy: claimedBy || null,
+                claimedByName: claimedByName || claimedBy || null,
                 status: 'claimed'
             };
             return await MySQLDatabaseManager.updateTicket(channelId, updates);

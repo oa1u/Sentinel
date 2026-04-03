@@ -7,6 +7,10 @@ const ROOT_DIR = path.join(__dirname, '..');
 const SERVER_BACKUP_DIR = path.join(ROOT_DIR, 'backups', 'server');
 const SERVER_BACKUP_CONFIG_PATH = path.join(ROOT_DIR, 'Config', 'constants', 'serverBackups.json');
 const SERVER_BACKUP_MANIFEST_SECRET = String(process.env.SERVER_BACKUP_MANIFEST_SECRET || process.env.SERVER_BACKUP_SIGNING_SECRET || '').trim();
+const SERVER_BACKUP_TYPE = 'server-backup';
+const LEGACY_SERVER_BACKUP_TYPES = Object.freeze(['sentinel-server-backup']);
+const SERVER_BACKUP_MANIFEST_SCHEMA = 'server-backup-manifest';
+const LEGACY_SERVER_BACKUP_MANIFEST_SCHEMAS = Object.freeze(['sentinel-server-backup-manifest']);
 const DEFAULT_BACKUP_INCLUDES = Object.freeze({
     settings: true,
     roles: true,
@@ -159,7 +163,8 @@ function validateServerBackupPayload(payload) {
         };
     }
 
-    if (payload.type !== 'sentinel-server-backup') {
+    const allowedBackupTypes = new Set([SERVER_BACKUP_TYPE, ...LEGACY_SERVER_BACKUP_TYPES]);
+    if (!allowedBackupTypes.has(String(payload.type || '').trim())) {
         errors.push('Backup type is not recognized.');
     }
 
@@ -274,7 +279,7 @@ function signBackupManifest(manifestPayload) {
 
 function buildBackupManifest({ fileName, payload, size }) {
     const manifestPayload = {
-        schema: 'sentinel-server-backup-manifest',
+        schema: SERVER_BACKUP_MANIFEST_SCHEMA,
         version: 1,
         fileName,
         generatedAt: payload.generatedAt || new Date().toISOString(),
@@ -315,6 +320,7 @@ function readServerBackupManifest(fileName) {
 
     const raw = fs.readFileSync(manifestPath, 'utf8');
     const parsed = JSON.parse(raw);
+    const allowedSchemas = new Set([SERVER_BACKUP_MANIFEST_SCHEMA, ...LEGACY_SERVER_BACKUP_MANIFEST_SCHEMAS]);
     const payload = {
         schema: parsed?.schema,
         version: parsed?.version,
@@ -327,12 +333,14 @@ function readServerBackupManifest(fileName) {
         size: parsed?.size
     };
     const expectedSignature = signBackupManifest(payload);
-    const valid = !parsed?.signed || !expectedSignature ? true : expectedSignature === parsed.signature;
+    const validSchema = allowedSchemas.has(String(parsed?.schema || '').trim());
+    const validSignature = !parsed?.signed || !expectedSignature ? true : expectedSignature === parsed.signature;
 
     return {
         ...parsed,
         available: true,
-        valid,
+        valid: validSchema && validSignature,
+        schemaValid: validSchema,
         path: manifestPath
     };
 }
@@ -762,7 +770,7 @@ async function buildGuildBackupPayload(guild, { trigger = 'manual', includes = D
         : [];
 
     return {
-        type: 'sentinel-server-backup',
+        type: SERVER_BACKUP_TYPE,
         version: 2,
         generatedAt: new Date().toISOString(),
         trigger,
@@ -996,7 +1004,10 @@ function buildChannelOptions(snapshotChannel, parentId, permissionOverwrites) {
     if ([ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(snapshotChannel.type)) {
         options.topic = snapshotChannel.topic || null;
         options.rateLimitPerUser = Number(snapshotChannel.rateLimitPerUser || 0);
-        options.defaultAutoArchiveDuration = Number(snapshotChannel.defaultAutoArchiveDuration || 0);
+        const autoArchiveDuration = Number(snapshotChannel.defaultAutoArchiveDuration || 0);
+        if ([60, 1440, 4320, 10080].includes(autoArchiveDuration)) {
+            options.defaultAutoArchiveDuration = autoArchiveDuration;
+        }
         options.defaultThreadRateLimitPerUser = Number(snapshotChannel.defaultThreadRateLimitPerUser || 0);
     }
 
@@ -1004,14 +1015,23 @@ function buildChannelOptions(snapshotChannel, parentId, permissionOverwrites) {
         options.bitrate = Number(snapshotChannel.bitrate || 0);
         options.userLimit = Number(snapshotChannel.userLimit || 0);
         options.rtcRegion = snapshotChannel.rtcRegion || null;
-        options.videoQualityMode = Number(snapshotChannel.videoQualityMode || 0);
+        const qualityMode = Number(snapshotChannel.videoQualityMode || 0);
+        if ([1, 2].includes(qualityMode)) {
+            options.videoQualityMode = qualityMode;
+        }
     }
 
     if (snapshotChannel.type === ChannelType.GuildForum) {
         options.topic = snapshotChannel.topic || null;
-        options.defaultAutoArchiveDuration = Number(snapshotChannel.defaultAutoArchiveDuration || 0);
+        const forumAutoArchive = Number(snapshotChannel.defaultAutoArchiveDuration || 0);
+        if ([60, 1440, 4320, 10080].includes(forumAutoArchive)) {
+            options.defaultAutoArchiveDuration = forumAutoArchive;
+        }
         options.defaultThreadRateLimitPerUser = Number(snapshotChannel.defaultThreadRateLimitPerUser || 0);
-        options.defaultForumLayout = Number(snapshotChannel.defaultForumLayout || 0);
+        const defaultForumLayout = Number(snapshotChannel.defaultForumLayout || 0);
+        if ([1, 2].includes(defaultForumLayout)) {
+            options.defaultForumLayout = defaultForumLayout;
+        }
         options.defaultSortOrder = snapshotChannel.defaultSortOrder ?? null;
         options.availableTags = Array.isArray(snapshotChannel.availableTags)
             ? snapshotChannel.availableTags.map((tag) => ({
@@ -1106,9 +1126,13 @@ async function restoreRolesFromBackup(guild, payloadRoles, exclusions = normaliz
             continue;
         }
         const existing = guild.roles.cache.find((role) => !role.managed && normalizeRoleKey(role.name) === normalizeRoleKey(snapshotRole.name));
+        const roleColors = snapshotRole.color && snapshotRole.color !== '#000000'
+            ? { primaryColor: snapshotRole.color }
+            : undefined;
+
         const roleData = {
             name: snapshotRole.name,
-            colors: snapshotRole.color || '#000000',
+            ...(roleColors ? { colors: roleColors } : {}),
             hoist: Boolean(snapshotRole.hoist),
             mentionable: Boolean(snapshotRole.mentionable),
             permissions: snapshotRole.permissions || '0',
@@ -1138,9 +1162,13 @@ async function restoreRolesFromBackup(guild, payloadRoles, exclusions = normaliz
         if (liveRole) {
             roleIdMap.set(snapshotRole.id, liveRole.id);
             if (typeof liveRole.setPosition === 'function') {
-                await liveRole.setPosition(Math.max(1, Number(snapshotRole.position || 1))).catch((error) => {
-                    warnings.push(`Failed to position role ${snapshotRole.name}: ${error.message || error}`);
-                });
+                if (liveRole.editable) {
+                    await liveRole.setPosition(Math.max(1, Number(snapshotRole.position || 1))).catch((error) => {
+                        warnings.push(`Failed to position role ${snapshotRole.name}: ${error.message || error}`);
+                    });
+                } else {
+                    warnings.push(`Could not position role ${snapshotRole.name}: bot lacks higher role permissions.`);
+                }
             }
         }
 
@@ -1608,7 +1636,8 @@ async function createServerBackupFromGuild(guild, {
     includes = DEFAULT_BACKUP_INCLUDES,
     label = '',
     notes = '',
-    requestedBy = null
+    requestedBy = null,
+    fileName = null
 } = {}) {
     if (!guild?.id) {
         throw new Error('A valid guild is required to create a server backup.');
@@ -1631,16 +1660,21 @@ async function createServerBackupFromGuild(guild, {
         }
     };
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `server-backup-${guild.id}-${timestamp}.json`;
-    const filePath = path.join(SERVER_BACKUP_DIR, fileName);
+    const safeFileName = fileName
+        ? String(fileName).trim().replace(/[<>:"/\\|?*]/g, '-').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '')
+        : null;
+    const finalFileName = safeFileName
+        ? `${safeFileName}${safeFileName.toLowerCase().endsWith('.json') ? '' : '.json'}`
+        : `server-backup-${guild.id}-${timestamp}.json`;
+    const filePath = path.join(SERVER_BACKUP_DIR, finalFileName);
     const fileBody = JSON.stringify(payload, null, 2);
     fs.writeFileSync(filePath, fileBody, 'utf8');
-    const manifest = buildBackupManifest({ fileName, payload, size: Buffer.byteLength(fileBody, 'utf8') });
-    writeServerBackupManifest(fileName, manifest);
+    const manifest = buildBackupManifest({ fileName: finalFileName, payload, size: Buffer.byteLength(fileBody, 'utf8') });
+    writeServerBackupManifest(finalFileName, manifest);
     pruneServerBackups({ guildId: guild.id, retentionCount });
 
     return {
-        fileName,
+        fileName: finalFileName,
         filePath,
         size: Buffer.byteLength(fileBody, 'utf8'),
         createdAt: Date.now(),

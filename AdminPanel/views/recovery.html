@@ -124,38 +124,145 @@
             margin: 0;
         }
 
+        .recovery-summary {
+            margin-bottom: 1rem;
+            padding: 1rem 1.05rem;
+            border-radius: 14px;
+            border: 1px solid rgba(91, 127, 255, 0.2);
+            background: linear-gradient(135deg, rgba(91, 127, 255, 0.14) 0%, rgba(91, 127, 255, 0.05) 100%);
+        }
+
+        .recovery-summary-kicker {
+            margin: 0 0 0.2rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-blue);
+        }
+
+        .recovery-summary-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .recovery-summary-text {
+            margin: 0.3rem 0 0;
+            font-size: 0.82rem;
+            line-height: 1.55;
+            color: var(--text-secondary);
+        }
+
         .recovery-switches {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.5rem;
             margin-bottom: 1rem;
-            background: var(--bg-secondary);
-            padding: 0.25rem;
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.025);
+            padding: 0.4rem;
+            border-radius: 14px;
             border: 1px solid var(--border-color);
         }
 
         .recovery-switches button {
+            display: grid;
+            gap: 0.18rem;
+            justify-items: start;
+            text-align: left;
+            min-height: 74px;
             background: transparent;
-            border: none;
+            border: 1px solid transparent;
             color: var(--text-secondary);
-            padding: 0.6rem;
+            padding: 0.75rem 0.85rem;
             font-size: 0.8rem;
             font-weight: 600;
-            border-radius: 10px;
+            border-radius: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
         }
 
         .recovery-switches button:hover {
             color: var(--text-primary);
-            background: var(--bg-card-hover);
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.06);
+            transform: translateY(-1px);
         }
 
         .recovery-switches button.active {
-            background: var(--color-blue);
+            background: linear-gradient(135deg, rgba(91, 127, 255, 0.2) 0%, rgba(91, 127, 255, 0.11) 100%);
             color: #fff;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+            border-color: rgba(91, 127, 255, 0.4);
+            box-shadow: 0 8px 24px rgba(91, 127, 255, 0.14);
+        }
+
+        .switch-title {
+            font-size: 0.83rem;
+            font-weight: 700;
+            color: inherit;
+        }
+
+        .switch-description {
+            font-size: 0.72rem;
+            line-height: 1.4;
+            opacity: 0.9;
+            color: inherit;
+        }
+
+        .recovery-panel {
+            display: grid;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .panel-header {
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .panel-kicker {
+            margin: 0;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.58);
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .panel-copy {
+            margin: 0;
+            font-size: 0.8rem;
+            line-height: 1.55;
+            color: var(--text-secondary);
+        }
+
+        .security-note {
+            margin: 0;
+            padding: 0.8rem 0.9rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.03);
+            font-size: 0.77rem;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+
+        .password-rules {
+            margin: -0.35rem 0 0;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            color: var(--text-secondary);
         }
 
         .form-group {
@@ -348,6 +455,10 @@
             .brand-logo {
                 margin: 0 auto;
             }
+
+            .recovery-switches {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -363,119 +474,166 @@
             <div class="brand-header">
                 <div class="brand-logo">🔐</div>
                 <h1 class="form-title">Account Recovery</h1>
-                <p class="form-subtitle">Choose a recovery method below</p>
+                <p class="form-subtitle">Regain access with the path that matches what you still have</p>
+            </div>
+
+            <div class="recovery-summary" aria-live="polite">
+                <p class="recovery-summary-kicker">Recovery Center</p>
+                <h2 class="recovery-summary-title" id="recoverySummaryTitle">Use a saved recovery code to sign in</h2>
+                <p class="recovery-summary-text" id="recoverySummaryText">Fastest path if you already have one of your backup recovery codes. Successful sign-in takes you straight back to the dashboard.</p>
             </div>
 
             <div id="errorMsg" class="message error hidden"></div>
             <div id="successMsg" class="message success hidden"></div>
 
             <div class="recovery-switches">
-                <button type="button" id="showRecoveryLoginPanel" class="active">Code Login</button>
-                <button type="button" id="showEmailResetRequestPanel">Email Reset</button>
-                <button type="button" id="showTokenResetPanel">Token Reset</button>
-                <button type="button" id="showRecoveryResetPanel">Code Reset</button>
+                <button type="button" id="showRecoveryLoginPanel" class="active">
+                    <span class="switch-title">Code Login</span>
+                    <span class="switch-description">Sign in immediately with a stored recovery code.</span>
+                </button>
+                <button type="button" id="showEmailResetRequestPanel">
+                    <span class="switch-title">Email Reset</span>
+                    <span class="switch-description">Request a reset link sent to your account email.</span>
+                </button>
+                <button type="button" id="showTokenResetPanel">
+                    <span class="switch-title">Token Reset</span>
+                    <span class="switch-description">Finish a password reset using a token from email.</span>
+                </button>
+                <button type="button" id="showRecoveryResetPanel">
+                    <span class="switch-title">Code Reset</span>
+                    <span class="switch-description">Set a new password with your username and recovery code.</span>
+                </button>
             </div>
 
             <form id="recoveryForm">
-                <h3 class="sr-only">Recovery Code Login</h3>
-                <div class="form-group">
-                    <label for="username" class="form-label">Username</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="username" name="username" class="form-input"
-                            placeholder="Enter your username" required autocomplete="username">
-                        <span class="input-icon">👤</span>
+                <div class="recovery-panel">
+                    <div class="panel-header">
+                        <p class="panel-kicker">Recovery Code Login</p>
+                        <h3 class="panel-title">Sign in with a backup code</h3>
+                        <p class="panel-copy">Use this if your password is correct but your authenticator device is unavailable. Enter the username tied to the account and one unused recovery code.</p>
                     </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="recoveryCode" class="form-label">Recovery Code</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="recoveryCode" name="recoveryCode" class="form-input"
-                            placeholder="XXXX-XXXX-XXXX" maxlength="14" required autocomplete="one-time-code">
-                        <span class="input-icon">🔑</span>
+                    <div class="form-group">
+                        <label for="username" class="form-label">Username</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="username" name="username" class="form-input"
+                                placeholder="Enter your username" required autocomplete="username">
+                            <span class="input-icon">👤</span>
+                        </div>
                     </div>
-                </div>
 
-                <button type="button" id="recoveryLoginBtn" class="btn btn-primary btn-full">Sign In</button>
+                    <div class="form-group">
+                        <label for="recoveryCode" class="form-label">Recovery Code</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="recoveryCode" name="recoveryCode" class="form-input"
+                                placeholder="XXXX-XXXX-XXXX" maxlength="14" required autocomplete="one-time-code">
+                            <span class="input-icon">🔑</span>
+                        </div>
+                    </div>
+
+                    <p class="security-note">This consumes the recovery code on successful sign-in. Keep remaining codes stored offline.</p>
+
+                    <button type="button" id="recoveryLoginBtn" class="btn btn-primary btn-full">Sign In</button>
+                </div>
             </form>
 
             <form id="passwordResetRequestForm" style="display:none;">
-                <h3 class="sr-only">Email Reset Request</h3>
-                <div class="form-group">
-                    <label for="resetIdentifier" class="form-label">Username or Email</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="resetIdentifier" name="resetIdentifier" class="form-input"
-                            placeholder="Enter username or email" autocomplete="username email">
-                        <span class="input-icon">📧</span>
+                <div class="recovery-panel">
+                    <div class="panel-header">
+                        <p class="panel-kicker">Email Reset</p>
+                        <h3 class="panel-title">Request a password reset link</h3>
+                        <p class="panel-copy">Use your username or the email attached to the account. If the account exists and email recovery is available, a reset link will be sent.</p>
                     </div>
+                    <div class="form-group">
+                        <label for="resetIdentifier" class="form-label">Username or Email</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="resetIdentifier" name="resetIdentifier" class="form-input"
+                                placeholder="Enter username or email" autocomplete="username email">
+                            <span class="input-icon">📧</span>
+                        </div>
+                    </div>
+                    <p class="security-note">If no email is configured for the account, use a recovery code path instead.</p>
+                    <button type="button" id="requestResetBtn" class="btn btn-primary btn-full">Send Reset Link</button>
                 </div>
-                <button type="button" id="requestResetBtn" class="btn btn-primary btn-full">Send Reset Link</button>
             </form>
 
             <form id="passwordResetTokenForm" style="display:none;">
-                <h3 class="sr-only">Reset With Email Token</h3>
-                <div class="form-group">
-                    <label for="resetToken" class="form-label">Reset Token</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="resetToken" name="resetToken" class="form-input"
-                            placeholder="Paste token from email">
-                        <span class="input-icon">🎟️</span>
+                <div class="recovery-panel">
+                    <div class="panel-header">
+                        <p class="panel-kicker">Token Reset</p>
+                        <h3 class="panel-title">Finish your email-based password reset</h3>
+                        <p class="panel-copy">Paste the reset token from your email, then choose a new strong password for the account.</p>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="resetNewPassword" class="form-label">New Password</label>
-                    <div class="input-wrapper">
-                        <input type="password" id="resetNewPassword" name="resetNewPassword" class="form-input"
-                            placeholder="New password" autocomplete="new-password">
-                        <span class="input-icon">🔒</span>
+                    <div class="form-group">
+                        <label for="resetToken" class="form-label">Reset Token</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="resetToken" name="resetToken" class="form-input"
+                                placeholder="Paste token from email">
+                            <span class="input-icon">🎟️</span>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="resetConfirmPassword" class="form-label">Confirm Password</label>
-                    <div class="input-wrapper">
-                        <input type="password" id="resetConfirmPassword" name="resetConfirmPassword" class="form-input"
-                            placeholder="Confirm password" autocomplete="new-password">
-                        <span class="input-icon">🔒</span>
+                    <div class="form-group">
+                        <label for="resetNewPassword" class="form-label">New Password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="resetNewPassword" name="resetNewPassword" class="form-input"
+                                placeholder="New password" autocomplete="new-password">
+                            <span class="input-icon">🔒</span>
+                        </div>
                     </div>
+                    <div class="form-group">
+                        <label for="resetConfirmPassword" class="form-label">Confirm Password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="resetConfirmPassword" name="resetConfirmPassword" class="form-input"
+                                placeholder="Confirm password" autocomplete="new-password">
+                            <span class="input-icon">🔒</span>
+                        </div>
+                    </div>
+                    <p class="password-rules">Use 8-100 characters with uppercase, lowercase, a number, and a symbol.</p>
+                    <button type="button" id="confirmResetBtn" class="btn btn-primary btn-full">Reset Password</button>
                 </div>
-                <button type="button" id="confirmResetBtn" class="btn btn-primary btn-full">Reset Password</button>
             </form>
 
             <form id="passwordResetRecoveryForm" style="display:none;">
-                <h3 class="sr-only">Reset With Recovery Code</h3>
-                <div class="form-group">
-                    <label for="resetRecoveryUsername" class="form-label">Username</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="resetRecoveryUsername" name="resetRecoveryUsername" class="form-input"
-                            placeholder="Username" autocomplete="username">
-                        <span class="input-icon">👤</span>
+                <div class="recovery-panel">
+                    <div class="panel-header">
+                        <p class="panel-kicker">Recovery Reset</p>
+                        <h3 class="panel-title">Set a new password with a recovery code</h3>
+                        <p class="panel-copy">Use this when you cannot sign in normally but still have an unused recovery code. This resets the password directly.</p>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="resetRecoveryCode" class="form-label">Recovery Code</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="resetRecoveryCode" name="resetRecoveryCode" class="form-input"
-                            placeholder="XXXX-XXXX-XXXX" maxlength="14" autocomplete="one-time-code">
-                        <span class="input-icon">🔑</span>
+                    <div class="form-group">
+                        <label for="resetRecoveryUsername" class="form-label">Username</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="resetRecoveryUsername" name="resetRecoveryUsername" class="form-input"
+                                placeholder="Username" autocomplete="username">
+                            <span class="input-icon">👤</span>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="recoveryResetNewPassword" class="form-label">New Password</label>
-                    <div class="input-wrapper">
-                        <input type="password" id="recoveryResetNewPassword" name="recoveryResetNewPassword"
-                            class="form-input" placeholder="New password" autocomplete="new-password">
-                        <span class="input-icon">🔒</span>
+                    <div class="form-group">
+                        <label for="resetRecoveryCode" class="form-label">Recovery Code</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="resetRecoveryCode" name="resetRecoveryCode" class="form-input"
+                                placeholder="XXXX-XXXX-XXXX" maxlength="14" autocomplete="one-time-code">
+                            <span class="input-icon">🔑</span>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="recoveryResetConfirmPassword" class="form-label">Confirm Password</label>
-                    <div class="input-wrapper">
-                        <input type="password" id="recoveryResetConfirmPassword" name="recoveryResetConfirmPassword"
-                            class="form-input" placeholder="Confirm password" autocomplete="new-password">
-                        <span class="input-icon">🔒</span>
+                    <div class="form-group">
+                        <label for="recoveryResetNewPassword" class="form-label">New Password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="recoveryResetNewPassword" name="recoveryResetNewPassword"
+                                class="form-input" placeholder="New password" autocomplete="new-password">
+                            <span class="input-icon">🔒</span>
+                        </div>
                     </div>
+                    <div class="form-group">
+                        <label for="recoveryResetConfirmPassword" class="form-label">Confirm Password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="recoveryResetConfirmPassword" name="recoveryResetConfirmPassword"
+                                class="form-input" placeholder="Confirm password" autocomplete="new-password">
+                            <span class="input-icon">🔒</span>
+                        </div>
+                    </div>
+                    <p class="password-rules">Choose a fresh password you do not reuse on other services.</p>
+                    <button type="button" id="recoveryResetBtn" class="btn btn-primary btn-full">Reset Password</button>
                 </div>
-                <button type="button" id="recoveryResetBtn" class="btn btn-primary btn-full">Reset Password</button>
             </form>
 
             <div class="links-container">
