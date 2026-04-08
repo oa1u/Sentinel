@@ -31,6 +31,7 @@ const CsrfHelper = require('./Functions/CsrfHelper');
 const { getStats } = require('./Functions/botStats');
 const { generateCaseId } = require('./Events/caseId');
 const { createModerationEmbed, createModerationDmEmbed } = require('./Functions/EmbedBuilders');
+const { updateTicketChannelAssigneeName } = require('./Functions/TicketLifecycle');
 const { EmbedBuilder } = require('discord.js');
 const moment = require('moment');
 require('moment-duration-format');
@@ -13050,23 +13051,36 @@ app.get('/api/tickets', requireAuth, async (req, res) => {
         const status = req.query.status && req.query.status !== 'all' ? req.query.status : null;
         const tickets = await AdminPanelHelper.getAllTickets(status || undefined);
         const list = Array.isArray(tickets) ? tickets : [];
-        res.json(list.map(t => ({
-            id: t.channelId || t.channel_id || t.id || 'N/A',
-            channelId: t.channelId || t.channel_id || null,
-            userId: t.userId || t.user_id || null,
-            username: t.userName || t.user_name || t.username || 'Unknown',
-            status: t.status || 'open',
-            priority: t.priority || 'medium',
-            claimedBy: t.claimedBy || t.claimed_by || null,
-            claimedByName: t.claimedByName || t.claimed_by_name || null,
-            closedBy: t.closedBy || t.closed_by || null,
-            closedByName: t.closedByName || t.closed_by_name || null,
-            closeReason: t.closeReason || t.close_reason || '',
-            reason: t.reason || '',
-            created_at: t.createdAt || t.created_at || null,
-            closed_at: t.closedAt || t.closed_at || null,
-            transcript_created_at: t.transcriptCreatedAt || t.transcript_created_at || null
-        })));
+        res.json(list.map(t => {
+            const rawPriority = String(t.priority || '').trim().toLowerCase();
+            const legacyCategoryLabel = rawPriority === 'high'
+                ? 'High Priority'
+                : rawPriority === 'medium'
+                    ? 'Medium Priority'
+                    : rawPriority === 'low'
+                        ? 'Low Priority'
+                        : 'Other';
+
+            return {
+                id: t.channelId || t.channel_id || t.id || 'N/A',
+                channelId: t.channelId || t.channel_id || null,
+                userId: t.userId || t.user_id || null,
+                username: t.userName || t.user_name || t.username || 'Unknown',
+                status: t.status || 'open',
+                categoryKey: t.categoryKey || t.category_key || null,
+                categoryLabel: t.categoryLabel || t.category_label || legacyCategoryLabel,
+                priority: t.priority || null,
+                claimedBy: t.claimedBy || t.claimed_by || null,
+                claimedByName: t.claimedByName || t.claimed_by_name || null,
+                closedBy: t.closedBy || t.closed_by || null,
+                closedByName: t.closedByName || t.closed_by_name || null,
+                closeReason: t.closeReason || t.close_reason || '',
+                reason: t.reason || '',
+                created_at: t.createdAt || t.created_at || null,
+                closed_at: t.closedAt || t.closed_at || null,
+                transcript_created_at: t.transcriptCreatedAt || t.transcript_created_at || null
+            };
+        }));
     } catch (error) {
         res.status(500).json({ error: 'Failed to get tickets' });
     }
@@ -13107,17 +13121,56 @@ app.get('/api/tickets/:ticketId/transcript', requireAuth, async (req, res) => {
 // Claim ticket
 app.post('/api/tickets/:ticketId/claim', requireAuth, async (req, res) => {
     try {
+        const user = await AdminPanelHelper.getAdminUser(req.session.username);
+        if (!hasModeratorAccess(user)) {
+            return res.status(403).json({ error: 'Moderator access required' });
+        }
+
         const { ticketId } = req.params;
         if (!ticketId) {
             return res.status(400).json({ error: 'Invalid ticket id' });
         }
+
+        const linkedDiscordUserId = String(user?.discord_user_id || '').trim();
+        const linkedDiscordUsername = String(user?.discord_username || '').trim();
+        const claimedBy = linkedDiscordUserId || req.session.userId || req.session.username || 'system';
+        const claimedByName = linkedDiscordUsername || user?.username || req.session.username || String(req.session.userId || 'system');
+
         const success = await AdminPanelHelper.claimTicket(
             ticketId,
-            req.session.userId || req.session.username || 'system',
-            req.session.username || req.session.userId || 'system'
+            claimedBy,
+            claimedByName
         );
+
         if (success) {
-            res.json({ success: true, message: 'Ticket claimed' });
+            if (discordClient?.channels?.fetch) {
+                const ticketChannel = discordClient.channels.cache.get(ticketId)
+                    || await discordClient.channels.fetch(ticketId).catch(() => null);
+
+                if (ticketChannel) {
+                    await updateTicketChannelAssigneeName(ticketChannel, linkedDiscordUsername || claimedByName).catch(() => { });
+
+                    const claimerDisplay = linkedDiscordUserId
+                        ? `<@${linkedDiscordUserId}>`
+                        : `**${claimedByName}** (Admin Panel)`;
+
+                    const notifyEmbed = new EmbedBuilder()
+                        .setColor(0x5865F2)
+                        .setTitle('🎫 Ticket Claimed')
+                        .setDescription(`${claimerDisplay} claimed this ticket from the admin panel and is now responsible for the case.`)
+                        .setFooter({ text: 'Support Team' })
+                        .setTimestamp();
+
+                    await ticketChannel.send({ embeds: [notifyEmbed] }).catch(() => { });
+                }
+            }
+
+            res.json({
+                success: true,
+                message: 'Ticket claimed',
+                claimedBy,
+                claimedByName
+            });
         } else {
             res.status(404).json({ error: 'Ticket not found' });
         }

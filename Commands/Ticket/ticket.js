@@ -2,7 +2,7 @@ const {
   ActionRowBuilder,
   SlashCommandBuilder,
   EmbedBuilder,
-  AttachmentBuilder,
+  ButtonBuilder,
   ButtonStyle,
   ChannelType,
   ModalBuilder,
@@ -16,57 +16,113 @@ const { createErrorEmbed, createWarningEmbed, createSuccessEmbed, sendWarningRep
 const MySQLDatabaseManager = require('../../Functions/MySQLDatabaseManager');
 const {
   closeTicketChannel,
+  getTicketRecordForChannel,
   hasSupportOrAdmin,
   isTicketChannel,
   updateTicketChannelAssigneeName
 } = require('../../Functions/TicketLifecycle');
-
-const ticketOpenAttempts = new Map();
-const lastSuccessfulTicketOpen = new Map();
-const lastTicketReasonFingerprint = new Map();
 
 const TICKET_OPEN_WINDOW_MS = 10 * 60 * 1000;
 const TICKET_OPEN_MAX_ATTEMPTS = 4;
 const TICKET_CREATION_COOLDOWN_MS = 2 * 60 * 1000;
 const DUPLICATE_REASON_WINDOW_MS = 15 * 60 * 1000;
 const AUTO_TICKET_BUTTON_ID = 'ticket:auto_open';
-const AUTO_TICKET_MODAL_ID = 'ticket:auto_open_modal';
+const TICKET_CATEGORY_BUTTON_PREFIX = 'ticket:category:';
+const AUTO_TICKET_MODAL_PREFIX = 'ticket:auto_open_modal:';
 const AUTO_TICKET_REASON_FIELD_ID = 'ticket_reason';
-const AUTO_TICKET_PRIORITY_FIELD_ID = 'ticket_priority';
+
+const TICKET_CATEGORIES = Object.freeze([
+  {
+    key: 'billing_info',
+    label: 'Billing Info',
+    emoji: '💳',
+    color: 0x4C9AFF,
+    channelTag: 'billing',
+    buttonStyle: ButtonStyle.Primary,
+    description: 'Payments, invoices, refunds, and subscription questions.'
+  },
+  {
+    key: 'sales_question',
+    label: 'Sales Question',
+    emoji: '🛍️',
+    color: 0x2ECC71,
+    channelTag: 'sales',
+    buttonStyle: ButtonStyle.Success,
+    description: 'Product details, pricing, upgrades, and pre-purchase questions.'
+  },
+  {
+    key: 'technical_support',
+    label: 'Technical Support',
+    emoji: '🛠️',
+    color: 0x5865F2,
+    channelTag: 'tech',
+    buttonStyle: ButtonStyle.Secondary,
+    description: 'Bot issues, broken features, setup problems, and troubleshooting.'
+  },
+  {
+    key: 'account_help',
+    label: 'Account Help',
+    emoji: '👤',
+    color: 0xF1C40F,
+    channelTag: 'account',
+    buttonStyle: ButtonStyle.Secondary,
+    description: 'Login problems, permissions, account access, and profile help.'
+  },
+  {
+    key: 'report_issue',
+    label: 'Report Issue',
+    emoji: '🚨',
+    color: 0xE74C3C,
+    channelTag: 'report',
+    buttonStyle: ButtonStyle.Danger,
+    description: 'Abuse reports, suspicious behavior, or urgent server issues.'
+  },
+  {
+    key: 'other',
+    label: 'Other',
+    emoji: '📌',
+    color: 0x95A5A6,
+    channelTag: 'other',
+    buttonStyle: ButtonStyle.Secondary,
+    description: 'Anything that does not fit the other support categories.'
+  }
+]);
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ticket')
-    .setDescription('Open a support ticket to get help from staff')
-    .addStringOption(option =>
-      option
-        .setName('reason')
-        .setDescription('Why are you opening a ticket?')
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option
-        .setName('priority')
-        .setDescription('Ticket priority level')
-        .setRequired(true)
-        .addChoices(
-          { name: '🟢 Low', value: 'low' },
-          { name: '🟡 Medium', value: 'medium' },
-          { name: '🔴 High', value: 'high' }
-        )
-    ),
+    .setDescription('Choose a ticket category and open a support ticket'),
   category: 'ticket',
   async execute(interaction) {
-    return openTicket(interaction);
+    await showTicketCategoryPicker(interaction, 'Choose the type of support request you want to open.');
+    return true;
   },
   async handleComponent(interaction) {
-    if (!interaction.isButton() || interaction.customId !== AUTO_TICKET_BUTTON_ID) {
+    if (!interaction.isButton()) {
       return false;
     }
 
+    if (interaction.customId === AUTO_TICKET_BUTTON_ID) {
+      await showTicketCategoryPicker(interaction, 'Choose the category that best matches your request.');
+      return true;
+    }
+
+    if (!interaction.customId.startsWith(TICKET_CATEGORY_BUTTON_PREFIX)) {
+      return false;
+    }
+
+    const ticketCategory = getTicketCategory(interaction.customId.slice(TICKET_CATEGORY_BUTTON_PREFIX.length));
+    if (!ticketCategory) {
+      await interaction.reply({
+        embeds: [createWarningEmbed('Unknown Category', 'That ticket category is no longer available. Please try again.')],
+        flags: MessageFlags.Ephemeral
+      });
+      return true;
+    }
+
     const modal = new ModalBuilder()
-      .setCustomId(AUTO_TICKET_MODAL_ID)
-      .setTitle('Open Support Ticket');
+      .setCustomId(`${AUTO_TICKET_MODAL_PREFIX}${ticketCategory.key}`)
+      .setTitle(`Open ${ticketCategory.label} Ticket`);
 
     const reasonInput = new TextInputBuilder()
       .setCustomId(AUTO_TICKET_REASON_FIELD_ID)
@@ -74,27 +130,16 @@ module.exports = {
       .setStyle(TextInputStyle.Paragraph)
       .setMinLength(8)
       .setMaxLength(1000)
-      .setPlaceholder('Describe the issue clearly so staff can help faster.')
+      .setPlaceholder(`Describe your ${ticketCategory.label.toLowerCase()} request clearly so staff can help faster.`)
       .setRequired(true);
 
-    const priorityInput = new TextInputBuilder()
-      .setCustomId(AUTO_TICKET_PRIORITY_FIELD_ID)
-      .setLabel('Priority (low, medium, high)')
-      .setStyle(TextInputStyle.Short)
-      .setMaxLength(10)
-      .setPlaceholder('medium')
-      .setRequired(false);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(reasonInput),
-      new ActionRowBuilder().addComponents(priorityInput)
-    );
+    modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
 
     await interaction.showModal(modal);
     return true;
   },
   async handleModal(interaction) {
-    if (!interaction.isModalSubmit() || interaction.customId !== AUTO_TICKET_MODAL_ID) {
+    if (!interaction.isModalSubmit() || !interaction.customId.startsWith(AUTO_TICKET_MODAL_PREFIX)) {
       return false;
     }
 
@@ -107,26 +152,82 @@ function getTicketRequestData(interaction) {
   if (typeof interaction.options?.getString === 'function') {
     return {
       reason: interaction.options.getString('reason'),
-      priority: interaction.options.getString('priority')
+      categoryKey: interaction.options.getString('category')
     };
   }
 
   if (typeof interaction.fields?.getTextInputValue === 'function') {
+    const categoryKey = String(interaction.customId || '').startsWith(AUTO_TICKET_MODAL_PREFIX)
+      ? interaction.customId.slice(AUTO_TICKET_MODAL_PREFIX.length)
+      : null;
+
     return {
       reason: interaction.fields.getTextInputValue(AUTO_TICKET_REASON_FIELD_ID),
-      priority: interaction.fields.getTextInputValue(AUTO_TICKET_PRIORITY_FIELD_ID)
+      categoryKey
     };
   }
 
-  return { reason: null, priority: null };
+  return { reason: null, categoryKey: null };
 }
 
-function normalizePriority(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'low' || normalized === 'high' || normalized === 'medium') {
-    return normalized;
+function getTicketCategory(categoryKey) {
+  const normalized = String(categoryKey || '').trim().toLowerCase();
+  return TICKET_CATEGORIES.find((entry) => entry.key === normalized) || null;
+}
+
+function buildTicketCategoryRows() {
+  const rows = [];
+  for (let index = 0; index < TICKET_CATEGORIES.length; index += 3) {
+    const row = new ActionRowBuilder().addComponents(
+      ...TICKET_CATEGORIES.slice(index, index + 3).map((ticketCategory) => (
+        new ButtonBuilder()
+          .setCustomId(`${TICKET_CATEGORY_BUTTON_PREFIX}${ticketCategory.key}`)
+          .setLabel(ticketCategory.label)
+          .setEmoji(ticketCategory.emoji)
+          .setStyle(ticketCategory.buttonStyle)
+      ))
+    );
+    rows.push(row);
   }
-  return 'medium';
+  return rows;
+}
+
+async function showTicketCategoryPicker(interaction, promptText) {
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('🎫 Open Support Ticket')
+    .setDescription(promptText || 'Choose a category below, then describe your request in the next step.')
+    .addFields(
+      ...TICKET_CATEGORIES.map((ticketCategory) => ({
+        name: `${ticketCategory.emoji} ${ticketCategory.label}`,
+        value: ticketCategory.description,
+        inline: false
+      }))
+    )
+    .setFooter({ text: 'Ticket system' })
+    .setTimestamp();
+
+  await interaction.reply({
+    embeds: [embed],
+    components: buildTicketCategoryRows(),
+    flags: MessageFlags.Ephemeral
+  });
+}
+
+function sanitizeChannelSegment(value, fallback = 'user') {
+  const normalized = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  return normalized || fallback;
+}
+
+function buildTicketChannelName(ticketCategory, username) {
+  const categorySegment = sanitizeChannelSegment(ticketCategory?.channelTag || ticketCategory?.key || 'other', 'other');
+  const userSegment = sanitizeChannelSegment(username, 'user');
+  return `ticket-${categorySegment}-${userSegment}`.slice(0, 95);
 }
 
 function normalizeReasonFingerprint(reason) {
@@ -137,13 +238,27 @@ function normalizeReasonFingerprint(reason) {
     .trim();
 }
 
-function registerTicketOpenAttempt(userId) {
-  const key = String(userId || '');
-  const now = Date.now();
-  const attempts = (ticketOpenAttempts.get(key) || []).filter((ts) => now - ts < TICKET_OPEN_WINDOW_MS);
-  attempts.push(now);
-  ticketOpenAttempts.set(key, attempts);
-  return attempts.length;
+async function getRegisteredTicketData(interaction) {
+  if (!isTicketChannel(interaction.channel)) {
+    await sendWarningReply(
+      interaction,
+      'Invalid Channel',
+      'This command can only be used in a ticket channel!'
+    );
+    return null;
+  }
+
+  const ticketData = await getTicketRecordForChannel(interaction.channel);
+  if (!ticketData) {
+    await sendWarningReply(
+      interaction,
+      'Ticket Record Missing',
+      'This channel is inside the ticket category but is not registered as a ticket. The command was blocked to avoid deleting or mutating the wrong channel.'
+    );
+    return null;
+  }
+
+  return ticketData;
 }
 
 async function openTicket(interaction) {
@@ -152,10 +267,16 @@ async function openTicket(interaction) {
 
     const requestData = getTicketRequestData(interaction);
     const reason = requestData.reason;
-    const priority = normalizePriority(requestData.priority);
+    const ticketCategory = getTicketCategory(requestData.categoryKey);
 
     if (!reason || reason.trim().length === 0) {
       return await interaction.editReply({ embeds: [createErrorEmbed('Invalid Input', 'Please provide a reason for your ticket.')] });
+    }
+
+    if (!ticketCategory) {
+      return await interaction.editReply({
+        embeds: [createWarningEmbed('Category Required', 'Please choose a ticket category before submitting your request.')]
+      });
     }
 
     const cleanReason = reason.trim();
@@ -165,7 +286,14 @@ async function openTicket(interaction) {
       });
     }
 
-    const attemptCount = registerTicketOpenAttempt(interaction.user.id);
+    const guardState = await MySQLDatabaseManager.recordTicketOpenAttempt(interaction.user.id, TICKET_OPEN_WINDOW_MS);
+    if (!guardState?.ok) {
+      return await interaction.editReply({
+        embeds: [createErrorEmbed('Ticket Guard Unavailable', 'Ticket creation is temporarily unavailable because the abuse-protection state could not be loaded. Please try again shortly.')]
+      });
+    }
+
+    const attemptCount = guardState.attemptCount;
     if (attemptCount > TICKET_OPEN_MAX_ATTEMPTS) {
       return await interaction.editReply({
         embeds: [
@@ -177,7 +305,7 @@ async function openTicket(interaction) {
       });
     }
 
-    const lastOpenedAt = Number(lastSuccessfulTicketOpen.get(interaction.user.id) || 0);
+    const lastOpenedAt = Number(guardState.lastSuccessfulOpenAt || 0);
     if (lastOpenedAt && Date.now() - lastOpenedAt < TICKET_CREATION_COOLDOWN_MS) {
       const secondsLeft = Math.ceil((TICKET_CREATION_COOLDOWN_MS - (Date.now() - lastOpenedAt)) / 1000);
       return await interaction.editReply({
@@ -185,9 +313,12 @@ async function openTicket(interaction) {
       });
     }
 
-    const reasonFingerprint = normalizeReasonFingerprint(cleanReason);
-    const previousReason = lastTicketReasonFingerprint.get(interaction.user.id);
-    if (previousReason && previousReason.fingerprint === reasonFingerprint && Date.now() - previousReason.createdAt < DUPLICATE_REASON_WINDOW_MS) {
+    const reasonFingerprint = `${ticketCategory.key}:${normalizeReasonFingerprint(cleanReason)}`;
+    if (
+      guardState.lastReasonFingerprint
+      && guardState.lastReasonFingerprint === reasonFingerprint
+      && Date.now() - Number(guardState.lastReasonCreatedAt || 0) < DUPLICATE_REASON_WINDOW_MS
+    ) {
       return await interaction.editReply({
         embeds: [
           createWarningEmbed(
@@ -198,8 +329,7 @@ async function openTicket(interaction) {
       });
     }
 
-    const priorityEmoji = priority === 'high' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
-    const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
+    const categoryDisplay = `${ticketCategory.emoji} ${ticketCategory.label}`;
 
     const categoryChannel = interaction.guild.channels.cache.get(ticketCategoryId);
     if (!categoryChannel) {
@@ -211,8 +341,7 @@ async function openTicket(interaction) {
     }
 
     try {
-      const allTickets = await MySQLDatabaseManager.getAllTickets().catch(() => []);
-      const existingTicket = allTickets.find(t => t.userId === interaction.user.id && t.status !== 'closed');
+      const existingTicket = await MySQLDatabaseManager.getActiveTicketByUserId(interaction.user.id).catch(() => null);
 
       if (existingTicket) {
         const ticketChannel = interaction.guild.channels.cache.get(existingTicket.channelId);
@@ -235,7 +364,7 @@ async function openTicket(interaction) {
     }
 
     const ticketChannel = await interaction.guild.channels.create({
-      name: `${priorityEmoji}-ticket-${interaction.user.username.toLowerCase()}`,
+      name: buildTicketChannelName(ticketCategory, interaction.user.username),
       type: ChannelType.GuildText,
       parent: ticketCategoryId,
       permissionOverwrites: [
@@ -275,12 +404,12 @@ async function openTicket(interaction) {
     }
 
     const welcomeEmbed = new EmbedBuilder()
-      .setColor(priority === 'high' ? 0xF04747 : priority === 'low' ? 0x43B581 : 0x5865F2)
-      .setTitle(`${priorityEmoji} Support Ticket Opened`)
+      .setColor(ticketCategory.color)
+      .setTitle(`${ticketCategory.emoji} Support Ticket Opened`)
       .setDescription(`Welcome, ${interaction.user}!\n\nYour support ticket has been created and assigned to our support team. Please provide as much detail as possible to help us assist you quickly.`)
       .addFields(
         { name: 'Status', value: '🟢 Open', inline: true },
-        { name: 'Priority', value: `${priorityEmoji} ${priorityLabel}`, inline: true },
+        { name: 'Category', value: categoryDisplay, inline: true },
         { name: 'Created', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
         { name: 'Your Request', value: reason ? `\`\`\`${reason}\`\`\`` : 'No reason provided', inline: false },
         { name: 'How to Provide Info', value: '📝 Detailed description\n📸 Screenshots\n⏱️ Timing\n📎 Attach files', inline: true },
@@ -295,22 +424,26 @@ async function openTicket(interaction) {
       embeds: [welcomeEmbed]
     });
 
-    await MySQLDatabaseManager.createTicket(ticketChannel.id, {
+    const ticketSaved = await MySQLDatabaseManager.createTicket(ticketChannel.id, {
       userId: interaction.user.id,
       userName: interaction.user.tag,
       reason: cleanReason,
-      priority: priority,
+      categoryKey: ticketCategory.key,
+      categoryLabel: ticketCategory.label,
       createdAt: Date.now(),
       claimedBy: null,
       claimedByName: null,
       status: 'open'
     });
+    if (!ticketSaved) {
+      await ticketChannel.delete().catch(() => { });
+      throw new Error('Ticket record could not be created');
+    }
 
-    lastSuccessfulTicketOpen.set(interaction.user.id, Date.now());
-    lastTicketReasonFingerprint.set(interaction.user.id, {
-      fingerprint: reasonFingerprint,
-      createdAt: Date.now()
-    });
+    const guardUpdated = await MySQLDatabaseManager.recordSuccessfulTicketOpen(interaction.user.id, reasonFingerprint, Date.now());
+    if (!guardUpdated) {
+      console.warn(`[Ticket] Failed to persist successful open guard for user ${interaction.user.id}`);
+    }
 
     const logChannel = interaction.guild.channels.cache.get(ticketLogChannelId);
     if (logChannel) {
@@ -320,7 +453,7 @@ async function openTicket(interaction) {
         .setDescription(`A new support ticket has been submitted for staff review.`)
         .addFields(
           { name: 'Ticket Creator', value: `${interaction.user.tag}\n\`ID: ${interaction.user.id}\``, inline: true },
-          { name: 'Priority Level', value: `${priorityEmoji} **${priorityLabel}**`, inline: true },
+          { name: 'Category', value: categoryDisplay, inline: true },
           { name: 'Ticket Channel', value: `${ticketChannel}`, inline: false },
           { name: 'Issue Description', value: `\`\`\`${cleanReason || 'No reason provided'}\`\`\``, inline: false },
           { name: 'Next Steps', value: '📌 Assign support staff\n💬 Provide initial response\n⚡ Resolve issue', inline: false }
@@ -337,7 +470,7 @@ async function openTicket(interaction) {
       .setDescription(`Your support request has been registered and assigned to our support team. Please provide as much detail as possible to help us assist you.\n\nYou will receive a response shortly.`)
       .addFields(
         { name: 'Status', value: '🟢 Open', inline: true },
-        { name: 'Priority', value: `${priorityEmoji} ${priorityLabel}`, inline: true },
+        { name: 'Category', value: categoryDisplay, inline: true },
         { name: 'Channel', value: `${ticketChannel}`, inline: true },
         { name: 'Your Issue', value: cleanReason ? `\`\`\`${cleanReason}\`\`\`` : 'No reason provided', inline: false },
         { name: 'What You Can Do', value: '✅ Add details\n📎 Share files\n💬 Ask questions\n⏳ Wait for support', inline: true },
@@ -364,36 +497,34 @@ async function openTicket(interaction) {
 }
 
 async function closeTicket(interaction) {
-  if (!isTicketChannel(interaction)) {
-    const errorEmbed = createWarningEmbed(
-      'Invalid Channel',
-      'This command can only be used in a ticket channel!'
-    );
-    return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
-  }
+  const ticketData = await getRegisteredTicketData(interaction);
+  if (!ticketData) return;
 
   const closeReason = interaction.options.getString('reason') || 'No reason provided';
   await interaction.reply({
     embeds: [createSuccessEmbed('Ticket Closure Started', 'The ticket transcript is being archived and this channel will be removed shortly.')]
   });
 
-  await closeTicketChannel({
-    client: interaction.client,
-    channel: interaction.channel,
-    closedByUser: interaction.user,
-    closeReason,
-    closeSource: 'slash-command'
-  });
+  try {
+    await closeTicketChannel({
+      client: interaction.client,
+      channel: interaction.channel,
+      closedByUser: interaction.user,
+      closeReason,
+      closeSource: 'slash-command'
+    });
+  } catch (error) {
+    console.error('[Ticket] Failed to close ticket:', error?.message || error);
+    await interaction.followUp({
+      embeds: [createErrorEmbed('Ticket Close Failed', 'The ticket could not be closed safely because its record could not be updated. No channel deletion was performed.')],
+      flags: MessageFlags.Ephemeral
+    }).catch(() => { });
+  }
 }
 
 async function addUserToTicket(interaction) {
-  if (!isTicketChannel(interaction)) {
-    return sendWarningReply(
-      interaction,
-      'Invalid Channel',
-      'This command can only be used in a ticket channel!'
-    );
-  }
+  const ticketData = await getRegisteredTicketData(interaction);
+  if (!ticketData) return;
 
   const member = interaction.member;
   const targetUser = interaction.options.getUser('user');
@@ -444,13 +575,8 @@ async function addUserToTicket(interaction) {
 }
 
 async function removeUserFromTicket(interaction) {
-  if (!isTicketChannel(interaction)) {
-    return sendWarningReply(
-      interaction,
-      'Invalid Channel',
-      'This command can only be used in a ticket channel!'
-    );
-  }
+  const ticketData = await getRegisteredTicketData(interaction);
+  if (!ticketData) return;
 
   const member = interaction.member;
   const targetUser = interaction.options.getUser('user');
@@ -472,7 +598,6 @@ async function removeUserFromTicket(interaction) {
     );
   }
 
-  const ticketData = await MySQLDatabaseManager.getTicket(interaction.channel.id).catch(() => null);
   if (ticketData?.userId && ticketData.userId === targetUser.id) {
     return sendWarningReply(
       interaction,
@@ -496,13 +621,8 @@ async function removeUserFromTicket(interaction) {
 }
 
 async function claimTicket(interaction) {
-  if (!isTicketChannel(interaction)) {
-    return sendWarningReply(
-      interaction,
-      'Invalid Channel',
-      'This command can only be used in a ticket channel!'
-    );
-  }
+  const ticketData = await getRegisteredTicketData(interaction);
+  if (!ticketData) return;
 
   if (!hasSupportOrAdmin(interaction.member)) {
     return sendWarningReply(
@@ -513,7 +633,6 @@ async function claimTicket(interaction) {
   }
 
   const ticketId = interaction.channel.id;
-  const ticketData = await MySQLDatabaseManager.getTicket(ticketId) || {};
 
   if (ticketData.claimedBy && ticketData.claimedBy !== interaction.user.id) {
     const claimer = await interaction.client.users.fetch(ticketData.claimedBy).catch(() => null);
@@ -524,11 +643,18 @@ async function claimTicket(interaction) {
     );
   }
 
-  await MySQLDatabaseManager.updateTicket(ticketId, {
+  const claimSaved = await MySQLDatabaseManager.updateTicket(ticketId, {
     claimedBy: interaction.user.id,
     claimedByName: interaction.user.tag,
     status: 'claimed'
   });
+  if (!claimSaved) {
+    return sendInfoReply(
+      interaction,
+      'Ticket Update Failed',
+      'The ticket could not be claimed because the database record was not updated.'
+    );
+  }
 
   await updateTicketChannelAssigneeName(interaction.channel, interaction.user.username);
 
@@ -554,13 +680,8 @@ async function claimTicket(interaction) {
 }
 
 async function transferTicket(interaction) {
-  if (!isTicketChannel(interaction)) {
-    return sendWarningReply(
-      interaction,
-      'Invalid Channel',
-      'This command can only be used in a ticket channel!'
-    );
-  }
+  const ticketData = await getRegisteredTicketData(interaction);
+  if (!ticketData) return;
 
   if (!hasSupportOrAdmin(interaction.member)) {
     return sendWarningReply(
@@ -590,15 +711,6 @@ async function transferTicket(interaction) {
     );
   }
 
-  const ticketData = await MySQLDatabaseManager.getTicket(interaction.channel.id).catch(() => null);
-  if (!ticketData) {
-    return sendInfoReply(
-      interaction,
-      'Ticket Not Found',
-      'Could not load ticket data for this channel.'
-    );
-  }
-
   if (ticketData.claimedBy === targetUser.id) {
     return sendInfoReply(
       interaction,
@@ -607,11 +719,18 @@ async function transferTicket(interaction) {
     );
   }
 
-  await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
+  const transferSaved = await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
     claimedBy: targetUser.id,
     claimedByName: targetUser.tag,
     status: 'claimed'
   });
+  if (!transferSaved) {
+    return sendInfoReply(
+      interaction,
+      'Ticket Update Failed',
+      'The ticket could not be transferred because the database record was not updated.'
+    );
+  }
 
   await updateTicketChannelAssigneeName(interaction.channel, targetUser.username);
 
@@ -655,19 +774,21 @@ async function markHandled(interaction) {
     );
   }
 
-  if (!isTicketChannel(interaction)) {
-    return sendWarningReply(
-      interaction,
-      'Invalid Channel',
-      'This command can only be used in ticket channels!'
-    );
-  }
+  const ticketData = await getRegisteredTicketData(interaction);
+  if (!ticketData) return;
 
-  await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
+  const handledSaved = await MySQLDatabaseManager.updateTicket(interaction.channel.id, {
     claimedBy: interaction.user.id,
     claimedByName: interaction.user.tag,
     status: 'waiting_user'
   });
+  if (!handledSaved) {
+    return sendInfoReply(
+      interaction,
+      'Ticket Update Failed',
+      'The ticket could not be marked as handled because the database record was not updated.'
+    );
+  }
 
   await updateTicketChannelAssigneeName(interaction.channel, interaction.user.username);
 

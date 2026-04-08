@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ticketsRefreshBtn = document.getElementById('ticketsRefreshBtn');
     const transcriptCopyBtn = document.getElementById('ticketTranscriptCopyBtn');
     const transcriptDownloadBtn = document.getElementById('ticketTranscriptDownloadBtn');
+    const ticketClaimBtn = document.getElementById('ticketClaimBtn');
 
     ticketStatusFilter?.addEventListener('change', () => {
         loadTickets(ticketStatusFilter.value);
@@ -158,6 +159,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     transcriptCopyBtn?.addEventListener('click', () => copyTicketTranscript());
     transcriptDownloadBtn?.addEventListener('click', () => downloadTicketTranscript());
+    ticketClaimBtn?.addEventListener('click', () => claimTicket(activeTicketId));
 
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -429,8 +431,23 @@ if (!window.currentTickets) {
 let activeTicketTranscript = '';
 let activeTicketId = null;
 
+function getTicketCategoryLabel(ticket) {
+    const directLabel = String(ticket?.categoryLabel || '').trim();
+    if (directLabel) return directLabel;
+
+    const legacyPriority = String(ticket?.priority || '').trim().toLowerCase();
+    if (legacyPriority === 'high') return 'High Priority';
+    if (legacyPriority === 'medium') return 'Medium Priority';
+    if (legacyPriority === 'low') return 'Low Priority';
+    return 'Other';
+}
+
+function getTicketAssigneeLabel(ticket) {
+    return ticket?.claimedByName || ticket?.claimedBy || 'Unassigned';
+}
+
 async function loadTickets(status = 'all') {
-    renderTableSkeleton('ticketsTable', 5, 4);
+    renderTableSkeleton('ticketsTable', 7, 4);
     try {
         const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
         const response = await fetch(`/api/tickets${query}`);
@@ -466,7 +483,9 @@ function filterTickets() {
 
         const username = (ticket.username || '').toLowerCase();
         const id = String(ticket.id || '').toLowerCase();
-        const matchesSearch = !query || username.includes(query) || id.includes(query);
+        const category = getTicketCategoryLabel(ticket).toLowerCase();
+        const assignee = String(getTicketAssigneeLabel(ticket) || '').toLowerCase();
+        const matchesSearch = !query || username.includes(query) || id.includes(query) || category.includes(query) || assignee.includes(query);
 
         return matchesStatus && matchesSearch;
     });
@@ -481,7 +500,7 @@ function renderTickets(tickets) {
     if (!Array.isArray(tickets) || tickets.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="text-center text-muted" style="padding: 4rem;">
+                <td colspan="7" class="text-center text-muted" style="padding: 4rem;">
                     <div style="display:flex; flex-direction:column; align-items:center; gap:1rem; opacity: 0.5;">
                         <i class="fas fa-inbox" style="font-size: 3rem;"></i>
                         <span>No tickets found.</span>
@@ -495,7 +514,7 @@ function renderTickets(tickets) {
         const rawStatus = (ticket.status || 'open').toLowerCase();
         let badgeClass = 'badge-kick';
         let iconClass = 'fa-archive';
-        let statusLabel = rawStatus.toUpperCase();
+        let statusLabel = rawStatus.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 
         if (rawStatus === 'open') {
             badgeClass = 'badge-timeout';
@@ -503,6 +522,12 @@ function renderTickets(tickets) {
         } else if (rawStatus === 'claimed') {
             badgeClass = 'badge-warn';
             iconClass = 'fa-user-check';
+        } else if (rawStatus === 'waiting_staff') {
+            badgeClass = 'badge-secondary';
+            iconClass = 'fa-user-clock';
+        } else if (rawStatus === 'waiting_user') {
+            badgeClass = 'badge-secondary';
+            iconClass = 'fa-hourglass-half';
         } else if (rawStatus === 'closed') {
             badgeClass = 'badge-kick';
             iconClass = 'fa-check-circle';
@@ -510,6 +535,8 @@ function renderTickets(tickets) {
 
         const createdDate = ticket.created_at ? new Date(ticket.created_at) : new Date();
         const timeAgo = formatTimeAgo(createdDate);
+        const assigneeLabel = getTicketAssigneeLabel(ticket);
+        const categoryLabel = getTicketCategoryLabel(ticket);
 
         return `
         <tr>
@@ -524,6 +551,8 @@ function renderTickets(tickets) {
                     <i class="fas ${iconClass}"></i> ${escapeHtml(statusLabel)}
                 </span>
             </td>
+            <td><span class="badge badge-secondary" style="font-size:0.75rem;">${escapeHtml(String(assigneeLabel))}</span></td>
+            <td><span style="font-size:0.9rem; color:var(--text-secondary);">${escapeHtml(categoryLabel)}</span></td>
             <td style="text-align: right; color: var(--text-secondary); font-size: 0.9rem;" title="${createdDate.toLocaleString()}">
                 ${timeAgo}
             </td>
@@ -552,10 +581,22 @@ async function viewTicket(ticketId) {
     setText('ticketDetailId', ticket.id || 'N/A');
     setText('ticketDetailUser', ticket.username || 'Unknown');
     setText('ticketDetailStatus', ticket.status || 'open');
-    setText('ticketDetailPriority', ticket.priority || 'medium');
+    setText('ticketDetailAssignee', getTicketAssigneeLabel(ticket));
+    setText('ticketDetailCategory', getTicketCategoryLabel(ticket));
     setText('ticketDetailCreated', created);
     setText('ticketDetailReason', ticket.reason || 'N/A');
+    setText('ticketDetailClosedBy', ticket.closedByName || ticket.closedBy || 'N/A');
+    setText('ticketDetailCloseReason', ticket.closeReason || 'N/A');
     activeTicketId = ticket.id || ticketId;
+
+    const ticketClaimBtn = document.getElementById('ticketClaimBtn');
+    if (ticketClaimBtn) {
+        const rawStatus = String(ticket.status || 'open').toLowerCase();
+        const canClaim = rawStatus !== 'closed';
+        ticketClaimBtn.disabled = !canClaim;
+        ticketClaimBtn.textContent = rawStatus === 'claimed' ? 'Claimed' : 'Claim';
+    }
+
     await loadTicketTranscript(activeTicketId);
 
     const modal = document.getElementById('ticketDetailsModal');
@@ -571,6 +612,11 @@ function closeTicketDetails() {
     }
     activeTicketTranscript = '';
     activeTicketId = null;
+    const ticketClaimBtn = document.getElementById('ticketClaimBtn');
+    if (ticketClaimBtn) {
+        ticketClaimBtn.disabled = true;
+        ticketClaimBtn.textContent = 'Claim';
+    }
     const body = document.getElementById('ticketTranscriptBody');
     const meta = document.getElementById('ticketTranscriptMeta');
     if (body) body.textContent = 'Select a ticket to load the transcript.';
@@ -657,14 +703,58 @@ function downloadTicketTranscript() {
 }
 
 async function claimTicket(ticketId) {
+    const resolvedTicketId = String(ticketId || activeTicketId || '').trim();
+    if (!resolvedTicketId) {
+        profileShowError('No ticket selected');
+        return;
+    }
+
+    const ticketClaimBtn = document.getElementById('ticketClaimBtn');
+
     try {
-        const { response, data } = await AdminPanel.api.postJson(`/api/tickets/${ticketId}/claim`, {});
+        if (ticketClaimBtn) {
+            ticketClaimBtn.disabled = true;
+            ticketClaimBtn.textContent = 'Claiming...';
+        }
+
+        const { response, data } = await AdminPanel.api.postJson(`/api/tickets/${encodeURIComponent(resolvedTicketId)}/claim`, {});
         if (response && response.ok) {
+            const claimedByName = data?.claimedByName || 'You';
+            const claimedBy = data?.claimedBy || claimedByName;
+            const ticket = window.currentTickets.find((item) => String(item.id) === resolvedTicketId);
+            if (ticket) {
+                ticket.status = 'claimed';
+                ticket.claimedBy = claimedBy;
+                ticket.claimedByName = claimedByName;
+            }
+
+            const setText = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            };
+
+            setText('ticketDetailStatus', 'claimed');
+            setText('ticketDetailAssignee', claimedByName);
+
+            if (ticketClaimBtn) {
+                ticketClaimBtn.disabled = true;
+                ticketClaimBtn.textContent = 'Claimed';
+            }
+
+            filterTickets();
             profileShowSuccess('Ticket claimed successfully');
         } else {
+            if (ticketClaimBtn) {
+                ticketClaimBtn.disabled = false;
+                ticketClaimBtn.textContent = 'Claim';
+            }
             profileShowError((data && data.error) || 'Failed to claim ticket');
         }
     } catch (error) {
+        if (ticketClaimBtn) {
+            ticketClaimBtn.disabled = false;
+            ticketClaimBtn.textContent = 'Claim';
+        }
         profileShowError('Error claiming ticket');
     }
 }

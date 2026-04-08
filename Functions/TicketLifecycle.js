@@ -10,6 +10,8 @@ const {
 const MySQLDatabaseManager = require('./MySQLDatabaseManager');
 
 const ACTIVE_TICKET_STATUSES = new Set(['open', 'claimed', 'waiting_user', 'waiting_staff']);
+const TICKET_CHANNEL_DELETE_DELAY_MS = 5000;
+const TICKET_CHANNEL_DELETE_JOB_TYPE = 'ticket.cleanup_channel_delete';
 
 function normalizeTicketStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -35,8 +37,31 @@ function getTicketStatusMeta(status) {
     }
 }
 
+function getTicketCategoryLabel(ticketData) {
+    if (ticketData?.categoryLabel) {
+        return ticketData.categoryLabel;
+    }
+
+    const legacyPriority = String(ticketData?.priority || '').trim().toLowerCase();
+    if (legacyPriority === 'high') return 'High Priority';
+    if (legacyPriority === 'medium') return 'Medium Priority';
+    if (legacyPriority === 'low') return 'Low Priority';
+    return 'Other';
+}
+
 function isTicketChannel(channel) {
     return Boolean(channel && channel.parentId === ticketCategoryId);
+}
+
+async function getTicketRecordByChannelId(channelId) {
+    const normalizedChannelId = String(channelId || '').trim();
+    if (!normalizedChannelId) return null;
+    return MySQLDatabaseManager.getTicket(normalizedChannelId).catch(() => null);
+}
+
+async function getTicketRecordForChannel(channel) {
+    if (!channel || !isTicketChannel(channel)) return null;
+    return getTicketRecordByChannelId(channel.id);
 }
 
 function hasSupportOrAdmin(member) {
@@ -72,6 +97,7 @@ async function buildTicketTranscript(channel, ticketData, closedByUser, closeRea
     const closedByLabel = closedByUser?.tag || closedByUser?.username || closedByUser?.id || 'Unknown';
     const assigneeLabel = ticketData.claimedByName || ticketData.claimedBy || 'Unassigned';
     const statusMeta = getTicketStatusMeta(ticketData.status);
+    const categoryLabel = getTicketCategoryLabel(ticketData);
 
     let transcript = `📋 Ticket Transcript - ${channel.name}\n`;
     transcript += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -82,7 +108,7 @@ async function buildTicketTranscript(channel, ticketData, closedByUser, closeRea
     transcript += `   • Closed By: ${closedByLabel} (${closedByUser?.id || 'N/A'})\n`;
     transcript += `   • Close Source: ${closeSource || 'manual'}\n`;
     transcript += `   • Close Reason: ${closeReason || 'No reason provided'}\n`;
-    transcript += `   • Priority: ${ticketData.priority || 'medium'}\n`;
+    transcript += `   • Category: ${categoryLabel}\n`;
     transcript += `   • Status Before Close: ${statusMeta.label}\n`;
     transcript += `   • Assignee: ${assigneeLabel}\n`;
     transcript += `   • Reason: ${ticketData.reason || 'No reason'}\n`;
@@ -90,8 +116,30 @@ async function buildTicketTranscript(channel, ticketData, closedByUser, closeRea
     transcript += `💬 Message History:\n\n`;
 
     try {
-        const messages = await channel.messages.fetch({ limit: 100 });
-        const sortedMessages = Array.from(messages.values()).reverse();
+        const collectedMessages = [];
+        let beforeMessageId = null;
+
+        while (true) {
+            const options = { limit: 100 };
+            if (beforeMessageId) {
+                options.before = beforeMessageId;
+            }
+
+            const batch = await channel.messages.fetch(options);
+            if (!batch || batch.size === 0) {
+                break;
+            }
+
+            const batchMessages = Array.from(batch.values());
+            collectedMessages.push(...batchMessages);
+            beforeMessageId = batchMessages[batchMessages.length - 1]?.id || null;
+
+            if (batch.size < 100) {
+                break;
+            }
+        }
+
+        const sortedMessages = collectedMessages.sort((left, right) => left.createdTimestamp - right.createdTimestamp);
 
         for (const message of sortedMessages) {
             const timestamp = message.createdAt.toLocaleString();
@@ -125,11 +173,16 @@ async function closeTicketChannel({ client, channel, closedByUser, closeReason, 
         throw new Error('Ticket channel is required');
     }
 
-    const ticketData = await MySQLDatabaseManager.getTicket(channel.id) || {};
+    const ticketData = await getTicketRecordForChannel(channel);
+    if (!ticketData) {
+        throw new Error('Ticket record not found for channel');
+    }
+
     const transcript = await buildTicketTranscript(channel, ticketData, closedByUser, closeReason, closeSource);
     const statusMeta = getTicketStatusMeta(ticketData.status);
     const closedByLabel = closedByUser?.tag || closedByUser?.username || closedByUser?.id || 'Unknown';
     const closedAt = Date.now();
+    const categoryLabel = getTicketCategoryLabel(ticketData);
 
     const closingEmbed = new EmbedBuilder()
         .setColor(0xF04747)
@@ -163,7 +216,7 @@ async function closeTicketChannel({ client, channel, closedByUser, closeReason, 
                 { name: '🎫 Ticket', value: `\`${channel.name}\``, inline: false },
                 { name: '👤 Ticket Owner', value: `${ticketData.userName || 'Unknown'}\n\`${ticketData.userId || 'N/A'}\``, inline: true },
                 { name: '👥 Assignee', value: ticketData.claimedByName || ticketData.claimedBy || 'Unassigned', inline: true },
-                { name: '⚡ Priority', value: ticketData.priority || 'medium', inline: true },
+                { name: '🗂️ Category', value: categoryLabel, inline: true },
                 { name: '📍 Previous Status', value: `${statusMeta.emoji} ${statusMeta.label}`, inline: true },
                 { name: '🔒 Closed By', value: `${closedByLabel}\n\`${closedByUser?.id || 'N/A'}\``, inline: true },
                 { name: '📝 Close Reason', value: `\`\`\`${closeReason || 'No reason provided'}\`\`\``, inline: false },
@@ -203,7 +256,7 @@ async function closeTicketChannel({ client, channel, closedByUser, closeReason, 
         }
     }
 
-    await MySQLDatabaseManager.updateTicket(channel.id, {
+    const persisted = await MySQLDatabaseManager.updateTicket(channel.id, {
         status: 'closed',
         closedAt,
         closedBy: closedByUser?.id || null,
@@ -212,14 +265,54 @@ async function closeTicketChannel({ client, channel, closedByUser, closeReason, 
         transcript,
         transcriptCreatedAt: closedAt
     });
+    if (!persisted) {
+        throw new Error('Failed to persist ticket closure state');
+    }
+
+    await MySQLDatabaseManager.enqueueJob(
+        TICKET_CHANNEL_DELETE_JOB_TYPE,
+        { channelId: channel.id },
+        closedAt + TICKET_CHANNEL_DELETE_DELAY_MS,
+        5
+    ).catch(() => null);
 
     setTimeout(async () => {
-        await channel.delete().catch((error) => {
+        await deleteTicketChannelIfClosed(client, channel.id).catch((error) => {
             console.error('[TicketLifecycle] Failed to delete ticket channel:', error.message);
         });
-    }, 5000);
+    }, TICKET_CHANNEL_DELETE_DELAY_MS);
 
     return { ticketData, transcript, closedAt };
+}
+
+async function deleteTicketChannelIfClosed(client, channelId) {
+    if (!client || !channelId) {
+        return { ok: false, code: 'invalid_input' };
+    }
+
+    const ticketData = await getTicketRecordByChannelId(channelId);
+    if (!ticketData) {
+        return { ok: false, code: 'ticket_not_found' };
+    }
+
+    if (normalizeTicketStatus(ticketData.status) !== 'closed') {
+        return { ok: false, code: 'ticket_not_closed' };
+    }
+
+    const channel = client.channels?.cache?.get(channelId) || await client.channels?.fetch?.(channelId).catch(() => null);
+    if (!channel) {
+        return { ok: true, code: 'channel_missing' };
+    }
+
+    if (!isTicketChannel(channel)) {
+        return { ok: false, code: 'channel_not_ticket_category' };
+    }
+
+    await channel.delete().catch((error) => {
+        throw new Error(error?.message || 'Channel deletion failed');
+    });
+
+    return { ok: true, code: 'channel_deleted' };
 }
 
 async function syncTicketConversationState(message) {
@@ -273,6 +366,9 @@ async function syncTicketConversationState(message) {
 module.exports = {
     ACTIVE_TICKET_STATUSES,
     closeTicketChannel,
+    deleteTicketChannelIfClosed,
+    getTicketRecordByChannelId,
+    getTicketRecordForChannel,
     getTicketChannelBaseName,
     getTicketStatusMeta,
     hasSupportOrAdmin,

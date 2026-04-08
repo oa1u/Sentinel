@@ -952,7 +952,7 @@
                     <div class="toolbar-group">
                         <div class="search-box-wrapper">
                             <span class="search-icon-overlay">🔍</span>
-                            <input type="text" id="ticketSearchInput" placeholder="Search ticket ID or user..."
+                            <input type="text" id="ticketSearchInput" placeholder="Search ticket ID, user, assignee, or category..."
                                 oninput="filterTickets()" autocomplete="off">
                         </div>
                         <select id="ticketStatusFilter" class="custom-select" onchange="filterTickets()">
@@ -979,7 +979,7 @@
                                 <th>User</th>
                                 <th>Status</th>
                                 <th>Assignee</th>
-                                <th>Priority</th>
+                                <th>Category</th>
                                 <th style="text-align: right;">Created</th>
                                 <th style="text-align: right;">Actions</th>
                             </tr>
@@ -1411,8 +1411,8 @@
                     <div id="ticketDetailAssignee" class="form-input" style="background: var(--bg-secondary);"></div>
                 </div>
                 <div class="form-group">
-                    <div class="form-label">Priority</div>
-                    <div id="ticketDetailPriority" class="form-input" style="background: var(--bg-secondary);">
+                    <div class="form-label">Category</div>
+                    <div id="ticketDetailCategory" class="form-input" style="background: var(--bg-secondary);">
                     </div>
                 </div>
                 <div class="form-group">

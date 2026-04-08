@@ -606,7 +606,8 @@ class MySQLConnection {
                     'user_id VARCHAR(20) NOT NULL',
                     'user_name VARCHAR(100) NOT NULL',
                     'reason TEXT',
-                    "priority ENUM('low', 'medium', 'high') DEFAULT 'medium'",
+                    "category_key VARCHAR(64) DEFAULT 'other'",
+                    "category_label VARCHAR(100) DEFAULT 'Other'",
                     'created_at BIGINT NOT NULL',
                     'claimed_by VARCHAR(20) DEFAULT NULL',
                     "status VARCHAR(32) DEFAULT 'open'",
@@ -622,7 +623,22 @@ class MySQLConnection {
                 indexes: [
                     { name: 'idx_user_id', definition: 'user_id' },
                     { name: 'idx_status', definition: 'status' },
-                    { name: 'idx_priority', definition: 'priority' }
+                    { name: 'idx_category_key', definition: 'category_key' }
+                ]
+            },
+            {
+                name: 'ticket_open_guards',
+                columns: [
+                    'user_id VARCHAR(20) PRIMARY KEY',
+                    'attempt_window_started_at BIGINT DEFAULT NULL',
+                    'attempt_count INT NOT NULL DEFAULT 0',
+                    'last_successful_open_at BIGINT DEFAULT NULL',
+                    'last_reason_fingerprint TEXT DEFAULT NULL',
+                    'last_reason_created_at BIGINT DEFAULT NULL',
+                    'updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+                ],
+                indexes: [
+                    { name: 'idx_ticket_open_guards_last_success', definition: 'last_successful_open_at' }
                 ]
             },
             {
@@ -1441,6 +1457,48 @@ class MySQLConnection {
                 if (statusType.startsWith('enum(')) {
                     await this.pool.execute("ALTER TABLE tickets MODIFY COLUMN status VARCHAR(32) DEFAULT 'open'");
                 }
+            }
+        );
+
+        await this.runSchemaMigration(
+            '2026-04-ticket-categories',
+            'Replace ticket urgency with category metadata',
+            async () => {
+                await this.ensureColumns('tickets', [
+                    { name: 'category_key', type: "VARCHAR(64) DEFAULT 'other'" },
+                    { name: 'category_label', type: "VARCHAR(100) DEFAULT 'Other'" }
+                ]);
+
+                const priorityColumn = await this.getColumnMetadata('tickets', 'priority');
+                if (priorityColumn) {
+                    await this.pool.execute(
+                        `UPDATE tickets
+                         SET category_key = CASE
+                                WHEN COALESCE(NULLIF(TRIM(category_key), ''), '') != '' THEN category_key
+                                WHEN priority = 'high' THEN 'report_issue'
+                                WHEN priority = 'medium' THEN 'technical_support'
+                                WHEN priority = 'low' THEN 'other'
+                                ELSE 'other'
+                             END,
+                             category_label = CASE
+                                WHEN COALESCE(NULLIF(TRIM(category_label), ''), '') != '' THEN category_label
+                                WHEN priority = 'high' THEN 'Report Issue'
+                                WHEN priority = 'medium' THEN 'Technical Support'
+                                WHEN priority = 'low' THEN 'Other'
+                                ELSE 'Other'
+                             END`
+                    );
+                } else {
+                    await this.pool.execute(
+                        `UPDATE tickets
+                         SET category_key = COALESCE(NULLIF(TRIM(category_key), ''), 'other'),
+                             category_label = COALESCE(NULLIF(TRIM(category_label), ''), 'Other')`
+                    );
+                }
+
+                await this.ensureIndexes('tickets', [
+                    { name: 'idx_tickets_category_created', definition: 'category_key, created_at' }
+                ]);
             }
         );
 

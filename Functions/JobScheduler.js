@@ -6,6 +6,7 @@ const { synchronizeAdminUserDiscordState } = require('./DiscordRoleSyncHelper');
 const { ECONOMY: economyConfigFile } = require('../Config/constants');
 const { generateInactiveChannelReport, resolveConfig } = require('./InactiveChannelReporter');
 const { runChannelRevival, resolveConfig: resolveRevivalConfig } = require('./ChannelRevival');
+const { deleteTicketChannelIfClosed } = require('./TicketLifecycle');
 
 const DEFAULT_POLL_INTERVAL_MS = 15000;
 const DEFAULT_STALE_LOCK_MS = 10 * 60 * 1000;
@@ -153,6 +154,18 @@ class JobScheduler {
 
             for (const guildId of guildIds) {
                 await MySQLDatabaseManager.applyBankInterest(guildId);
+            }
+        });
+
+        this.register('ticket.cleanup_channel_delete', async ({ client, payload }) => {
+            const channelId = String(payload?.channelId || '').trim();
+            if (!channelId) {
+                throw new Error('Missing ticket channel id for cleanup job');
+            }
+
+            const result = await deleteTicketChannelIfClosed(client, channelId);
+            if (!result?.ok && result?.code !== 'channel_missing') {
+                throw new Error(`Ticket cleanup failed: ${result?.code || 'unknown_error'}`);
             }
         });
 

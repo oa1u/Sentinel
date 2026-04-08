@@ -3005,13 +3005,13 @@ class MySQLDatabaseManager {
 
     async createTicket(channelId, ticketData) {
         try {
-            const { userId, userName, reason, priority, createdAt, claimedBy, claimedByName, status } = ticketData;
-            await this.connection.query(
-                `INSERT INTO tickets (channel_id, user_id, user_name, reason, priority, created_at, claimed_by, claimed_by_name, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [channelId, userId, userName, reason || null, priority || 'medium', createdAt || Date.now(), claimedBy || null, claimedByName || null, status || 'open']
+            const { userId, userName, reason, categoryKey, categoryLabel, createdAt, claimedBy, claimedByName, status } = ticketData;
+            const result = await this.connection.query(
+                `INSERT INTO tickets (channel_id, user_id, user_name, reason, category_key, category_label, created_at, claimed_by, claimed_by_name, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [channelId, userId, userName, reason || null, categoryKey || 'other', categoryLabel || 'Other', createdAt || Date.now(), claimedBy || null, claimedByName || null, status || 'open']
             );
-            return true;
+            return this.getAffectedRowCount(result) > 0 || Number(result?.insertId || 0) > 0;
         } catch (error) {
             console.error('Error creating ticket:', error);
             return false;
@@ -3031,6 +3031,8 @@ class MySQLDatabaseManager {
                     userId: ticket.user_id,
                     userName: ticket.user_name,
                     reason: ticket.reason,
+                    categoryKey: ticket.category_key,
+                    categoryLabel: ticket.category_label,
                     priority: ticket.priority,
                     createdAt: ticket.created_at,
                     claimedBy: ticket.claimed_by,
@@ -3096,11 +3098,11 @@ class MySQLDatabaseManager {
             if (fields.length === 0) return false;
 
             values.push(channelId);
-            await this.connection.query(
+            const result = await this.connection.query(
                 `UPDATE tickets SET ${fields.join(', ')} WHERE channel_id = ?`,
                 values
             );
-            return true;
+            return this.getAffectedRowCount(result) > 0;
         } catch (error) {
             console.error('Error updating ticket:', error);
             return false;
@@ -3109,8 +3111,8 @@ class MySQLDatabaseManager {
 
     async deleteTicket(channelId) {
         try {
-            await this.connection.query('DELETE FROM tickets WHERE channel_id = ?', [channelId]);
-            return true;
+            const result = await this.connection.query('DELETE FROM tickets WHERE channel_id = ?', [channelId]);
+            return this.getAffectedRowCount(result) > 0;
         } catch (error) {
             console.error('Error deleting ticket:', error);
             return false;
@@ -3135,6 +3137,8 @@ class MySQLDatabaseManager {
                 userId: ticket.user_id,
                 userName: ticket.user_name,
                 reason: ticket.reason,
+                categoryKey: ticket.category_key,
+                categoryLabel: ticket.category_label,
                 priority: ticket.priority,
                 createdAt: ticket.created_at,
                 claimedBy: ticket.claimed_by,
@@ -3162,6 +3166,8 @@ class MySQLDatabaseManager {
                 channelId: ticket.channel_id,
                 userName: ticket.user_name,
                 reason: ticket.reason,
+                categoryKey: ticket.category_key,
+                categoryLabel: ticket.category_label,
                 priority: ticket.priority,
                 createdAt: ticket.created_at,
                 claimedBy: ticket.claimed_by,
@@ -3175,6 +3181,142 @@ class MySQLDatabaseManager {
         } catch (error) {
             console.error('Error getting user tickets:', error);
             return [];
+        }
+    }
+
+    async getActiveTicketByUserId(userId) {
+        try {
+            const validUserId = this.validateDiscordId(userId);
+            if (!validUserId) return null;
+
+            const results = await this.connection.query(
+                `SELECT * FROM tickets
+                 WHERE user_id = ? AND status != 'closed'
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [validUserId]
+            );
+
+            if (!Array.isArray(results) || results.length === 0) {
+                return null;
+            }
+
+            const ticket = results[0];
+            return {
+                channelId: ticket.channel_id,
+                userId: ticket.user_id,
+                userName: ticket.user_name,
+                reason: ticket.reason,
+                categoryKey: ticket.category_key,
+                categoryLabel: ticket.category_label,
+                priority: ticket.priority,
+                createdAt: ticket.created_at,
+                claimedBy: ticket.claimed_by,
+                claimedByName: ticket.claimed_by_name,
+                status: ticket.status,
+                closedAt: ticket.closed_at,
+                closedBy: ticket.closed_by,
+                closedByName: ticket.closed_by_name,
+                closeReason: ticket.close_reason,
+                transcript: ticket.transcript,
+                transcriptCreatedAt: ticket.transcript_created_at
+            };
+        } catch (error) {
+            console.error('Error getting active ticket by user:', error);
+            return null;
+        }
+    }
+
+    async recordTicketOpenAttempt(userId, windowMs = 10 * 60 * 1000) {
+        try {
+            const validUserId = this.validateDiscordId(userId);
+            const safeWindowMs = Math.max(60 * 1000, Number(windowMs) || 10 * 60 * 1000);
+            if (!validUserId) {
+                return { ok: false, attemptCount: 0, lastSuccessfulOpenAt: 0, lastReasonFingerprint: null, lastReasonCreatedAt: 0 };
+            }
+
+            return await this.connection.transaction(async (conn) => {
+                const now = Date.now();
+                const [rows] = await conn.query(
+                    `SELECT * FROM ticket_open_guards WHERE user_id = ? LIMIT 1 FOR UPDATE`,
+                    [validUserId]
+                );
+
+                const existing = Array.isArray(rows) ? rows[0] : null;
+                const currentWindowStartedAt = Number(existing?.attempt_window_started_at) || 0;
+                const currentAttemptCount = Math.max(0, Number(existing?.attempt_count) || 0);
+                const attemptWindowStartedAt = currentWindowStartedAt && now - currentWindowStartedAt < safeWindowMs
+                    ? currentWindowStartedAt
+                    : now;
+                const attemptCount = attemptWindowStartedAt === currentWindowStartedAt ? currentAttemptCount + 1 : 1;
+
+                await conn.query(
+                    `INSERT INTO ticket_open_guards (
+                        user_id,
+                        attempt_window_started_at,
+                        attempt_count,
+                        last_successful_open_at,
+                        last_reason_fingerprint,
+                        last_reason_created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        attempt_window_started_at = VALUES(attempt_window_started_at),
+                        attempt_count = VALUES(attempt_count),
+                        last_successful_open_at = VALUES(last_successful_open_at),
+                        last_reason_fingerprint = VALUES(last_reason_fingerprint),
+                        last_reason_created_at = VALUES(last_reason_created_at),
+                        updated_at = CURRENT_TIMESTAMP`,
+                    [
+                        validUserId,
+                        attemptWindowStartedAt,
+                        attemptCount,
+                        Number(existing?.last_successful_open_at) || null,
+                        existing?.last_reason_fingerprint || null,
+                        Number(existing?.last_reason_created_at) || null
+                    ]
+                );
+
+                return {
+                    ok: true,
+                    attemptCount,
+                    attemptWindowStartedAt,
+                    lastSuccessfulOpenAt: Number(existing?.last_successful_open_at) || 0,
+                    lastReasonFingerprint: existing?.last_reason_fingerprint || null,
+                    lastReasonCreatedAt: Number(existing?.last_reason_created_at) || 0
+                };
+            });
+        } catch (error) {
+            console.error('Error recording ticket open attempt:', error);
+            return { ok: false, attemptCount: 0, lastSuccessfulOpenAt: 0, lastReasonFingerprint: null, lastReasonCreatedAt: 0 };
+        }
+    }
+
+    async recordSuccessfulTicketOpen(userId, fingerprint, openedAt = Date.now()) {
+        try {
+            const validUserId = this.validateDiscordId(userId);
+            const safeFingerprint = String(fingerprint || '').trim().slice(0, 2000) || null;
+            const safeOpenedAt = Number(openedAt) || Date.now();
+            if (!validUserId) return false;
+
+            const result = await this.connection.query(
+                `INSERT INTO ticket_open_guards (
+                    user_id,
+                    last_successful_open_at,
+                    last_reason_fingerprint,
+                    last_reason_created_at
+                ) VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    last_successful_open_at = VALUES(last_successful_open_at),
+                    last_reason_fingerprint = VALUES(last_reason_fingerprint),
+                    last_reason_created_at = VALUES(last_reason_created_at),
+                    updated_at = CURRENT_TIMESTAMP`,
+                [validUserId, safeOpenedAt, safeFingerprint, safeOpenedAt]
+            );
+
+            return this.getAffectedRowCount(result) > 0 || Number(result?.insertId || 0) > 0;
+        } catch (error) {
+            console.error('Error recording successful ticket open:', error);
+            return false;
         }
     }
 
@@ -5328,6 +5470,15 @@ class MySQLDatabaseManager {
             console.error('[MySQLDatabaseManager] Error enqueueing job:', error.message);
             return null;
         }
+    }
+
+    getAffectedRowCount(result) {
+        if (Array.isArray(result)) {
+            const first = result[0] || {};
+            return Number(first.affectedRows ?? first.changedRows ?? 0);
+        }
+
+        return Number(result?.affectedRows ?? result?.changedRows ?? 0);
     }
 
     async claimDueJobs(workerId, limit = 10) {
