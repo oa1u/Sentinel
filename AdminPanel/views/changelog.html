@@ -112,6 +112,33 @@
                             <div class="changelog-entry-header">
                                 <div class="changelog-entry-badge">NEW</div>
                                 <div>
+                                    <h3>Update 8.4.0</h3>
+                                    <p>Owner-panel diagnostics redesign, config cleanup, and authentication
+                                        quality-of-life fixes.</p>
+                                </div>
+                                <span class="changelog-entry-date">April 2026</span>
+                            </div>
+                            <ul class="changelog-item-list">
+                                <li><span class="tag tag-feature">Feature</span>Redesigned the diagnostics page in the
+                                    owner panel for better readability.</li>
+                                <li><span class="tag tag-feature">Feature</span>Improved the antiraid system for better
+                                    security and performance.</li>
+                                <li><span class="tag tag-feature">Feature</span>Improved the captcha system in the
+                                    login/register page.</li>
+                                <li><span class="tag tag-feature">Feature</span>Added new analytics features for better
+                                    insights into user behavior.</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>Improved the setup command for a
+                                    smoother initial configuration experience.</li>
+                                <li><span class="tag tag-enhance">Enhancement</span>The Bot will now send notification
+                                    when you are missing certain values in your config files.</li>
+                                <li><span class="tag tag-bugfix">Bugfix</span>Multiple bugfixes to multiple files.</li>
+
+                            </ul>
+                        </div>
+                        <div class="changelog-entry-card">
+                            <div class="changelog-entry-header">
+
+                                <div>
                                     <h3>Update 8.3.0</h3>
                                     <p>Website features, Bot features, QoL Improvements, Security Improvements</p>
                                 </div>
@@ -224,7 +251,6 @@
 
                         <div class="changelog-entry-card">
                             <div class="changelog-entry-header">
-                                <div class="changelog-entry-version">v7.0.0</div>
                                 <div>
                                     <h3>Major Update 7.0.0</h3>
                                     <p>Reliability, security, and operator-focused upgrades across the bot and the
@@ -1183,6 +1209,17 @@
             content: "🐛";
             font-size: 0.8rem;
             filter: saturate(1.5);
+        }
+
+        .tag-removal {
+            background: rgba(148, 163, 184, 0.1);
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, 0.24);
+        }
+
+        .tag-removal::before {
+            content: "🗑️";
+            font-size: 0.8rem;
         }
 
         .changelog-issue-list {

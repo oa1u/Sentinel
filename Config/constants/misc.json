@@ -47,7 +47,28 @@
 		"retryDelayMinutes": 5
 	},
 	"alerts": {
-		"discordRoutingEnabled": true
+		"discordRoutingEnabled": true,
+		"botSafety": {
+			"enabled": true,
+			"recentAlertLimit": 50,
+			"emojiBurstThreshold": 5,
+			"stickerBurstThreshold": 4,
+			"assetAuditWindowMs": 120000,
+			"assetAuditCooldownMs": 300000,
+			"inviteWindowMs": 900000,
+			"inviteMutationThreshold": 6,
+			"inviteJoinSpikeThreshold": 4,
+			"inviterJoinSpikeThreshold": 6,
+			"inviteAlertCooldownMs": 600000,
+			"nicknameAlertCooldownMs": 1200000,
+			"attachmentCountThreshold": 6,
+			"attachmentTotalSizeMbThreshold": 25,
+			"moderationEscalationCooldownMs": 3600000,
+			"moderationEscalationLastHourThreshold": 3,
+			"moderationEscalationLastDayThreshold": 6,
+			"moderationEscalationTimeoutThreshold": 2,
+			"moderationEscalationHighRiskThreshold": 3
+		}
 	},
 	"afk": {
 		"mentionNoticeCooldownMs": 45000,

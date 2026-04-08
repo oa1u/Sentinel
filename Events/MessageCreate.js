@@ -4,6 +4,7 @@ const EconomyActivity = require('./EconomyActivity');
 const Leveling = require('./Leveling');
 const MediaOnly = require('./MediaOnly');
 const LuckyDrop = require('../Functions/LuckyDrop');
+const AttachmentScanner = require('../Functions/AttachmentScanner');
 const { syncTicketConversationState } = require('../Functions/TicketLifecycle');
 const { AUTO_RESPONDER: autoResponderConfig, CHANNELS: channelConfig } = require('../Config/constants');
 const mainConfig = require('../Config/main.json');
@@ -189,8 +190,9 @@ module.exports = {
     await invokeHandler(MediaOnly, message, client, 'MediaOnly');
     await invokeHandler(EconomyActivity, message, client, 'EconomyActivity');
     await invokeHandler(Leveling, message, client, 'Leveling');
-    await LuckyDrop.handleMessage(message).catch(() => {});
+    await LuckyDrop.handleMessage(message).catch(() => { });
+    await invokeHandler(AttachmentScanner, message, client, 'AttachmentScanner');
 
-    await handleAutoResponse(message).catch(() => {});
+    await handleAutoResponse(message).catch(() => { });
   }
 };

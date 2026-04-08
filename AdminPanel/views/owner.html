@@ -162,6 +162,285 @@
             font-size: 1.5rem;
         }
 
+        .diagnostics-console {
+            position: relative;
+            overflow: hidden;
+            background: var(--bg-card, #1e1e24);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: none;
+        }
+
+        .diagnostics-console::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 28%);
+        }
+
+        .diagnostics-console-header {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .diagnostics-console-heading {
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .diagnostics-console-kicker {
+            color: #94a3b8;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .diagnostics-console-heading p {
+            margin: 0;
+            max-width: 760px;
+            color: #94a3b8;
+            font-size: 0.92rem;
+            line-height: 1.55;
+        }
+
+        .diagnostics-console-actions {
+            display: flex;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+
+        .diagnostics-console-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 34px;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .diagnostics-board {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+
+        .diagnostics-board-column {
+            display: grid;
+            gap: 1.25rem;
+        }
+
+        .diagnostics-panel {
+            min-width: 0;
+            padding: 1.15rem;
+            border-radius: 22px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .diagnostics-panel-health {
+            background: var(--bg-secondary);
+        }
+
+        .diagnostics-panel-header {
+            display: grid;
+            gap: 0.3rem;
+            margin-bottom: 1rem;
+        }
+
+        .diagnostics-panel-title {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            color: #f8fafc;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .diagnostics-panel-title span {
+            font-size: 1.15rem;
+        }
+
+        .diagnostics-panel-copy {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+
+        .diagnostics-health-grid {
+            display: grid;
+            grid-template-columns: 148px minmax(0, 1fr);
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .diagnostics-health-stack {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .diagnostics-health-notes {
+            display: grid;
+            gap: 0.55rem;
+        }
+
+        .diagnostics-health-note {
+            min-height: 40px;
+            padding: 0.75rem 0.9rem;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+            color: #dbe7f4;
+            font-size: 0.88rem;
+            line-height: 1.4;
+        }
+
+        .diagnostics-health-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .diagnostics-health-metric {
+            padding: 0.95rem 1rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .diagnostics-health-label {
+            color: #94a3b8;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+
+        .diagnostics-health-value {
+            margin-top: 0.4rem;
+            color: #fff;
+            font-size: 1.2rem;
+            font-weight: 800;
+            font-family: 'Consolas', monospace;
+        }
+
+        .diagnostics-updated {
+            margin-top: 0.9rem;
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+
+        .system-health-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            width: fit-content;
+            min-height: 34px;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .system-health-chip.healthy {
+            background: rgba(76, 175, 80, 0.1);
+            border-color: rgba(76, 175, 80, 0.3);
+            color: #81c784;
+        }
+
+        .system-health-chip.warning {
+            background: rgba(255, 193, 7, 0.1);
+            border-color: rgba(255, 193, 7, 0.3);
+            color: #ffe082;
+        }
+
+        .system-health-chip.critical {
+            background: rgba(244, 67, 54, 0.1);
+            border-color: rgba(244, 67, 54, 0.3);
+            color: #ff8a80;
+        }
+
+        .system-health-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .diagnostics-table-wrap {
+            overflow-x: auto;
+        }
+
+        .diagnostics-table-wrap table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .diagnostics-table-wrap thead th {
+            padding: 0.9rem 0.85rem;
+            background: rgba(255, 255, 255, 0.04);
+            color: #cbd5e1;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .diagnostics-table-wrap tbody td {
+            padding: 0.95rem 0.85rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            color: #e2e8f0;
+            vertical-align: middle;
+        }
+
+        .diagnostics-summary-grid {
+            gap: 0.85rem;
+            margin: 0;
+        }
+
+        @media (max-width: 768px) {
+            .diagnostics-board {
+                grid-template-columns: 1fr;
+            }
+
+            .diagnostics-console-header,
+            .diagnostics-health-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .diagnostics-health-metrics {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 560px) {
+            .diagnostics-health-metrics {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .owner-tabs-nav {
             display: flex;
             gap: 0.75rem;
@@ -1839,155 +2118,6 @@
         .admin-user-select:hover,
         #adminUsersSelectAll:hover {
             border-color: rgba(255, 255, 255, 0.4);
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-
-        .system-health-circle {
-            position: relative;
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            background: conic-gradient(var(--health-color, #4CAF50) calc(var(--health-percentage, 100) * 1%), rgba(255, 255, 255, 0.03) 0);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.5);
-            transition: all 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            margin: 0 auto;
-        }
-
-        .system-health-circle::before {
-            content: '';
-            position: absolute;
-            inset: 10px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #1e1e2eae, #252530f2);
-            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
-        }
-
-        .system-health-circle::after {
-            content: '';
-            position: absolute;
-            inset: -4px;
-            border-radius: 50%;
-            padding: 4px;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            pointer-events: none;
-        }
-
-        .system-health-circle-content {
-            position: relative;
-            text-align: center;
-            z-index: 2;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .system-health-value {
-            font-size: 3rem;
-            font-weight: 900;
-            line-height: 1;
-            background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 20px rgba(165, 180, 252, 0.3);
-        }
-
-        .system-health-label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #94a3b8;
-            margin-top: 8px;
-            font-weight: 600;
-        }
-
-        .system-health-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 0.5rem 1rem;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            color: #cbd5e1;
-            transition: all 0.2s ease;
-        }
-
-        .system-health-chip.healthy {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: rgba(16, 185, 129, 0.2);
-            color: #34d399;
-        }
-
-        .system-health-chip.warning {
-            background: rgba(245, 158, 11, 0.1);
-            border-color: rgba(245, 158, 11, 0.2);
-            color: #fbbf24;
-        }
-
-        .system-health-chip.critical {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.2);
-            color: #f87171;
-        }
-
-        .system-health-status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: currentColor;
-            box-shadow: 0 0 8px currentColor;
-        }
-
-        .system-health-status-dot.healthy {
-            background-color: #34d399;
-            color: #34d399;
-        }
-
-        .system-health-status-dot.warning {
-            background-color: #fbbf24;
-            color: #fbbf24;
-        }
-
-        .system-health-status-dot.critical {
-            background-color: #f87171;
-            color: #f87171;
-        }
-
-        .system-health-chip.healthy {
-            background: rgba(76, 175, 80, 0.1);
-            border-color: rgba(76, 175, 80, 0.3);
-            color: #81c784;
-        }
-
-        .system-health-chip.warning {
-            background: rgba(255, 193, 7, 0.1);
-            border-color: rgba(255, 193, 7, 0.3);
-            color: #ffe082;
-        }
-
-        .system-health-chip.critical {
-            background: rgba(244, 67, 54, 0.1);
-            border-color: rgba(244, 67, 54, 0.3);
-            color: #ff8a80;
-        }
-
-        .system-health-status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: currentColor;
-            display: inline-block;
-            margin-right: 6px;
         }
 
         .stat-card-advanced-header {
@@ -3003,128 +3133,138 @@
         <div class="message success hidden" id="successMsg"></div>
 
         <div id="diagnostics" class="tab-content active">
-            <div class="dashboard-grid">
-                <div class="dashboard-card" style="grid-column: span 1;">
-                    <div class="card-header"><span class="card-header-icon">🩺</span> Live System Health</div>
-                    <div style="display:flex; flex-direction:column; gap:1rem; height:100%;">
-                        <div style="display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
-                            <div class="system-health-circle"
-                                style="--health-percentage: 0; --health-color: #4caf50; width: 132px; height: 132px; border-radius: 50%; display:flex; align-items:center; justify-content:center; background: conic-gradient(var(--health-color) calc(var(--health-percentage) * 1%), rgba(255,255,255,0.08) 0); padding: 12px;">
-                                <div
-                                    style="width:100%; height:100%; border-radius:50%; background: rgba(15, 23, 42, 0.95); display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                                    <span id="healthScore"
-                                        style="font-size:2rem; font-weight:800; color:#fff; line-height:1;">0</span>
-                                    <span
-                                        style="font-size:0.78rem; color:#94a3b8; letter-spacing:0.08em; text-transform:uppercase;">Health</span>
+            <div class="dashboard-card diagnostics-console">
+                <div class="card-header diagnostics-console-header">
+                    <div class="diagnostics-console-heading">
+                        <div class="diagnostics-console-kicker">Operations Surface</div>
+                        <div><span class="card-header-icon">🔬</span> Diagnostics Console</div>
+                        <p>Runtime health, core diagnostics, memory pressure, and database posture arranged as a single
+                            operator board.</p>
+                    </div>
+                    <div class="diagnostics-console-actions">
+                        <div class="diagnostics-console-badge">Live Monitoring</div>
+                        <div class="diagnostics-console-badge">Owner Only</div>
+                    </div>
+                </div>
+                <div class="diagnostics-board">
+                    <div class="diagnostics-board-column">
+                        <section class="diagnostics-panel diagnostics-panel-health">
+                            <div class="diagnostics-panel-header">
+                                <div class="diagnostics-panel-title"><span>🩺</span> Live System Health</div>
+                                <p class="diagnostics-panel-copy">Immediate service posture, connection confidence, and
+                                    operator-facing risk.</p>
+                            </div>
+                            <div class="diagnostics-health-grid">
+                                <div class="system-health-circle"
+                                    style="--health-percentage: 0; --health-color: #4caf50; width: 148px; height: 148px; border-radius: 50%; display:flex; align-items:center; justify-content:center; background: conic-gradient(var(--health-color) calc(var(--health-percentage) * 1%), rgba(255,255,255,0.08) 0); padding: 12px;">
+                                    <div
+                                        style="width:100%; height:100%; border-radius:50%; background: rgba(15, 23, 42, 0.95); display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                                        <span id="healthScore"
+                                            style="font-size:2.1rem; font-weight:800; color:#fff; line-height:1;">0</span>
+                                        <span
+                                            style="font-size:0.76rem; color:#94a3b8; letter-spacing:0.1em; text-transform:uppercase;">Health</span>
+                                    </div>
+                                </div>
+                                <div class="diagnostics-health-stack">
+                                    <div id="healthOverallBadge" class="system-health-chip healthy">Running checks...
+                                    </div>
+                                    <div class="diagnostics-health-notes">
+                                        <div id="healthDb" class="diagnostics-health-note">Waiting on database status...
+                                        </div>
+                                        <div id="healthBot" class="diagnostics-health-note">Waiting on bot connection...
+                                        </div>
+                                        <div id="healthPerf" class="diagnostics-health-note">Waiting on performance
+                                            data...</div>
+                                    </div>
                                 </div>
                             </div>
-                            <div style="flex:1; min-width:220px; display:grid; gap:0.75rem;">
-                                <div id="healthOverallBadge" class="system-health-chip healthy">Running checks...</div>
-                                <div id="healthDb" style="color:#e2e8f0; font-size:0.92rem;">Waiting on database
-                                    status...</div>
-                                <div id="healthBot" style="color:#e2e8f0; font-size:0.92rem;">Waiting on bot
-                                    connection...</div>
-                                <div id="healthPerf" style="color:#e2e8f0; font-size:0.92rem;">Waiting on performance
-                                    data...</div>
+                            <div class="diagnostics-health-metrics">
+                                <div class="diagnostics-health-metric">
+                                    <div class="diagnostics-health-label">Users</div>
+                                    <div id="healthUsers" class="diagnostics-health-value">0</div>
+                                </div>
+                                <div class="diagnostics-health-metric">
+                                    <div class="diagnostics-health-label">Alerts</div>
+                                    <div id="healthAlerts" class="diagnostics-health-value">0</div>
+                                </div>
+                                <div class="diagnostics-health-metric">
+                                    <div class="diagnostics-health-label">Load</div>
+                                    <div id="healthLoad" class="diagnostics-health-value">0MB</div>
+                                </div>
+                                <div class="diagnostics-health-metric">
+                                    <div class="diagnostics-health-label">Risk</div>
+                                    <div id="healthRisk" class="diagnostics-health-value">0%</div>
+                                </div>
                             </div>
-                        </div>
-                        <div
-                            style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:0.75rem;">
-                            <div
-                                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:0.9rem;">
-                                <div
-                                    style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
-                                    Users</div>
-                                <div id="healthUsers"
-                                    style="font-size:1.2rem; font-weight:700; color:#fff; margin-top:0.35rem;">0</div>
-                            </div>
-                            <div
-                                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:0.9rem;">
-                                <div
-                                    style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
-                                    Alerts</div>
-                                <div id="healthAlerts"
-                                    style="font-size:1.2rem; font-weight:700; color:#fff; margin-top:0.35rem;">0</div>
-                            </div>
-                            <div
-                                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:0.9rem;">
-                                <div
-                                    style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
-                                    Load</div>
-                                <div id="healthLoad"
-                                    style="font-size:1.2rem; font-weight:700; color:#fff; margin-top:0.35rem;">0MB</div>
-                            </div>
-                            <div
-                                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:0.9rem;">
-                                <div
-                                    style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">
-                                    Risk</div>
-                                <div id="healthRisk"
-                                    style="font-size:1.2rem; font-weight:700; color:#fff; margin-top:0.35rem;">0%</div>
-                            </div>
-                        </div>
-                        <div id="healthUpdated" style="font-size:0.8rem; color:#64748b;">Updated: --</div>
-                    </div>
-                </div>
-                <div class="dashboard-card" style="grid-column: span 2;">
-                    <div class="card-header"><span class="card-header-icon">📈</span> System Overview</div>
-                    <div class="dashboard-grid" id="systemStats">
-                        <div class="loading show">Loading system overview...</div>
-                    </div>
-                </div>
-            </div>
+                            <div id="healthUpdated" class="diagnostics-updated">Updated: --</div>
+                        </section>
 
-            <div class="dashboard-grid">
-                <div class="dashboard-card" style="grid-column: span 3;">
-                    <div class="card-header"><span class="card-header-icon">🧪</span> Diagnostics Summary</div>
-                    <div class="dashboard-grid" id="diagnosticsStats">
-                        <div class="loading show">Loading diagnostics...</div>
+                        <section class="diagnostics-panel">
+                            <div class="diagnostics-panel-header">
+                                <div class="diagnostics-panel-title"><span>🗄️</span> Database Health</div>
+                                <p class="diagnostics-panel-copy">Storage footprint, dataset count, engine state, and
+                                    table readiness.</p>
+                            </div>
+                            <div class="diagnostics-table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Dataset</th>
+                                            <th>Rows</th>
+                                            <th>Size</th>
+                                            <th>Engine</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="databaseStatsTable">
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading
+                                                database statistics...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
                     </div>
-                </div>
-            </div>
 
-            <div class="dashboard-grid">
-                <div class="dashboard-card" style="grid-column: span 2;">
-                    <div class="card-header"><span class="card-header-icon">🗄️</span> Database Health</div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Dataset</th>
-                                    <th>Rows</th>
-                                    <th>Size</th>
-                                    <th>Engine</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="databaseStatsTable">
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading
-                                        database statistics...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="dashboard-card" style="grid-column: span 1;">
-                    <div class="card-header"><span class="card-header-icon">🧠</span> Memory & Cache</div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Layer</th>
-                                    <th>Status</th>
-                                    <th>Usage</th>
-                                    <th>Latency</th>
-                                </tr>
-                            </thead>
-                            <tbody id="cacheStatsTable">
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted" style="padding:2rem;">Loading runtime
-                                        metrics...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="diagnostics-board-column">
+                        <section class="diagnostics-panel">
+                            <div class="diagnostics-panel-header">
+                                <div class="diagnostics-panel-title"><span>🧪</span> Diagnostics Summary</div>
+                                <p class="diagnostics-panel-copy">Core uptime, response profile, memory footprint, and
+                                    indexed record volume.</p>
+                            </div>
+                            <div class="dashboard-grid diagnostics-summary-grid" id="diagnosticsStats">
+                                <div class="loading show">Loading diagnostics...</div>
+                            </div>
+                        </section>
+
+                        <section class="diagnostics-panel">
+                            <div class="diagnostics-panel-header">
+                                <div class="diagnostics-panel-title"><span>🧠</span> Memory & Cache</div>
+                                <p class="diagnostics-panel-copy">Heap utilization, working set pressure, buffers, and
+                                    cache activity.</p>
+                            </div>
+                            <div class="diagnostics-table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Layer</th>
+                                            <th>Status</th>
+                                            <th>Usage</th>
+                                            <th>Latency</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="cacheStatsTable">
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted" style="padding:2rem;">Loading
+                                                runtime
+                                                metrics...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>

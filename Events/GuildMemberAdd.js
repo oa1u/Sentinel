@@ -1,6 +1,7 @@
 const GuildMemberWelcome = require('./GuildMemberWelcome');
 const Verification = require('./verification');
 const InviteTracker = require('../Functions/InviteTracker');
+const InviteAbuseMonitor = require('../Functions/InviteAbuseMonitor');
 const AntiRaid = require('../Functions/AntiRaid');
 
 async function invokeHandler(handler, member, client, label) {
@@ -22,6 +23,7 @@ module.exports = {
     async execute(member, client) {
         // Run Invite tracking instantly (deduplicated)
         const inviteInfo = await InviteTracker.handleMemberJoin(member).catch(() => null);
+        await InviteAbuseMonitor.handleMemberJoin(member, inviteInfo).catch(() => null);
 
         // Evaluate anti-raid triggers BEFORE executing heavy visual processes
         const isQuarantined = await AntiRaid.handleMemberJoin(member, inviteInfo).catch(() => false);

@@ -995,6 +995,7 @@
         }
 
         @media (max-width: 640px) {
+
             .evidence-dropzone-header,
             .evidence-dropzone-actions {
                 grid-template-columns: 1fr;
@@ -2070,11 +2071,16 @@
                     <span>Appeals Portal</span>
                 </div>
                 <h1 class="header-title">Ban Appeal</h1>
-                <p class="header-subtitle">If you want us to take a look at your ban, start here. This page walks you through what to include, lets you check progress later, and helps you send a clear appeal without guessing what staff needs to see.</p>
+                <p class="header-subtitle">If you want us to take a look at your ban, start here. This page walks you
+                    through what to include, lets you check progress later, and helps you send a clear appeal without
+                    guessing what staff needs to see.</p>
                 <div class="header-chip-row">
-                    <div class="header-chip"><span>🧭</span><strong>Guided</strong><span>step-by-step appeal form</span></div>
-                    <div class="header-chip"><span>📎</span><strong>Evidence</strong><span>attach files if they actually help</span></div>
-                    <div class="header-chip"><span>🔍</span><strong>Status</strong><span>check updates and past appeals here</span></div>
+                    <div class="header-chip"><span>🧭</span><strong>Guided</strong><span>step-by-step appeal form</span>
+                    </div>
+                    <div class="header-chip"><span>📎</span><strong>Evidence</strong><span>attach files if they actually
+                            help</span></div>
+                    <div class="header-chip"><span>🔍</span><strong>Status</strong><span>check updates and past appeals
+                            here</span></div>
                 </div>
             </div>
 
@@ -2084,7 +2090,8 @@
                     <div>
                         <div class="header-summary-label">What helps most</div>
                         <div class="header-summary-value">Clear, honest appeals</div>
-                        <div class="header-summary-copy">The more direct and specific you are, the easier it is for staff to review what happened and make a decision.</div>
+                        <div class="header-summary-copy">The more direct and specific you are, the easier it is for
+                            staff to review what happened and make a decision.</div>
                     </div>
                 </div>
                 <div class="header-summary-card">
@@ -2132,7 +2139,8 @@
                         <div class="sidebar-card-heading">
                             <div>
                                 <div class="sidebar-title sidebar-title--hero">📈 Before You Submit</div>
-                                <div class="sidebar-card-copy">See how far along your draft is and what still needs attention before you send it.</div>
+                                <div class="sidebar-card-copy">See how far along your draft is and what still needs
+                                    attention before you send it.</div>
                             </div>
                             <div class="sidebar-card-badge">Live</div>
                         </div>
@@ -2160,7 +2168,10 @@
                                 <span class="sidebar-panel-tag">4 steps</span>
                             </div>
                             <div class="sidebar-live-list" id="appealReadinessList">
-                                <div class="sidebar-live-row"><span>•</span><div><strong>Step 1</strong><span>Add your account details to get started.</span></div></div>
+                                <div class="sidebar-live-row"><span>•</span>
+                                    <div><strong>Step 1</strong><span>Add your account details to get started.</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2206,7 +2217,8 @@
                             <span>👤</span>
                             <span>Account Information</span>
                         </h2>
-                        <p class="form-section-desc">Tell us which Discord account the appeal is for so we can match it correctly.
+                        <p class="form-section-desc">Tell us which Discord account the appeal is for so we can match it
+                            correctly.
                         </p>
 
                         <div class="form-group">
@@ -2216,7 +2228,8 @@
                             </label>
                             <input type="text" id="userTag" class="form-input" placeholder="e.g., Your Username"
                                 oninput="validateStep(1)">
-                            <p class="form-help">💡 Use your current Discord username, not your server nickname or display name.</p>
+                            <p class="form-help">💡 Use your current Discord username, not your server nickname or
+                                display name.</p>
                             <div id="userTagValidation" class="form-validation"></div>
                         </div>
 
@@ -2227,7 +2240,8 @@
                             </label>
                             <input type="text" id="userId" class="form-input" placeholder="e.g., 123456789012345678"
                                 oninput="validateStep(1)">
-                            <p class="form-help">💡 Right-click your profile and copy your User ID. Developer Mode needs to be enabled in Discord.</p>
+                            <p class="form-help">💡 Right-click your profile and copy your User ID. Developer Mode needs
+                                to be enabled in Discord.</p>
                             <div id="userIdValidation" class="form-validation"></div>
                         </div>
 
@@ -2259,7 +2273,8 @@
                             <span>🚫</span>
                             <span>Ban Information</span>
                         </h2>
-                        <p class="form-section-desc">Enter the ban case ID from your ban message so we can pull up the right record.</p>
+                        <p class="form-section-desc">Enter the ban case ID from your ban message so we can pull up the
+                            right record.</p>
 
                         <div class="form-group">
                             <label class="form-label" for="caseId">
@@ -2269,7 +2284,8 @@
                             <input type="text" id="caseId" class="form-input" placeholder="e.g., BAN-kX7mP9qL2n"
                                 maxlength="54" autocomplete="off" spellcheck="false" pattern="^BAN-[A-Za-z0-9]{1,50}$"
                                 oninput="normalizeCaseIdInput(); validateStep(2); queueCaseIdDatabaseValidation()">
-                            <p class="form-help">💡 You can usually find this in the ban DM you received. It starts with BAN-.</p>
+                            <p class="form-help">💡 You can usually find this in the ban DM you received. It starts with
+                                BAN-.</p>
                             <div id="caseIdValidation" class="form-validation"></div>
                         </div>
 
@@ -2297,18 +2313,21 @@
                             <span>✍️</span>
                             <span>Your Appeal</span>
                         </h2>
-                        <p class="form-section-desc">Tell your side clearly. The best appeals are honest, specific, and respectful.</p>
+                        <p class="form-section-desc">Tell your side clearly. The best appeals are honest, specific, and
+                            respectful.</p>
 
                         <div class="form-group">
                             <label class="form-label" for="reason">
                                 <span>Appeal Reason</span>
                                 <span class="required">*</span>
                             </label>
-                            <textarea id="reason" class="form-input" placeholder="Explain what happened, what you understand now, and why you should be given another chance..."
+                            <textarea id="reason" class="form-input"
+                                placeholder="Explain what happened, what you understand now, and why you should be given another chance..."
                                 maxlength="2000" oninput="analyzeAppealQuality()"></textarea>
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-                                <p class="form-help">💭 Try to cover what happened, your role in it, and what would be different going forward.</p>
+                                <p class="form-help">💭 Try to cover what happened, your role in it, and what would be
+                                    different going forward.</p>
                                 <span style="font-size: 0.85rem; color: var(--color-muted);">
                                     <span id="charCount">0</span> / 2000
                                 </span>
@@ -2346,12 +2365,18 @@
                         </div>
 
                         <div style="margin-top: 1rem;">
-                            <div style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-muted); margin-bottom: 0.75rem;">Need help starting?</div>
+                            <div
+                                style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-muted); margin-bottom: 0.75rem;">
+                                Need help starting?</div>
                             <div class="appeal-prompts">
-                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('accountability')">Own the mistake</button>
-                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('context')">Add context</button>
-                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('plan')">Future plan</button>
-                                <button type="button" class="appeal-prompt-chip" onclick="insertAppealPrompt('evidence')">Mention evidence</button>
+                                <button type="button" class="appeal-prompt-chip"
+                                    onclick="insertAppealPrompt('accountability')">Own the mistake</button>
+                                <button type="button" class="appeal-prompt-chip"
+                                    onclick="insertAppealPrompt('context')">Add context</button>
+                                <button type="button" class="appeal-prompt-chip"
+                                    onclick="insertAppealPrompt('plan')">Future plan</button>
+                                <button type="button" class="appeal-prompt-chip"
+                                    onclick="insertAppealPrompt('evidence')">Mention evidence</button>
                             </div>
                         </div>
 
@@ -2360,22 +2385,29 @@
                                 <span>Supporting Evidence</span>
                             </label>
                             <div class="evidence-upload-shell">
-                                <input class="evidence-file-input" type="file" id="appealEvidence" multiple accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,image/png,image/jpeg,image/webp,application/pdf,text/plain">
-                                <div class="evidence-dropzone" id="appealEvidenceDropzone" tabindex="0" role="button" aria-controls="appealEvidence" aria-label="Add supporting evidence files">
+                                <input class="evidence-file-input" type="file" id="appealEvidence" multiple
+                                    accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,image/png,image/jpeg,image/webp,application/pdf,text/plain">
+                                <div class="evidence-dropzone" id="appealEvidenceDropzone" tabindex="0" role="button"
+                                    aria-controls="appealEvidence" aria-label="Add supporting evidence files">
                                     <div class="evidence-dropzone-header">
                                         <div class="evidence-dropzone-copy">
-                                            <div class="evidence-dropzone-title">Drop files here or choose them from your device</div>
-                                            <div class="evidence-dropzone-text">Screenshots, PDFs, and text files help most when they directly back up your timeline or explain missing context.</div>
+                                            <div class="evidence-dropzone-title">Drop files here or choose them from
+                                                your device</div>
+                                            <div class="evidence-dropzone-text">Screenshots, PDFs, and text files help
+                                                most when they directly back up your timeline or explain missing
+                                                context.</div>
                                         </div>
                                         <div class="evidence-dropzone-badge">Up to 3 files</div>
                                     </div>
                                     <div class="evidence-dropzone-actions">
                                         <div class="evidence-dropzone-buttons">
-                                            <button class="evidence-dropzone-btn" type="button" id="appealEvidenceBrowseBtn">
+                                            <button class="evidence-dropzone-btn" type="button"
+                                                id="appealEvidenceBrowseBtn">
                                                 <span>📎</span>
                                                 <span>Choose files</span>
                                             </button>
-                                            <button class="evidence-dropzone-btn evidence-dropzone-btn--ghost" type="button" id="appealEvidenceClearBtn">
+                                            <button class="evidence-dropzone-btn evidence-dropzone-btn--ghost"
+                                                type="button" id="appealEvidenceClearBtn">
                                                 <span>✕</span>
                                                 <span>Clear</span>
                                             </button>
@@ -2387,11 +2419,16 @@
                                     </div>
                                 </div>
                                 <div class="evidence-dropzone-help">
-                                    <p class="form-help">📎 Optional. You can attach up to 3 screenshots, PDF, or TXT files. Each file must be 5MB or smaller.</p>
-                                    <p class="form-help">Drag and drop works too. Only attach evidence if it gives staff something useful to check.</p>
+                                    <p class="form-help">📎 Optional. You can attach up to 3 screenshots, PDF, or TXT
+                                        files. Each file must be 5MB or smaller.</p>
+                                    <p class="form-help">Drag and drop works too. Only attach evidence if it gives staff
+                                        something useful to check.</p>
                                 </div>
                                 <div class="evidence-list" id="appealEvidenceList">
-                                    <div class="sidebar-live-row"><span>📂</span><div><strong>No files selected</strong><span>You can still submit without evidence if your explanation already covers it.</span></div></div>
+                                    <div class="sidebar-live-row"><span>📂</span>
+                                        <div><strong>No files selected</strong><span>You can still submit without
+                                                evidence if your explanation already covers it.</span></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2456,7 +2493,10 @@
                                     <div style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">
                                         Evidence Files</div>
                                     <div id="reviewEvidenceList" class="evidence-list">
-                                        <div class="sidebar-live-row"><span>📂</span><div><strong>No evidence attached</strong><span>That is fine if your explanation already gives enough detail.</span></div></div>
+                                        <div class="sidebar-live-row"><span>📂</span>
+                                            <div><strong>No evidence attached</strong><span>That is fine if your
+                                                    explanation already gives enough detail.</span></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2464,12 +2504,14 @@
 
                         <div
                             style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-left: 4px solid var(--color-green); padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
-                            <label style="display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; margin-bottom: 0.85rem;">
+                            <label
+                                style="display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; margin-bottom: 0.85rem;">
                                 <input type="checkbox" id="rulesCheckbox"
                                     style="margin-top: 0.25rem; min-width: 18px; width: 18px; height: 18px; accent-color: var(--color-green); cursor: pointer;"
                                     oninput="validateStep(4)">
                                 <span style="line-height: 1.6;">
-                                    I confirm that the information here is accurate, and I will follow the server rules if this appeal is accepted.
+                                    I confirm that the information here is accurate, and I will follow the server rules
+                                    if this appeal is accepted.
                                 </span>
                             </label>
                             <button type="button" id="viewRulesBtn"
@@ -2481,7 +2523,8 @@
 
                         <div id="loadingBox" class="loading">
                             <div class="spinner"></div>
-                            <p id="loadingText" style="margin-top: 1rem; color: var(--color-muted);">Sending your appeal...</p>
+                            <p id="loadingText" style="margin-top: 1rem; color: var(--color-muted);">Sending your
+                                appeal...</p>
                             <div class="upload-progress-card" id="uploadProgressCard" style="display: none;">
                                 <div class="upload-progress-header">
                                     <strong id="uploadProgressTitle">Uploading evidence</strong>
@@ -2490,7 +2533,8 @@
                                 <div class="upload-progress-bar" aria-hidden="true">
                                     <div class="upload-progress-fill" id="uploadProgressFill"></div>
                                 </div>
-                                <div class="upload-progress-note" id="uploadProgressNote">Preparing your appeal package...</div>
+                                <div class="upload-progress-note" id="uploadProgressNote">Preparing your appeal
+                                    package...</div>
                             </div>
                         </div>
 
@@ -2513,7 +2557,8 @@
                         <div class="sidebar-card-heading">
                             <div>
                                 <div class="sidebar-title sidebar-title--hero">🧭 What Staff Looks For</div>
-                                <div class="sidebar-card-copy">A quick reference for what makes an appeal easier to review and more likely to get a fair read.</div>
+                                <div class="sidebar-card-copy">A quick reference for what makes an appeal easier to
+                                    review and more likely to get a fair read.</div>
                             </div>
                             <div class="sidebar-card-badge">Guide</div>
                         </div>
@@ -2527,14 +2572,16 @@
                             </div>
                             <div class="sidebar-list sidebar-list--compact">
                                 <div class="sidebar-item">
-                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--success">⚡</div>
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--success">⚡
+                                    </div>
                                     <div>
                                         <div style="font-weight: 600; margin-bottom: 0.2rem;">Most appeals</div>
                                         <div style="color: var(--color-green); font-weight: 700;">24-48 hours</div>
                                     </div>
                                 </div>
                                 <div class="sidebar-item">
-                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--info">🚀</div>
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--info">🚀
+                                    </div>
                                     <div>
                                         <div style="font-weight: 600; margin-bottom: 0.2rem;">Clear and complete</div>
                                         <div style="color: var(--color-cyan); font-weight: 700;">4-12 hours</div>
@@ -2550,12 +2597,15 @@
                             </div>
                             <div class="sidebar-list sidebar-list--compact">
                                 <div class="sidebar-item">
-                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">1</div>
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">1
+                                    </div>
                                     <div>You can only have one appeal waiting for review at a time.</div>
                                 </div>
                                 <div class="sidebar-item">
-                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">⚖️</div>
-                                    <div>Final decisions are made by the server owner or senior staff handling appeals.</div>
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">⚖️
+                                    </div>
+                                    <div>Final decisions are made by the server owner or senior staff handling appeals.
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2630,15 +2680,18 @@
                         <div class="status-timeline" id="statusTimeline">
                             <div class="status-timeline-step is-complete" data-status-step="submitted">
                                 <div class="status-timeline-label"><span>1.</span><span>Submitted</span></div>
-                                <div class="status-timeline-copy">Your appeal was received and is waiting in the review queue.</div>
+                                <div class="status-timeline-copy">Your appeal was received and is waiting in the review
+                                    queue.</div>
                             </div>
                             <div class="status-timeline-step" data-status-step="review">
                                 <div class="status-timeline-label"><span>2.</span><span>Under review</span></div>
-                                <div class="status-timeline-copy">Staff is reviewing the case details, your explanation, and any evidence.</div>
+                                <div class="status-timeline-copy">Staff is reviewing the case details, your explanation,
+                                    and any evidence.</div>
                             </div>
                             <div class="status-timeline-step" data-status-step="decision">
                                 <div class="status-timeline-label"><span>3.</span><span>Decision</span></div>
-                                <div class="status-timeline-copy">You get a final decision and any next steps you need to follow.</div>
+                                <div class="status-timeline-copy">You get a final decision and any next steps you need
+                                    to follow.</div>
                             </div>
                         </div>
 
@@ -2680,7 +2733,8 @@
 
                         <div class="status-guidance-box" id="statusGuidanceBox">
                             <strong>What happens next</strong>
-                            <p id="statusGuidanceText">If your appeal is still pending, give the review team time to finish before sending another one.</p>
+                            <p id="statusGuidanceText">If your appeal is still pending, give the review team time to
+                                finish before sending another one.</p>
                         </div>
 
                         <div class="status-quick-actions" id="statusPendingActions" style="display: none;">
@@ -2702,7 +2756,8 @@
                         <div class="sidebar-card-heading">
                             <div>
                                 <div class="sidebar-title sidebar-title--hero">📌 Status Guide</div>
-                                <div class="sidebar-card-copy">Here is what each status means while you wait for updates or a final decision.</div>
+                                <div class="sidebar-card-copy">Here is what each status means while you wait for updates
+                                    or a final decision.</div>
                             </div>
                             <div class="sidebar-card-badge">Guide</div>
                         </div>
@@ -2718,22 +2773,27 @@
                                 <div class="sidebar-status-card">
                                     <div class="sidebar-status-card-icon sidebar-status-card-icon--pending">⏳</div>
                                     <div>
-                                        <div class="sidebar-status-card-label sidebar-status-card-label--pending">Pending</div>
-                                        <div class="sidebar-status-card-copy">Your appeal is waiting to be reviewed.</div>
+                                        <div class="sidebar-status-card-label sidebar-status-card-label--pending">
+                                            Pending</div>
+                                        <div class="sidebar-status-card-copy">Your appeal is waiting to be reviewed.
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="sidebar-status-card">
                                     <div class="sidebar-status-card-icon sidebar-status-card-icon--accepted">✅</div>
                                     <div>
-                                        <div class="sidebar-status-card-label sidebar-status-card-label--accepted">Accepted</div>
+                                        <div class="sidebar-status-card-label sidebar-status-card-label--accepted">
+                                            Accepted</div>
                                         <div class="sidebar-status-card-copy">Your appeal was approved.</div>
                                     </div>
                                 </div>
                                 <div class="sidebar-status-card">
                                     <div class="sidebar-status-card-icon sidebar-status-card-icon--denied">⛔</div>
                                     <div>
-                                        <div class="sidebar-status-card-label sidebar-status-card-label--denied">Denied</div>
-                                        <div class="sidebar-status-card-copy">Your appeal was reviewed and not approved.</div>
+                                        <div class="sidebar-status-card-label sidebar-status-card-label--denied">Denied
+                                        </div>
+                                        <div class="sidebar-status-card-copy">Your appeal was reviewed and not approved.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2796,7 +2856,8 @@
                             <div class="history-summary-card">
                                 <div class="history-summary-label">Latest decision</div>
                                 <div class="history-summary-value" id="historySummaryLatest">-</div>
-                                <div class="history-summary-note" id="historySummaryLatestNote">No decision history yet.</div>
+                                <div class="history-summary-note" id="historySummaryLatestNote">No decision history yet.
+                                </div>
                             </div>
                         </div>
                         <h3
@@ -2811,7 +2872,8 @@
                         style="display: none; margin-top: 2rem; text-align: center; padding: 3rem; background: var(--bg-tertiary); border: 1px dashed var(--color-border); border-radius: 0.5rem;">
                         <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
                         <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">No appeals yet</div>
-                        <div style="color: var(--color-muted);">We could not find any appeals linked to that account.</div>
+                        <div style="color: var(--color-muted);">We could not find any appeals linked to that account.
+                        </div>
                     </div>
                 </div>
 
@@ -2821,7 +2883,8 @@
                         <div class="sidebar-card-heading">
                             <div>
                                 <div class="sidebar-title sidebar-title--hero">📚 Appeal History Guide</div>
-                                <div class="sidebar-card-copy">Use this view to keep track of past appeals, decisions, and any feedback you have already received.</div>
+                                <div class="sidebar-card-copy">Use this view to keep track of past appeals, decisions,
+                                    and any feedback you have already received.</div>
                             </div>
                             <div class="sidebar-card-badge">Records</div>
                         </div>
@@ -2835,16 +2898,22 @@
                             </div>
                             <div class="sidebar-callout-list">
                                 <div class="sidebar-callout-item">
-                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--info">📊</div>
-                                    <div><strong>Recent overview</strong><span>See up to 10 recent appeals linked to your Discord account.</span></div>
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--info">📊
+                                    </div>
+                                    <div><strong>Recent overview</strong><span>See up to 10 recent appeals linked to
+                                            your Discord account.</span></div>
                                 </div>
                                 <div class="sidebar-callout-item">
-                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--success">🧾</div>
-                                    <div><strong>Decision trail</strong><span>Review outcomes, timestamps, and the latest staff response.</span></div>
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--success">🧾
+                                    </div>
+                                    <div><strong>Decision trail</strong><span>Review outcomes, timestamps, and the
+                                            latest staff response.</span></div>
                                 </div>
                                 <div class="sidebar-callout-item">
-                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">🔒</div>
-                                    <div><strong>Verified access</strong><span>Your User ID is required so only your own history is shown.</span></div>
+                                    <div class="sidebar-item-icon sidebar-item-icon--chip sidebar-item-icon--warn">🔒
+                                    </div>
+                                    <div><strong>Verified access</strong><span>Your User ID is required so only your own
+                                            history is shown.</span></div>
                                 </div>
                             </div>
                         </div>
@@ -3008,10 +3077,10 @@
             if (title) title.textContent = normalizedProgress >= 100 ? 'Finalizing request' : 'Uploading evidence';
             if (note) {
                 note.textContent = normalizedProgress >= 100
-                        ? 'Upload finished. The server is wrapping up your appeal now.'
-                        : `${actionLabel} with your appeal details and any attached evidence.`;
+                    ? 'Upload finished. The server is wrapping up your appeal now.'
+                    : `${actionLabel} with your appeal details and any attached evidence.`;
             }
-                    if (loadingText) loadingText.textContent = normalizedProgress >= 100 ? 'Finishing things up...' : `${actionLabel}...`;
+            if (loadingText) loadingText.textContent = normalizedProgress >= 100 ? 'Finishing things up...' : `${actionLabel}...`;
         }
 
         function getSelectedAppealEvidenceFiles() {
@@ -3128,8 +3197,8 @@
                 const action = linked && entry.url
                     ? `<a class="evidence-link" href="${sanitizeHTML(entry.url)}" target="_blank" rel="noopener noreferrer">Open</a>`
                     : removable
-                    ? `<button class="evidence-item-action" type="button" onclick="removeAppealEvidenceFile(${index})">Remove</button>`
-                    : `<span style="font-size:0.82rem; color:var(--color-muted);">Ready</span>`;
+                        ? `<button class="evidence-item-action" type="button" onclick="removeAppealEvidenceFile(${index})">Remove</button>`
+                        : `<span style="font-size:0.82rem; color:var(--color-muted);">Ready</span>`;
 
                 return `
                     <div class="evidence-item">

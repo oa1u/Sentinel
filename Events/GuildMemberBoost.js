@@ -1,9 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
 const { createLogEmbed, sendLogEmbed } = require('../Functions/LoggingHelper');
+const NicknameGuard = require('../Functions/NicknameGuard');
 
 module.exports = {
     name: 'guildMemberUpdate',
     async execute(oldMember, newMember) {
+        await NicknameGuard.handleGuildMemberUpdate(oldMember, newMember).catch(() => null);
+
         // Check if the member started boosting
         if (!oldMember.premiumSince && newMember.premiumSince) {
             const boostCount = newMember.guild.premiumSubscriptionCount || 'Unknown';

@@ -2,6 +2,7 @@ const { ActivityType, EmbedBuilder } = require('discord.js');
 const presenceConfig = require('../Config/presence.json');
 const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 const InviteTracker = require('../Functions/InviteTracker');
+const ConfigValidator = require('../Functions/ConfigValidator');
 const JoinToCreate = require('./JoinToCreate');
 const { serverID } = require('../Config/main.json');
 const { CHANNELS: { birthdayChannelId } } = require('../Config/constants');
@@ -30,6 +31,13 @@ module.exports = {
 
         // Cache existing invites for invite tracking.
         InviteTracker.primeAllGuildInvites(client).catch(() => { });
+
+        const guild = client.guilds.cache.get(serverID) || await client.guilds.fetch(serverID).catch(() => null);
+        if (guild) {
+            await ConfigValidator.validateAndNotify(client, guild, { reason: 'startup' }).catch((error) => {
+                console.error('[Ready] Config validation failed:', error.message);
+            });
+        }
     }
 };
 

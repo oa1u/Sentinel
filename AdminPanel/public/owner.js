@@ -5,8 +5,32 @@ let securityEventsAutoRefreshIntervalMs = 30000;
 let backupTablesCache = [];
 let serverBackupGuildsCache = [];
 let activeServerBackupRestoreOperationId = null;
+let ownerConfigOverview = null;
+let ownerConfigHistory = [];
+let ownerConfigCheckFilter = 'action';
 const SERVER_BACKUP_RESTORE_OPERATION_STORAGE_KEY = 'owner_server_backup_restore_operation_v1';
 const OWNER_NOTIFICATION_STORAGE_KEY = 'owner_notification_center_v1';
+const OWNER_BOT_SAFETY_LABELS = {
+    enabled: 'Alerts Enabled',
+    recentAlertLimit: 'Recent Alert Limit',
+    emojiBurstThreshold: 'Emoji Burst Threshold',
+    stickerBurstThreshold: 'Sticker Burst Threshold',
+    assetAuditWindowMs: 'Asset Audit Window (ms)',
+    assetAuditCooldownMs: 'Asset Audit Cooldown (ms)',
+    inviteWindowMs: 'Invite Window (ms)',
+    inviteMutationThreshold: 'Invite Mutation Threshold',
+    inviteJoinSpikeThreshold: 'Invite Join Spike Threshold',
+    inviterJoinSpikeThreshold: 'Inviter Join Spike Threshold',
+    inviteAlertCooldownMs: 'Invite Alert Cooldown (ms)',
+    nicknameAlertCooldownMs: 'Nickname Alert Cooldown (ms)',
+    attachmentCountThreshold: 'Attachment Count Threshold',
+    attachmentTotalSizeMbThreshold: 'Attachment Size Threshold (MB)',
+    moderationEscalationCooldownMs: 'Escalation Cooldown (ms)',
+    moderationEscalationLastHourThreshold: 'Escalations Per Hour',
+    moderationEscalationLastDayThreshold: 'Escalations Per Day',
+    moderationEscalationTimeoutThreshold: 'Timeout Threshold',
+    moderationEscalationHighRiskThreshold: 'High Risk Threshold'
+};
 const ownerNotificationFeedState = {
     events: [],
     maxEntries: 300,
@@ -1335,6 +1359,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (tabName === 'diagnostics') {
                     loadDiagnostics();
                 }
+                if (tabName === 'config') {
+                    loadOwnerConfigSection();
+                }
                 if (tabName === 'invites') {
                     loadInviteStats();
                 }
@@ -1381,6 +1408,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const serverBackupPreflightBtn = document.getElementById('serverBackupPreflightBtn');
     const inspectServerBackupBtn = document.getElementById('inspectServerBackupBtn');
     const restoreServerBackupBtn = document.getElementById('restoreServerBackupBtn');
+    const ownerConfigRefreshBtn = document.getElementById('ownerConfigRefreshBtn');
     initBackupModeTabs();
     runBackupBtn?.addEventListener('click', () => runBackupNow());
     saveBackupSettingsCardBtn?.addEventListener('click', () => saveBackupSettings());
@@ -1390,6 +1418,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     serverBackupPreflightBtn?.addEventListener('click', () => runServerBackupRestorePreflight());
     inspectServerBackupBtn?.addEventListener('click', () => inspectSelectedServerBackup());
     restoreServerBackupBtn?.addEventListener('click', () => restoreServerBackup());
+    ownerConfigRefreshBtn?.addEventListener('click', () => loadOwnerConfigSection(true));
+    document.getElementById('config')?.addEventListener('click', (event) => {
+        const filterBtn = event.target.closest('[data-owner-config-filter]');
+        if (!filterBtn) return;
+        setOwnerConfigCheckFilter(filterBtn.dataset.ownerConfigFilter || 'all');
+    });
     backupSelectAll?.addEventListener('change', () => {
         const list = document.getElementById('backupTablesList');
         if (!list) return;
@@ -1399,6 +1433,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         updateBackupTableCount();
     });
+
+    if (document.getElementById('config')?.classList.contains('active')) {
+        loadOwnerConfigSection();
+    }
 
     if (typeof initAdminUserManagement === 'function') {
         initAdminUserManagement();
@@ -1682,6 +1720,10 @@ function switchTab(e, tabName) {
         if (typeof window.loadDiagnostics === 'function') window.loadDiagnostics();
     }
 
+    if (tabName === 'config') {
+        if (typeof window.loadOwnerConfigSection === 'function') window.loadOwnerConfigSection();
+    }
+
     if (tabName === 'security') {
         if (typeof window.loadSessions === 'function') window.loadSessions();
 
@@ -1842,143 +1884,633 @@ async function loadSystemStatus() {
             setText('healthRisk', `${banRate}%`);
             setText('healthUpdated', `Updated: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
 
-            const systemStats = document.getElementById('systemStats');
-            if (systemStats) {
-                systemStats.innerHTML = `
-                    <div class="stat-card-advanced">
-                        <div class="stat-card-advanced-header">
-                            <div class="stat-card-advanced-title">Active Users</div>
-                            <div class="stat-card-advanced-icon">👥</div>
-                        </div>
-                        <div class="stat-card-advanced-value">${totalUsers.toLocaleString()}</div>
-                        <div>
-                            <div class="stat-card-advanced-progress">
-                                <div class="stat-card-advanced-progress-bar" style="width: ${Math.min(memberCapacity, 100)}%; background: linear-gradient(90deg, #2196f3, #1976d2);"></div>
-                            </div>
-                            <div class="stat-card-advanced-percent">${Math.min(memberCapacity, 100).toFixed(1)}% capacity</div>
-                        </div>
-                        <div class="stat-card-advanced-meta">
-                            <span class="stat-card-advanced-detail">Score: ${Math.round(userHealthFactor)}/100</span>
-                            <span class="stat-card-advanced-trend positive">↑ Active</span>
-                        </div>
-                    </div>
-                    <div class="stat-card-advanced">
-                        <div class="stat-card-advanced-header">
-                            <div class="stat-card-advanced-title">Total Warnings</div>
-                            <div class="stat-card-advanced-icon">⚠️</div>
-                        </div>
-                        <div class="stat-card-advanced-value">${totalWarnings.toLocaleString()}</div>
-                        <div>
-                            <div class="stat-card-advanced-progress">
-                                <div class="stat-card-advanced-progress-bar" style="width: ${Math.min(warningRate, 100)}%; background: ${warningRate > 30 ? 'linear-gradient(90deg, #f44336, #e53935)' : 'linear-gradient(90deg, #ffc107, #ff9800)'};" ></div>
-                            </div>
-                            <div class="stat-card-advanced-percent">${warningRate}% of users</div>
-                        </div>
-                        <div class="stat-card-advanced-meta">
-                            <span class="stat-card-advanced-detail">Score: ${Math.round(warningHealthFactor)}/100</span>
-                            <span class="stat-card-advanced-badge ${warningRate > 30 ? 'critical' : warningRate > 20 ? 'warning' : 'healthy'}">⚠️ ${warningRate > 30 ? 'Critical' : warningRate > 20 ? 'Monitor' : 'Normal'}</span>
-                        </div>
-                    </div>
-                    <div class="stat-card-advanced">
-                        <div class="stat-card-advanced-header">
-                            <div class="stat-card-advanced-title">Banned Users</div>
-                            <div class="stat-card-advanced-icon">🔨</div>
-                        </div>
-                        <div class="stat-card-advanced-value">${bannedUsers}</div>
-                        <div>
-                            <div class="stat-card-advanced-progress">
-                                <div class="stat-card-advanced-progress-bar" style="width: ${Math.min((bannedUsers / totalUsers * 20), 100)}%; background: ${bannedUsers > 10 ? 'linear-gradient(90deg, #f44336, #e53935)' : bannedUsers > 5 ? 'linear-gradient(90deg, #ff9800, #f57c00)' : 'linear-gradient(90deg, #4caf50, #45a049)'};" ></div>
-                            </div>
-                            <div class="stat-card-advanced-percent">${banRate}% ban rate</div>
-                        </div>
-                        <div class="stat-card-advanced-meta">
-                            <span class="stat-card-advanced-detail">Score: ${Math.round(userHealthFactor)}/100</span>
-                            <span class="stat-card-advanced-badge ${bannedUsers > 10 ? 'critical' : bannedUsers > 5 ? 'warning' : 'healthy'}">🔨 ${bannedUsers > 0 ? 'Active' : 'None'}</span>
-                        </div>
-                    </div>
-                    <div class="stat-card-advanced">
-                        <div class="stat-card-advanced-header">
-                            <div class="stat-card-advanced-title">System Health</div>
-                            <div class="stat-card-advanced-icon">🏥</div>
-                        </div>
-                        <div class="stat-card-advanced-value" style="color: ${healthColor};">${Math.round(healthScore)}/100</div>
-                        <div>
-                            <div class="stat-card-advanced-progress">
-                                <div class="stat-card-advanced-progress-bar" style="width: ${healthScore}%; background: ${healthColor};"></div>
-                            </div>
-                            <div class="stat-card-advanced-percent">${healthStatus} Status</div>
-                        </div>
-                        <div class="stat-card-advanced-meta">
-                            <span class="stat-card-advanced-detail">Memory: ${memoryUsage}MB</span>
-                            <span class="stat-card-advanced-badge ${healthScore >= 80 ? 'healthy' : healthScore >= 60 ? 'warning' : 'critical'}">✓ ${healthStatus}</span>
-                        </div>
-                    </div>
-                    <div class="stat-card-advanced">
-                        <div class="stat-card-advanced-header">
-                            <div class="stat-card-advanced-title">Response Time</div>
-                            <div class="stat-card-advanced-icon">⚡</div>
-                        </div>
-                        <div class="stat-card-advanced-value">${responseTime}ms</div>
-                        <div>
-                            <div class="stat-card-advanced-progress">
-                                <div class="stat-card-advanced-progress-bar" style="width: ${responseTimeHealth}%; background: ${responseTimeHealth >= 80 ? 'linear-gradient(90deg, #4caf50, #45a049)' : responseTimeHealth >= 50 ? 'linear-gradient(90deg, #ffc107, #ff9800)' : 'linear-gradient(90deg, #f44336, #e53935)'};" ></div>
-                            </div>
-                            <div class="stat-card-advanced-percent">${responseTime < 30 ? 'Optimal' : responseTime < 50 ? 'Good' : 'Slow'}</div>
-                        </div>
-                        <div class="stat-card-advanced-meta">
-                            <span class="stat-card-advanced-detail">Score: ${Math.round(responseTimeHealth)}/100</span>
-                            <span class="stat-card-advanced-badge ${responseTimeHealth >= 80 ? 'healthy' : responseTimeHealth >= 50 ? 'warning' : 'critical'}">⚡ Real-time</span>
-                        </div>
-                    </div>
-                    <div class="stat-card-advanced">
-                        <div class="stat-card-advanced-header">
-                            <div class="stat-card-advanced-title">Memory Usage</div>
-                            <div class="stat-card-advanced-icon">🧠</div>
-                        </div>
-                        <div class="stat-card-advanced-value">${memoryUsage}MB</div>
-                        <div>
-                            <div class="stat-card-advanced-progress">
-                                <div class="stat-card-advanced-progress-bar" style="width: ${Math.min((memoryUsage / 512) * 100, 100)}%; background: ${memoryUsage > 400 ? 'linear-gradient(90deg, #f44336, #e53935)' : memoryUsage > 250 ? 'linear-gradient(90deg, #ff9800, #f57c00)' : 'linear-gradient(90deg, #4caf50, #45a049)'};" ></div>
-                            </div>
-                            <div class="stat-card-advanced-percent">${Math.min((memoryUsage / 512) * 100, 100).toFixed(1)}% of 512MB</div>
-                        </div>
-                        <div class="stat-card-advanced-meta">
-                            <span class="stat-card-advanced-detail">Score: ${Math.round(memoryHealthFactor)}/100</span>
-                            <span class="stat-card-advanced-badge ${memoryUsage > 400 ? 'critical' : memoryUsage > 250 ? 'warning' : 'healthy'}">🧠 ${memoryUsage > 400 ? 'High' : memoryUsage > 250 ? 'Medium' : 'Low'}</span>
-                        </div>
-                    </div>
-                    <div class="stat-card-advanced">
-                        <div class="stat-card-advanced-header">
-                            <div class="stat-card-advanced-title">System Uptime</div>
-                            <div class="stat-card-advanced-icon">📈</div>
-                        </div>
-                        <div class="stat-card-advanced-value">${uptimeLabel}</div>
-                        <div>
-                            <div class="stat-card-advanced-progress">
-                                <div class="stat-card-advanced-progress-bar" style="width: ${Math.min((uptimeHoursTotal / 168) * 100, 100)}%; background: linear-gradient(90deg, #4caf50, #45a049);" ></div>
-                            </div>
-                            <div class="stat-card-advanced-percent">${(uptimeSeconds / 86400).toFixed(1)} days</div>
-                        </div>
-                        <div class="stat-card-advanced-meta">
-                            <span class="stat-card-advanced-detail">Since: ${uptimeSeconds > 0 ? new Date(Date.now() - (uptimeSeconds * 1000)).toLocaleString() : 'N/A'}</span>
-                            <span class="stat-card-advanced-badge healthy">✓ Stable</span>
-                        </div>
-                    </div>
-                `;
-            }
         }
 
         await loadSocketHealth();
         await loadBackupStatus();
     } catch (error) {
         console.error('Error loading system status:', error);
-        const systemStats = document.getElementById('systemStats');
-        if (systemStats) {
-            systemStats.innerHTML = '<div role="alert" style="padding: 2rem; text-align: center; color: var(--text-secondary);"><p>Unable to load system statistics</p></div>';
-        }
         updateSocketHealthFallback('Unable to load WebSocket health');
     }
 }
+
+function formatOwnerConfigTimestamp(value) {
+    if (!value) return '--';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '--' : date.toLocaleString();
+}
+
+function getOwnerConfigCheckClass(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'pass' || normalized === 'passed' || normalized === 'ok') return 'pass';
+    if (normalized === 'warning' || normalized === 'warn') return 'warn';
+    if (normalized === 'fail' || normalized === 'failed' || normalized === 'error') return 'fail';
+    return 'warn';
+}
+
+function getOwnerConfigPillClass(ready, failed, warnings) {
+    if (ready && failed === 0) return 'good';
+    if (failed > 0) return 'bad';
+    if (warnings > 0) return 'warn';
+    return 'warn';
+}
+
+function buildFallbackConstantCards(files, fileMatchers, label) {
+    const matches = (Array.isArray(files) ? files : []).filter((file) => {
+        const fileName = String(file?.fileName || file?.key || '').toLowerCase();
+        return fileMatchers.some((matcher) => fileName.includes(String(matcher).toLowerCase()));
+    });
+
+    if (!matches.length) {
+        return `
+            <details class="config-constant-row is-missing" open>
+                <summary>
+                    <div class="config-constant-main">
+                        <strong>${escapeOwnerHtml(label)}</strong>
+                        <span class="config-constant-value">Unavailable</span>
+                    </div>
+                    <div class="config-constant-actions">
+                        <span class="config-status-pill bad">MISSING</span>
+                    </div>
+                </summary>
+                <div class="config-constant-meta">
+                    <p>No fallback config file data is available yet for this constant group.</p>
+                </div>
+            </details>
+        `;
+    }
+
+    return matches.map((file) => {
+        const status = String(file.status || 'warn').toLowerCase();
+        const isMissing = status === 'fail' || file.exists === false;
+        const value = String(file.fileName || file.key || label);
+        return `
+            <details class="config-constant-row ${isMissing ? 'is-missing' : ''}">
+                <summary>
+                    <div class="config-constant-main">
+                        <strong>${escapeOwnerHtml(file.fileName || file.key || label)}</strong>
+                        <span class="config-constant-value">${escapeOwnerHtml(isMissing ? 'Needs attention' : 'Detected')}</span>
+                    </div>
+                    <div class="config-constant-actions">
+                        <span class="config-status-pill ${isMissing ? 'bad' : 'warn'}">${escapeOwnerHtml(String(file.status || 'warn').toUpperCase())}</span>
+                        <button class="config-constant-copy" onclick="copyOwnerConfigValue('${escapeOwnerJsString(value)}', event)">Copy name</button>
+                    </div>
+                </summary>
+                <div class="config-constant-meta">
+                    <p>${escapeOwnerHtml(file.message || 'Fallback config file status available.')}</p>
+                    <div class="config-constant-meta-line">
+                        <strong>Reference</strong>
+                        <span class="config-constant-code">${escapeOwnerHtml(value)}</span>
+                    </div>
+                </div>
+            </details>
+        `;
+    }).join('');
+}
+
+function buildOwnerConfigSnapshot(overview) {
+    const readiness = overview?.readiness || {};
+    const summary = readiness.summary || {};
+    const botSafety = overview?.highlights?.botSafety || {};
+    return {
+        timestamp: String(overview?.generatedAt || new Date().toISOString()),
+        score: Number(summary.score || 0),
+        warnings: Number(summary.warnings || 0),
+        failed: Number(summary.failed || 0),
+        passed: Number(summary.passed || 0),
+        ready: Boolean(summary.ready),
+        botSafetyEnabled: Boolean(botSafety.enabled),
+        recentAlertLimit: botSafety.recentAlertLimit,
+        inviteMutationThreshold: botSafety.inviteMutationThreshold,
+        moderationEscalationHighRiskThreshold: botSafety.moderationEscalationHighRiskThreshold
+    };
+}
+
+function pushOwnerConfigHistory(overview) {
+    const snapshot = buildOwnerConfigSnapshot(overview);
+    const last = ownerConfigHistory[ownerConfigHistory.length - 1];
+    const unchanged = last
+        && last.score === snapshot.score
+        && last.warnings === snapshot.warnings
+        && last.failed === snapshot.failed
+        && last.ready === snapshot.ready
+        && last.botSafetyEnabled === snapshot.botSafetyEnabled
+        && String(last.recentAlertLimit ?? '') === String(snapshot.recentAlertLimit ?? '')
+        && String(last.inviteMutationThreshold ?? '') === String(snapshot.inviteMutationThreshold ?? '')
+        && String(last.moderationEscalationHighRiskThreshold ?? '') === String(snapshot.moderationEscalationHighRiskThreshold ?? '');
+
+    if (!unchanged) {
+        ownerConfigHistory.push(snapshot);
+        if (ownerConfigHistory.length > 6) {
+            ownerConfigHistory = ownerConfigHistory.slice(-6);
+        }
+    }
+
+    return ownerConfigHistory[ownerConfigHistory.length - 2] || null;
+}
+
+function formatOwnerConfigDelta(currentValue, previousValue, positiveDirection = 'up') {
+    const current = Number(currentValue);
+    const previous = Number(previousValue);
+    if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+    const delta = current - previous;
+    if (delta === 0) return { text: 'No change', tone: 'neutral' };
+    const direction = delta > 0 ? 'up' : 'down';
+    const improved = positiveDirection === direction;
+    return {
+        text: `${delta > 0 ? '+' : ''}${delta}`,
+        tone: improved ? 'good' : 'bad'
+    };
+}
+
+function renderOwnerConfigTrends(overview, previousSnapshot) {
+    const readinessTrendEl = document.getElementById('ownerConfigReadinessTrend');
+    const botSafetyTrendEl = document.getElementById('ownerBotSafetyTrend');
+    const currentSnapshot = buildOwnerConfigSnapshot(overview);
+    const recentHistory = ownerConfigHistory.slice(-4);
+
+    if (readinessTrendEl) {
+        const scoreDelta = previousSnapshot ? formatOwnerConfigDelta(currentSnapshot.score, previousSnapshot.score, 'up') : null;
+        const warningDelta = previousSnapshot ? formatOwnerConfigDelta(currentSnapshot.warnings, previousSnapshot.warnings, 'down') : null;
+        const historyChips = recentHistory.map((entry) => `<span class="config-trend-chip">Score ${escapeOwnerHtml(String(entry.score))}</span>`).join('');
+        readinessTrendEl.innerHTML = [
+            scoreDelta ? `<span class="config-trend-chip ${scoreDelta.tone === 'neutral' ? '' : scoreDelta.tone}">Score ${escapeOwnerHtml(scoreDelta.text)}</span>` : '<span class="config-trend-empty">Baseline captured on first refresh.</span>',
+            warningDelta ? `<span class="config-trend-chip ${warningDelta.tone === 'neutral' ? '' : warningDelta.tone}">Warnings ${escapeOwnerHtml(warningDelta.text)}</span>` : '',
+            historyChips
+        ].filter(Boolean).join('');
+    }
+
+    if (botSafetyTrendEl) {
+        if (!previousSnapshot) {
+            botSafetyTrendEl.innerHTML = '<span class="config-trend-empty">Baseline captured on first refresh.</span>';
+        } else {
+            const chips = [];
+            if (currentSnapshot.botSafetyEnabled !== previousSnapshot.botSafetyEnabled) {
+                chips.push(`<span class="config-trend-chip ${currentSnapshot.botSafetyEnabled ? 'good' : 'warn'}">Alerts ${currentSnapshot.botSafetyEnabled ? 'enabled' : 'disabled'}</span>`);
+            }
+
+            const metricPairs = [
+                ['Recent limit', currentSnapshot.recentAlertLimit, previousSnapshot.recentAlertLimit],
+                ['Invite threshold', currentSnapshot.inviteMutationThreshold, previousSnapshot.inviteMutationThreshold],
+                ['High risk', currentSnapshot.moderationEscalationHighRiskThreshold, previousSnapshot.moderationEscalationHighRiskThreshold]
+            ];
+
+            metricPairs.forEach(([label, current, previous]) => {
+                if (String(current ?? '') === String(previous ?? '')) return;
+                const delta = formatOwnerConfigDelta(current, previous, 'down');
+                chips.push(`<span class="config-trend-chip ${delta?.tone === 'neutral' ? '' : (delta?.tone || 'warn')}">${escapeOwnerHtml(label)} ${escapeOwnerHtml(delta?.text || String(current ?? '-'))}</span>`);
+            });
+
+            botSafetyTrendEl.innerHTML = chips.length
+                ? chips.join('')
+                : '<span class="config-trend-empty">No bot safety threshold changes since the last refresh.</span>';
+        }
+    }
+}
+
+function getOwnerConfigCheckCounts(checks) {
+    return {
+        all: checks.length,
+        fail: checks.filter((check) => getOwnerConfigCheckClass(check?.status) === 'fail').length,
+        warn: checks.filter((check) => getOwnerConfigCheckClass(check?.status) === 'warn').length,
+        pass: checks.filter((check) => getOwnerConfigCheckClass(check?.status) === 'pass').length
+    };
+}
+
+function getOwnerConfigActiveFilter(counts) {
+    const normalizedFilter = ['action', 'fail', 'warn', 'pass', 'all'].includes(ownerConfigCheckFilter) ? ownerConfigCheckFilter : 'action';
+    const actionCount = Number(counts.fail || 0) + Number(counts.warn || 0);
+
+    if (normalizedFilter === 'action' && actionCount === 0 && Number(counts.pass || 0) > 0) {
+        ownerConfigCheckFilter = 'pass';
+        return 'pass';
+    }
+
+    ownerConfigCheckFilter = normalizedFilter;
+    return normalizedFilter;
+}
+
+function getOwnerConfigCheckSeverityRank(check) {
+    const statusClass = getOwnerConfigCheckClass(check?.status);
+    if (statusClass === 'fail') return 0;
+    if (statusClass === 'warn') return 1;
+    return 2;
+}
+
+function filterOwnerConfigChecks(checks) {
+    const counts = getOwnerConfigCheckCounts(checks);
+    const activeFilter = getOwnerConfigActiveFilter(counts);
+
+    if (activeFilter === 'all') return checks.slice();
+    if (activeFilter === 'action') {
+        return checks.filter((check) => ['fail', 'warn'].includes(getOwnerConfigCheckClass(check?.status)));
+    }
+
+    return checks.filter((check) => getOwnerConfigCheckClass(check?.status) === activeFilter);
+}
+
+function buildOwnerConfigCheckTabs(checks, filteredChecks) {
+    const counts = getOwnerConfigCheckCounts(checks);
+    const activeFilter = getOwnerConfigActiveFilter(counts);
+    const actionCount = Number(counts.fail || 0) + Number(counts.warn || 0);
+    const buttons = [
+        ['action', 'Action Needed', actionCount, 'Failures and warnings only'],
+        ['fail', 'Failures', counts.fail, 'Broken or missing config'],
+        ['warn', 'Warnings', counts.warn, 'Config drift or soft issues'],
+        ['pass', 'Passed', counts.pass, 'Healthy checks'],
+        ['all', 'All Checks', counts.all, 'Full readiness list']
+    ].map(([value, label, count, description]) => `
+        <button class="config-check-tab ${activeFilter === value ? 'active' : ''}" data-owner-config-filter="${escapeOwnerHtml(value)}" type="button">
+            <span class="config-check-tab-label">${escapeOwnerHtml(label)}</span>
+            <span class="config-check-tab-count">${escapeOwnerHtml(String(count))}</span>
+            <span class="config-check-tab-copy">${escapeOwnerHtml(description)}</span>
+        </button>
+    `).join('');
+
+    const activeLabel = {
+        action: 'Action Needed',
+        fail: 'Failures',
+        warn: 'Warnings',
+        pass: 'Passed',
+        all: 'All Checks'
+    }[activeFilter] || 'Readiness';
+
+    return `
+        <div class="config-check-shell">
+            <div class="config-check-toolbar">
+                <div class="config-check-toolbar-copy">${escapeOwnerHtml(activeLabel)} tab showing ${escapeOwnerHtml(String(filteredChecks.length))} of ${escapeOwnerHtml(String(checks.length))} readiness checks.</div>
+                <div class="config-check-filter-group">${buttons}</div>
+            </div>
+        </div>
+    `;
+}
+
+function buildOwnerConfigConstantRows(entries, emptyLabel, kindLabel) {
+    if (!Array.isArray(entries) || !entries.length) {
+        return `
+            <details class="config-constant-row is-missing" open>
+                <summary>
+                    <div class="config-constant-main">
+                        <strong>${escapeOwnerHtml(emptyLabel)}</strong>
+                        <span class="config-constant-value">Unavailable</span>
+                    </div>
+                    <div class="config-constant-actions">
+                        <span class="config-status-pill bad">MISSING</span>
+                    </div>
+                </summary>
+                <div class="config-constant-meta">
+                    <p>No constants were returned for this group.</p>
+                </div>
+            </details>
+        `;
+    }
+
+    return entries.map((entry) => {
+        const configured = Boolean(entry?.configured);
+        const isCollection = Boolean(entry?.isCollection);
+        const key = String(entry?.key || 'unknown');
+        const rawValue = entry?.value;
+        const displayValue = isCollection
+            ? `${Number(rawValue || 0)} configured`
+            : (configured ? String(rawValue || '-') : 'Missing');
+        const copyValue = isCollection
+            ? JSON.stringify(rawValue ?? [])
+            : String(rawValue ?? '');
+        const pillTone = !configured ? 'bad' : (isCollection ? 'warn' : 'good');
+        const pillText = !configured ? 'MISSING' : (isCollection ? 'COLLECTION' : 'CONFIGURED');
+        const description = isCollection
+            ? `${kindLabel} constant backed by a collection or count.`
+            : (configured ? `Configured ${kindLabel.toLowerCase()} reference.` : `Unset ${kindLabel.toLowerCase()} reference.`);
+        return `
+            <details class="config-constant-row ${configured ? '' : 'is-missing'}">
+                <summary>
+                    <div class="config-constant-main">
+                        <strong>${escapeOwnerHtml(key)}</strong>
+                        <span class="config-constant-value">${escapeOwnerHtml(displayValue)}</span>
+                    </div>
+                    <div class="config-constant-actions">
+                        <span class="config-status-pill ${pillTone}">${pillText}</span>
+                        ${configured || isCollection ? `<button class="config-constant-copy" onclick="copyOwnerConfigValue('${escapeOwnerJsString(copyValue)}', event)">Copy</button>` : ''}
+                    </div>
+                </summary>
+                <div class="config-constant-meta">
+                    <p>${escapeOwnerHtml(description)}</p>
+                    <div class="config-constant-meta-line">
+                        <strong>Key</strong>
+                        <span class="config-constant-code">${escapeOwnerHtml(key)}</span>
+                    </div>
+                    <div class="config-constant-meta-line">
+                        <strong>Value</strong>
+                        <span class="config-constant-code">${escapeOwnerHtml(isCollection ? displayValue : String(rawValue ?? 'Missing'))}</span>
+                    </div>
+                </div>
+            </details>
+        `;
+    }).join('');
+}
+
+async function copyOwnerConfigValue(value, event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const normalized = String(value ?? '');
+    if (!normalized) {
+        profileShowError('Nothing to copy');
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(normalized);
+        profileShowSuccess('Copied config value');
+    } catch (error) {
+        console.error('Failed to copy config value:', error);
+        profileShowError('Failed to copy config value');
+    }
+}
+
+function setOwnerConfigCheckFilter(filter) {
+    ownerConfigCheckFilter = ['action', 'all', 'fail', 'warn', 'pass'].includes(String(filter || '')) ? String(filter) : 'action';
+    if (ownerConfigOverview) {
+        renderOwnerConfigOverview(ownerConfigOverview);
+    }
+}
+
+function renderOwnerConfigOverview(overview) {
+    const readiness = overview?.readiness || {};
+    const summary = readiness.summary || {};
+    const checks = (Array.isArray(readiness.checks) ? readiness.checks : []).slice().sort((left, right) => getOwnerConfigCheckSeverityRank(left) - getOwnerConfigCheckSeverityRank(right));
+    const highlights = overview?.highlights || {};
+    const files = Array.isArray(overview?.files) ? overview.files : [];
+    const botSafety = highlights.botSafety || {};
+
+    const scoreEl = document.getElementById('ownerConfigReadinessScore');
+    const labelEl = document.getElementById('ownerConfigReadinessLabel');
+    const passedEl = document.getElementById('ownerConfigPassedCount');
+    const totalChecksEl = document.getElementById('ownerConfigTotalChecks');
+    const warningEl = document.getElementById('ownerConfigWarningCount');
+    const failureEl = document.getElementById('ownerConfigFailureCount');
+    const generatedEl = document.getElementById('ownerConfigGeneratedAt');
+    const mainSummaryEl = document.getElementById('ownerConfigMainSummary');
+    const checksEl = document.getElementById('ownerConfigChecks');
+    const channelsEl = document.getElementById('ownerConfigChannels');
+    const rolesEl = document.getElementById('ownerConfigRoles');
+    const thresholdsEl = document.getElementById('ownerBotSafetyThresholds');
+    const botSafetyMetaEl = document.getElementById('ownerBotSafetyMeta');
+    const filesEl = document.getElementById('ownerConfigFiles');
+
+    renderOwnerConfigTrends(overview, ownerConfigHistory[ownerConfigHistory.length - 2] || null);
+
+    if (scoreEl) scoreEl.textContent = String(summary.score ?? '--');
+    if (labelEl) {
+        const pillClass = getOwnerConfigPillClass(Boolean(summary.ready), Number(summary.failed || 0), Number(summary.warnings || 0));
+        labelEl.innerHTML = `<span class="config-status-pill ${pillClass}">${summary.ready ? 'Ready' : 'Needs attention'}</span>`;
+    }
+    if (passedEl) passedEl.textContent = String(summary.passed ?? 0);
+    if (totalChecksEl) totalChecksEl.textContent = `Total checks: ${summary.total ?? 0}`;
+    if (warningEl) warningEl.textContent = String(summary.warnings ?? 0);
+    if (failureEl) failureEl.textContent = `Failures: ${summary.failed ?? 0}`;
+    if (generatedEl) generatedEl.textContent = formatOwnerConfigTimestamp(overview?.generatedAt);
+    if (mainSummaryEl) {
+        mainSummaryEl.textContent = `${String(highlights?.main?.botName || 'Sentinel')} • ${String(highlights?.main?.serverName || 'Unknown server')}`;
+    }
+
+    if (checksEl) {
+        if (!checks.length) {
+            checksEl.innerHTML = '<div class="text-muted">No readiness checks returned.</div>';
+        } else {
+            const filteredChecks = filterOwnerConfigChecks(checks);
+            const toolbar = buildOwnerConfigCheckTabs(checks, filteredChecks);
+            const body = filteredChecks.length ? filteredChecks.map((check) => {
+                const statusClass = getOwnerConfigCheckClass(check.status);
+                const label = escapeOwnerHtml(check.label || check.name || 'Unnamed check');
+                const message = escapeOwnerHtml(check.message || 'No details provided.');
+                const statusText = escapeOwnerHtml(String(check.status || 'warning').toUpperCase());
+                return `
+                    <div class="config-check-item ${statusClass}">
+                        <div class="config-check-item-header">
+                            <div class="config-check-item-title">
+                                <span class="config-check-item-indicator"></span>
+                                <strong style="margin:0; color:#fff; font-size:0.92rem; letter-spacing:0.01em; text-transform:none;">${label}</strong>
+                            </div>
+                            <span class="config-status-pill ${statusClass === 'pass' ? 'good' : statusClass === 'fail' ? 'bad' : 'warn'}">${statusText}</span>
+                        </div>
+                        <div class="config-check-item-body">${message}</div>
+                    </div>
+                `;
+            }).join('') : '<div class="config-check-empty">No checks match the current filter.</div>';
+            checksEl.innerHTML = `${toolbar}<div class="config-check-results">${body}</div>`;
+        }
+    }
+
+    if (channelsEl) {
+        const channels = Array.isArray(highlights.channels) ? highlights.channels : [];
+        channelsEl.innerHTML = channels.length
+            ? buildOwnerConfigConstantRows(channels, 'Channel constants', 'Channel')
+            : buildFallbackConstantCards(files, ['channel.json', 'channels'], 'Channel constants');
+    }
+
+    if (rolesEl) {
+        const roles = Array.isArray(highlights.roles) ? highlights.roles : [];
+        rolesEl.innerHTML = roles.length
+            ? buildOwnerConfigConstantRows(roles, 'Role constants', 'Role')
+            : buildFallbackConstantCards(files, ['roles.json', 'role'], 'Role constants');
+    }
+
+    if (thresholdsEl) {
+        const entries = Object.entries(OWNER_BOT_SAFETY_LABELS).map(([key, label]) => ({
+            key,
+            label,
+            value: botSafety[key]
+        }));
+        thresholdsEl.innerHTML = entries.map((entry) => {
+            const value = entry.key === 'enabled'
+                ? (entry.value ? 'Enabled' : 'Disabled')
+                : String(entry.value ?? '-');
+            const helperText = entry.key === 'enabled'
+                ? 'Global bot safety alert switch.'
+                : 'Owner-editable runtime threshold.';
+            return `
+                <div class="config-threshold-card ${entry.key === 'enabled' && !entry.value ? 'is-missing' : ''}">
+                    <div class="config-threshold-head">
+                        <div class="config-threshold-title">
+                            <strong>${escapeOwnerHtml(entry.label)}</strong>
+                            <span class="config-threshold-key">${escapeOwnerHtml(entry.key)}</span>
+                        </div>
+                        <span class="config-status-pill ${entry.key === 'enabled' ? (entry.value ? 'good' : 'warn') : 'warn'}">${entry.key === 'enabled' ? (entry.value ? 'LIVE' : 'OFF') : 'LIMIT'}</span>
+                    </div>
+                    <div class="config-threshold-value">
+                        <span class="config-threshold-value-label">Current Value</span>
+                        <span class="config-threshold-value-text">${escapeOwnerHtml(value)}</span>
+                    </div>
+                    <div class="config-threshold-note">${escapeOwnerHtml(helperText)}</div>
+                    <button class="btn btn-secondary" onclick="editOwnerBotSafetySetting('${escapeOwnerJsString(entry.key)}', '${escapeOwnerJsString(String(entry.value ?? ''))}')">${entry.key === 'enabled' ? 'Toggle' : 'Edit'}</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    if (botSafetyMetaEl) {
+        botSafetyMetaEl.innerHTML = `<span class="config-status-pill ${botSafety.enabled ? 'good' : 'warn'}">${botSafety.enabled ? 'Bot safety enabled' : 'Bot safety disabled'}</span>`;
+    }
+
+    if (filesEl) {
+        filesEl.innerHTML = files.map((file) => `
+            <div class="config-file-card ${file.exists === false ? 'is-missing' : ''}">
+                <div class="config-file-card-top">
+                    <div class="config-file-title-wrap">
+                        <strong>${escapeOwnerHtml(file.fileName || file.key || 'unknown')}</strong>
+                        <span class="config-file-subcopy">${escapeOwnerHtml(file.key || 'config source')}</span>
+                    </div>
+                    <span class="config-status-pill ${String(file.status || '').toLowerCase() === 'fail' ? 'bad' : String(file.status || '').toLowerCase() === 'pass' ? 'good' : 'warn'}">${escapeOwnerHtml(String(file.status || 'info').toUpperCase())}</span>
+                </div>
+                <div class="config-file-metrics">
+                    <div class="config-file-metric">
+                        <span class="config-file-metric-label">Entries</span>
+                        <span class="config-file-metric-value">${escapeOwnerHtml(typeof file.configuredEntryCount === 'number' ? `${Number(file.configuredEntryCount || 0)}` : (file.exists ? 'Detected' : 'Missing'))}</span>
+                    </div>
+                    <div class="config-file-metric">
+                        <span class="config-file-metric-label">Keys</span>
+                        <span class="config-file-metric-value">${escapeOwnerHtml(typeof file.topLevelKeyCount === 'number' ? `${Number(file.topLevelKeyCount || 0)}` : '--')}</span>
+                    </div>
+                </div>
+                <div class="config-file-body">${escapeOwnerHtml(typeof file.topLevelKeyCount === 'number'
+            ? `Updated ${formatOwnerConfigTimestamp(file.updatedAt)}`
+            : (file.message || 'No file metadata available.'))}</div>
+                <div class="config-file-tags">
+                    ${(Array.isArray(file.sampleKeys) && file.sampleKeys.length > 0)
+                ? file.sampleKeys.map((tag) => `<span class="config-file-tag">${escapeOwnerHtml(tag)}</span>`).join('')
+                : `<span class="config-file-tag">${escapeOwnerHtml(String(file.status || 'info').toUpperCase())}</span>`}
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+async function buildLegacyOwnerConfigOverview() {
+    const [readinessResult, botSafetyResult, mainResult] = await Promise.allSettled([
+        window.AdminPanel.api.getJson('/api/getting-started/config-readiness'),
+        window.AdminPanel.api.getJson('/api/owner/bot-safety-config'),
+        window.AdminPanel.api.getJson('/Config/main.json')
+    ]);
+
+    const readiness = readinessResult.status === 'fulfilled' && readinessResult.value?.response?.ok
+        ? (readinessResult.value.data || {})
+        : { summary: { total: 0, passed: 0, warnings: 0, failed: 0, score: 0, ready: false }, checks: [] };
+
+    const botSafety = botSafetyResult.status === 'fulfilled' && botSafetyResult.value?.response?.ok
+        ? (botSafetyResult.value.data?.config || {})
+        : {};
+
+    const mainConfig = mainResult.status === 'fulfilled' && mainResult.value?.response?.ok
+        ? (mainResult.value.data || {})
+        : {};
+
+    const readinessChecks = Array.isArray(readiness.checks) ? readiness.checks : [];
+    const files = readinessChecks
+        .filter((check) => String(check?.key || '').startsWith('file:'))
+        .map((check) => ({
+            key: String(check.key || '').replace(/^file:/, ''),
+            fileName: String(check.label || check.key || 'unknown'),
+            exists: String(check.status || '').toLowerCase() !== 'fail' || !String(check.message || '').toLowerCase().includes('missing'),
+            topLevelKeyCount: null,
+            configuredEntryCount: null,
+            sampleKeys: [],
+            updatedAt: null,
+            status: String(check.status || 'warn').toLowerCase(),
+            message: String(check.message || 'No details available.')
+        }));
+
+    return {
+        generatedAt: new Date().toISOString(),
+        readiness,
+        highlights: {
+            main: {
+                botName: String(mainConfig.botName || 'Sentinel').trim() || 'Sentinel',
+                serverName: String(mainConfig.serverName || 'Sentinel').trim() || 'Sentinel'
+            },
+            channels: [],
+            roles: [],
+            botSafety
+        },
+        files
+    };
+}
+
+async function loadOwnerConfigSection(force = false) {
+    const checksEl = document.getElementById('ownerConfigChecks');
+    if (checksEl && (!ownerConfigOverview || force)) {
+        checksEl.innerHTML = '<div class="loading show">Loading config readiness...</div>';
+    }
+
+    try {
+        const nextOverview = await buildLegacyOwnerConfigOverview();
+        ownerConfigOverview = nextOverview;
+        pushOwnerConfigHistory(nextOverview);
+        renderOwnerConfigOverview(ownerConfigOverview);
+    } catch (error) {
+        console.error('Failed to load owner config section:', error);
+        if (checksEl) {
+            checksEl.innerHTML = `<div class="message error">${escapeOwnerHtml(error.message || 'Failed to load config overview')}</div>`;
+        }
+    }
+}
+
+async function editOwnerBotSafetySetting(key, currentValue) {
+    if (key === 'enabled') {
+        await toggleOwnerBotSafetyEnabled(String(currentValue).toLowerCase() !== 'true');
+        return;
+    }
+
+    if (typeof window.showPromptModal !== 'function') {
+        profileShowError('Unavailable', 'Prompt modal unavailable. Please refresh and try again.');
+        return;
+    }
+
+    const result = await window.showPromptModal({
+        title: `Edit ${OWNER_BOT_SAFETY_LABELS[key] || key}`,
+        label: `Enter a new numeric value for ${OWNER_BOT_SAFETY_LABELS[key] || key}:`,
+        defaultValue: String(currentValue ?? ''),
+        inputType: 'number',
+        confirmText: 'Save',
+        cancelText: 'Cancel',
+        validate: (value) => Number.isFinite(Number(value)) ? true : 'Value must be numeric.'
+    });
+
+    if (result === null) return;
+
+    try {
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/bot-safety-config', {
+            [key]: Number(result)
+        });
+        if (!response.ok) {
+            throw new Error(data?.error || 'Failed to update bot safety config');
+        }
+        profileShowSuccess('Updated', `${OWNER_BOT_SAFETY_LABELS[key] || key} updated.`);
+        await loadOwnerConfigSection(true);
+    } catch (error) {
+        console.error('Failed to update owner bot safety config:', error);
+        profileShowError('Failed', error?.message || 'Failed to update bot safety config');
+    }
+}
+
+async function toggleOwnerBotSafetyEnabled(nextEnabled) {
+    try {
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/bot-safety-config', {
+            enabled: Boolean(nextEnabled)
+        });
+        if (!response.ok) {
+            throw new Error(data?.error || 'Failed to update bot safety config');
+        }
+        profileShowSuccess('Updated', `Bot safety ${nextEnabled ? 'enabled' : 'disabled'}.`);
+        await loadOwnerConfigSection(true);
+    } catch (error) {
+        console.error('Failed to toggle owner bot safety config:', error);
+        profileShowError('Failed', error?.message || 'Failed to update bot safety config');
+    }
+}
+
+window.loadOwnerConfigSection = loadOwnerConfigSection;
+window.editOwnerBotSafetySetting = editOwnerBotSafetySetting;
+window.copyOwnerConfigValue = copyOwnerConfigValue;
 
 async function loadSocketHealth() {
     const setText = (id, value) => {

@@ -19,6 +19,7 @@ const ServerBackupManager = require('./Functions/ServerBackupManager');
 const AdminPanelHelper = require('./Functions/AdminPanelHelper');
 const TotpHelper = require('./Functions/TotpHelper');
 const EmailHelper = require('./Functions/EmailHelper');
+const BotSafetyCenter = require('./Functions/BotSafetyCenter');
 const QRCode = require('qrcode');
 const {
     buildDiscordLinkSecurityState: buildDiscordLinkSecurityStateHelper,
@@ -459,6 +460,7 @@ app.use((req, res, next) => {
 let discordClient = null;
 function setDiscordClient(client) {
     discordClient = client;
+    adminPanelRuntime.discordClientAttachedAt = Date.now();
 }
 
 function toBase64Url(buffer) {
@@ -922,6 +924,17 @@ const socketMetrics = {
         user: 0
     }
 };
+let ioReady = false;
+const adminPanelRuntime = {
+    startedAt: Date.now(),
+    discordClientAttachedAt: null,
+    serverListeningAt: null,
+    lastSocketActivityAt: null,
+    lastSocketErrorAt: null,
+    lastSocketError: null,
+    lastServerErrorAt: null,
+    lastServerError: null
+};
 
 // Optional: stream recent server logs to connected admin UI clients.
 // We keep a small rolling buffer so new clients can see recent activity.
@@ -1149,7 +1162,7 @@ async function sendBotWebhook(event, data = {}, req = null) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                    'User-Agent': 'adminpanel-webhook',
+                'User-Agent': 'adminpanel-webhook',
                 'X-Webhook-Timestamp': timestamp,
                 'X-Webhook-Signature': signature
             },
@@ -1892,7 +1905,7 @@ async function refreshSessionRoleIfNeeded(req, options = {}) {
             req.session.roleVerifiedAt = now;
             return;
         }
-        
+
         if (state?.panelRole && state.panelRole !== effectiveRole) {
             effectiveRole = state.panelRole;
         }
@@ -3659,6 +3672,86 @@ function buildConfigReadinessReport() {
             ready: failed === 0
         },
         checks
+    };
+}
+
+function countConfiguredEntries(value) {
+    if (Array.isArray(value)) {
+        return value.filter((entry) => String(entry || '').trim().length > 0).length;
+    }
+    if (value && typeof value === 'object') {
+        return Object.values(value).reduce((count, entry) => count + countConfiguredEntries(entry), 0);
+    }
+    return String(value || '').trim().length > 0 ? 1 : 0;
+}
+
+function buildOwnerConfigOverview() {
+    const constantsDir = path.join(__dirname, 'Config', 'constants');
+    const fileDefinitions = [
+        ['channel', 'channel.json'],
+        ['role', 'roles.json'],
+        ['misc', 'misc.json'],
+        ['automod', 'automod.json'],
+        ['autoResponder', 'autoResponder.json'],
+        ['leveling', 'leveling.json'],
+        ['economy', 'economy.json'],
+        ['rules', 'rules.JSON'],
+        ['serverBackups', 'serverBackups.json'],
+        ['blockedWords', 'blockedWords.json'],
+        ['api', 'api.json'],
+        ['credits', 'credits.json']
+    ];
+
+    const files = fileDefinitions.map(([key, fileName]) => {
+        const filePath = path.join(constantsDir, fileName);
+        try {
+            const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const stats = fs.statSync(filePath);
+            const topLevelKeys = raw && typeof raw === 'object' ? Object.keys(raw) : [];
+            return {
+                key,
+                fileName,
+                exists: true,
+                topLevelKeyCount: topLevelKeys.length,
+                configuredEntryCount: countConfiguredEntries(raw),
+                sampleKeys: topLevelKeys.slice(0, 8),
+                updatedAt: stats.mtime.toISOString()
+            };
+        } catch {
+            return {
+                key,
+                fileName,
+                exists: false,
+                topLevelKeyCount: 0,
+                configuredEntryCount: 0,
+                sampleKeys: [],
+                updatedAt: null
+            };
+        }
+    });
+
+    return {
+        generatedAt: new Date().toISOString(),
+        readiness: buildConfigReadinessReport(),
+        highlights: {
+            main: {
+                botName: PANEL_BOT_NAME,
+                serverName: PANEL_SERVER_NAME
+            },
+            channels: Object.entries(CHANNELS || {}).slice(0, 12).map(([key, value]) => ({
+                key,
+                value: String(value || '').trim(),
+                configured: String(value || '').trim().length > 0
+            })),
+            roles: Object.entries(ROLES_CONFIG || {}).slice(0, 12).map(([key, value]) => ({
+                key,
+                value: Array.isArray(value) ? value.filter(Boolean).length : String(value || '').trim(),
+                configured: Array.isArray(value) ? value.filter(Boolean).length > 0 : String(value || '').trim().length > 0,
+                isCollection: Array.isArray(value)
+            })),
+            botSafety: BotSafetyCenter.getConfig()
+        },
+        files
     };
 }
 
@@ -13434,6 +13527,95 @@ async function resolveDatabaseHealthSnapshot() {
     }
 }
 
+async function buildAdminPanelRuntimeDiagnostics() {
+    const dbHealth = await resolveDatabaseHealthSnapshot();
+    const now = Math.floor(Date.now() / 1000);
+    let activeSessionCount = null;
+
+    try {
+        const [rows] = await MySQLDatabaseManager.connection.pool.query(
+            'SELECT COUNT(*) as count FROM sessions WHERE expires > ?',
+            [now]
+        );
+        activeSessionCount = Number(rows?.[0]?.count || 0);
+    } catch (error) {
+        activeSessionCount = null;
+    }
+
+    const discordState = {
+        attached: Boolean(discordClient),
+        ready: Boolean(discordClient?.isReady?.()),
+        tag: discordClient?.user?.tag || null,
+        userId: discordClient?.user?.id || null,
+        guildCount: discordClient?.guilds?.cache?.size || 0,
+        pingMs: typeof discordClient?.ws?.ping === 'number' ? discordClient.ws.ping : null
+    };
+
+    return {
+        panel: {
+            botName: PANEL_BOT_NAME,
+            serverName: PANEL_SERVER_NAME,
+            nodeEnv: process.env.NODE_ENV || 'development',
+            port: Number(PORT),
+            ioReady,
+            sessionStoreReady: Boolean(sessionStore),
+            startedAt: adminPanelRuntime.startedAt,
+            uptimeMs: process.uptime() * 1000,
+            runtime: { ...adminPanelRuntime }
+        },
+        discord: discordState,
+        sockets: {
+            ...socketMetrics,
+            rooms: io?.of('/')?.adapter?.rooms?.size || 0,
+            terminalBufferSize: terminalLogBuffer.length
+        },
+        backups: {
+            database: {
+                ...backupState,
+                timerActive: Boolean(backupTimer),
+                configEnabled: Boolean(backupConfig?.enabled)
+            },
+            server: {
+                ...serverBackupState,
+                timerActive: Boolean(serverBackupTimer),
+                configEnabled: Boolean(serverBackupConfig?.enabled),
+                activeRestoreOperations: Array.from(serverBackupRestoreOperations.values())
+                    .filter((operation) => ['queued', 'running'].includes(String(operation?.status || '').toLowerCase())).length
+            }
+        },
+        sessions: {
+            active: activeSessionCount
+        },
+        database: dbHealth,
+        botStats: getStats(),
+        memory: process.memoryUsage()
+    };
+}
+
+app.get('/healthz', (_req, res) => {
+    res.status(200).json({
+        ok: true,
+        ioReady,
+        sessionStoreReady: Boolean(sessionStore),
+        discordAttached: Boolean(discordClient),
+        uptimeMs: process.uptime() * 1000
+    });
+});
+
+app.get('/readyz', async (_req, res) => {
+    const dbHealth = await resolveDatabaseHealthSnapshot();
+    const ready = Boolean(ioReady && sessionStore && dbHealth?.ok);
+
+    res.status(ready ? 200 : 503).json({
+        ready,
+        ioReady,
+        sessionStoreReady: Boolean(sessionStore),
+        discordAttached: Boolean(discordClient),
+        databaseHealthy: Boolean(dbHealth?.ok),
+        databaseError: dbHealth?.error || null
+    });
+});
+
 // Audit logs
 app.get('/api/audit-logs', requireAuth, requireOwner, async (req, res) => {
     try {
@@ -13486,6 +13668,16 @@ app.get('/api/system/health', requireAuth, requireOwner, async (req, res) => {
     } catch (error) {
         console.error('Error getting system health:', error);
         res.status(500).json({ error: 'Failed to get system health' });
+    }
+});
+
+app.get('/api/owner/runtime-diagnostics', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const snapshot = await buildAdminPanelRuntimeDiagnostics();
+        res.json(snapshot);
+    } catch (error) {
+        console.error('Error building admin panel runtime diagnostics:', error);
+        res.status(500).json({ error: 'Failed to build runtime diagnostics' });
     }
 });
 
@@ -15243,7 +15435,7 @@ app.post('/api/appeals/check-status', createRateLimiter(10, 60000), async (req, 
 
         // Query appeal by case ID and user ID for security
         const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
-                `SELECT id, user_tag, ban_case_id, status, created_at, updated_at, decided_at, withdrawn_at,
+            `SELECT id, user_tag, ban_case_id, status, created_at, updated_at, decided_at, withdrawn_at,
                     owner_response, review_stage, public_status_note, evidence_json, reason, user_email, withdraw_reason
              FROM ban_appeals 
              WHERE ban_case_id = ? AND user_id = ?
@@ -15276,7 +15468,7 @@ app.post('/api/appeals/my-history', createRateLimiter(10, 60000), async (req, re
 
         // Query all appeals for this user
         const [appeals] = await MySQLDatabaseManager.connection.pool.execute(
-                `SELECT id, user_tag, ban_case_id, status, created_at, updated_at, decided_at, withdrawn_at,
+            `SELECT id, user_tag, ban_case_id, status, created_at, updated_at, decided_at, withdrawn_at,
                     owner_response, review_stage, public_status_note, evidence_json, reason, user_email, withdraw_reason
              FROM ban_appeals 
              WHERE user_id = ?
@@ -15805,6 +15997,106 @@ app.get('/api/owner/alert-settings-analytics', requireAuth, requireOwner, async 
     } catch (error) {
         console.error('Error fetching alert settings analytics:', error);
         res.status(500).json({ error: 'Failed to fetch alert settings analytics' });
+    }
+});
+
+app.get('/api/owner/bot-safety-alerts', requireAuth, requireOwner, async (req, res) => {
+    try {
+        const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 25));
+        const snapshot = await BotSafetyCenter.getDashboardSnapshot(limit);
+        res.json({
+            success: true,
+            ...snapshot
+        });
+    } catch (error) {
+        console.error('Error fetching bot safety alerts:', error);
+        res.status(500).json({ error: 'Failed to fetch bot safety alerts' });
+    }
+});
+
+app.get('/api/owner/config-overview', requireAuth, requireOwner, async (_req, res) => {
+    try {
+        return res.json({
+            success: true,
+            ...buildOwnerConfigOverview()
+        });
+    } catch (error) {
+        console.error('Error fetching owner config overview:', error);
+        return res.status(500).json({ error: 'Failed to fetch config overview' });
+    }
+});
+
+app.get('/api/owner/bot-safety-config', requireAuth, requireOwner, async (_req, res) => {
+    try {
+        return res.json({
+            success: true,
+            config: BotSafetyCenter.getConfig()
+        });
+    } catch (error) {
+        console.error('Error fetching bot safety config:', error);
+        return res.status(500).json({ error: 'Failed to fetch bot safety config' });
+    }
+});
+
+app.post('/api/owner/bot-safety-config', requireAuth, requireOwner, requireSensitiveDiscordSecurityBinding, async (req, res) => {
+    try {
+        const incoming = req.body || {};
+        const allowedNumericKeys = new Set([
+            'recentAlertLimit',
+            'emojiBurstThreshold',
+            'stickerBurstThreshold',
+            'assetAuditWindowMs',
+            'assetAuditCooldownMs',
+            'inviteWindowMs',
+            'inviteMutationThreshold',
+            'inviteJoinSpikeThreshold',
+            'inviterJoinSpikeThreshold',
+            'inviteAlertCooldownMs',
+            'nicknameAlertCooldownMs',
+            'attachmentCountThreshold',
+            'attachmentTotalSizeMbThreshold',
+            'moderationEscalationCooldownMs',
+            'moderationEscalationLastHourThreshold',
+            'moderationEscalationLastDayThreshold',
+            'moderationEscalationTimeoutThreshold',
+            'moderationEscalationHighRiskThreshold'
+        ]);
+
+        const next = {};
+        for (const [key, value] of Object.entries(incoming)) {
+            if (key === 'enabled') {
+                if (typeof value !== 'boolean') {
+                    return res.status(400).json({ error: 'enabled must be a boolean' });
+                }
+                next.enabled = value;
+                continue;
+            }
+
+            if (!allowedNumericKeys.has(key)) {
+                return res.status(400).json({ error: `Unknown config key: ${key}` });
+            }
+
+            if (!Number.isFinite(Number(value))) {
+                return res.status(400).json({ error: `${key} must be numeric` });
+            }
+
+            next[key] = Number(value);
+        }
+
+        const saved = BotSafetyCenter.saveConfig(next);
+
+        await logAdminAuthEvent(req.session.username, 'SESSIONS_REVOKED', req, {
+            mode: 'bot-safety-config-updated',
+            changes: next
+        }).catch(() => { });
+
+        return res.json({
+            success: true,
+            config: saved
+        });
+    } catch (error) {
+        console.error('Error updating bot safety config:', error);
+        return res.status(500).json({ error: 'Failed to update bot safety config' });
     }
 });
 
@@ -16712,6 +17004,7 @@ io.on('connection', (socket) => {
     socketMetrics.active += 1;
     socketMetrics.connects += 1;
     socketMetrics.lastConnectAt = Date.now();
+    adminPanelRuntime.lastSocketActivityAt = Date.now();
     if (socketMetrics.perRole[normalizedRole] !== undefined) {
         socketMetrics.perRole[normalizedRole] += 1;
     }
@@ -16783,6 +17076,7 @@ io.on('connection', (socket) => {
         socketMetrics.active = Math.max(0, socketMetrics.active - 1);
         socketMetrics.disconnects += 1;
         socketMetrics.lastDisconnectAt = Date.now();
+        adminPanelRuntime.lastSocketActivityAt = Date.now();
         const normalized = String(role || 'user').toLowerCase();
         if (socketMetrics.perRole[normalized] !== undefined) {
             socketMetrics.perRole[normalized] = Math.max(0, socketMetrics.perRole[normalized] - 1);
@@ -16793,6 +17087,9 @@ io.on('connection', (socket) => {
         console.error('WebSocket error:', error);
         socketMetrics.errors += 1;
         socketMetrics.lastError = error?.message || String(error || 'unknown');
+        adminPanelRuntime.lastSocketActivityAt = Date.now();
+        adminPanelRuntime.lastSocketErrorAt = Date.now();
+        adminPanelRuntime.lastSocketError = error?.message || String(error || 'unknown');
         if (statsInterval) clearInterval(statsInterval);
     });
 
@@ -17460,6 +17757,8 @@ app.get('/api/owner/system-stats', requireAuth, requireOwner, async (req, res) =
 
 // Start server
 server.on('error', (error) => {
+    adminPanelRuntime.lastServerErrorAt = Date.now();
+    adminPanelRuntime.lastServerError = error?.message || String(error || 'unknown');
     if (error?.code === 'EADDRINUSE') {
         console.warn(`⚠️ Admin Panel Server could not bind to port ${PORT} because it is already in use.`);
         console.warn('⚠️ Skipping embedded admin panel startup for this process.');
@@ -17469,8 +17768,13 @@ server.on('error', (error) => {
     console.error('Admin Panel server failed to start:', error);
 });
 
+server.on('close', () => {
+    ioReady = false;
+});
+
 server.listen(PORT, () => {
     ioReady = true;
+    adminPanelRuntime.serverListeningAt = Date.now();
     console.log(`\nAdmin Panel Server Running on port ${PORT}`);
     console.log(`📡  WebSocket enabled for live updates`);
     if (!SESSION_SECRET) {

@@ -6,6 +6,113 @@ function analyticsShowNotification(message, type = 'info') {
     console.log(`[${type}] ${message}`);
 }
 
+function escapeAnalyticsValue(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function getAlertSeverityTone(severity) {
+    const normalized = String(severity || '').toLowerCase();
+    if (normalized === 'critical') return 'critical';
+    if (normalized === 'high') return 'high';
+    if (normalized === 'medium') return 'medium';
+    return 'low';
+}
+
+function formatAlertTypeLabel(alertType) {
+    return String(alertType || 'unknown').replace(/_/g, ' ').toUpperCase();
+}
+
+function showResolveAlertModal(alert) {
+    const modal = document.getElementById('resolveAlertModal');
+    if (!modal) {
+        return Promise.resolve(confirm('Are you sure you want to resolve this alert?'));
+    }
+
+    return new Promise((resolve) => {
+        const overlay = modal.querySelector('.modal-overlay');
+        const closeBtn = document.getElementById('resolveAlertModalClose');
+        const cancelBtn = document.getElementById('resolveAlertModalCancel');
+        const confirmBtn = document.getElementById('resolveAlertModalConfirm');
+        const typeBadge = document.getElementById('resolveAlertModalType');
+        const severityBadge = document.getElementById('resolveAlertModalSeverity');
+        const messageEl = document.getElementById('resolveAlertModalMessage');
+        const valueEl = document.getElementById('resolveAlertModalValue');
+        const thresholdEl = document.getElementById('resolveAlertModalThreshold');
+        const createdEl = document.getElementById('resolveAlertModalCreated');
+
+        const cleanup = (confirmed) => {
+            modal.classList.remove('show');
+            const finish = () => {
+                modal.style.display = 'none';
+                overlay?.removeEventListener('click', handleCancel);
+                closeBtn?.removeEventListener('click', handleCancel);
+                cancelBtn?.removeEventListener('click', handleCancel);
+                confirmBtn?.removeEventListener('click', handleConfirm);
+                document.removeEventListener('keydown', handleKeydown);
+                resolve(confirmed);
+            };
+
+            window.setTimeout(finish, 180);
+        };
+
+        const handleCancel = () => cleanup(false);
+        const handleConfirm = () => cleanup(true);
+        const handleKeydown = (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                handleCancel();
+            }
+        };
+
+        const createdAt = alert?.created_at ? new Date(alert.created_at) : null;
+        const createdLabel = createdAt && !Number.isNaN(createdAt.getTime())
+            ? createdAt.toLocaleString()
+            : 'Unknown';
+        const severityTone = getAlertSeverityTone(alert?.severity);
+
+        if (typeBadge) {
+            typeBadge.textContent = formatAlertTypeLabel(alert?.alert_type);
+        }
+        if (severityBadge) {
+            severityBadge.textContent = String(alert?.severity || 'unknown').toUpperCase();
+            severityBadge.className = `resolve-alert-pill severity-${severityTone}`;
+        }
+        if (messageEl) {
+            messageEl.textContent = String(alert?.message || 'Resolve this alert?');
+        }
+        if (valueEl) {
+            valueEl.textContent = String(alert?.value ?? '--');
+        }
+        if (thresholdEl) {
+            thresholdEl.textContent = String(alert?.threshold ?? '--');
+        }
+        if (createdEl) {
+            createdEl.textContent = createdLabel;
+        }
+        if (confirmBtn) {
+            confirmBtn.innerHTML = 'Resolve Alert';
+        }
+
+        modal.style.display = 'flex';
+        window.setTimeout(() => {
+            modal.classList.add('show');
+            confirmBtn?.focus();
+        }, 10);
+
+        overlay?.addEventListener('click', handleCancel);
+        closeBtn?.addEventListener('click', handleCancel);
+        cancelBtn?.addEventListener('click', handleCancel);
+        confirmBtn?.addEventListener('click', handleConfirm);
+        document.addEventListener('keydown', handleKeydown);
+    });
+}
+
 window.verificationChallengeChart = window.verificationChallengeChart || null;
 window.verificationAnalyticsData = window.verificationAnalyticsData || null;
 
@@ -82,7 +189,7 @@ async function loadVerificationAnalytics() {
             modeBreakdown.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--text-muted);">No verification mode data available yet.</div>';
         } else {
             const totalModes = modeRows.reduce((acc, [, value]) => acc + Number(value || 0), 0);
-            
+
             modeRows.sort((a, b) => Number(b[1]) - Number(a[1]));
 
             modeBreakdown.innerHTML = modeRows.map(([mode, value], index) => {
@@ -90,7 +197,7 @@ async function loadVerificationAnalytics() {
                 const pct = totalModes > 0 ? ((count / totalModes) * 100).toFixed(1) : '0.0';
                 const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#a78bfa', '#ec4899'];
                 const color = colors[index % colors.length];
-                
+
                 return `
                 <div style="margin-bottom: 1rem;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem; font-size: 0.9rem;">
@@ -241,12 +348,35 @@ window.exportVerificationEventsCsv = exportVerificationEventsCsv;
 let allAlertSettings = [];
 let allActiveAlerts = [];
 let pendingAlertToggleByType = {};
+let botSafetySnapshot = null;
+
+const BOT_SAFETY_LABELS = {
+    enabled: 'Bot Safety Alerts Enabled',
+    recentAlertLimit: 'Recent Alert Limit',
+    emojiBurstThreshold: 'Emoji Burst Threshold',
+    stickerBurstThreshold: 'Sticker Burst Threshold',
+    assetAuditWindowMs: 'Asset Audit Window (ms)',
+    assetAuditCooldownMs: 'Asset Audit Cooldown (ms)',
+    inviteWindowMs: 'Invite Window (ms)',
+    inviteMutationThreshold: 'Invite Mutation Threshold',
+    inviteJoinSpikeThreshold: 'Invite Join Spike Threshold',
+    inviterJoinSpikeThreshold: 'Inviter Join Spike Threshold',
+    inviteAlertCooldownMs: 'Invite Alert Cooldown (ms)',
+    nicknameAlertCooldownMs: 'Nickname Alert Cooldown (ms)',
+    attachmentCountThreshold: 'Attachment Count Threshold',
+    attachmentTotalSizeMbThreshold: 'Attachment Total Size (MB)',
+    moderationEscalationCooldownMs: 'Escalation Cooldown (ms)',
+    moderationEscalationLastHourThreshold: 'Escalation Last Hour Threshold',
+    moderationEscalationLastDayThreshold: 'Escalation Last Day Threshold',
+    moderationEscalationTimeoutThreshold: 'Escalation Timeout Threshold',
+    moderationEscalationHighRiskThreshold: 'Escalation High Risk Threshold'
+};
 
 async function loadAlertAnalytics() {
     try {
         const { response, data } = await window.AdminPanel.api.getJson('/api/owner/alert-settings-analytics');
         if (!response.ok) {
-			analyticsShowNotification('Failed to load alert analytics', 'error');
+            analyticsShowNotification('Failed to load alert analytics', 'error');
             return;
         }
 
@@ -256,12 +386,169 @@ async function loadAlertAnalytics() {
 
         await loadActiveAlerts();
         await loadAlertMonitorStatus();
+        await loadBotSafetyAnalytics();
     } catch (error) {
         console.error('Error loading alert analytics:', error);
-		analyticsShowNotification('Failed to load alert analytics', 'error');
+        analyticsShowNotification('Failed to load alert analytics', 'error');
         renderAlertMonitorStatus(null);
+        renderBotSafetyAnalytics(null);
     }
 }
+
+function renderBotSafetyAnalytics(snapshot) {
+    const recentCountEl = document.getElementById('botSafetyRecentCount');
+    const criticalCountEl = document.getElementById('botSafetyCriticalCount');
+    const warningCountEl = document.getElementById('botSafetyWarningCount');
+    const thresholdsContainer = document.getElementById('botSafetyThresholdsContainer');
+    const alertsContainer = document.getElementById('botSafetyAlertsContainer');
+
+    if (!snapshot) {
+        if (recentCountEl) recentCountEl.textContent = '0';
+        if (criticalCountEl) criticalCountEl.textContent = '0';
+        if (warningCountEl) warningCountEl.textContent = '0';
+        if (thresholdsContainer) thresholdsContainer.innerHTML = '<p class="text-muted">Bot safety config unavailable.</p>';
+        if (alertsContainer) alertsContainer.innerHTML = '<p class="text-muted">Bot safety alerts unavailable.</p>';
+        return;
+    }
+
+    const summary = snapshot.summary || {};
+    const config = snapshot.config || {};
+    const alerts = Array.isArray(snapshot.alerts) ? snapshot.alerts : [];
+
+    if (recentCountEl) recentCountEl.textContent = String(summary.total || 0);
+    if (criticalCountEl) criticalCountEl.textContent = String(summary.critical || 0);
+    if (warningCountEl) warningCountEl.textContent = String(summary.warning || 0);
+
+    if (thresholdsContainer) {
+        const entries = Object.entries(BOT_SAFETY_LABELS).map(([key, label]) => ({
+            key,
+            label,
+            value: config[key]
+        }));
+
+        thresholdsContainer.innerHTML = entries.map((entry) => `
+            <div class="alert-setting-card">
+                <div class="alert-setting-header">
+                    <div class="alert-setting-title"><span class="alert-type-badge">${escapeAnalyticsValue(entry.label)}</span></div>
+                    <span class="alert-enabled-badge ${config.enabled ? 'enabled' : 'disabled'}">${config.enabled ? 'Enabled' : 'Disabled'}</span>
+                </div>
+                <div class="alert-setting-body">
+                    <div class="alert-info-item">
+                        <div class="alert-info-label">Value</div>
+                        <div class="alert-info-value">${escapeAnalyticsValue(entry.value)}</div>
+                    </div>
+                </div>
+                <div class="alert-setting-footer">
+                    <button class="btn-alert-edit" onclick="editBotSafetySetting('${entry.key}', ${JSON.stringify(String(entry.value))})">&#9881; Edit</button>
+                    ${entry.key === 'enabled'
+                ? `<button class="btn-alert-toggle" onclick="toggleBotSafetyEnabled(${config.enabled ? 'false' : 'true'})">${config.enabled ? '&#128683; Disable' : '&#9989; Enable'}</button>`
+                : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    if (alertsContainer) {
+        if (!alerts.length) {
+            alertsContainer.innerHTML = '<p class="text-muted">No recent bot safety alerts.</p>';
+        } else {
+            alertsContainer.innerHTML = alerts.map((alert) => `
+                <div class="active-alert-card">
+                    <div class="active-alert-header">
+                        <div class="active-alert-type">${escapeAnalyticsValue(String(alert.type || '').replace(/-/g, ' ').toUpperCase())}</div>
+                        <span class="active-alert-severity ${escapeAnalyticsValue(alert.severity || 'warning')}">${escapeAnalyticsValue(String(alert.severity || 'warning').toUpperCase())}</span>
+                    </div>
+                    <div class="active-alert-message">${escapeAnalyticsValue(alert.message || '')}</div>
+                    <div class="active-alert-footer">
+                        <span>${escapeAnalyticsValue(alert.guildName || alert.guildId || 'Unknown guild')}</span>
+                        <span>${alert.createdAt ? new Date(alert.createdAt).toLocaleString() : 'Unknown time'}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+async function loadBotSafetyAnalytics() {
+    try {
+        const { response, data } = await window.AdminPanel.api.getJson('/api/owner/bot-safety-alerts?limit=25');
+        if (!response.ok) {
+            renderBotSafetyAnalytics(null);
+            return;
+        }
+
+        botSafetySnapshot = data || null;
+        renderBotSafetyAnalytics(botSafetySnapshot);
+    } catch (error) {
+        console.error('Error loading bot safety analytics:', error);
+        renderBotSafetyAnalytics(null);
+    }
+}
+
+window.loadBotSafetyAnalytics = loadBotSafetyAnalytics;
+
+async function editBotSafetySetting(key, currentValue) {
+    if (key === 'enabled') {
+        await toggleBotSafetyEnabled(String(currentValue).toLowerCase() !== 'true');
+        return;
+    }
+
+    if (typeof window.showPromptModal !== 'function') {
+        analyticsShowNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
+        return;
+    }
+
+    const result = await window.showPromptModal({
+        title: `Edit ${BOT_SAFETY_LABELS[key] || key}`,
+        label: `Enter a new value for ${BOT_SAFETY_LABELS[key] || key}:`,
+        defaultValue: String(currentValue ?? ''),
+        inputType: 'number',
+        confirmText: 'Save',
+        cancelText: 'Cancel',
+        validate: (value) => {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed)) {
+                return 'Value must be numeric.';
+            }
+            return true;
+        }
+    });
+
+    if (result === null) return;
+
+    try {
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/bot-safety-config', {
+            [key]: Number(result)
+        });
+        if (!response.ok) {
+            throw new Error(data?.error || 'Failed to update bot safety config');
+        }
+        analyticsShowNotification(`${BOT_SAFETY_LABELS[key] || key} updated.`, 'success');
+        await loadBotSafetyAnalytics();
+    } catch (error) {
+        console.error('Error updating bot safety setting:', error);
+        analyticsShowNotification(error?.message || 'Failed to update bot safety config', 'error');
+    }
+}
+
+async function toggleBotSafetyEnabled(nextEnabled) {
+    try {
+        const { response, data } = await window.AdminPanel.api.postJson('/api/owner/bot-safety-config', {
+            enabled: Boolean(nextEnabled)
+        });
+        if (!response.ok) {
+            throw new Error(data?.error || 'Failed to update bot safety config');
+        }
+        analyticsShowNotification(`Bot safety alerts ${nextEnabled ? 'enabled' : 'disabled'}.`, 'success');
+        await loadBotSafetyAnalytics();
+    } catch (error) {
+        console.error('Error toggling bot safety config:', error);
+        analyticsShowNotification(error?.message || 'Failed to update bot safety config', 'error');
+    }
+}
+
+window.editBotSafetySetting = editBotSafetySetting;
+window.toggleBotSafetyEnabled = toggleBotSafetyEnabled;
 
 function formatMonitorStatusTime(value) {
     if (!value) return 'Never';
@@ -310,13 +597,13 @@ function updateAlertStats(summary) {
 
     const totalEl = document.getElementById('totalAlertSettings');
     if (totalEl) totalEl.textContent = total;
-    
+
     const enabledEl = document.getElementById('enabledAlertSettings');
     if (enabledEl) enabledEl.textContent = enabled;
-    
+
     const activeEl = document.getElementById('activeAlertsCount');
     if (activeEl) activeEl.textContent = active;
-    
+
     const recentEl = document.getElementById('recentAlertsCount');
     if (recentEl) recentEl.textContent = recent;
 
@@ -325,7 +612,7 @@ function updateAlertStats(summary) {
         healthIndicator.classList.remove('warning', 'critical');
         const healthText = healthIndicator.querySelector('.health-text');
         const healthDot = healthIndicator.querySelector('.health-dot');
-        
+
         if (healthDot) {
             healthDot.style = '';
         }
@@ -421,7 +708,7 @@ function renderAlertSettings(settings) {
 
 async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
     if (typeof window.showPromptModal !== 'function') {
-		analyticsShowNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
+        analyticsShowNotification('Prompt modal unavailable. Please refresh and try again.', 'error');
         return;
     }
 
@@ -445,7 +732,7 @@ async function editAlertSetting(alertType, currentThreshold, currentEnabled) {
 
     const threshold = parseFloat(newThreshold);
     if (isNaN(threshold) || threshold < 0 || threshold > 100) {
-		analyticsShowNotification('Invalid threshold value. Must be between 0 and 100.', 'error');
+        analyticsShowNotification('Invalid threshold value. Must be between 0 and 100.', 'error');
         return;
     }
 
@@ -564,31 +851,12 @@ function renderActiveAlerts(alerts) {
     container.innerHTML = html;
 }
 
-window.resolveAlert = async function(alertId) {
-    if (!window.modalManager) {
-        if (!confirm('Are you sure you want to resolve this alert?')) return;
-        
-        try {
-            const { response } = await window.AdminPanel.api.postJson(`/api/alerts/${alertId}/resolve`, {});
-            if (response.ok) {
-                analyticsShowNotification('Alert resolved successfully', 'success');
-                await loadAlertAnalytics();
-            } else {
-                analyticsShowNotification('Failed to resolve alert', 'error');
-            }
-        } catch (error) {
-            console.error('Error resolving alert:', error);
-        }
-        return;
-    }
+window.resolveAlert = async function (alertId) {
+    const alert = Array.isArray(allActiveAlerts)
+        ? allActiveAlerts.find((entry) => String(entry?.id) === String(alertId))
+        : null;
 
-    const confirmed = await window.modalManager.showConfirm({
-        title: 'Resolve Alert',
-        message: 'Are you sure you want to resolve this alert?',
-        confirmText: 'Resolve',
-        cancelText: 'Cancel',
-        type: 'warning'
-    });
+    const confirmed = await showResolveAlertModal(alert);
     if (!confirmed) return;
 
     try {
@@ -607,7 +875,7 @@ window.resolveAlert = async function(alertId) {
 
 function exportAlertSettings() {
     if (allAlertSettings.length === 0) {
-		analyticsShowNotification('No alert settings to export', 'warning');
+        analyticsShowNotification('No alert settings to export', 'warning');
         return;
     }
 
@@ -977,7 +1245,7 @@ function renderEmailRecentRows(recentRows) {
 
 function exportEmailRecentCsv() {
     if (!Array.isArray(latestEmailRecentRows) || latestEmailRecentRows.length === 0) {
-		analyticsShowNotification('No recent email deliveries to export', 'warning');
+        analyticsShowNotification('No recent email deliveries to export', 'warning');
         return;
     }
 
@@ -1113,7 +1381,7 @@ window.systemMemoryData = {
     }]
 };
 
-window.toggleSystemMonitor = function() {
+window.toggleSystemMonitor = function () {
     const btn = document.getElementById('sysMonitorToggle');
     if (window.systemMonitorInterval) {
         clearInterval(window.systemMonitorInterval);
@@ -1139,7 +1407,7 @@ window.toggleSystemMonitor = function() {
     }
 };
 
-window.loadSystemStats = async function() {
+window.loadSystemStats = async function () {
     try {
         const { response, data } = await window.AdminPanel.api.getJson('/api/owner/system-stats');
         if (!response.ok) return;
@@ -1149,7 +1417,7 @@ window.loadSystemStats = async function() {
         const memPercent = system.totalMem > 0 ? ((system.usedMem / system.totalMem) * 100).toFixed(1) : '0.0';
         const sysMemEl = document.getElementById('sysMemUsage');
         if (sysMemEl) sysMemEl.textContent = `${memPercent}%`;
-        
+
         const load = system.loadavg && typeof system.loadavg[0] === 'number' ? system.loadavg[0].toFixed(2) : '0.00';
         const sysLoadEl = document.getElementById('sysLoadAvg');
         if (sysLoadEl) sysLoadEl.textContent = load;
@@ -1162,7 +1430,7 @@ window.loadSystemStats = async function() {
 
         const sysUptimeEl = document.getElementById('sysUptime');
         if (sysUptimeEl) sysUptimeEl.textContent = formatUptime(system.uptime);
-        
+
         const botUptimeEl = document.getElementById('botUptime');
         if (botUptimeEl) botUptimeEl.textContent = formatUptime(proc.uptime);
 

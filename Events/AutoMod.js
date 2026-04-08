@@ -5,6 +5,7 @@ const MySQLDatabaseManager = require('../Functions/MySQLDatabaseManager');
 const { ROLES: { administratorRoleId, moderatorRoleId }, CHANNELS: { serverLogChannelId }, BLOCKED_WORDS: blockedWordsList } = require('../Config/constants');
 const { createProfanityMatcher } = require('../Functions/ProfanityFilter');
 const ModerationApiHelper = require('../Functions/ModerationApiHelper');
+const ModerationEscalationTracker = require('../Functions/ModerationEscalationTracker');
 const mainConfig = require('../Config/main.json');
 
 // AutoMod: watches for spam, blocked words, invite links and other rule violations.
@@ -421,6 +422,34 @@ async function handleMessageCreate(message, client) {
     }
 }
 
+async function handleMessageUpdate(oldMessage, newMessage, client) {
+    if (!newMessage || newMessage.author?.bot) return;
+    if (!newMessage.guild) return;
+
+    const member = newMessage.member || await newMessage.guild.members.fetch(newMessage.author.id).catch(() => null);
+    const isStaff = member?.roles.cache.has(administratorRoleId) || member?.roles.cache.has(moderatorRoleId);
+    if (isStaff) return;
+
+    const oldContent = String(oldMessage?.content || '');
+    const newContent = String(newMessage.content || '');
+    if (!newContent.trim() || oldContent === newContent) return;
+
+    const runtimeConfig = getRuntimeAutoModConfig();
+    if (runtimeConfig.advancedConfig.exemptChannelIds.includes(newMessage.channelId)) return;
+    if (member?.roles?.cache && runtimeConfig.advancedConfig.exemptRoleIds.some(roleId => member.roles.cache.has(roleId))) return;
+
+    try {
+        const violation = await detectEditedViolation(newMessage, client, runtimeConfig);
+
+        if (violation) {
+            violation.reason = `Edited message triggered AutoMod: ${violation.reason}`;
+            await handleViolation(newMessage, client, violation, runtimeConfig);
+        }
+    } catch (error) {
+        console.error('[AutoMod] Error processing edited message:', error);
+    }
+}
+
 module.exports = {
     name: 'messageCreate',
     runOnce: false,
@@ -429,7 +458,8 @@ module.exports = {
         const [message] = args;
         return handleMessageCreate(message, client);
     },
-    handleMessageCreate
+    handleMessageCreate,
+    handleMessageUpdate
 };
 
 // Check the message for anything that breaks server rules.
@@ -473,6 +503,47 @@ async function detectViolation(message, client, runtimeConfig) {
     return {
         type: primarySignal?.type || 'spam',
         reason: primarySignal?.reason || 'AutoMod risk model flagged this message',
+        signals,
+        riskScore,
+        riskLevel,
+        baseAction: determineBaseAction(riskScore, runtimeConfig.automodConfig)
+    };
+}
+
+async function detectEditedViolation(message, client, runtimeConfig) {
+    const content = message.content || '';
+    const signals = [];
+
+    const capsSignal = detectExcessiveCaps(message, runtimeConfig.automodConfig, runtimeConfig.advancedConfig);
+    if (capsSignal) signals.push(capsSignal);
+
+    if (runtimeConfig.automodConfig.profanityFilterEnabled) {
+        const profanitySignal = await detectProfanity(content, runtimeConfig.advancedConfig);
+        if (profanitySignal) signals.push(profanitySignal);
+    }
+
+    const regexSignal = detectBlockedRegex(content, runtimeConfig.blockedRegexList, runtimeConfig.advancedConfig);
+    if (regexSignal) signals.push(regexSignal);
+
+    if (runtimeConfig.automodConfig.blockInvites) {
+        const inviteSignal = await detectInvites(message, client, runtimeConfig.advancedConfig);
+        if (inviteSignal) signals.push(inviteSignal);
+    }
+
+    const mentionSignal = detectMassMentions(message, runtimeConfig.automodConfig, runtimeConfig.advancedConfig);
+    if (mentionSignal) signals.push(mentionSignal);
+
+    if (!signals.length) {
+        return null;
+    }
+
+    const riskScore = signals.reduce((accumulator, item) => accumulator + Number(item.score || 0), 0);
+    const primarySignal = pickPrimarySignal(signals);
+    const riskLevel = resolveRiskLevel(riskScore, runtimeConfig.automodConfig);
+
+    return {
+        type: primarySignal?.type || 'regex',
+        reason: primarySignal?.reason || 'Edited message triggered AutoMod risk model',
         signals,
         riskScore,
         riskLevel,
@@ -847,6 +918,15 @@ async function handleViolation(message, client, violation, runtimeConfig) {
         signalCount: signals.length,
         appealNotified: Boolean(appealEligible && APPEAL_LINK)
     });
+
+    await ModerationEscalationTracker.handleViolation(message, {
+        reason,
+        violationType: type,
+        caseId,
+        actionTaken,
+        riskScore,
+        riskLevel
+    }).catch(() => null);
 }
 
 // Send DM to violating user

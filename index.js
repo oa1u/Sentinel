@@ -74,6 +74,7 @@ const client = new Client({
 const BOT_WEBHOOK_PORT = Number(process.env.BOT_WEBHOOK_PORT || 3050);
 const BOT_WEBHOOK_SECRET = String(process.env.BOT_WEBHOOK_SECRET || '').trim();
 const BOT_WEBHOOK_MAX_DRIFT_MS = Math.max(30_000, Math.min(15 * 60 * 1000, Number(process.env.BOT_WEBHOOK_MAX_DRIFT_MS) || 5 * 60 * 1000));
+let webhookServer = null;
 
 function verifyWebhookSignature(req, secret) {
   if (!secret) return false;
@@ -101,6 +102,8 @@ function verifyWebhookSignature(req, secret) {
 
 async function dispatchWebsiteWebhook(payload) {
   if (!payload || typeof payload !== 'object') return;
+  client.runtimeState.lastWebsiteWebhookAt = Date.now();
+  client.runtimeState.lastWebsiteWebhookEvent = String(payload.event || 'website.event');
   const channelId = CHANNELS?.webhookChannelId || CHANNELS?.notificationChannelId || CHANNELS?.serverLogChannelId;
   if (!channelId) return;
 
@@ -140,6 +143,102 @@ webhookApp.use(express.json({
   }
 }));
 
+function isRuntimeReady() {
+  if (shutdownInProgress) return false;
+  if (!client.isReady?.()) return false;
+  if (client.runtimeHealth.lastDatabaseHealth === false
+    && client.runtimeHealth.consecutiveDatabaseHealthFailures >= DB_FAILURE_THRESHOLD) {
+    return false;
+  }
+  return true;
+}
+
+function buildRuntimeSnapshot() {
+  const rawShards = client.ws?.shards;
+  const shardList = Array.isArray(rawShards)
+    ? rawShards
+    : Array.from(rawShards?.values?.() || []);
+  const shardStatus = shardList.map((shard) => ({ id: shard.id, status: shard.status }));
+
+  return {
+    appName,
+    pid: process.pid,
+    nodeVersion: process.version,
+    platform: process.platform,
+    uptimeMs: process.uptime() * 1000,
+    shutdownInProgress,
+    ready: client.isReady?.() || false,
+    runtimeState: { ...client.runtimeState },
+    discord: {
+      userId: client.user?.id || null,
+      tag: client.user?.tag || null,
+      pingMs: typeof client.ws?.ping === 'number' ? client.ws.ping : null,
+      guildCount: client.guilds?.cache?.size || 0,
+      shardStatus
+    },
+    commands: {
+      loaded: client.slashCommands?.size || 0,
+      interactionHandlers: {
+        component: client.interactionHandlers?.component?.length || 0,
+        modal: client.interactionHandlers?.modal?.length || 0
+      },
+      lastRegisteredSignatureLength: String(lastRegisteredCommandSignature || '').length
+    },
+    metrics: {
+      ...client.runtimeMetrics,
+      recentSlowCommands: Array.isArray(client.runtimeMetrics?.recentSlowCommands)
+        ? client.runtimeMetrics.recentSlowCommands.slice(-10)
+        : []
+    },
+    health: { ...client.runtimeHealth },
+    scheduler: {
+      active: Boolean(jobScheduler || client.jobScheduler),
+      reminderTimerActive: Boolean(reminderTimer),
+      botStatsTimerActive: Boolean(botStatsTimer),
+      runtimeHealthTimerActive: Boolean(runtimeHealthTimer),
+      commandWatcherActive: typeof stopCommandWatcher === 'function'
+    },
+    memory: process.memoryUsage()
+  };
+}
+
+function hasDiagnosticsAccess(req) {
+  if (!BOT_WEBHOOK_SECRET) return false;
+  const provided = String(req.headers['x-bot-secret'] || '').trim();
+  return Boolean(provided) && provided === BOT_WEBHOOK_SECRET;
+}
+
+webhookApp.get('/healthz', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    shutdownInProgress,
+    ready: client.isReady?.() || false,
+    uptimeMs: process.uptime() * 1000,
+    pingMs: typeof client.ws?.ping === 'number' ? client.ws.ping : null,
+    databaseHealthy: client.runtimeHealth.lastDatabaseHealth,
+    consecutiveDatabaseHealthFailures: client.runtimeHealth.consecutiveDatabaseHealthFailures
+  });
+});
+
+webhookApp.get('/readyz', (_req, res) => {
+  const ready = isRuntimeReady();
+  res.status(ready ? 200 : 503).json({
+    ready,
+    shutdownInProgress,
+    discordReady: client.isReady?.() || false,
+    databaseHealthy: client.runtimeHealth.lastDatabaseHealth,
+    consecutiveDatabaseHealthFailures: client.runtimeHealth.consecutiveDatabaseHealthFailures
+  });
+});
+
+webhookApp.get('/diagnostics', (req, res) => {
+  if (!hasDiagnosticsAccess(req)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  return res.json(buildRuntimeSnapshot());
+});
+
 webhookApp.post('/webhooks/website', (req, res) => {
   if (!BOT_WEBHOOK_SECRET) {
     return res.status(503).json({ error: 'Webhook secret not configured' });
@@ -153,10 +252,11 @@ webhookApp.post('/webhooks/website', (req, res) => {
   return res.json({ success: true });
 });
 
-webhookApp.listen(BOT_WEBHOOK_PORT, () => {
+webhookServer = webhookApp.listen(BOT_WEBHOOK_PORT, () => {
   if (!BOT_WEBHOOK_SECRET) {
     console.warn('⚠️ Bot webhook server started without BOT_WEBHOOK_SECRET. Requests will be rejected.');
   }
+  client.runtimeState.webhookServerStartedAt = Date.now();
   console.log(`🔗 Bot webhook listener running on port ${BOT_WEBHOOK_PORT}`);
 });
 
@@ -196,6 +296,19 @@ let shutdownInProgress = false;
 let stopCommandWatcher = null;
 let pendingWatchRegistrationTimer = null;
 let lastRegisteredCommandSignature = null;
+
+client.runtimeState = {
+  startupStartedAt: Date.now(),
+  initializedAt: null,
+  loggedInAt: null,
+  readyAt: null,
+  shutdownReason: null,
+  webhookServerStartedAt: null,
+  lastWebsiteWebhookAt: null,
+  lastWebsiteWebhookEvent: null,
+  lastCommandsRegisteredAt: null,
+  lastCommandsRegisteredReason: null
+};
 
 function sleep(ms) {
   const safeDelay = Math.max(0, Number(ms) || 0);
@@ -336,6 +449,8 @@ async function registerCommands({ commandsOverride = null, skipIfUnchanged = fal
     const data = await rest.put(route, { body: commands });
     console.log(`✅ ${data.length} commands registered\n`);
     lastRegisteredCommandSignature = signature;
+    client.runtimeState.lastCommandsRegisteredAt = Date.now();
+    client.runtimeState.lastCommandsRegisteredReason = String(reason || 'manual');
     return true;
   } catch (error) {
     console.error('🗑️Error registering commands:', error.message);
@@ -377,6 +492,8 @@ async function initializeBot() {
       console.error("- Couldn't load commands:", err.message);
       process.exit(1);
     });
+
+    client.runtimeState.initializedAt = Date.now();
 
     refreshInteractionHandlerRegistry();
 
@@ -565,6 +682,7 @@ async function loginWithRetry(clientInstance, token) {
 async function gracefulShutdown(reason = 'shutdown', exitCode = 0) {
   if (shutdownInProgress) return;
   shutdownInProgress = true;
+  client.runtimeState.shutdownReason = String(reason || 'shutdown');
 
   console.log(`\n🛑 Shutting down (${reason})...`);
 
@@ -597,6 +715,13 @@ async function gracefulShutdown(reason = 'shutdown', exitCode = 0) {
       if (pendingWatchRegistrationTimer) {
         clearTimeout(pendingWatchRegistrationTimer);
         pendingWatchRegistrationTimer = null;
+      }
+
+      if (webhookServer) {
+        await new Promise((resolve) => {
+          webhookServer.close(() => resolve());
+        }).catch(() => { });
+        webhookServer = null;
       }
 
       if (client && typeof client.destroy === 'function') {
@@ -963,10 +1088,6 @@ function toTime(seconds) {
   return result || '0 seconds';
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 // Select a giveaway winner (random) and update the end embed accordingly.
 async function finalizeGiveaway(message, giveawayId, client, prize, host) {
   try {
@@ -1240,6 +1361,7 @@ function validateEnvironment() {
 }
 
 client.once("clientReady", () => {
+  client.runtimeState.readyAt = Date.now();
   client.emit("commandsAndEventsLoaded", 1);
 
   // Send bot stats immediately on ready, then update every 30 seconds.
@@ -1335,6 +1457,7 @@ process.on('SIGTERM', async () => {
     validateEnvironment();
     await initializeBot();
     await loginWithRetry(client, process.env.TOKEN);
+    client.runtimeState.loggedInAt = Date.now();
     startRuntimeHealthMonitor();
 
     // Start admin panel if enabled

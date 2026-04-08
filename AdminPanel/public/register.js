@@ -14,11 +14,17 @@ const captchaQuestionEl = document.getElementById('captchaQuestion');
 const captchaAnswerInput = document.getElementById('captchaAnswer');
 const refreshCaptchaBtn = document.getElementById('refreshCaptchaBtn');
 const captchaGroup = document.getElementById('registerCaptchaGroup');
+const captchaTypeText = document.getElementById('captchaTypeText');
+const captchaStatusText = document.getElementById('captchaStatusText');
+const captchaExpiryText = document.getElementById('captchaExpiryText');
+const captchaTipText = document.getElementById('captchaTipText');
 const { ui, api } = window.AdminPanel || {};
 const captchaState = {
     challengeId: '',
     loaded: false,
-    enabled: true
+    enabled: true,
+    expiresAt: 0,
+    countdownTimer: null
 };
 
 registerBtn.addEventListener('click', handleRegister);
@@ -160,9 +166,65 @@ function validateForm() {
     registerBtn.disabled = !(passwordValid && usernameValid && emailValid && passwordMatch && inviteCodeValid && captchaValid);
 }
 
+function clearCaptchaCountdown() {
+    if (captchaState.countdownTimer) {
+        window.clearInterval(captchaState.countdownTimer);
+        captchaState.countdownTimer = null;
+    }
+}
+
+function formatCaptchaCountdown(msRemaining) {
+    const totalSeconds = Math.max(0, Math.ceil(msRemaining / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function updateCaptchaExpiryText() {
+    if (!captchaExpiryText) return;
+    if (!captchaState.enabled || !captchaState.loaded || !captchaState.expiresAt) {
+        captchaExpiryText.textContent = 'Expires in --:--';
+        return;
+    }
+
+    const remainingMs = Number(captchaState.expiresAt) - Date.now();
+    if (remainingMs <= 0) {
+        captchaExpiryText.textContent = 'Expired';
+        clearCaptchaCountdown();
+        return;
+    }
+
+    captchaExpiryText.textContent = `Expires in ${formatCaptchaCountdown(remainingMs)}`;
+}
+
+function startCaptchaCountdown(expiresInMs) {
+    clearCaptchaCountdown();
+    const ttlMs = Math.max(0, Number(expiresInMs) || 0);
+    captchaState.expiresAt = ttlMs > 0 ? Date.now() + ttlMs : 0;
+    updateCaptchaExpiryText();
+    if (!captchaState.expiresAt) return;
+    captchaState.countdownTimer = window.setInterval(updateCaptchaExpiryText, 1000);
+}
+
+function resetCaptchaPresentation() {
+    clearCaptchaCountdown();
+    captchaState.expiresAt = 0;
+    if (captchaTypeText) captchaTypeText.textContent = 'Adaptive challenge';
+    if (captchaStatusText) captchaStatusText.textContent = 'Challenge ready';
+    if (captchaTipText) captchaTipText.textContent = 'The answer may be a number or a short text response depending on the challenge.';
+    if (captchaAnswerInput) {
+        captchaAnswerInput.placeholder = 'Enter captcha answer';
+        captchaAnswerInput.removeAttribute('maxlength');
+        captchaAnswerInput.setAttribute('inputmode', 'text');
+    }
+    updateCaptchaExpiryText();
+}
+
 async function loadCaptchaChallenge(force = false) {
     if (!api?.getJson) return false;
+    resetCaptchaPresentation();
     if (captchaQuestionEl) captchaQuestionEl.textContent = 'Loading captcha challenge...';
+    if (captchaStatusText) captchaStatusText.textContent = 'Loading challenge...';
 
     try {
         const suffix = force ? `&_=${Date.now()}` : '';
@@ -175,6 +237,7 @@ async function loadCaptchaChallenge(force = false) {
             captchaState.enabled = false;
             captchaState.challengeId = '';
             captchaState.loaded = true;
+            captchaState.expiresAt = 0;
             if (captchaGroup) captchaGroup.style.display = 'none';
             validateForm();
             return true;
@@ -190,13 +253,30 @@ async function loadCaptchaChallenge(force = false) {
         if (captchaGroup) captchaGroup.style.display = '';
         if (captchaQuestionEl) captchaQuestionEl.textContent = String(data.question);
         if (captchaAnswerInput) captchaAnswerInput.value = '';
+        if (captchaTypeText) captchaTypeText.textContent = String(data.label || 'Adaptive challenge');
+        if (captchaStatusText) captchaStatusText.textContent = 'Challenge ready';
+        if (captchaTipText) captchaTipText.textContent = String(data.tip || 'The answer may be a number or a short text response depending on the challenge.');
+        if (captchaAnswerInput) {
+            captchaAnswerInput.placeholder = String(data.placeholder || 'Enter captcha answer');
+            captchaAnswerInput.setAttribute('inputmode', String(data.inputMode || 'text'));
+            if (Number(data.answerLength) > 0) {
+                captchaAnswerInput.maxLength = Number(data.answerLength);
+            } else {
+                captchaAnswerInput.removeAttribute('maxlength');
+            }
+        }
+        startCaptchaCountdown(data.expiresInMs);
         validateForm();
         return true;
     } catch {
+        clearCaptchaCountdown();
         captchaState.challengeId = '';
         captchaState.loaded = false;
         captchaState.enabled = true;
+        captchaState.expiresAt = 0;
         if (captchaQuestionEl) captchaQuestionEl.textContent = 'Captcha unavailable. Refresh to retry.';
+        if (captchaStatusText) captchaStatusText.textContent = 'Challenge unavailable';
+        updateCaptchaExpiryText();
         validateForm();
         return false;
     }

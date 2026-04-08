@@ -628,6 +628,261 @@
             background: rgba(255, 255, 255, 0.1);
             color: #fff;
         }
+
+        .resolve-alert-modal {
+            max-width: 560px;
+            width: min(92vw, 560px);
+            border-radius: 1.25rem;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top right, rgba(239, 68, 68, 0.18), transparent 32%),
+                linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(15, 23, 42, 0.98));
+            border: 1px solid rgba(248, 113, 113, 0.18);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+        }
+
+        .resolve-alert-modal .modal-header {
+            align-items: flex-start;
+            gap: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 1.35rem 1.5rem 1rem;
+        }
+
+        .resolve-alert-header-copy {
+            display: grid;
+            gap: 0.4rem;
+            flex: 1;
+        }
+
+        .resolve-alert-eyebrow {
+            margin: 0;
+            font-size: 0.72rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-weight: 800;
+            color: #fca5a5;
+        }
+
+        .resolve-alert-modal .modal-header h3 {
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .resolve-alert-subtitle {
+            margin: 0;
+            color: rgba(226, 232, 240, 0.76);
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+
+        .resolve-alert-hero-icon {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 0.95rem;
+            display: grid;
+            place-items: center;
+            font-size: 1.4rem;
+            background: linear-gradient(135deg, rgba(248, 113, 113, 0.22), rgba(245, 158, 11, 0.18));
+            border: 1px solid rgba(248, 113, 113, 0.22);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+        }
+
+        .resolve-alert-modal .modal-body {
+            display: grid;
+            gap: 1rem;
+            padding-top: 1.1rem;
+        }
+
+        .resolve-alert-pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+        }
+
+        .resolve-alert-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.5rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.05);
+            color: #e2e8f0;
+        }
+
+        .resolve-alert-pill.severity-critical,
+        .resolve-alert-pill.severity-high {
+            background: rgba(239, 68, 68, 0.14);
+            border-color: rgba(248, 113, 113, 0.24);
+            color: #fecaca;
+        }
+
+        .resolve-alert-pill.severity-medium {
+            background: rgba(245, 158, 11, 0.14);
+            border-color: rgba(251, 191, 36, 0.24);
+            color: #fde68a;
+        }
+
+        .resolve-alert-pill.severity-low {
+            background: rgba(59, 130, 246, 0.14);
+            border-color: rgba(96, 165, 250, 0.24);
+            color: #bfdbfe;
+        }
+
+        .resolve-alert-message-card {
+            padding: 1rem 1.05rem;
+            border-radius: 1rem;
+            background: rgba(15, 23, 42, 0.76);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .resolve-alert-message-label {
+            margin: 0 0 0.45rem;
+            font-size: 0.72rem;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: #94a3b8;
+            font-weight: 700;
+        }
+
+        .resolve-alert-message-text {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.65;
+            color: #f8fafc;
+        }
+
+        .resolve-alert-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.85rem;
+        }
+
+        .resolve-alert-stat {
+            padding: 0.95rem 1rem;
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            min-width: 0;
+        }
+
+        .resolve-alert-stat-label {
+            display: block;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: #94a3b8;
+            margin-bottom: 0.45rem;
+            font-weight: 700;
+        }
+
+        .resolve-alert-stat-value {
+            display: block;
+            color: #fff;
+            font-size: 1.02rem;
+            font-weight: 800;
+            overflow-wrap: anywhere;
+        }
+
+        .resolve-alert-warning-note {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.95rem 1rem;
+            border-radius: 1rem;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.16);
+            color: #fde68a;
+        }
+
+        .resolve-alert-warning-note strong {
+            display: block;
+            margin-bottom: 0.2rem;
+            color: #fef3c7;
+        }
+
+        .resolve-alert-warning-note span {
+            color: rgba(254, 243, 199, 0.88);
+            font-size: 0.92rem;
+            line-height: 1.45;
+        }
+
+        .resolve-alert-modal .modal-footer {
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 1rem;
+        }
+
+        .resolve-alert-footer-copy {
+            color: #94a3b8;
+            font-size: 0.86rem;
+        }
+
+        .resolve-alert-footer-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .resolve-alert-btn {
+            padding: 0.75rem 1.1rem;
+            border-radius: 0.8rem;
+            font-weight: 700;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .resolve-alert-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .resolve-alert-btn.secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+        }
+
+        .resolve-alert-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .resolve-alert-btn.primary {
+            background: linear-gradient(135deg, #ef4444, #f97316);
+            color: #fff;
+            box-shadow: 0 12px 24px rgba(239, 68, 68, 0.24);
+        }
+
+        .resolve-alert-btn.primary:hover {
+            box-shadow: 0 16px 32px rgba(239, 68, 68, 0.32);
+        }
+
+        @media (max-width: 640px) {
+            .resolve-alert-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .resolve-alert-modal .modal-footer {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .resolve-alert-footer-actions {
+                width: 100%;
+            }
+
+            .resolve-alert-btn {
+                flex: 1;
+            }
+        }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -1120,6 +1375,60 @@
                 </div>
             </div>
 
+            <div class="content-card" style="margin-bottom:1.5rem; border-left:4px solid #60a5fa;">
+                <div class="section-header" style="margin-bottom:1rem; border:none; padding-bottom:0;">
+                    <div class="section-title">Bot Safety Alerts</div>
+                    <div class="action-buttons">
+                        <button class="btn-glass" onclick="loadBotSafetyAnalytics()">Refresh Bot Safety</button>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid" style="margin-bottom:1rem;">
+                    <div class="kpi-card">
+                        <div class="kpi-icon-wrapper" style="color:#60a5fa; background:rgba(96,165,250,0.12);">🛡️</div>
+                        <div class="kpi-content">
+                            <h3 id="botSafetyRecentCount">0</h3>
+                            <p>Recent Safety Alerts</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon-wrapper" style="color:#ef4444; background:rgba(239,68,68,0.12);">⛔</div>
+                        <div class="kpi-content">
+                            <h3 id="botSafetyCriticalCount">0</h3>
+                            <p>Critical Safety Alerts</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon-wrapper" style="color:#f59e0b; background:rgba(245,158,11,0.12);">⚠️</div>
+                        <div class="kpi-content">
+                            <h3 id="botSafetyWarningCount">0</h3>
+                            <p>Warnings</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alerts-dashboard-container">
+                    <div class="visual-column">
+                        <div class="content-card">
+                            <div class="section-title" style="margin-bottom:0.75rem;">Configured Thresholds</div>
+                            <div id="botSafetyThresholdsContainer" class="alert-settings-grid">
+                                <p class="text-muted">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="status-column">
+                        <div class="content-card" style="border-left: 4px solid #60a5fa;">
+                            <div class="section-title" style="margin-bottom:0.75rem; color:#60a5fa;">Recent Bot Safety
+                                Alerts</div>
+                            <div id="botSafetyAlertsContainer"
+                                style="display:flex; flex-direction:column; gap:0.75rem; max-height:320px; overflow-y:auto;">
+                                <p class="text-muted">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
 
             <div class="alerts-dashboard-container">
                 <div class="visual-column">
@@ -1216,6 +1525,67 @@
         </div>
 
     </div>
+
+    <div id="resolveAlertModal" class="modal-wrapper" style="display: none; z-index: 10020;">
+        <div class="modal-overlay"></div>
+        <div class="notification-modal resolve-alert-modal" role="dialog" aria-modal="true"
+            aria-labelledby="resolveAlertModalTitle">
+            <div class="modal-header">
+                <div class="resolve-alert-hero-icon">⚠</div>
+                <div class="resolve-alert-header-copy">
+                    <p class="resolve-alert-eyebrow">Alert Resolution</p>
+                    <h3 id="resolveAlertModalTitle">Resolve Active Alert</h3>
+                    <p class="resolve-alert-subtitle">Review the alert details before removing it from the active queue.
+                    </p>
+                </div>
+                <button id="resolveAlertModalClose" class="modal-close" type="button" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="resolve-alert-pill-row">
+                    <span id="resolveAlertModalType" class="resolve-alert-pill">UNKNOWN</span>
+                    <span id="resolveAlertModalSeverity" class="resolve-alert-pill severity-high">HIGH</span>
+                </div>
+
+                <div class="resolve-alert-message-card">
+                    <p class="resolve-alert-message-label">Alert Message</p>
+                    <p id="resolveAlertModalMessage" class="resolve-alert-message-text">Resolve this alert?</p>
+                </div>
+
+                <div class="resolve-alert-stats">
+                    <div class="resolve-alert-stat">
+                        <span class="resolve-alert-stat-label">Current Value</span>
+                        <span id="resolveAlertModalValue" class="resolve-alert-stat-value">--</span>
+                    </div>
+                    <div class="resolve-alert-stat">
+                        <span class="resolve-alert-stat-label">Threshold</span>
+                        <span id="resolveAlertModalThreshold" class="resolve-alert-stat-value">--</span>
+                    </div>
+                    <div class="resolve-alert-stat">
+                        <span class="resolve-alert-stat-label">Triggered At</span>
+                        <span id="resolveAlertModalCreated" class="resolve-alert-stat-value">--</span>
+                    </div>
+                </div>
+
+                <div class="resolve-alert-warning-note">
+                    <div>!</div>
+                    <div>
+                        <strong>This hides the alert from the active stream.</strong>
+                        <span>Use this once you have reviewed the incident or the condition has been handled.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="resolve-alert-footer-copy">This action updates the monitoring state immediately.</div>
+                <div class="resolve-alert-footer-actions">
+                    <button id="resolveAlertModalCancel" class="resolve-alert-btn secondary" type="button">Keep
+                        Alert</button>
+                    <button id="resolveAlertModalConfirm" class="resolve-alert-btn primary" type="button">Resolve
+                        Alert</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <footer class="page-footer">
         <div class="footer-links">
             <span>© 2026 <strong><span class="websiteName"></span></strong></span>

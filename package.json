@@ -40,7 +40,7 @@
     "moment-timezone": "^0.6.0",
     "multer": "^2.1.1",
     "mysql2": "^3.16.3",
-    "nodemailer": "^8.0.1",
+    "nodemailer": "^8.0.4",
     "opusscript": "^0.0.8",
     "play-dl": "^1.9.7",
     "qrcode": "^1.5.4",
@@ -51,6 +51,8 @@
     "ytdl-core": "^4.11.5"
   },
   "overrides": {
+    "lodash": "^4.18.1",
+    "path-to-regexp": "^8.4.2",
     "undici": "^6.24.0",
     "socket.io-parser": "^4.2.6",
     "cookie-parser": "^1.4.7",
